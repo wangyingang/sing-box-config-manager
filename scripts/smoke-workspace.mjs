@@ -38,6 +38,15 @@ const resolveTyped: (input: RecipeCompileInput) => Result<CompileInput> = resolv
 const recipeTyped: (input: RecipeCompileInput) => Result<CompiledConfig> = compileRecipe;
 // @ts-expect-error Profile is fixed to the supported five variants
 const invalidProfile: RecipeDocument['profile'] = 'linux';
+const dnsSteps: RecipeDocument['dnsSteps'] = [
+  { id: 'evaluate', rule: { action: 'evaluate', server: 'dns', tag: 'first' } },
+  { id: 'respond', rule: { match_response: 'first', action: 'respond' } },
+];
+const dnsServers: RecipeDocument['resources']['dnsServers'] = [{ type: 'https', tag: 'dns', server: '8.8.8.8', server_port: 443, headers: { Host: 'dns.google' }, domain_resolver: { server: 'local', strategy: 'ipv4_only' } }];
+const httpClients: TemplateDocument['resources']['httpClients'] = [{ tag: 'download', detour: 'direct', domain_resolver: 'dns' }];
+// @ts-expect-error dynamic ECS belongs to generation params, never a Recipe rule
+const staleEcs: RecipeDocument['dnsSteps'] = [{ id: 'bad', rule: { action: 'evaluate', server: 'dns', client_subnet: '8.8.8.0/24' } }];
+void [dnsSteps, dnsServers, httpClients, staleEcs];
 const dependencies: RecipeCompileInput['dependencies'] = { templates: [] as TemplateDocument[], nodes: [] as NodeRevision[] };
 void [compileTyped, check, invalidVersion, resolveTyped, recipeTyped, invalidProfile, dependencies];
 const draftTyped: (input: unknown) => Result<RecipeDocument> = validateRecipeDraft;

@@ -99,6 +99,30 @@ const routeRule = union(
   actionRule({ action: literal('reject'), method: optional(enumeration(['default', 'drop', 'reply'] as const)), no_drop: optional(bool) }),
 );
 const routeStep = union(object({ id: string, preset: string }), object({ id: string, rule: routeRule }));
+const dnsFields = { ...routeFields,
+  network: optional(union(enumeration(['tcp', 'udp'] as const), array(enumeration(['tcp', 'udp'] as const)))),
+  query_type: optional(union(string, integer(0, 65535), array(union(string, integer(0, 65535))))),
+  preferred_by: optional(strings), match_response: optional(union(bool, string)),
+  response_rcode: optional(union(string, integer(0, 65535))),
+  response_answer: optional(strings), response_ns: optional(strings), response_extra: optional(strings),
+  ip_accept_any: optional(bool),
+};
+const dnsDefault = object(dnsFields);
+type DnsMatch = Value<typeof dnsDefault> | { type: 'logical'; mode: 'and' | 'or'; rules: DnsMatch[]; invert?: boolean };
+const dnsMatch: Schema<DnsMatch> = { parse: (v, p) => union(dnsDefault, object(logical(dnsMatch))).parse(v, p) };
+function dnsAction<S extends Shape>(action: S) {
+  return union(object({ ...dnsFields, ...action }), object({ ...logical(dnsMatch), ...action }));
+}
+const dnsQueryOptions = { server: string, disable_cache: optional(bool), rewrite_ttl: optional(integer(0, 4294967295)),
+  timeout: optional(string), remove_client_subnet: optional(bool) };
+const dnsRule = union(
+  dnsAction({ action: optional(literal('route')), ...dnsQueryOptions }),
+  dnsAction({ action: literal('evaluate'), ...dnsQueryOptions, tag: optional(string) }),
+  dnsAction({ action: literal('respond') }),
+  dnsAction({ action: literal('reject'), method: optional(enumeration(['default', 'drop', 'reply'] as const)), no_drop: optional(bool) }),
+  dnsAction({ action: literal('predefined'), rcode: optional(union(string, integer(0, 65535))), answer: optional(strings), ns: optional(strings), extra: optional(strings) }),
+);
+const dnsStep = union(object({ id: string, preset: string }), object({ id: string, rule: dnsRule }));
 function record<T>(inner: Schema<T>): Schema<Record<string, T>> {
   return { parse(value, path) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new StructureError(path);
@@ -106,17 +130,22 @@ function record<T>(inner: Schema<T>): Schema<Record<string, T>> {
   } };
 }
 const inlineSet = object({ kind: literal('inline'), definition: object({ type: literal('inline'), tag: string, rules: array(headlessRule) }) });
-export const recipeSchema = object({ ...identity, profile, templateRef: ref,
-  resources: object({ outbounds: optional(array(union(object({ kind: literal('node'), tag: string, nodeRef: ref }), outbound))), ruleSets: optional(array(inlineSet)) }),
-  settings: optional(object({ logLevel: optional(enumeration(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'panic'] as const)), tunMtu: optional(integer(576, 65535)), dnsFinal: optional(string), routeFinal: optional(string) })),
-  // DNS policy is a separate slice; its steps remain explicitly empty.
-  dnsSteps: array(schema((v): v is never => false)), routeSteps: array(routeStep),
-});
+const domainResolver = union(string, object({ server: string, strategy: optional(strategy) }));
+const dialer = { detour: optional(string), domain_resolver: optional(domainResolver) };
+const headers = object({ Host: optional(strings) });
 const resolver = union(
-  object({ type: literal('local'), tag: string, prefer_go: optional(bool) }),
-  object({ type: literal('udp'), tag: string, ...endpoint }),
-  object({ type: literal('https'), tag: string, ...endpoint, path: optional(string), tls: optional(tls) }),
+  object({ type: literal('local'), tag: string, prefer_go: optional(bool), neighbor_domain: optional(strings), ...dialer }),
+  object({ type: literal('udp'), tag: string, ...endpoint, ...dialer }),
+  object({ type: literal('https'), tag: string, ...endpoint, path: optional(string), tls: optional(tls), headers: optional(headers), ...dialer }),
 );
+// DHCP is a Template platform choice, never a Recipe resource.
+const platformResolver = union(resolver, object({ type: literal('dhcp'), tag: string, interface: optional(string), prefer_go: optional(bool), neighbor_domain: optional(strings), ...dialer }));
+const httpClient = object({ tag: string, ...dialer });
+export const recipeSchema = object({ ...identity, profile, templateRef: ref,
+  resources: object({ outbounds: optional(array(union(object({ kind: literal('node'), tag: string, nodeRef: ref }), outbound))), ruleSets: optional(array(inlineSet)), dnsServers: optional(array(resolver)), httpClients: optional(array(httpClient)) }),
+  settings: optional(object({ logLevel: optional(enumeration(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'panic'] as const)), tunMtu: optional(integer(576, 65535)), dnsFinal: optional(string), routeFinal: optional(string) })),
+  dnsSteps: array(dnsStep), routeSteps: array(routeStep),
+});
 export const templateSchema = object({ ...identity, targetVersion: literal('1.14.4'),
   defaults: object({ log: optional(object({ disabled: optional(bool), level: optional(enumeration(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'panic'] as const)) })),
     dns: optional(object({ final: optional(string), strategy: optional(enumeration(['prefer_ipv4', 'prefer_ipv6', 'ipv4_only', 'ipv6_only'] as const)) })),
@@ -125,6 +154,7 @@ export const templateSchema = object({ ...identity, targetVersion: literal('1.14
   resources: object({
     outbounds: optional(array(outbound)),
     dnsServers: optional(array(resolver)),
+    httpClients: optional(array(httpClient)),
     ruleSets: optional(array(inlineSet)),
     inbounds: optional(array(union(
       object({ type: literal('mixed'), tag: string, listen: string, listen_port: integer(1, 65535) }),
@@ -132,7 +162,9 @@ export const templateSchema = object({ ...identity, targetVersion: literal('1.14
     ))),
   }),
   routePresets: optional(record(array(routeRule))),
-  platformDnsServers: object({ 'windows-standalone': optional(array(resolver)), 'macos-standalone': optional(array(resolver)), 'macos-appstore': optional(array(resolver)), 'ios-appstore': optional(array(resolver)), 'android-google-play': optional(array(resolver)) }),
+  dnsPresets: optional(record(array(dnsRule))),
+  ecsResponseTags: optional(array(string)),
+  platformDnsServers: object({ 'windows-standalone': optional(array(platformResolver)), 'macos-standalone': optional(array(platformResolver)), 'macos-appstore': optional(array(platformResolver)), 'ios-appstore': optional(array(platformResolver)), 'android-google-play': optional(array(platformResolver)) }),
 });
 export type RecipeDocument = Value<typeof recipeSchema>;
 export type TemplateDocument = Value<typeof templateSchema>;

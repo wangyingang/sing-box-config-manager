@@ -64,7 +64,7 @@ python3 scripts/import-legacy-fixtures.py \
 - [原始验收与 M2 输入](docs/architecture/d06-validation.md)
 - [固定 Schema 来源与许可证](schemas/README.md)
 
-### 固定修订 Recipe 入口（首个切片）
+### 固定修订 Recipe 入口
 
 核心包导出 `RecipeDocument`、`TemplateDocument`、`NodeRevision` 和
 `RecipeCompileInput`。`resolveRecipe(input)` 返回 `Result<CompileInput>`；
@@ -103,7 +103,7 @@ const result = compileRecipe(input);
 日志／DNS／Route 的有限默认值及四个既有 Recipe settings。
 节点连接支持 VLESS（含 REALITY、uTLS、WebSocket）、Hysteria2（含内嵌证书）和
 Shadowsocks。所有对象拒绝未声明字段，不接受文件路径、任意 options 或 JSON patch。
-Route 策略支持预设与 Inline Rule，具体契约见下节。DNS steps 当前只接受空数组；
+DNS／Route 策略支持预设与 Inline Rule，具体契约见下节。
 固定规则产物由后续切片实现。
 底层 D06 API 保持原契约，仍可供可信宿主直接使用。
 
@@ -125,7 +125,34 @@ Template 可提供固定 `routePresets: Record<string, RouteRule[]>`。Recipe �
 `preset` 和 `presetRuleIndex`。D06 `compile` 的输出路径保持原样。
 四项 settings 均为明确字段：logLevel、tunMtu、dnsFinal、routeFinal。
 dnsFinal 是 DNS server tag；tunMtu 要求 Template 中有且仅有一个 TUN 入站。
-DNS steps 的完整契约仍属于后续切片。
+
+### Recipe DNS 策略
+
+Template 可提供 `dnsPresets` 和 `ecsResponseTags`。Recipe 的 `dnsSteps` 与
+`routeSteps` 分别有序，均使用 `{ id, preset }` 或 `{ id, rule }`，ID 在各自列表中唯一。
+DNS 同样支持预设原位展开、独立重复和稳定步骤诊断映射。
+支持 route（可省略 action）、evaluate、respond、reject、predefined，以及递归
+and／or、查询类型、响应码、具名响应、域名、地址、进程／应用和 Rule Set 匹配。
+具名响应必须由此前的 evaluate 定义；重复定义、先引用后定义和逻辑条件内的
+缺失响应均阻止编译。删除或移动预设不会修复响应依赖。
+
+Template 和 Recipe 的 `resources.dnsServers` 支持 local／UDP／HTTPS；
+HTTPS 保留样本使用的 TLS、Host headers、detour 和 domain_resolver。
+local 支持 prefer_go、neighbor_domain。`resources.httpClients` 支持 tag、detour、
+domain_resolver；resolver 可以是 tag 或 `{ server, strategy? }`。
+这些对象均有封闭字段契约，引用沿用 D06 校验。平台 DHCP resolver 只能由
+Template 的 `platformDnsServers` 提供；Android 选择 local，若配置 DHCP 或
+不支持的进程／应用条件则明确拒绝。资源顺序为模板公共项、平台项、Recipe 项。
+
+Recipe 和结构化 Template 均不接受 `client_subnet`，动态地址只来自
+`params.ecs: { address, prefix } | null`，没有默认掩码。
+Template 的 `ecsResponseTags` 只声明可注入的顶层 evaluate 响应。
+不同参数只改变声明位置的 ECS 字段；null 清除旧网段并设置 remove_client_subnet。
+删除声明所需的 evaluate 即使传 null 也仍报错，不自动关闭 ECS。
+
+`test/dns-fixtures.ts` 将既有 first／ecs DNS 策略映射到新入口，使用显式合成的
+Inline Rule Set 依赖；这不代表已迁移远程产物内容或完成五份样本的全量迁移。
+原生集成覆盖桌面 DHCP／Android local 选择，以及发布和订阅的两种 ECS 输出。
 
 ### 草稿与编辑判定
 
