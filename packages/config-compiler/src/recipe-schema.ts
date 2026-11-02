@@ -130,6 +130,31 @@ function record<T>(inner: Schema<T>): Schema<Record<string, T>> {
   } };
 }
 const inlineSet = object({ kind: literal('inline'), definition: object({ type: literal('inline'), tag: string, rules: array(headlessRule) }) });
+const artifactUsage = enumeration(['route', 'dns-query', 'dns-response'] as const);
+const curatedSet = object({ kind: literal('curated'), tag: string,
+  artifactRef: object({ id: string, revision: string, usage: artifactUsage }), httpClient: optional(string) });
+const ruleSet = union(inlineSet, curatedSet);
+// Data contract owned by rule-set-pipeline/contracts; no Pipeline runtime import.
+const nonemptyStrings = schema((v): v is string[] => Array.isArray(v) && v.length > 0 && v.every(s => typeof s === 'string' && s.length > 0) && new Set(v).size === v.length);
+const capability = enumeration(['processMatching', 'packageMatching', 'dhcpDns'] as const);
+const capabilities: Schema<Value<typeof capability>[]> = { parse(v, p) {
+  const result = array(capability).parse(v, p);
+  if (new Set(result).size !== result.length) throw new StructureError(p);
+  return result;
+} };
+const httpsUrl = schema((v): v is string => {
+  if (typeof v !== 'string' || !/^https:\/\/[^/?#@]+\/[^?#]*$/.test(v)) return false;
+  try { const url = new URL(v); return url.protocol === 'https:' && !!url.hostname && !url.username && !url.password; } catch { return false; }
+});
+const projection = union(object({ artifactIds: nonemptyStrings }), object({ unavailable: literal('empty') }));
+export const artifactManifestSchema = object({ schemaVersion: literal(1), id: string, revision: string,
+  targetVersion: literal('1.14.4'), sourceFormatVersion: literal(4),
+  artifacts: array(object({ id: string, format: enumeration(['source', 'binary'] as const), url: httpsUrl,
+    sha256: schema((v): v is string => typeof v === 'string' && /^[a-f0-9]{64}$/.test(v)),
+    byteLength: integer(1, Number.MAX_SAFE_INTEGER), termCount: integer(1, Number.MAX_SAFE_INTEGER), requiredCapabilities: capabilities })),
+  projections: object({ route: projection, 'dns-query': projection, 'dns-response': projection }),
+});
+export type ArtifactManifest = Value<typeof artifactManifestSchema>;
 const domainResolver = union(string, object({ server: string, strategy: optional(strategy) }));
 const dialer = { detour: optional(string), domain_resolver: optional(domainResolver) };
 const headers = object({ Host: optional(strings) });
@@ -142,7 +167,7 @@ const resolver = union(
 const platformResolver = union(resolver, object({ type: literal('dhcp'), tag: string, interface: optional(string), prefer_go: optional(bool), neighbor_domain: optional(strings), ...dialer }));
 const httpClient = object({ tag: string, ...dialer });
 export const recipeSchema = object({ ...identity, profile, templateRef: ref,
-  resources: object({ outbounds: optional(array(union(object({ kind: literal('node'), tag: string, nodeRef: ref }), outbound))), ruleSets: optional(array(inlineSet)), dnsServers: optional(array(resolver)), httpClients: optional(array(httpClient)) }),
+  resources: object({ outbounds: optional(array(union(object({ kind: literal('node'), tag: string, nodeRef: ref }), outbound))), ruleSets: optional(array(ruleSet)), dnsServers: optional(array(resolver)), httpClients: optional(array(httpClient)) }),
   settings: optional(object({ logLevel: optional(enumeration(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'panic'] as const)), tunMtu: optional(integer(576, 65535)), dnsFinal: optional(string), routeFinal: optional(string) })),
   dnsSteps: array(dnsStep), routeSteps: array(routeStep),
 });
@@ -155,7 +180,7 @@ export const templateSchema = object({ ...identity, targetVersion: literal('1.14
     outbounds: optional(array(outbound)),
     dnsServers: optional(array(resolver)),
     httpClients: optional(array(httpClient)),
-    ruleSets: optional(array(inlineSet)),
+    ruleSets: optional(array(ruleSet)),
     inbounds: optional(array(union(
       object({ type: literal('mixed'), tag: string, listen: string, listen_port: integer(1, 65535) }),
       object({ type: literal('tun'), tag: string, address: strings, mtu: optional(integer(576, 65535)), auto_route: optional(bool), strict_route: optional(bool), stack: optional(enumeration(['system', 'gvisor', 'mixed'] as const)) }),
@@ -170,8 +195,9 @@ export type RecipeDocument = Value<typeof recipeSchema>;
 export type TemplateDocument = Value<typeof templateSchema>;
 export type NodeRevision = Value<typeof nodeRevisionSchema>;
 const params = object({ ecs: union(schema((v): v is null => v === null), object({ address: string, prefix: integer(0, 32) })) });
+const dependencies = object({ templates: array(templateSchema), nodes: array(nodeRevisionSchema), manifests: optional(array(artifactManifestSchema)) });
 export const recipeInputSchema = object({ recipe: recipeSchema,
-  dependencies: object({ templates: array(templateSchema), nodes: array(nodeRevisionSchema) }),
+  dependencies,
   params,
 });
 export type RecipeCompileInput = Value<typeof recipeInputSchema>;
@@ -180,7 +206,7 @@ export type RecipeCompileInput = Value<typeof recipeInputSchema>;
 export const recipeEditSchema = object({
   previous: union(schema((v): v is null => v === null), recipeSchema),
   candidate: recipeSchema,
-  dependencies: object({ templates: array(templateSchema), nodes: array(nodeRevisionSchema) }),
+  dependencies,
   params,
   nodes: array(object({ id: string, archived: bool })),
 });
