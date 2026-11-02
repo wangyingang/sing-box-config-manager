@@ -12,7 +12,8 @@ test('two Recipes share a fixed NodeRevision with independent local tags and upg
   assert.deepEqual(success(compileRecipe(b)).config.outbounds, [{ type: 'direct', tag: 'direct' }, { ...node.connection, tag: 'bob-proxy' }]);
   a.dependencies.nodes.push({ ...node, revision: '2', connection: { ...node.connection, server: '192.0.2.2' } });
   assert.deepEqual(success(compileRecipe(a)), first);
-  a.recipe.revision = '2'; a.recipe.resources.outbounds![0]!.nodeRef.revision = '2';
+  a.recipe.revision = '2'; const binding = a.recipe.resources.outbounds![0]!;
+  assert.ok('kind' in binding); binding.nodeRef.revision = '2';
   assert.equal((success(compileRecipe(a)).config.outbounds as { server?: string }[])[1]!.server, '192.0.2.2');
   assert.equal((success(compileRecipe(b)).config.outbounds as { server?: string }[])[1]!.server, '192.0.2.1');
   assert.deepEqual(b.dependencies.nodes, before.dependencies.nodes);

@@ -122,7 +122,7 @@ export function validateConfig(config: Obj, profile: ProfileId, artifacts: RuleA
         }
       }
       const parameters = new Set(['action', 'type', 'server', 'outbound', 'method', 'no_drop', 'rcode', 'answer', 'ns', 'extra', 'disable_cache', 'remove_client_subnet', 'client_subnet', 'rewrite_ttl', 'timeout']);
-      const terminal = ['route', 'reject', 'predefined', 'hijack-dns'].includes(String(rule.action));
+      const terminal = ['route', 'reject', 'predefined', 'hijack-dns'].includes(String(rule.action ?? 'route'));
       if (terminal && Object.keys(rule).every(key => parameters.has(key))) terminated = true;
     });
   }

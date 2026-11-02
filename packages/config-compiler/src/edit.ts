@@ -42,8 +42,9 @@ export function decideRecipeEdit(input: unknown): EditDecision<RecipeDocument> {
       reasons.push(reason('RECIPE_REVISION_IMMUTABLE', '/candidate/revision', '修改 Recipe 必须创建新修订'));
     }
     // Consume retained bindings once: duplicating one binding is still an addition.
-    const retained = sameRecipe ? [...(previous.resources.outbounds ?? [])] : [];
+    const retained = sameRecipe ? (previous.resources.outbounds ?? []).filter(binding => 'kind' in binding) : [];
     for (const [i, binding] of (candidate.resources.outbounds ?? []).entries()) {
+      if (!('kind' in binding)) continue;
       const path = `/candidate/resources/outbounds/${i}/nodeRef`;
       const states = nodes.filter(state => state.id === binding.nodeRef.id);
       if (states.length !== 1) {

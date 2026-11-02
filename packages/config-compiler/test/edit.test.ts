@@ -77,7 +77,7 @@ test('archived bindings survive ordinary edits and reordering but cannot be adde
   for (const mutate of [
     (v: RecipeEditInput) => { v.previous = null; },
     (v: RecipeEditInput) => { v.candidate.id = 'copy'; },
-    (v: RecipeEditInput) => { v.candidate.resources.outbounds![0]!.nodeRef.revision = 'missing'; },
+    (v: RecipeEditInput) => { const binding = v.candidate.resources.outbounds![0]!; assert.ok('kind' in binding); binding.nodeRef.revision = 'missing'; },
     (v: RecipeEditInput) => { v.candidate.resources.outbounds![0]!.tag = 'new-binding'; },
     (v: RecipeEditInput) => { v.candidate.resources.outbounds!.push(structuredClone(v.candidate.resources.outbounds![0]!)); },
     (v: RecipeEditInput) => { v.previous!.resources.outbounds = []; },
@@ -113,7 +113,7 @@ test('edits require a new Recipe revision and return isolated snapshots', () => 
   const saved = decideRecipeEdit(request);
   assert.ok(saved.allowed);
   assert.deepEqual(decideRecipeEdit(request), saved);
-  saved.value.resources.outbounds![0]!.nodeRef.revision = 'mutated';
+  const binding = saved.value.resources.outbounds![0]!; assert.ok('kind' in binding); binding.nodeRef.revision = 'mutated';
   const structural = success(validateRecipeDraft(request.candidate));
   structural.resources.outbounds![0]!.tag = 'mutated';
   assert.deepEqual(request, before);
@@ -151,4 +151,15 @@ test('retained archived bindings compile and publish; draft edits and new node r
   assert.deepEqual(original, before);
   assert.deepEqual(publication, snapshot);
   assert.deepEqual(success(await renderSubscription(publication, { ecs: null })), config);
+});
+
+test('non-node outbounds do not require node lifecycle state and cannot mask archived additions', () => {
+  const request = edit();
+  request.candidate.resources.outbounds!.unshift({ type: 'direct', tag: 'extra' });
+  request.candidate.resources.outbounds!.push({ type: 'selector', tag: 'proxy', outbounds: ['direct', 'alice-proxy'] });
+  assert.equal(decideRecipeEdit(request).allowed, true);
+  request.nodes[0]!.archived = true;
+  assert.equal(decideRecipeEdit(request).allowed, true);
+  request.previous = null;
+  assert.ok(codes(request).includes('NODE_ARCHIVED'));
 });
