@@ -1,0 +1,46 @@
+{
+  "name": "@sing-box-config-manager/config-compiler",
+  "version": "0.1.0",
+  "description": "独立的 sing-box 配置组合、校验与发布核心",
+  "scripts": {
+    "generate:validator": "node scripts/build-validator.mjs",
+    "typecheck": "tsc --noEmit",
+    "build": "pnpm run generate:validator && tsc -p tsconfig.build.json && node scripts/build.mjs",
+    "test": "pnpm run generate:validator && tsx --test test/*.test.ts",
+    "test:integration": "pnpm run generate:validator && tsx --test test/integration/*.test.ts",
+    "check": "pnpm run typecheck && pnpm test && pnpm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wangyingang/sing-box-config-manager.git"
+  },
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/wangyingang/sing-box-config-manager/issues"
+  },
+  "homepage": "https://github.com/wangyingang/sing-box-config-manager#readme",
+  "dependencies": {
+    "ipaddr.js": "2.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "ajv": "8.20.0",
+    "esbuild": "0.28.2",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
+  },
+  "private": true,
+  "exports": {
+    ".": {
+      "types": "./dist/types/src/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./publisher": {
+      "types": "./dist/types/src/publisher.d.ts",
+      "import": "./dist/publisher.js"
+    }
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

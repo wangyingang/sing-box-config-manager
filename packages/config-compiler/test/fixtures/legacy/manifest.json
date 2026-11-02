@@ -1,0 +1,247 @@
+{
+  "configRevision": "01fd03bc8cf1587770bf98d67e241b7068be49fe",
+  "ruleRevision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+  "binaryVersion": "sing-box version 1.14.4\n\nEnvironment: go1.26.10 darwin/arm64\nTags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0\nRevision: c005f35300ce76427dc285481ec5695f5b179cd2\nCGO: enabled",
+  "cases": [
+    {
+      "id": "user-a-tun",
+      "profile": "macos-standalone"
+    },
+    {
+      "id": "user-b-tun",
+      "profile": "macos-standalone"
+    },
+    {
+      "id": "user-b-android-tun",
+      "profile": "android-google-play"
+    },
+    {
+      "id": "user-c-tun",
+      "profile": "macos-standalone"
+    },
+    {
+      "id": "user-d-tun",
+      "profile": "macos-standalone"
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "Javdb",
+      "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+      "sha256": "77b1257cd726bad361a94157062e1ace1abda1060e967d267af7d1f6bc7fdaf9",
+      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/custom-rule/Javdb.json",
+      "format": "source",
+      "requiredCapabilities": []
+    },
+    {
+      "id": "Development",
+      "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+      "sha256": "52a8437ba0871413c21dd402214cdba747152271cc3e484a1ed21303546550be",
+      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/custom-rule/Development.json",
+      "format": "source",
+      "requiredCapabilities": [
+        "processMatching"
+      ]
+    },
+    {
+      "id": "Docker",
+      "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+      "sha256": "ea005ac127a35ddfabcdc3d3243bda2725725a77b627426c86019062dad32f84",
+      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Docker.srs",
+      "format": "binary",
+      "requiredCapabilities": []
+    },
+    {
+      "id": "Apple",
+      "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+      "sha256": "39ea340347144d81fed404b80a4b4e6dd62d2f52d5f4d3f27f684b77f21089e1",
+      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Apple.srs",
+      "format": "binary",
+      "requiredCapabilities": [
+        "processMatching"
+      ]
+    },
+    {
+      "id": "Speedtest",
+      "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+      "sha256": "a91c7ffb41d1e5217a95d3f6db47ae2b71c72c8d261b8467cda11e80c32e1f59",
+      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Speedtest.srs",
+      "format": "binary",
+      "requiredCapabilities": []
+    },
+    {
+      "id": "OpenAI",
+      "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+      "sha256": "6739c84f6ce825a9bd229c207756ffbd5f84d6014dcdd0805dbc2560aad22a15",
+      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/OpenAI.srs",
+      "format": "binary",
+      "requiredCapabilities": []
+    },
+    {
+      "id": "DNS_OpenAI_domain",
+      "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+      "sha256": "37325eeef1be0f7d356bfdbfec00cc85b884d3b8874bc831ce8130d0891a3fb8",
+      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/DNS_OpenAI_domain.srs",
+      "format": "binary",
+      "requiredCapabilities": []
+    },
+    {
+      "id": "Anthropic",
+      "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+      "sha256": "62a7e7ff919792ca473230b5db8452c7cd0cc53f487f1a1509f908df847bd27c",
+      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Anthropic.srs",
+      "format": "binary",
+      "requiredCapabilities": []
+    },
+    {
+      "id": "Claude",
+      "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+      "sha256": "e9c87ae24f336682fd8882b6d2753932cdac5d1946ace56d55bbc0cfbe358608",
+      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Claude.srs",
+      "format": "binary",
+      "requiredCapabilities": []
+    },
+    {
+      "id": "Gemini",
+      "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+      "sha256": "fa7c1542d34ccb1b17d001f59e1e917b056d2491451b060300b51cf37b8b5923",
+      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Gemini.srs",
+      "format": "binary",
+      "requiredCapabilities": []
+    },
+    {
+      "id": "OneDrive",
+      "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+      "sha256": "2a3743995d7e5570f8cc54deb8d82ad55c03f90e9b55063ae77314970a3b057b",
+      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/OneDrive.srs",
+      "format": "binary",
+      "requiredCapabilities": [
+        "processMatching"
+      ]
+    },
+    {
+      "id": "Microsoft",
+      "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+      "sha256": "dc6c37fd3b80281563762614903ed500e14374098306f4ceee5ec5326f966089",
+      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Microsoft.srs",
+      "format": "binary",
+      "requiredCapabilities": [
+        "processMatching"
+      ]
+    },
+    {
+      "id": "Google",
+      "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+      "sha256": "ec7346865f6c23a1636885a6b5d73baeff233ac0e2fbfffd1e848e4369bc926a",
+      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Google.srs",
+      "format": "binary",
+      "requiredCapabilities": [
+        "processMatching"
+      ]
+    },
+    {
+      "id": "DNS_Google_domain",
+      "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+      "sha256": "6b5ff78c2b4f2795ba89ca84238314a459e6c085db55ce956d64c0469a06a9df",
+      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/DNS_Google_domain.srs",
+      "format": "binary",
+      "requiredCapabilities": []
+    },
+    {
+      "id": "YouTube",
+      "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+      "sha256": "da4163404185d0c106158bad3bc246a7df1388b1974bceace0dfa1f0443abd30",
+      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/YouTube.srs",
+      "format": "binary",
+      "requiredCapabilities": []
+    },
+    {
+      "id": "海外媒体",
+      "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+      "sha256": "0b13536eb159f92502f3cb3645432f9f1b34810e9f59c4ea1aa8b990f72a9442",
+      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/GlobalMedia.srs",
+      "format": "binary",
+      "requiredCapabilities": [
+        "processMatching"
+      ]
+    },
+    {
+      "id": "Global",
+      "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+      "sha256": "a66cc5d831893559f68951289eb29013d62cbca7929cef929bc6416c6b38c1c2",
+      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Global.srs",
+      "format": "binary",
+      "requiredCapabilities": [
+        "processMatching"
+      ]
+    },
+    {
+      "id": "DNS_Global_domain",
+      "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+      "sha256": "6a26c4e4587f04da848e3dfbf00a718a98030b1be9aa6252de16061c60bbf02d",
+      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/DNS_Global_domain.srs",
+      "format": "binary",
+      "requiredCapabilities": []
+    },
+    {
+      "id": "DNS_Global_ipcidr",
+      "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+      "sha256": "42a74efce84a46459465c78ec89555283cc2e47f8627f367670ca447dd3620e8",
+      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/DNS_Global_ipcidr.srs",
+      "format": "binary",
+      "requiredCapabilities": []
+    },
+    {
+      "id": "ChinaIPs",
+      "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+      "sha256": "96d4480f2f673b5feac8da5c30e49d184b0e50ed2eb682b8a38116aa5bd9a7f8",
+      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/ChinaIPs.srs",
+      "format": "binary",
+      "requiredCapabilities": []
+    },
+    {
+      "id": "ChinaMaxNoIP",
+      "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+      "sha256": "15ef1a722ac5de17c3ec7b314c8cccda023367c4e3cfccd8fe52bb7912a8ecf8",
+      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/ChinaMaxNoIP.srs",
+      "format": "binary",
+      "requiredCapabilities": [
+        "processMatching"
+      ]
+    },
+    {
+      "id": "DNS_ChinaMaxNoIP_domain",
+      "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+      "sha256": "161420a96cb0bccad30811c77b1b6c4591afb5bf37271b6f378f337b8df2e192",
+      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/DNS_ChinaMaxNoIP_domain.srs",
+      "format": "binary",
+      "requiredCapabilities": []
+    },
+    {
+      "id": "ChinaMax",
+      "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+      "sha256": "38b5e95ee0d98bc770a72a90ca5859c4447e24570d5852963727e790cd14cf87",
+      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/ChinaMax.srs",
+      "format": "binary",
+      "requiredCapabilities": [
+        "processMatching"
+      ]
+    },
+    {
+      "id": "Steam",
+      "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+      "sha256": "4914997e877545193dd298026179b9607c12da0c69edad54adab023067e0e5a8",
+      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Steam.srs",
+      "format": "binary",
+      "requiredCapabilities": []
+    },
+    {
+      "id": "SteamCN",
+      "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+      "sha256": "d39e1720e141216438c8accd2eeb51c44b7d14fd66e4763bc2d7c2190602e302",
+      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/SteamCN.srs",
+      "format": "binary",
+      "requiredCapabilities": []
+    }
+  ]
+}

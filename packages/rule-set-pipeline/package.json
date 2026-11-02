@@ -1,0 +1,7 @@
+{
+  "name": "@sing-box-config-manager/rule-set-pipeline",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "系统规则的采集、转换、编译与发布模块骨架"
+}

@@ -1,0 +1,10 @@
+{
+  "name": "@sing-box-config-manager/web-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Configuration Manager Web App 模块骨架",
+  "dependencies": {
+    "@sing-box-config-manager/config-compiler": "workspace:*"
+  }
+}

@@ -1,0 +1,1953 @@
+{
+  "fragments": {
+    "1.base.json": {
+      "log": {
+        "disabled": false,
+        "level": "warn"
+      },
+      "dns": {
+        "servers": [
+          {
+            "tag": "dns_direct",
+            "type": "https",
+            "server": "223.5.5.5",
+            "server_port": 443,
+            "path": "/dns-query",
+            "headers": {
+              "Host": "dns.alidns.com"
+            },
+            "tls": {
+              "server_name": "dns.alidns.com"
+            }
+          },
+          {
+            "tag": "dns_proxy",
+            "type": "https",
+            "server": "8.8.8.8",
+            "server_port": 443,
+            "path": "/dns-query",
+            "headers": {
+              "Host": "dns.google"
+            },
+            "tls": {
+              "server_name": "dns.google"
+            },
+            "detour": "代理"
+          },
+          {
+            "type": "local",
+            "tag": "dns_local",
+            "prefer_go": false,
+            "neighbor_domain": []
+          }
+        ],
+        "rules": [
+          {
+            "preferred_by": "dns_local",
+            "action": "route",
+            "server": "dns_local",
+            "remove_client_subnet": true,
+            "disable_cache": true
+          },
+          {
+            "domain_suffix": [
+              "local"
+            ],
+            "action": "route",
+            "server": "dns_local",
+            "remove_client_subnet": true,
+            "disable_cache": true
+          },
+          {
+            "domain_regex": "^[^.]+$",
+            "action": "route",
+            "server": "dns_lan",
+            "remove_client_subnet": true,
+            "disable_cache": true
+          },
+          {
+            "domain_suffix": [
+              "localdomain",
+              "lan",
+              "home.arpa",
+              "internal",
+              "intranet"
+            ],
+            "action": "route",
+            "server": "dns_lan",
+            "remove_client_subnet": true,
+            "disable_cache": true
+          },
+          {
+            "query_type": "AAAA",
+            "action": "predefined",
+            "rcode": "NOERROR"
+          },
+          {
+            "clash_mode": "Direct",
+            "action": "route",
+            "server": "dns_direct",
+            "remove_client_subnet": true
+          },
+          {
+            "clash_mode": "Global",
+            "action": "route",
+            "server": "dns_proxy",
+            "remove_client_subnet": true
+          },
+          {
+            "rule_set": [
+              "Process-Direct-required",
+              "Domain-Direct-required"
+            ],
+            "action": "route",
+            "server": "dns_direct",
+            "remove_client_subnet": true
+          },
+          {
+            "protocol": [
+              "bittorrent",
+              "rdp",
+              "ssh"
+            ],
+            "action": "route",
+            "server": "dns_direct",
+            "remove_client_subnet": true
+          }
+        ],
+        "final": "dns_proxy",
+        "strategy": "ipv4_only"
+      },
+      "inbounds": [],
+      "outbounds": [
+        {
+          "type": "selector",
+          "tag": "漏网之鱼",
+          "outbounds": [
+            "直连",
+            "代理"
+          ],
+          "default": "直连",
+          "interrupt_exist_connections": true
+        },
+        {
+          "type": "direct",
+          "tag": "直连"
+        }
+      ],
+      "route": {
+        "rules": [
+          {
+            "action": "sniff"
+          },
+          {
+            "type": "logical",
+            "mode": "or",
+            "rules": [
+              {
+                "protocol": "dns"
+              },
+              {
+                "port": 53
+              }
+            ],
+            "action": "hijack-dns"
+          },
+          {
+            "rule_set": "LocalNames",
+            "action": "resolve"
+          },
+          {
+            "rule_set": "LocalNames",
+            "action": "route",
+            "outbound": "直连"
+          },
+          {
+            "ip_is_private": true,
+            "action": "route",
+            "outbound": "直连"
+          },
+          {
+            "ip_version": 6,
+            "action": "reject"
+          },
+          {
+            "type": "logical",
+            "mode": "or",
+            "rules": [
+              {
+                "port": 853
+              },
+              {
+                "network": "udp",
+                "port": 443
+              },
+              {
+                "protocol": [
+                  "stun"
+                ]
+              }
+            ],
+            "action": "reject"
+          }
+        ],
+        "rule_set": [
+          {
+            "type": "inline",
+            "tag": "Process-Direct-required",
+            "rules": [
+              {
+                "process_name": [
+                  "TencentMeeting",
+                  "Thunder",
+                  "LocalSend",
+                  "WeChat",
+                  "Tailscale",
+                  "softwareupdated",
+                  "kubectl"
+                ]
+              }
+            ]
+          },
+          {
+            "type": "inline",
+            "tag": "Domain-Direct-required",
+            "rules": [
+              {
+                "domain_suffix": [
+                  "jsdelivr.net"
+                ]
+              }
+            ]
+          },
+          {
+            "type": "inline",
+            "tag": "LocalNames",
+            "rules": [
+              {
+                "domain_regex": [
+                  "^[^.]+\\.?$",
+                  "(?i)^(?:[^.]+\\.)*(?:local|localdomain|lan|home\\.arpa|internal|intranet)\\.?$"
+                ]
+              }
+            ]
+          }
+        ],
+        "default_domain_resolver": "dns_direct",
+        "default_http_client": "rule-set-download",
+        "final": "漏网之鱼",
+        "auto_detect_interface": true
+      },
+      "services": [
+        {
+          "type": "api",
+          "tag": "api",
+          "listen": "127.0.0.1",
+          "listen_port": 9090,
+          "secret": "",
+          "dashboard": {
+            "enabled": true,
+            "path": "dashboard",
+            "http_client": "rule-set-download"
+          }
+        }
+      ],
+      "experimental": {
+        "cache_file": {
+          "enabled": true,
+          "store_dns": true
+        }
+      }
+    },
+    "1.dns-lan.json": {
+      "dns": {
+        "servers": [
+          {
+            "type": "dhcp",
+            "tag": "dns_lan"
+          }
+        ]
+      }
+    },
+    "1.policy-common.json": {
+      "http_clients": [
+        {
+          "tag": "rule-set-download",
+          "detour": "代理",
+          "domain_resolver": {
+            "server": "dns_proxy",
+            "strategy": "ipv4_only"
+          }
+        }
+      ],
+      "route": {
+        "rules": [
+          {
+            "clash_mode": "Direct",
+            "action": "route",
+            "outbound": "直连"
+          },
+          {
+            "clash_mode": "Global",
+            "action": "route",
+            "outbound": "代理"
+          },
+          {
+            "rule_set": [
+              "Process-Direct-required",
+              "Domain-Direct-required"
+            ],
+            "action": "route",
+            "outbound": "直连"
+          },
+          {
+            "protocol": [
+              "bittorrent",
+              "rdp",
+              "ssh"
+            ],
+            "action": "route",
+            "outbound": "直连"
+          }
+        ]
+      }
+    },
+    "2.inbounds-tun.json": {
+      "log": {},
+      "dns": {},
+      "inbounds": [
+        {
+          "type": "tun",
+          "tag": "in",
+          "address": [
+            "172.19.0.1/30",
+            "fd82:25ea:4d13::1/126"
+          ],
+          "auto_route": true,
+          "strict_route": true
+        }
+      ],
+      "outbounds": [],
+      "route": {
+        "auto_detect_interface": true,
+        "rules": [
+          {
+            "inbound": "in",
+            "action": "resolve"
+          }
+        ]
+      },
+      "experimental": {}
+    },
+    "3.outbounds-common.json": {
+      "log": {},
+      "dns": {},
+      "inbounds": [],
+      "outbounds": [
+        {
+          "type": "selector",
+          "tag": "代理",
+          "outbounds": [
+            "自动选择",
+            "dmit-vps",
+            "jms-s1",
+            "jms-s2",
+            "jms-s3",
+            "jms-s4",
+            "jms-s5",
+            "jms-s801"
+          ],
+          "default": "自动选择",
+          "interrupt_exist_connections": true
+        },
+        {
+          "type": "urltest",
+          "tag": "自动选择",
+          "outbounds": [
+            "dmit-vps",
+            "jms-s1",
+            "jms-s2",
+            "jms-s3",
+            "jms-s4",
+            "jms-s5"
+          ],
+          "interrupt_exist_connections": true
+        }
+      ],
+      "route": {},
+      "experimental": {}
+    },
+    "4.user-b.json": {
+      "log": {},
+      "dns": {},
+      "inbounds": [],
+      "outbounds": [
+        {
+          "type": "selector",
+          "tag": "Steam",
+          "outbounds": [
+            "直连",
+            "代理",
+            "dmit-vps",
+            "jms-s1",
+            "jms-s2",
+            "jms-s3",
+            "jms-s4",
+            "jms-s5",
+            "jms-s801"
+          ],
+          "default": "代理",
+          "interrupt_exist_connections": true
+        },
+        {
+          "type": "selector",
+          "tag": "SteamCN",
+          "outbounds": [
+            "直连",
+            "代理",
+            "dmit-vps",
+            "jms-s1",
+            "jms-s2",
+            "jms-s3",
+            "jms-s4",
+            "jms-s5",
+            "jms-s801"
+          ],
+          "default": "直连",
+          "interrupt_exist_connections": true
+        }
+      ],
+      "route": {
+        "rules": [
+          {
+            "rule_set": "Proxy-required",
+            "action": "route",
+            "outbound": "代理"
+          },
+          {
+            "rule_set": "Steam",
+            "action": "route",
+            "outbound": "Steam"
+          },
+          {
+            "rule_set": "SteamCN",
+            "action": "route",
+            "outbound": "SteamCN"
+          }
+        ],
+        "rule_set": [
+          {
+            "type": "inline",
+            "tag": "Proxy-required",
+            "rules": [
+              {
+                "domain_suffix": [
+                  "wallhaven.cc"
+                ]
+              }
+            ]
+          },
+          {
+            "type": "remote",
+            "tag": "Steam",
+            "format": "binary",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Steam.srs",
+            "http_client": "rule-set-download"
+          },
+          {
+            "type": "remote",
+            "tag": "SteamCN",
+            "format": "binary",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/SteamCN.srs",
+            "http_client": "rule-set-download"
+          }
+        ]
+      },
+      "experimental": {}
+    },
+    "5.dns.json": {
+      "log": {},
+      "dns": {
+        "rules": [
+          {
+            "rule_set": [
+              "DNS_OpenAI_domain",
+              "Anthropic",
+              "Claude",
+              "DNS_Google_domain",
+              "Gemini"
+            ],
+            "action": "route",
+            "server": "dns_proxy",
+            "remove_client_subnet": true
+          },
+          {
+            "rule_set": "DNS_ChinaMaxNoIP_domain",
+            "action": "route",
+            "server": "dns_direct",
+            "remove_client_subnet": true
+          },
+          {
+            "rule_set": "DNS_Global_domain",
+            "action": "route",
+            "server": "dns_proxy",
+            "remove_client_subnet": true
+          },
+          {
+            "action": "evaluate",
+            "server": "dns_proxy",
+            "tag": "first",
+            "remove_client_subnet": true
+          },
+          {
+            "match_response": "first",
+            "rule_set": "DNS_Global_ipcidr",
+            "action": "respond"
+          },
+          {
+            "match_response": "first",
+            "response_rcode": "NOERROR",
+            "rule_set": "ChinaIPs",
+            "action": "evaluate",
+            "server": "dns_proxy",
+            "tag": "ecs",
+            "client_subnet": "8.8.8.0/24"
+          },
+          {
+            "match_response": "ecs",
+            "response_rcode": "NOERROR",
+            "rule_set": "ChinaIPs",
+            "action": "respond"
+          },
+          {
+            "match_response": "first",
+            "action": "respond"
+          },
+          {
+            "action": "predefined",
+            "rcode": "SERVFAIL"
+          }
+        ]
+      },
+      "inbounds": [],
+      "outbounds": [],
+      "route": {},
+      "experimental": {}
+    },
+    "6.route.json": {
+      "log": {},
+      "dns": {},
+      "inbounds": [],
+      "outbounds": [
+        {
+          "type": "selector",
+          "tag": "OneDrive",
+          "outbounds": [
+            "直连",
+            "代理"
+          ],
+          "default": "代理",
+          "interrupt_exist_connections": true
+        },
+        {
+          "type": "selector",
+          "tag": "Microsoft",
+          "outbounds": [
+            "直连",
+            "代理"
+          ],
+          "default": "直连",
+          "interrupt_exist_connections": true
+        },
+        {
+          "type": "selector",
+          "tag": "海外AI",
+          "outbounds": [
+            "dmit-vps",
+            "jms-s3"
+          ],
+          "default": "dmit-vps",
+          "interrupt_exist_connections": true
+        },
+        {
+          "type": "selector",
+          "tag": "YouTube",
+          "outbounds": [
+            "代理",
+            "dmit-vps",
+            "jms-s1",
+            "jms-s2",
+            "jms-s3",
+            "jms-s4",
+            "jms-s5",
+            "jms-s801"
+          ],
+          "default": "jms-s3",
+          "interrupt_exist_connections": true
+        },
+        {
+          "type": "selector",
+          "tag": "海外媒体",
+          "outbounds": [
+            "直连",
+            "代理",
+            "dmit-vps",
+            "jms-s1",
+            "jms-s2",
+            "jms-s3",
+            "jms-s4",
+            "jms-s5",
+            "jms-s801"
+          ],
+          "default": "代理",
+          "interrupt_exist_connections": true
+        }
+      ],
+      "route": {
+        "rules": [
+          {
+            "type": "logical",
+            "mode": "or",
+            "rules": [
+              {
+                "rule_set": [
+                  "OpenAI",
+                  "Anthropic",
+                  "Claude",
+                  "Google",
+                  "Gemini"
+                ]
+              },
+              {
+                "process_name": [
+                  "ChatGPT",
+                  "ChatGPTHelper",
+                  "Claude",
+                  "Claude Helper",
+                  "Antigravity",
+                  "Antigravity Helper",
+                  "Antigravity Helper (GPU)",
+                  "Antigravity Helper (Plugin)",
+                  "Antigravity Helper (Renderer)"
+                ]
+              },
+              {
+                "process_path_regex": [
+                  "^/Applications/(Claude|ChatGPT|Antigravity)\\.app(/.*)?"
+                ]
+              },
+              {
+                "domain_suffix": [
+                  "chat.com"
+                ]
+              }
+            ],
+            "action": "route",
+            "outbound": "海外AI"
+          },
+          {
+            "rule_set": "OneDrive",
+            "action": "route",
+            "outbound": "OneDrive"
+          },
+          {
+            "rule_set": "Microsoft",
+            "action": "route",
+            "outbound": "Microsoft"
+          },
+          {
+            "rule_set": "YouTube",
+            "action": "route",
+            "outbound": "YouTube"
+          },
+          {
+            "rule_set": "海外媒体",
+            "action": "route",
+            "outbound": "海外媒体"
+          },
+          {
+            "rule_set": [
+              "ChinaMax"
+            ],
+            "action": "route",
+            "outbound": "直连"
+          },
+          {
+            "rule_set": "Global",
+            "action": "route",
+            "outbound": "代理"
+          },
+          {
+            "type": "logical",
+            "mode": "and",
+            "rules": [
+              {
+                "rule_set": "ChinaIPs"
+              },
+              {
+                "rule_set": "Global",
+                "invert": true
+              }
+            ],
+            "action": "route",
+            "outbound": "直连"
+          }
+        ],
+        "rule_set": [
+          {
+            "type": "remote",
+            "tag": "OpenAI",
+            "format": "binary",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/OpenAI.srs",
+            "http_client": "rule-set-download"
+          },
+          {
+            "type": "remote",
+            "tag": "DNS_OpenAI_domain",
+            "format": "binary",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/DNS_OpenAI_domain.srs",
+            "http_client": "rule-set-download"
+          },
+          {
+            "type": "remote",
+            "tag": "Anthropic",
+            "format": "binary",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Anthropic.srs",
+            "http_client": "rule-set-download"
+          },
+          {
+            "type": "remote",
+            "tag": "Claude",
+            "format": "binary",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Claude.srs",
+            "http_client": "rule-set-download"
+          },
+          {
+            "type": "remote",
+            "tag": "Gemini",
+            "format": "binary",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Gemini.srs",
+            "http_client": "rule-set-download"
+          },
+          {
+            "type": "remote",
+            "tag": "OneDrive",
+            "format": "binary",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/OneDrive.srs",
+            "http_client": "rule-set-download"
+          },
+          {
+            "type": "remote",
+            "tag": "Microsoft",
+            "format": "binary",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Microsoft.srs",
+            "http_client": "rule-set-download"
+          },
+          {
+            "type": "remote",
+            "tag": "Google",
+            "format": "binary",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Google.srs",
+            "http_client": "rule-set-download"
+          },
+          {
+            "type": "remote",
+            "tag": "DNS_Google_domain",
+            "format": "binary",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/DNS_Google_domain.srs",
+            "http_client": "rule-set-download"
+          },
+          {
+            "type": "remote",
+            "tag": "YouTube",
+            "format": "binary",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/YouTube.srs",
+            "http_client": "rule-set-download"
+          },
+          {
+            "type": "remote",
+            "tag": "海外媒体",
+            "format": "binary",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/GlobalMedia.srs",
+            "http_client": "rule-set-download"
+          },
+          {
+            "type": "remote",
+            "tag": "Global",
+            "format": "binary",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Global.srs",
+            "http_client": "rule-set-download"
+          },
+          {
+            "type": "remote",
+            "tag": "DNS_Global_domain",
+            "format": "binary",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/DNS_Global_domain.srs",
+            "http_client": "rule-set-download"
+          },
+          {
+            "type": "remote",
+            "tag": "DNS_Global_ipcidr",
+            "format": "binary",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/DNS_Global_ipcidr.srs",
+            "http_client": "rule-set-download"
+          },
+          {
+            "type": "remote",
+            "tag": "ChinaIPs",
+            "format": "binary",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/ChinaIPs.srs",
+            "http_client": "rule-set-download"
+          },
+          {
+            "type": "remote",
+            "tag": "ChinaMaxNoIP",
+            "format": "binary",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/ChinaMaxNoIP.srs",
+            "http_client": "rule-set-download"
+          },
+          {
+            "type": "remote",
+            "tag": "DNS_ChinaMaxNoIP_domain",
+            "format": "binary",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/DNS_ChinaMaxNoIP_domain.srs",
+            "http_client": "rule-set-download"
+          },
+          {
+            "type": "remote",
+            "tag": "ChinaMax",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/ChinaMax.srs",
+            "http_client": "rule-set-download",
+            "format": "binary"
+          }
+        ]
+      },
+      "experimental": {}
+    },
+    "9.outbounds-dmit-vps.json": {
+      "log": {},
+      "dns": {},
+      "inbounds": [],
+      "outbounds": [
+        {
+          "type": "urltest",
+          "tag": "dmit-vps",
+          "outbounds": [
+            "dmit-vps-reality-ipv6",
+            "dmit-vps-reality",
+            "dmit-vps-cf-backup",
+            "dmit-vps-hy2"
+          ],
+          "interrupt_exist_connections": true
+        },
+        {
+          "type": "vless",
+          "tag": "dmit-vps-reality-ipv6",
+          "server": "2001:db8::10",
+          "server_port": 443,
+          "uuid": "00000000-0000-4000-8000-000000000001",
+          "flow": "xtls-rprx-vision",
+          "tls": {
+            "enabled": true,
+            "server_name": "fixture.example.invalid",
+            "reality": {
+              "enabled": true,
+              "public_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+              "short_id": "0123456789abcdef"
+            },
+            "utls": {
+              "enabled": true,
+              "fingerprint": "chrome"
+            }
+          }
+        },
+        {
+          "type": "vless",
+          "tag": "dmit-vps-reality",
+          "server": "192.0.2.10",
+          "server_port": 443,
+          "uuid": "00000000-0000-4000-8000-000000000001",
+          "flow": "xtls-rprx-vision",
+          "tls": {
+            "enabled": true,
+            "server_name": "fixture.example.invalid",
+            "reality": {
+              "enabled": true,
+              "public_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+              "short_id": "0123456789abcdef"
+            },
+            "utls": {
+              "enabled": true,
+              "fingerprint": "chrome"
+            }
+          }
+        },
+        {
+          "type": "vless",
+          "tag": "dmit-vps-cf-backup",
+          "server": "192.0.2.10",
+          "server_port": 443,
+          "uuid": "00000000-0000-4000-8000-000000000001",
+          "tls": {
+            "enabled": true,
+            "server_name": "fixture.example.invalid",
+            "utls": {
+              "enabled": true,
+              "fingerprint": "chrome"
+            }
+          },
+          "transport": {
+            "type": "ws",
+            "path": "/fixture",
+            "headers": {
+              "Host": "fixture.example.invalid"
+            }
+          }
+        },
+        {
+          "type": "hysteria2",
+          "tag": "dmit-vps-hy2",
+          "server": "192.0.2.10",
+          "server_port": 443,
+          "password": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+          "tls": {
+            "enabled": true,
+            "server_name": "fixture.example.invalid",
+            "certificate": [
+              "-----BEGIN CERTIFICATE-----",
+              "MIIBoTCCAUigAwIBAgIUfj4ZhNqHjYfKad6VNwuaPLBArvkwCgYIKoZIzj0EAwIw",
+              "GTEXMBUGA1UEAwwOaHkyLndhbmd5Zy5jb20wHhcNMjYxMDI5MDkxMzAyWhcNMjkw",
+              "MTMxMDkxMzAyWjAZMRcwFQYDVQQDDA5oeTIud2FuZ3lnLmNvbTBZMBMGByqGSM49",
+              "AgEGCCqGSM49AwEHA0IABBIXUsU2okK0eQpYbkZj4c/SK2+PSoJA9Mc9EOrg024e",
+              "9AkBvqEdLwol2ntM0zHLbfVy7RQUoCJCfTm8iVM+aQCjbjBsMB0GA1UdDgQWBBTu",
+              "aatY5BptLOO0gALO1dgohy5F3zAfBgNVHSMEGDAWgBTuaatY5BptLOO0gALO1dgo",
+              "hy5F3zAPBgNVHRMBAf8EBTADAQH/MBkGA1UdEQQSMBCCDmh5Mi53YW5neWcuY29t",
+              "MAoGCCqGSM49BAMCA0cAMEQCIEkKQOTWRUAhGKwajgdE0euNzsAIZrPpGCdciZ6K",
+              "6ovBAiAkuQ4ia9/FbsDjHuwxNBPMNQgZFbppWU3MdRv2kVGozQ==",
+              "-----END CERTIFICATE-----"
+            ]
+          }
+        }
+      ],
+      "route": {},
+      "experimental": {}
+    },
+    "9.outbounds-justmysocks.json": {
+      "log": {},
+      "dns": {},
+      "inbounds": [],
+      "outbounds": [
+        {
+          "type": "shadowsocks",
+          "tag": "jms-s1",
+          "server": "192.0.2.10",
+          "server_port": 9191,
+          "method": "aes-256-gcm",
+          "password": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
+        },
+        {
+          "type": "vless",
+          "tag": "jms-s2",
+          "server": "192.0.2.10",
+          "server_port": 443,
+          "uuid": "00000000-0000-4000-8000-000000000001",
+          "flow": "xtls-rprx-vision",
+          "tls": {
+            "enabled": true,
+            "server_name": "fixture.example.invalid",
+            "reality": {
+              "enabled": true,
+              "public_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+              "short_id": "0123456789abcdef"
+            },
+            "utls": {
+              "enabled": true,
+              "fingerprint": "chrome"
+            }
+          }
+        },
+        {
+          "type": "vless",
+          "tag": "jms-s3",
+          "server": "192.0.2.10",
+          "server_port": 443,
+          "uuid": "00000000-0000-4000-8000-000000000001",
+          "flow": "xtls-rprx-vision",
+          "tls": {
+            "enabled": true,
+            "server_name": "fixture.example.invalid",
+            "reality": {
+              "enabled": true,
+              "public_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+              "short_id": "0123456789abcdef"
+            },
+            "utls": {
+              "enabled": true,
+              "fingerprint": "chrome"
+            }
+          }
+        },
+        {
+          "type": "vless",
+          "tag": "jms-s4",
+          "server": "192.0.2.10",
+          "server_port": 443,
+          "uuid": "00000000-0000-4000-8000-000000000001",
+          "flow": "xtls-rprx-vision",
+          "tls": {
+            "enabled": true,
+            "server_name": "fixture.example.invalid",
+            "reality": {
+              "enabled": true,
+              "public_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+              "short_id": "0123456789abcdef"
+            },
+            "utls": {
+              "enabled": true,
+              "fingerprint": "chrome"
+            }
+          }
+        },
+        {
+          "type": "vless",
+          "tag": "jms-s5",
+          "server": "192.0.2.10",
+          "server_port": 443,
+          "uuid": "00000000-0000-4000-8000-000000000001",
+          "flow": "xtls-rprx-vision",
+          "tls": {
+            "enabled": true,
+            "server_name": "fixture.example.invalid",
+            "reality": {
+              "enabled": true,
+              "public_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+              "short_id": "0123456789abcdef"
+            },
+            "utls": {
+              "enabled": true,
+              "fingerprint": "chrome"
+            }
+          }
+        },
+        {
+          "type": "vless",
+          "tag": "jms-s801",
+          "server": "192.0.2.10",
+          "server_port": 443,
+          "uuid": "00000000-0000-4000-8000-000000000001",
+          "flow": "xtls-rprx-vision",
+          "tls": {
+            "enabled": true,
+            "server_name": "fixture.example.invalid",
+            "reality": {
+              "enabled": true,
+              "public_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+              "short_id": "0123456789abcdef"
+            },
+            "utls": {
+              "enabled": true,
+              "fingerprint": "chrome"
+            }
+          }
+        }
+      ],
+      "route": {},
+      "experimental": {}
+    }
+  },
+  "golden": {
+    "log": {
+      "level": "warn"
+    },
+    "dns": {
+      "servers": [
+        {
+          "type": "https",
+          "tag": "dns_direct",
+          "server": "223.5.5.5",
+          "server_port": 443,
+          "tls": {
+            "server_name": "dns.alidns.com"
+          },
+          "path": "/dns-query",
+          "headers": {
+            "Host": "dns.alidns.com"
+          }
+        },
+        {
+          "type": "https",
+          "tag": "dns_proxy",
+          "detour": "代理",
+          "server": "8.8.8.8",
+          "server_port": 443,
+          "tls": {
+            "server_name": "dns.google"
+          },
+          "path": "/dns-query",
+          "headers": {
+            "Host": "dns.google"
+          }
+        },
+        {
+          "type": "local",
+          "tag": "dns_local"
+        },
+        {
+          "type": "dhcp",
+          "tag": "dns_lan"
+        }
+      ],
+      "rules": [
+        {
+          "preferred_by": "dns_local",
+          "server": "dns_local",
+          "disable_cache": true,
+          "remove_client_subnet": true
+        },
+        {
+          "domain_suffix": "local",
+          "server": "dns_local",
+          "disable_cache": true,
+          "remove_client_subnet": true
+        },
+        {
+          "domain_regex": "^[^.]+$",
+          "server": "dns_lan",
+          "disable_cache": true,
+          "remove_client_subnet": true
+        },
+        {
+          "domain_suffix": [
+            "localdomain",
+            "lan",
+            "home.arpa",
+            "internal",
+            "intranet"
+          ],
+          "server": "dns_lan",
+          "disable_cache": true,
+          "remove_client_subnet": true
+        },
+        {
+          "query_type": "AAAA",
+          "action": "predefined",
+          "rcode": "NOERROR"
+        },
+        {
+          "clash_mode": "Direct",
+          "server": "dns_direct",
+          "remove_client_subnet": true
+        },
+        {
+          "clash_mode": "Global",
+          "server": "dns_proxy",
+          "remove_client_subnet": true
+        },
+        {
+          "rule_set": [
+            "Process-Direct-required",
+            "Domain-Direct-required"
+          ],
+          "server": "dns_direct",
+          "remove_client_subnet": true
+        },
+        {
+          "protocol": [
+            "bittorrent",
+            "rdp",
+            "ssh"
+          ],
+          "server": "dns_direct",
+          "remove_client_subnet": true
+        },
+        {
+          "rule_set": [
+            "DNS_OpenAI_domain",
+            "Anthropic",
+            "Claude",
+            "DNS_Google_domain",
+            "Gemini"
+          ],
+          "server": "dns_proxy",
+          "remove_client_subnet": true
+        },
+        {
+          "rule_set": "DNS_ChinaMaxNoIP_domain",
+          "server": "dns_direct",
+          "remove_client_subnet": true
+        },
+        {
+          "rule_set": "DNS_Global_domain",
+          "server": "dns_proxy",
+          "remove_client_subnet": true
+        },
+        {
+          "action": "evaluate",
+          "server": "dns_proxy",
+          "tag": "first",
+          "remove_client_subnet": true
+        },
+        {
+          "rule_set": "DNS_Global_ipcidr",
+          "match_response": "first",
+          "action": "respond"
+        },
+        {
+          "rule_set": "ChinaIPs",
+          "match_response": "first",
+          "response_rcode": "NOERROR",
+          "action": "evaluate",
+          "server": "dns_proxy",
+          "tag": "ecs",
+          "client_subnet": "8.8.8.0/24"
+        },
+        {
+          "rule_set": "ChinaIPs",
+          "match_response": "ecs",
+          "response_rcode": "NOERROR",
+          "action": "respond"
+        },
+        {
+          "match_response": "first",
+          "action": "respond"
+        },
+        {
+          "action": "predefined",
+          "rcode": "SERVFAIL"
+        }
+      ],
+      "final": "dns_proxy",
+      "strategy": "ipv4_only"
+    },
+    "http_clients": [
+      {
+        "tag": "rule-set-download",
+        "version": 2,
+        "detour": "代理",
+        "domain_resolver": {
+          "server": "dns_proxy",
+          "strategy": "ipv4_only"
+        }
+      }
+    ],
+    "inbounds": [
+      {
+        "type": "tun",
+        "tag": "in",
+        "address": [
+          "172.19.0.1/30",
+          "fd82:25ea:4d13::1/126"
+        ],
+        "auto_route": true,
+        "strict_route": true
+      }
+    ],
+    "outbounds": [
+      {
+        "type": "selector",
+        "tag": "漏网之鱼",
+        "outbounds": [
+          "直连",
+          "代理"
+        ],
+        "default": "直连",
+        "interrupt_exist_connections": true
+      },
+      {
+        "type": "direct",
+        "tag": "直连"
+      },
+      {
+        "type": "selector",
+        "tag": "代理",
+        "outbounds": [
+          "自动选择",
+          "dmit-vps",
+          "jms-s1",
+          "jms-s2",
+          "jms-s3",
+          "jms-s4",
+          "jms-s5",
+          "jms-s801"
+        ],
+        "default": "自动选择",
+        "interrupt_exist_connections": true
+      },
+      {
+        "type": "urltest",
+        "tag": "自动选择",
+        "outbounds": [
+          "dmit-vps",
+          "jms-s1",
+          "jms-s2",
+          "jms-s3",
+          "jms-s4",
+          "jms-s5"
+        ],
+        "interrupt_exist_connections": true
+      },
+      {
+        "type": "selector",
+        "tag": "Steam",
+        "outbounds": [
+          "直连",
+          "代理",
+          "dmit-vps",
+          "jms-s1",
+          "jms-s2",
+          "jms-s3",
+          "jms-s4",
+          "jms-s5",
+          "jms-s801"
+        ],
+        "default": "代理",
+        "interrupt_exist_connections": true
+      },
+      {
+        "type": "selector",
+        "tag": "SteamCN",
+        "outbounds": [
+          "直连",
+          "代理",
+          "dmit-vps",
+          "jms-s1",
+          "jms-s2",
+          "jms-s3",
+          "jms-s4",
+          "jms-s5",
+          "jms-s801"
+        ],
+        "default": "直连",
+        "interrupt_exist_connections": true
+      },
+      {
+        "type": "selector",
+        "tag": "OneDrive",
+        "outbounds": [
+          "直连",
+          "代理"
+        ],
+        "default": "代理",
+        "interrupt_exist_connections": true
+      },
+      {
+        "type": "selector",
+        "tag": "Microsoft",
+        "outbounds": [
+          "直连",
+          "代理"
+        ],
+        "default": "直连",
+        "interrupt_exist_connections": true
+      },
+      {
+        "type": "selector",
+        "tag": "海外AI",
+        "outbounds": [
+          "dmit-vps",
+          "jms-s3"
+        ],
+        "default": "dmit-vps",
+        "interrupt_exist_connections": true
+      },
+      {
+        "type": "selector",
+        "tag": "YouTube",
+        "outbounds": [
+          "代理",
+          "dmit-vps",
+          "jms-s1",
+          "jms-s2",
+          "jms-s3",
+          "jms-s4",
+          "jms-s5",
+          "jms-s801"
+        ],
+        "default": "jms-s3",
+        "interrupt_exist_connections": true
+      },
+      {
+        "type": "selector",
+        "tag": "海外媒体",
+        "outbounds": [
+          "直连",
+          "代理",
+          "dmit-vps",
+          "jms-s1",
+          "jms-s2",
+          "jms-s3",
+          "jms-s4",
+          "jms-s5",
+          "jms-s801"
+        ],
+        "default": "代理",
+        "interrupt_exist_connections": true
+      },
+      {
+        "type": "urltest",
+        "tag": "dmit-vps",
+        "outbounds": [
+          "dmit-vps-reality-ipv6",
+          "dmit-vps-reality",
+          "dmit-vps-cf-backup",
+          "dmit-vps-hy2"
+        ],
+        "interrupt_exist_connections": true
+      },
+      {
+        "type": "vless",
+        "tag": "dmit-vps-reality-ipv6",
+        "server": "2001:db8::10",
+        "server_port": 443,
+        "uuid": "00000000-0000-4000-8000-000000000001",
+        "flow": "xtls-rprx-vision",
+        "tls": {
+          "enabled": true,
+          "server_name": "fixture.example.invalid",
+          "utls": {
+            "enabled": true,
+            "fingerprint": "chrome"
+          },
+          "reality": {
+            "enabled": true,
+            "public_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+            "short_id": "0123456789abcdef"
+          }
+        }
+      },
+      {
+        "type": "vless",
+        "tag": "dmit-vps-reality",
+        "server": "192.0.2.10",
+        "server_port": 443,
+        "uuid": "00000000-0000-4000-8000-000000000001",
+        "flow": "xtls-rprx-vision",
+        "tls": {
+          "enabled": true,
+          "server_name": "fixture.example.invalid",
+          "utls": {
+            "enabled": true,
+            "fingerprint": "chrome"
+          },
+          "reality": {
+            "enabled": true,
+            "public_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+            "short_id": "0123456789abcdef"
+          }
+        }
+      },
+      {
+        "type": "vless",
+        "tag": "dmit-vps-cf-backup",
+        "server": "192.0.2.10",
+        "server_port": 443,
+        "uuid": "00000000-0000-4000-8000-000000000001",
+        "tls": {
+          "enabled": true,
+          "server_name": "fixture.example.invalid",
+          "utls": {
+            "enabled": true,
+            "fingerprint": "chrome"
+          }
+        },
+        "transport": {
+          "type": "ws",
+          "path": "/fixture",
+          "headers": {
+            "Host": "fixture.example.invalid"
+          }
+        }
+      },
+      {
+        "type": "hysteria2",
+        "tag": "dmit-vps-hy2",
+        "server": "192.0.2.10",
+        "server_port": 443,
+        "password": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+        "tls": {
+          "enabled": true,
+          "server_name": "fixture.example.invalid",
+          "certificate": [
+            "-----BEGIN CERTIFICATE-----",
+            "MIIBoTCCAUigAwIBAgIUfj4ZhNqHjYfKad6VNwuaPLBArvkwCgYIKoZIzj0EAwIw",
+            "GTEXMBUGA1UEAwwOaHkyLndhbmd5Zy5jb20wHhcNMjYxMDI5MDkxMzAyWhcNMjkw",
+            "MTMxMDkxMzAyWjAZMRcwFQYDVQQDDA5oeTIud2FuZ3lnLmNvbTBZMBMGByqGSM49",
+            "AgEGCCqGSM49AwEHA0IABBIXUsU2okK0eQpYbkZj4c/SK2+PSoJA9Mc9EOrg024e",
+            "9AkBvqEdLwol2ntM0zHLbfVy7RQUoCJCfTm8iVM+aQCjbjBsMB0GA1UdDgQWBBTu",
+            "aatY5BptLOO0gALO1dgohy5F3zAfBgNVHSMEGDAWgBTuaatY5BptLOO0gALO1dgo",
+            "hy5F3zAPBgNVHRMBAf8EBTADAQH/MBkGA1UdEQQSMBCCDmh5Mi53YW5neWcuY29t",
+            "MAoGCCqGSM49BAMCA0cAMEQCIEkKQOTWRUAhGKwajgdE0euNzsAIZrPpGCdciZ6K",
+            "6ovBAiAkuQ4ia9/FbsDjHuwxNBPMNQgZFbppWU3MdRv2kVGozQ==",
+            "-----END CERTIFICATE-----"
+          ]
+        }
+      },
+      {
+        "type": "shadowsocks",
+        "tag": "jms-s1",
+        "server": "192.0.2.10",
+        "server_port": 9191,
+        "method": "aes-256-gcm",
+        "password": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
+      },
+      {
+        "type": "vless",
+        "tag": "jms-s2",
+        "server": "192.0.2.10",
+        "server_port": 443,
+        "uuid": "00000000-0000-4000-8000-000000000001",
+        "flow": "xtls-rprx-vision",
+        "tls": {
+          "enabled": true,
+          "server_name": "fixture.example.invalid",
+          "utls": {
+            "enabled": true,
+            "fingerprint": "chrome"
+          },
+          "reality": {
+            "enabled": true,
+            "public_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+            "short_id": "0123456789abcdef"
+          }
+        }
+      },
+      {
+        "type": "vless",
+        "tag": "jms-s3",
+        "server": "192.0.2.10",
+        "server_port": 443,
+        "uuid": "00000000-0000-4000-8000-000000000001",
+        "flow": "xtls-rprx-vision",
+        "tls": {
+          "enabled": true,
+          "server_name": "fixture.example.invalid",
+          "utls": {
+            "enabled": true,
+            "fingerprint": "chrome"
+          },
+          "reality": {
+            "enabled": true,
+            "public_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+            "short_id": "0123456789abcdef"
+          }
+        }
+      },
+      {
+        "type": "vless",
+        "tag": "jms-s4",
+        "server": "192.0.2.10",
+        "server_port": 443,
+        "uuid": "00000000-0000-4000-8000-000000000001",
+        "flow": "xtls-rprx-vision",
+        "tls": {
+          "enabled": true,
+          "server_name": "fixture.example.invalid",
+          "utls": {
+            "enabled": true,
+            "fingerprint": "chrome"
+          },
+          "reality": {
+            "enabled": true,
+            "public_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+            "short_id": "0123456789abcdef"
+          }
+        }
+      },
+      {
+        "type": "vless",
+        "tag": "jms-s5",
+        "server": "192.0.2.10",
+        "server_port": 443,
+        "uuid": "00000000-0000-4000-8000-000000000001",
+        "flow": "xtls-rprx-vision",
+        "tls": {
+          "enabled": true,
+          "server_name": "fixture.example.invalid",
+          "utls": {
+            "enabled": true,
+            "fingerprint": "chrome"
+          },
+          "reality": {
+            "enabled": true,
+            "public_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+            "short_id": "0123456789abcdef"
+          }
+        }
+      },
+      {
+        "type": "vless",
+        "tag": "jms-s801",
+        "server": "192.0.2.10",
+        "server_port": 443,
+        "uuid": "00000000-0000-4000-8000-000000000001",
+        "flow": "xtls-rprx-vision",
+        "tls": {
+          "enabled": true,
+          "server_name": "fixture.example.invalid",
+          "utls": {
+            "enabled": true,
+            "fingerprint": "chrome"
+          },
+          "reality": {
+            "enabled": true,
+            "public_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+            "short_id": "0123456789abcdef"
+          }
+        }
+      }
+    ],
+    "route": {
+      "rules": [
+        {
+          "action": "sniff"
+        },
+        {
+          "type": "logical",
+          "mode": "or",
+          "rules": [
+            {
+              "protocol": "dns"
+            },
+            {
+              "port": 53
+            }
+          ],
+          "action": "hijack-dns"
+        },
+        {
+          "rule_set": "LocalNames",
+          "action": "resolve"
+        },
+        {
+          "rule_set": "LocalNames",
+          "outbound": "直连"
+        },
+        {
+          "ip_is_private": true,
+          "outbound": "直连"
+        },
+        {
+          "ip_version": 6,
+          "action": "reject"
+        },
+        {
+          "type": "logical",
+          "mode": "or",
+          "rules": [
+            {
+              "port": 853
+            },
+            {
+              "network": "udp",
+              "port": 443
+            },
+            {
+              "protocol": "stun"
+            }
+          ],
+          "action": "reject"
+        },
+        {
+          "clash_mode": "Direct",
+          "outbound": "直连"
+        },
+        {
+          "clash_mode": "Global",
+          "outbound": "代理"
+        },
+        {
+          "rule_set": [
+            "Process-Direct-required",
+            "Domain-Direct-required"
+          ],
+          "outbound": "直连"
+        },
+        {
+          "protocol": [
+            "bittorrent",
+            "rdp",
+            "ssh"
+          ],
+          "outbound": "直连"
+        },
+        {
+          "inbound": "in",
+          "action": "resolve"
+        },
+        {
+          "rule_set": "Proxy-required",
+          "outbound": "代理"
+        },
+        {
+          "rule_set": "Steam",
+          "outbound": "Steam"
+        },
+        {
+          "rule_set": "SteamCN",
+          "outbound": "SteamCN"
+        },
+        {
+          "type": "logical",
+          "mode": "or",
+          "rules": [
+            {
+              "rule_set": [
+                "OpenAI",
+                "Anthropic",
+                "Claude",
+                "Google",
+                "Gemini"
+              ]
+            },
+            {
+              "process_name": [
+                "ChatGPT",
+                "ChatGPTHelper",
+                "Claude",
+                "Claude Helper",
+                "Antigravity",
+                "Antigravity Helper",
+                "Antigravity Helper (GPU)",
+                "Antigravity Helper (Plugin)",
+                "Antigravity Helper (Renderer)"
+              ]
+            },
+            {
+              "process_path_regex": "^/Applications/(Claude|ChatGPT|Antigravity)\\.app(/.*)?"
+            },
+            {
+              "domain_suffix": "chat.com"
+            }
+          ],
+          "outbound": "海外AI"
+        },
+        {
+          "rule_set": "OneDrive",
+          "outbound": "OneDrive"
+        },
+        {
+          "rule_set": "Microsoft",
+          "outbound": "Microsoft"
+        },
+        {
+          "rule_set": "YouTube",
+          "outbound": "YouTube"
+        },
+        {
+          "rule_set": "海外媒体",
+          "outbound": "海外媒体"
+        },
+        {
+          "rule_set": "ChinaMax",
+          "outbound": "直连"
+        },
+        {
+          "rule_set": "Global",
+          "outbound": "代理"
+        },
+        {
+          "type": "logical",
+          "mode": "and",
+          "rules": [
+            {
+              "rule_set": "ChinaIPs"
+            },
+            {
+              "rule_set": "Global",
+              "invert": true
+            }
+          ],
+          "outbound": "直连"
+        }
+      ],
+      "rule_set": [
+        {
+          "tag": "Process-Direct-required",
+          "rules": [
+            {
+              "process_name": [
+                "TencentMeeting",
+                "Thunder",
+                "LocalSend",
+                "WeChat",
+                "Tailscale",
+                "softwareupdated",
+                "kubectl"
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "Domain-Direct-required",
+          "rules": [
+            {
+              "domain_suffix": "jsdelivr.net"
+            }
+          ]
+        },
+        {
+          "tag": "LocalNames",
+          "rules": [
+            {
+              "domain_regex": [
+                "^[^.]+\\.?$",
+                "(?i)^(?:[^.]+\\.)*(?:local|localdomain|lan|home\\.arpa|internal|intranet)\\.?$"
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "Proxy-required",
+          "rules": [
+            {
+              "domain_suffix": "wallhaven.cc"
+            }
+          ]
+        },
+        {
+          "type": "remote",
+          "tag": "Steam",
+          "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Steam.srs",
+          "http_client": "rule-set-download"
+        },
+        {
+          "type": "remote",
+          "tag": "SteamCN",
+          "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/SteamCN.srs",
+          "http_client": "rule-set-download"
+        },
+        {
+          "type": "remote",
+          "tag": "OpenAI",
+          "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/OpenAI.srs",
+          "http_client": "rule-set-download"
+        },
+        {
+          "type": "remote",
+          "tag": "DNS_OpenAI_domain",
+          "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/DNS_OpenAI_domain.srs",
+          "http_client": "rule-set-download"
+        },
+        {
+          "type": "remote",
+          "tag": "Anthropic",
+          "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Anthropic.srs",
+          "http_client": "rule-set-download"
+        },
+        {
+          "type": "remote",
+          "tag": "Claude",
+          "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Claude.srs",
+          "http_client": "rule-set-download"
+        },
+        {
+          "type": "remote",
+          "tag": "Gemini",
+          "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Gemini.srs",
+          "http_client": "rule-set-download"
+        },
+        {
+          "type": "remote",
+          "tag": "OneDrive",
+          "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/OneDrive.srs",
+          "http_client": "rule-set-download"
+        },
+        {
+          "type": "remote",
+          "tag": "Microsoft",
+          "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Microsoft.srs",
+          "http_client": "rule-set-download"
+        },
+        {
+          "type": "remote",
+          "tag": "Google",
+          "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Google.srs",
+          "http_client": "rule-set-download"
+        },
+        {
+          "type": "remote",
+          "tag": "DNS_Google_domain",
+          "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/DNS_Google_domain.srs",
+          "http_client": "rule-set-download"
+        },
+        {
+          "type": "remote",
+          "tag": "YouTube",
+          "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/YouTube.srs",
+          "http_client": "rule-set-download"
+        },
+        {
+          "type": "remote",
+          "tag": "海外媒体",
+          "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/GlobalMedia.srs",
+          "http_client": "rule-set-download"
+        },
+        {
+          "type": "remote",
+          "tag": "Global",
+          "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Global.srs",
+          "http_client": "rule-set-download"
+        },
+        {
+          "type": "remote",
+          "tag": "DNS_Global_domain",
+          "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/DNS_Global_domain.srs",
+          "http_client": "rule-set-download"
+        },
+        {
+          "type": "remote",
+          "tag": "DNS_Global_ipcidr",
+          "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/DNS_Global_ipcidr.srs",
+          "http_client": "rule-set-download"
+        },
+        {
+          "type": "remote",
+          "tag": "ChinaIPs",
+          "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/ChinaIPs.srs",
+          "http_client": "rule-set-download"
+        },
+        {
+          "type": "remote",
+          "tag": "ChinaMaxNoIP",
+          "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/ChinaMaxNoIP.srs",
+          "http_client": "rule-set-download"
+        },
+        {
+          "type": "remote",
+          "tag": "DNS_ChinaMaxNoIP_domain",
+          "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/DNS_ChinaMaxNoIP_domain.srs",
+          "http_client": "rule-set-download"
+        },
+        {
+          "type": "remote",
+          "tag": "ChinaMax",
+          "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/ChinaMax.srs",
+          "http_client": "rule-set-download"
+        }
+      ],
+      "final": "漏网之鱼",
+      "auto_detect_interface": true,
+      "default_domain_resolver": "dns_direct",
+      "default_http_client": "rule-set-download"
+    },
+    "services": [
+      {
+        "type": "api",
+        "tag": "api",
+        "listen": "127.0.0.1",
+        "listen_port": 9090,
+        "dashboard": {
+          "enabled": true,
+          "path": "dashboard",
+          "http_client": "rule-set-download"
+        }
+      }
+    ],
+    "experimental": {
+      "cache_file": {
+        "enabled": true,
+        "store_dns": true
+      }
+    }
+  }
+}
