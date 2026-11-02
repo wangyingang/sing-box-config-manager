@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import build from '../schemas/build.json' with { type: 'json' };
 import { canonical, digest } from './json.js';
+import { prepareRecipePublication } from './recipe-publication.js';
 import { preparePublication, renderSubscription } from './publication.js';
 import type { NativeCheck, Publication } from './publication.js';
 import type { CompileInput, Result } from './types.js';
@@ -59,6 +60,13 @@ export async function readPublication(directory: string): Promise<Publication> {
 
 export async function publish(input: CompileInput, options: { binary: string; directory: string }): Promise<Result<Publication>> {
   const result = await preparePublication(input, createSingBoxChecker(options.binary));
+  if (result.ok) await commitPublication(options.directory, result.value);
+  return result;
+}
+
+/** The Recipe adapter uses the same atomic local publisher as D06. */
+export async function publishRecipe(input: unknown, options: { binary: string; directory: string }): Promise<Result<Publication>> {
+  const result = await prepareRecipePublication(input, createSingBoxChecker(options.binary));
   if (result.ok) await commitPublication(options.directory, result.value);
   return result;
 }

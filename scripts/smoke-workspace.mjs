@@ -12,8 +12,8 @@ const name = '@sing-box-config-manager/config-compiler';
 try {
   await writeFile(join(temporary, 'runtime.mjs'), `
 import assert from 'node:assert/strict';
-import { compile, compileRecipe, resolveRecipe, preparePublication, renderSubscription, validateRecipeDraft, decideRecipeEdit, decideNodeRevisionDeletion } from '${name}';
-import { createSingBoxChecker, publish } from '${name}/publisher';
+import { compile, compileRecipe, resolveRecipe, inspectRecipeComposition, prepareRecipePublication, preparePublication, renderSubscription, validateRecipeDraft, decideRecipeEdit, decideNodeRevisionDeletion } from '${name}';
+import { createSingBoxChecker, publish, publishRecipe } from '${name}/publisher';
 const result = compile({
   template: { id: 'smoke', revision: '1', targetVersion: '1.14.4', defaults: {},
     resources: {}, platformDnsServers: {}, dnsPresets: {}, routePresets: {}, ecsResponseTags: [] },
@@ -21,12 +21,12 @@ const result = compile({
   profile: 'macos-standalone', artifacts: [], params: { ecs: null }
 });
 assert.equal(result.ok, true, JSON.stringify(result.diagnostics));
-for (const fn of [compileRecipe, resolveRecipe, preparePublication, renderSubscription, validateRecipeDraft, decideRecipeEdit, decideNodeRevisionDeletion, createSingBoxChecker, publish]) assert.equal(typeof fn, 'function');
+for (const fn of [compileRecipe, resolveRecipe, inspectRecipeComposition, prepareRecipePublication, preparePublication, renderSubscription, validateRecipeDraft, decideRecipeEdit, decideNodeRevisionDeletion, createSingBoxChecker, publish, publishRecipe]) assert.equal(typeof fn, 'function');
 `);
   execFileSync(process.execPath, [join(temporary, 'runtime.mjs')], { cwd: web, stdio: 'inherit' });
 
   await writeFile(join(temporary, 'consumer.mts'), `
-import { compile, compileRecipe, resolveRecipe, artifactManifestSchema, type ArtifactManifest, type RecipeCompileInput, type RecipeDocument, type TemplateDocument, type NodeRevision, type CompileInput, type Result, type CompiledConfig } from '${name}';
+import { compile, compileRecipe, resolveRecipe, inspectRecipeComposition, prepareRecipePublication, artifactManifestSchema, preparePublication, type ArtifactManifest, type RecipePublicationSource, type RecipeCompileInput, type RecipeDocument, type TemplateDocument, type NodeRevision, type CompileInput, type Result, type CompiledConfig } from '${name}';
 import { createSingBoxChecker } from '${name}/publisher';
 import { validateRecipeDraft, decideRecipeEdit, decideNodeRevisionDeletion, type RecipeEditInput, type NodeRevisionDeletionInput, type EditDecision } from '${name}';
 const compileTyped: (input: CompileInput) => Result<CompiledConfig> = compile;
@@ -35,6 +35,9 @@ const check: (config: CompiledConfig['config']) => Promise<void> = createSingBox
 // @ts-expect-error target version is deliberately unsupported
 const invalidVersion: CompileInput['template']['targetVersion'] = 'invalid';
 const resolveTyped: (input: RecipeCompileInput) => Result<CompileInput> = resolveRecipe;
+const prepareTyped: (input: unknown, check: (config: CompiledConfig['config']) => Promise<void>) => ReturnType<typeof preparePublication> = prepareRecipePublication;
+const sourceNodes: RecipePublicationSource['nodes'] = [{ id: 'fixed', revision: '1' }];
+void [prepareTyped, sourceNodes, inspectRecipeComposition];
 const recipeTyped: (input: RecipeCompileInput) => Result<CompiledConfig> = compileRecipe;
 // @ts-expect-error Profile is fixed to the supported five variants
 const invalidProfile: RecipeDocument['profile'] = 'linux';
@@ -67,7 +70,7 @@ void [draftTyped, editTyped, deleteTyped, invalidState];
   // The Compiler owns these tools; root and Web App do not rely on hoisted dev dependencies.
   execFileSync('pnpm', ['--dir', compiler, 'exec', 'tsc', '-p', join(temporary, 'tsconfig.json')], { cwd: root, stdio: 'inherit' });
 
-  await writeFile(join(temporary, 'browser.mjs'), `export { compile, compileRecipe, resolveRecipe, recipeSchema, templateSchema, nodeRevisionSchema, artifactManifestSchema, renderSubscription, validateRecipeDraft, decideRecipeEdit, decideNodeRevisionDeletion } from '${name}';\n`);
+  await writeFile(join(temporary, 'browser.mjs'), `export { compile, compileRecipe, resolveRecipe, inspectRecipeComposition, prepareRecipePublication, recipeSchema, templateSchema, nodeRevisionSchema, artifactManifestSchema, renderSubscription, validateRecipeDraft, decideRecipeEdit, decideNodeRevisionDeletion } from '${name}';\n`);
   execFileSync('pnpm', ['--dir', compiler, 'exec', 'esbuild', join(temporary, 'browser.mjs'), '--bundle', '--platform=browser', '--format=esm', '--log-level=error', `--outfile=${join(temporary, 'browser.bundle.mjs')}`], { cwd: root, stdio: 'inherit' });
   console.log('Workspace smoke passed: Web App imports, public declarations, and browser bundle.');
 } finally {

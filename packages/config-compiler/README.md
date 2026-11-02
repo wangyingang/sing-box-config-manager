@@ -212,3 +212,78 @@ DNS 响应用途要求当前匹配对象引用此前已 evaluate 的响应；
 此入口是纯内存适配器，不读取 Pipeline 或远程文件。
 Manifest 地址、摘要和能力声明的真实性由可信接入方验证，
 合成样本和真实 binary check 均不能替代远程内容验收。
+
+### 五份样本迁移与 Recipe 发布
+
+`test/fixtures/migrated/` 保存五份可独立加载的静态 `RecipeCompileInput`；
+同名 `.mapping.json` 逐项记录原 fragment、固定节点和产物绑定。
+每个脱敏节点按样本与本地 tag 显式分配 ID，不根据相同连接内容推断共享身份。
+共享节点行为另由合成测试验证。旧 golden 与受限 normalization 保持原样，
+数组顺序不排序、不去重；user-d 继续使用独立模板和策略。
+
+本次补齐 Template 的 `experimental.cache_file.enabled/store_dns`、
+`route.default_http_client`、`resources.services` 的 API service 与 dashboard，
+以及 HTTP client 的 `version`。各层均为封闭字段，Recipe 不获得通用 JSON 或 service 覆盖入口。
+同一规则集本地 tag 若需用于多个消费位置，可显式使用
+`artifactRef: { id, revision, usages: ['route', 'dns-query'] }`；
+`usage` 单用途写法继续有效，两者不能混用。`usages` 必须非空、无重复，
+每个声明仍须属于固定 Manifest 的用途投影，每个消费位置分别检查。
+
+```ts
+import { compileRecipe, inspectRecipeComposition, prepareRecipePublication,
+  renderSubscription } from '@sing-box-config-manager/config-compiler';
+import { publishRecipe } from '@sing-box-config-manager/config-compiler/publisher';
+
+// fixedInput 是可信宿主加载的固定 Recipe、Template、NodeRevision 和 Manifest。
+const compiled = compileRecipe(fixedInput);
+const prepared = await prepareRecipePublication(fixedInput, trustedNativeChecker);
+const published = await publishRecipe(fixedInput, {
+  binary: '/absolute/path/to/sing-box', directory: '/private/publications/example',
+});
+if (published.ok) {
+  const subscription = await renderSubscription(published.value, { ecs: null });
+}
+```
+
+`prepareRecipePublication` 先执行严格 Recipe 编译，再复用 `preparePublication`；
+`publishRecipe` 复用既有本地发布适配器。启用与关闭 ECS 两种输出都必须通过真实 check。
+声明 ECS 的模板发布时仍要求显式探针地址／前缀，不能传 null 绕过探针；
+编译与订阅可传 `ecs: null`。不设默认掩码，不把 ECS 地址写入 Recipe。
+
+发布保留原 D06 `inputHash`，新增可选 `body.recipeSource`：
+其 `inputHash` 包含完整 Recipe（含步骤 ID）、选中的固定模板、节点、Manifest 和生成参数；
+同时保存 Recipe、模板、节点修订及产物摘要记录，供宿主审计与修订保留。
+这些记录参与最终发布 ID。未引用的节点最新版或模板候选不改变发布；
+检查期间的调用方修改不影响快照。D06 调用及旧发布格式继续可用。
+记录中的摘要提供完整性绑定，不提供授权或远程内容证明。
+
+`inspectRecipeComposition` 仅供审计／预览：保持结构、依赖和用途检查，
+将 Profile 能力问题延后到现有 `inspectComposition`，返回带诊断候选。
+旧 Android 样本可沿新入口完整对照，但 `compileRecipe`、
+`prepareRecipePublication` 和 `publishRecipe` 均继续拒绝其进程规则。
+独立合法 Android 测试使用 local resolver 与合成 package 策略，并检查两种 ECS 输出。
+不能通过删除旧样本条件把它标记为已迁移可交付配置。
+
+验收覆盖完整策略下语义错误草稿可保存但不可发布、归档旧绑定可重新发布、
+本地发布失败保留旧指针、发布快照隔离，以及公开类型和浏览器 bundle。
+迁移元数据沿用旧 manifest 的 URL、摘要与能力；新增 `byteLength`、`termCount`
+明确使用合成占位值 `1`。真实 check 不下载这些规则文件，未验证远端字节与统计。
+真实设备运行、代理连通性、在线订阅／激活事务、数据库、Web 页面及实际 Pipeline
+采集、转换、产物生产和发布均未实现或验收。
+
+本次迁移验收结果（2026-11-03）：
+
+| 样本 | 新契约与旧 golden 对照 | 真实 1.14.4 两种 ECS check | 正式发布 |
+| --- | --- | --- | --- |
+| user-a-tun | 通过 | 通过 | 通过 |
+| user-b-tun | 通过 | 通过 | 通过 |
+| user-b-android-tun | 审计候选通过 | 审计候选通过 | 按 Profile 拒绝进程规则 |
+| user-c-tun | 通过 | 通过 | 通过 |
+| user-d-tun | 独立策略通过 | 通过 | 通过 |
+
+`pnpm check`：81 项常规测试通过，类型检查、构建、公开声明及浏览器 smoke 通过。
+显式指定真实 binary 的 `pnpm test:integration`：26 项通过，0 跳过，
+包含既有回归及独立合法 Android 场景。binary 报告 1.14.4，
+Revision `c005f35300ce76427dc285481ec5695f5b179cd2`，darwin/arm64；
+checker 同时核对固定 Schema 摘要。上述“正式发布”是临时目录内的本地适配器验收，
+不表示线上发布或设备运行验收。

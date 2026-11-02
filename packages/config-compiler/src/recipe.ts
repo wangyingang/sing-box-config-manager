@@ -1,4 +1,4 @@
-import { compile } from './compiler.js';
+import { compile, inspectComposition } from './compiler.js';
 import { isJson } from './json.js';
 import { recipeInputSchema, StructureError } from './recipe-schema.js';
 import { resolveRecipeArtifacts } from './recipe-artifacts.js';
@@ -6,6 +6,16 @@ import type { CompileInput, CompiledConfig, Diagnostic, Obj, Result } from './ty
 
 /** Resolve exact immutable dependencies. The caller owns persistence and authorization. */
 export function resolveRecipe(input: unknown): Result<CompileInput> {
+  return resolveRecipeInput(input, false);
+}
+
+/** Preview only; errors remain visible and candidates cannot be delivered. */
+export function inspectRecipeComposition(input: unknown) {
+  const resolved = resolveRecipeInput(input, true);
+  return resolved.ok ? inspectComposition(resolved.value) : { diagnostics: resolved.diagnostics };
+}
+
+function resolveRecipeInput(input: unknown, audit: boolean): Result<CompileInput> {
   const diagnostics: Diagnostic[] = [];
   const error = (code: string, path: string, message: string) => diagnostics.push({ severity: 'error', code, path, message });
   try {
@@ -31,7 +41,7 @@ export function resolveRecipe(input: unknown): Result<CompileInput> {
       return node ? [{ ...node.connection, tag: binding.tag }] : [];
     });
     if (!template || diagnostics.length) return { ok: false, diagnostics };
-    const resolvedArtifacts = resolveRecipeArtifacts(parsed, template);
+    const resolvedArtifacts = resolveRecipeArtifacts(parsed, template, audit);
     diagnostics.push(...resolvedArtifacts.diagnostics);
     if (diagnostics.length) return { ok: false, diagnostics };
     return { ok: true, diagnostics, value: {

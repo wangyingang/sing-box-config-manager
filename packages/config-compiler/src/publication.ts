@@ -1,3 +1,4 @@
+import type { RecipePublicationSource } from './recipe-publication.js';
 import { compile, COMPILER_VERSION } from './compiler.js';
 import { CAPABILITY_VERSION } from './profiles.js';
 import build from '../schemas/build.json' with { type: 'json' };
@@ -9,6 +10,7 @@ import type { CompileInput, CompiledConfig, Diagnostic, GenerationParams, Obj, R
 export interface PublicationBody {
   format: 'd06-publication-1';
   inputHash: string;
+  recipeSource?: RecipePublicationSource;
   compiled: CompiledConfig;
   checks: { enabledHash: string; disabledHash: string };
 }

@@ -5,7 +5,7 @@ import type { Diagnostic, Obj, RuleArtifact, RuleSetBinding } from './types.js';
 type Usage = 'route' | 'dns-query' | 'dns-response';
 
 /** Adapt trusted, fixed Manifest data. This never downloads or verifies remote bytes. */
-export function resolveRecipeArtifacts(input: RecipeCompileInput, template: TemplateDocument) {
+export function resolveRecipeArtifacts(input: RecipeCompileInput, template: TemplateDocument, audit = false) {
   const diagnostics: Diagnostic[] = [];
   const error = (code: string, path: string, message: string) => diagnostics.push({ severity: 'error', code, path, message });
   const manifests = input.dependencies.manifests ?? [];
@@ -34,11 +34,12 @@ export function resolveRecipeArtifacts(input: RecipeCompileInput, template: Temp
     }
   }
   const artifacts = new Map<string, RuleArtifact>();
-  const usages = new Map<string, Usage>();
+  const usages = new Map<string, Usage[]>();
   const resolve = (bindings: NonNullable<TemplateDocument['resources']['ruleSets']>, path: string): RuleSetBinding[] => bindings.flatMap<RuleSetBinding>((binding, i) => {
     if (binding.kind === 'inline') return [binding];
     const bindingPath = `${path}/${i}/artifactRef`;
-    const { id, revision, usage } = binding.artifactRef;
+    const { id, revision } = binding.artifactRef;
+    const selectedUsages = 'usage' in binding.artifactRef ? [binding.artifactRef.usage] : binding.artifactRef.usages;
     const matches = manifests.flatMap(manifest => manifest.revision === revision
       ? manifest.artifacts.filter(artifact => artifact.id === id).map(artifact => ({ manifest, artifact })) : []);
     if (matches.length !== 1) {
@@ -46,17 +47,19 @@ export function resolveRecipeArtifacts(input: RecipeCompileInput, template: Temp
       return [];
     }
     const { manifest, artifact } = matches[0]!;
-    const projection = manifest.projections[usage];
-    if ('unavailable' in projection) error('ARTIFACT_PROJECTION_EMPTY', bindingPath, '所选用途没有内容，不能生成空匹配集合');
-    else if (!projection.artifactIds.includes(id)) error('ARTIFACT_USAGE_MISMATCH', bindingPath, '所选物理产物不属于该用途投影');
+    for (const usage of selectedUsages) {
+      const projection = manifest.projections[usage];
+      if ('unavailable' in projection) error('ARTIFACT_PROJECTION_EMPTY', bindingPath, '所选用途没有内容，不能生成空匹配集合');
+      else if (!projection.artifactIds.includes(id)) error('ARTIFACT_USAGE_MISMATCH', bindingPath, '所选物理产物不属于该用途投影');
+    }
     for (const capability of artifact.requiredCapabilities) {
-      if (!PROFILES[input.recipe.profile][capability]) error('CAPABILITY_UNSUPPORTED', bindingPath, '固定规则产物需要此 Profile 不支持的能力');
+      if (!audit && !PROFILES[input.recipe.profile][capability]) error('CAPABILITY_UNSUPPORTED', bindingPath, '固定规则产物需要此 Profile 不支持的能力');
     }
     const resolved: RuleArtifact = { id, revision, sha256: artifact.sha256, url: artifact.url, format: artifact.format, requiredCapabilities: artifact.requiredCapabilities };
     const previous = artifacts.get(id);
     if (previous && JSON.stringify(previous) !== JSON.stringify(resolved)) error('ARTIFACT_DUPLICATE', bindingPath, '绑定版本的物理产物身份发生冲突');
     artifacts.set(id, resolved);
-    usages.set(binding.tag, usage);
+    usages.set(binding.tag, selectedUsages);
     return [{ kind: 'curated', artifactId: id, tag: binding.tag, ...(binding.httpClient ? { httpClient: binding.httpClient } : {}) }];
   });
   const templateRuleSets = resolve(template.resources.ruleSets ?? [], '/dependencies/templates/' + input.dependencies.templates.indexOf(template) + '/resources/ruleSets');
@@ -74,13 +77,14 @@ export function resolveRecipeArtifacts(input: RecipeCompileInput, template: Temp
         const walk = (match: Obj, suffix: string) => {
           const tags = typeof match.rule_set === 'string' ? [match.rule_set] : (match.rule_set as string[] | undefined) ?? [];
           for (const tag of tags) {
-            const usage = usages.get(tag);
-            if (!usage) continue; // Inline and missing references retain existing D06 validation.
+            const allowedUsages = usages.get(tag);
+            if (!allowedUsages) continue; // Inline and missing references retain existing D06 validation.
             const response = match.match_response;
             const responseContext = response === true ? untaggedResponse : typeof response === 'string' && responses.has(response);
-            const compatible = section === 'route' ? usage === 'route'
-              : usage === 'dns-response' ? responseContext && match.rule_set_ip_cidr_match_source !== true
-              : usage === 'dns-query' && (response === undefined || response === false);
+            const compatible = section === 'route' ? allowedUsages.includes('route')
+              : response !== undefined && response !== false
+                ? allowedUsages.includes('dns-response') && responseContext && match.rule_set_ip_cidr_match_source !== true
+                : allowedUsages.includes('dns-query');
             if (!compatible) diagnostics.push({ severity: 'error', code: 'ARTIFACT_USAGE_MISMATCH',
               path: `/recipe/${section}Steps/${stepIndex}/${'preset' in step ? 'preset' : `rule${suffix}/rule_set`}`,
               message: '规则产物用途与消费位置不符；DNS 响应用途要求此前已 evaluate 的响应上下文',
