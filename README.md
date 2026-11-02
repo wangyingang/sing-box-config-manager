@@ -64,5 +64,6 @@ pnpm --dir packages/config-compiler build
 - [monorepo 迁移记录](docs/architecture/monorepo-migration.md)
 - [M2 契约设计与实施计划（草案）](docs/architecture/m2-contract-plan.md)
 - [领域术语索引](GLOSSARY-MAP.md)
+- [初始交接文档](docs/history/2026-11-02-configuration-management-handoff.md)（历史参考，部分决策已被后续 ADR 和 spec 替代）
 
 各层 `node_modules/`、`dist/` 和生成的 validator 均被 Git 忽略。依赖锁文件只维护根目录 `pnpm-lock.yaml`。
