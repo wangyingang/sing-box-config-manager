@@ -132,7 +132,12 @@ function record<T>(inner: Schema<T>): Schema<Record<string, T>> {
 const inlineSet = object({ kind: literal('inline'), definition: object({ type: literal('inline'), tag: string, rules: array(headlessRule) }) });
 const artifactUsage = enumeration(['route', 'dns-query', 'dns-response'] as const);
 const curatedSet = object({ kind: literal('curated'), tag: string,
-  artifactRef: object({ id: string, revision: string, usage: artifactUsage }), httpClient: optional(string) });
+  artifactRef: union(object({ id: string, revision: string, usage: artifactUsage }),
+    object({ id: string, revision: string, usages: { parse(v, p) {
+      const parsed = array(artifactUsage).parse(v, p);
+      if (!parsed.length || new Set(parsed).size !== parsed.length) throw new StructureError(p);
+      return parsed;
+    } } })), httpClient: optional(string) });
 const ruleSet = union(inlineSet, curatedSet);
 // Data contract owned by rule-set-pipeline/contracts; no Pipeline runtime import.
 const nonemptyStrings = schema((v): v is string[] => Array.isArray(v) && v.length > 0 && v.every(s => typeof s === 'string' && s.length > 0) && new Set(v).size === v.length);
@@ -165,7 +170,10 @@ const resolver = union(
 );
 // DHCP is a Template platform choice, never a Recipe resource.
 const platformResolver = union(resolver, object({ type: literal('dhcp'), tag: string, interface: optional(string), prefer_go: optional(bool), neighbor_domain: optional(strings), ...dialer }));
-const httpClient = object({ tag: string, ...dialer });
+const httpClient = object({ tag: string, version: optional(union(literal(1), literal(2), literal(3))), ...dialer });
+const apiService = object({ type: literal('api'), tag: string, listen: string, listen_port: integer(1, 65535),
+  secret: optional(union(literal(''), string)), dashboard: optional(object({ enabled: optional(bool), path: optional(string), http_client: optional(string) })),
+});
 export const recipeSchema = object({ ...identity, profile, templateRef: ref,
   resources: object({ outbounds: optional(array(union(object({ kind: literal('node'), tag: string, nodeRef: ref }), outbound))), ruleSets: optional(array(ruleSet)), dnsServers: optional(array(resolver)), httpClients: optional(array(httpClient)) }),
   settings: optional(object({ logLevel: optional(enumeration(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'panic'] as const)), tunMtu: optional(integer(576, 65535)), dnsFinal: optional(string), routeFinal: optional(string) })),
@@ -174,9 +182,11 @@ export const recipeSchema = object({ ...identity, profile, templateRef: ref,
 export const templateSchema = object({ ...identity, targetVersion: literal('1.14.4'),
   defaults: object({ log: optional(object({ disabled: optional(bool), level: optional(enumeration(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'panic'] as const)) })),
     dns: optional(object({ final: optional(string), strategy: optional(enumeration(['prefer_ipv4', 'prefer_ipv6', 'ipv4_only', 'ipv6_only'] as const)) })),
-    route: optional(object({ final: optional(string), auto_detect_interface: optional(bool), default_domain_resolver: optional(string) })),
+    route: optional(object({ final: optional(string), auto_detect_interface: optional(bool), default_domain_resolver: optional(string), default_http_client: optional(string) })),
+    experimental: optional(object({ cache_file: optional(object({ enabled: optional(bool), store_dns: optional(bool) })) })),
   }),
   resources: object({
+    services: optional(array(apiService)),
     outbounds: optional(array(outbound)),
     dnsServers: optional(array(resolver)),
     httpClients: optional(array(httpClient)),

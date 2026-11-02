@@ -1,0 +1,1597 @@
+{
+  "recipe": {
+    "schemaVersion": 1,
+    "id": "user-d-tun",
+    "revision": "01fd03bc8cf1587770bf98d67e241b7068be49fe",
+    "profile": "macos-standalone",
+    "templateRef": {
+      "id": "user-d-tun-template",
+      "revision": "01fd03bc8cf1587770bf98d67e241b7068be49fe"
+    },
+    "resources": {
+      "outbounds": [
+        {
+          "type": "selector",
+          "tag": "OneDrive",
+          "outbounds": [
+            "直连",
+            "代理"
+          ],
+          "default": "代理",
+          "interrupt_exist_connections": true
+        },
+        {
+          "type": "selector",
+          "tag": "Microsoft",
+          "outbounds": [
+            "直连",
+            "代理"
+          ],
+          "default": "直连",
+          "interrupt_exist_connections": true
+        },
+        {
+          "type": "selector",
+          "tag": "海外AI",
+          "outbounds": [
+            "jms-s1",
+            "jms-s2",
+            "jms-s3"
+          ],
+          "default": "jms-s3",
+          "interrupt_exist_connections": true
+        },
+        {
+          "type": "selector",
+          "tag": "YouTube",
+          "outbounds": [
+            "代理",
+            "jms-s1",
+            "jms-s2",
+            "jms-s3",
+            "jms-s4",
+            "jms-s5",
+            "jms-s801"
+          ],
+          "default": "代理",
+          "interrupt_exist_connections": true
+        },
+        {
+          "type": "selector",
+          "tag": "海外媒体",
+          "outbounds": [
+            "直连",
+            "代理",
+            "jms-s1",
+            "jms-s2",
+            "jms-s3",
+            "jms-s4",
+            "jms-s5",
+            "jms-s801"
+          ],
+          "default": "代理",
+          "interrupt_exist_connections": true
+        },
+        {
+          "kind": "node",
+          "tag": "jms-s1",
+          "nodeRef": {
+            "id": "user-d-tun:node:1",
+            "revision": "1"
+          }
+        },
+        {
+          "kind": "node",
+          "tag": "jms-s2",
+          "nodeRef": {
+            "id": "user-d-tun:node:2",
+            "revision": "1"
+          }
+        },
+        {
+          "kind": "node",
+          "tag": "jms-s3",
+          "nodeRef": {
+            "id": "user-d-tun:node:3",
+            "revision": "1"
+          }
+        },
+        {
+          "kind": "node",
+          "tag": "jms-s4",
+          "nodeRef": {
+            "id": "user-d-tun:node:4",
+            "revision": "1"
+          }
+        },
+        {
+          "kind": "node",
+          "tag": "jms-s5",
+          "nodeRef": {
+            "id": "user-d-tun:node:5",
+            "revision": "1"
+          }
+        },
+        {
+          "kind": "node",
+          "tag": "jms-s801",
+          "nodeRef": {
+            "id": "user-d-tun:node:6",
+            "revision": "1"
+          }
+        }
+      ],
+      "ruleSets": [
+        {
+          "kind": "curated",
+          "tag": "OpenAI",
+          "artifactRef": {
+            "id": "OpenAI",
+            "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+            "usage": "route"
+          },
+          "httpClient": "rule-set-download"
+        },
+        {
+          "kind": "curated",
+          "tag": "DNS_OpenAI_domain",
+          "artifactRef": {
+            "id": "DNS_OpenAI_domain",
+            "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+            "usage": "dns-query"
+          },
+          "httpClient": "rule-set-download"
+        },
+        {
+          "kind": "curated",
+          "tag": "Anthropic",
+          "artifactRef": {
+            "id": "Anthropic",
+            "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+            "usages": [
+              "dns-query",
+              "route"
+            ]
+          },
+          "httpClient": "rule-set-download"
+        },
+        {
+          "kind": "curated",
+          "tag": "Claude",
+          "artifactRef": {
+            "id": "Claude",
+            "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+            "usages": [
+              "dns-query",
+              "route"
+            ]
+          },
+          "httpClient": "rule-set-download"
+        },
+        {
+          "kind": "curated",
+          "tag": "Gemini",
+          "artifactRef": {
+            "id": "Gemini",
+            "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+            "usages": [
+              "dns-query",
+              "route"
+            ]
+          },
+          "httpClient": "rule-set-download"
+        },
+        {
+          "kind": "curated",
+          "tag": "OneDrive",
+          "artifactRef": {
+            "id": "OneDrive",
+            "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+            "usage": "route"
+          },
+          "httpClient": "rule-set-download"
+        },
+        {
+          "kind": "curated",
+          "tag": "Microsoft",
+          "artifactRef": {
+            "id": "Microsoft",
+            "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+            "usage": "route"
+          },
+          "httpClient": "rule-set-download"
+        },
+        {
+          "kind": "curated",
+          "tag": "Google",
+          "artifactRef": {
+            "id": "Google",
+            "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+            "usage": "route"
+          },
+          "httpClient": "rule-set-download"
+        },
+        {
+          "kind": "curated",
+          "tag": "DNS_Google_domain",
+          "artifactRef": {
+            "id": "DNS_Google_domain",
+            "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+            "usage": "dns-query"
+          },
+          "httpClient": "rule-set-download"
+        },
+        {
+          "kind": "curated",
+          "tag": "YouTube",
+          "artifactRef": {
+            "id": "YouTube",
+            "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+            "usage": "route"
+          },
+          "httpClient": "rule-set-download"
+        },
+        {
+          "kind": "curated",
+          "tag": "海外媒体",
+          "artifactRef": {
+            "id": "海外媒体",
+            "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+            "usage": "route"
+          },
+          "httpClient": "rule-set-download"
+        },
+        {
+          "kind": "curated",
+          "tag": "Global",
+          "artifactRef": {
+            "id": "Global",
+            "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+            "usage": "route"
+          },
+          "httpClient": "rule-set-download"
+        },
+        {
+          "kind": "curated",
+          "tag": "DNS_Global_domain",
+          "artifactRef": {
+            "id": "DNS_Global_domain",
+            "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+            "usage": "dns-query"
+          },
+          "httpClient": "rule-set-download"
+        },
+        {
+          "kind": "curated",
+          "tag": "DNS_Global_ipcidr",
+          "artifactRef": {
+            "id": "DNS_Global_ipcidr",
+            "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+            "usage": "dns-response"
+          },
+          "httpClient": "rule-set-download"
+        },
+        {
+          "kind": "curated",
+          "tag": "ChinaIPs",
+          "artifactRef": {
+            "id": "ChinaIPs",
+            "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+            "usages": [
+              "dns-response",
+              "route"
+            ]
+          },
+          "httpClient": "rule-set-download"
+        },
+        {
+          "kind": "curated",
+          "tag": "ChinaMaxNoIP",
+          "artifactRef": {
+            "id": "ChinaMaxNoIP",
+            "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+            "usage": "route"
+          },
+          "httpClient": "rule-set-download"
+        },
+        {
+          "kind": "curated",
+          "tag": "DNS_ChinaMaxNoIP_domain",
+          "artifactRef": {
+            "id": "DNS_ChinaMaxNoIP_domain",
+            "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+            "usage": "dns-query"
+          },
+          "httpClient": "rule-set-download"
+        },
+        {
+          "kind": "curated",
+          "tag": "ChinaMax",
+          "artifactRef": {
+            "id": "ChinaMax",
+            "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+            "usage": "route"
+          },
+          "httpClient": "rule-set-download"
+        }
+      ]
+    },
+    "dnsSteps": [
+      {
+        "id": "1.base.json:dns",
+        "preset": "1.base.json"
+      },
+      {
+        "id": "5.user-d.dns.json:dns",
+        "preset": "5.user-d.dns.json"
+      }
+    ],
+    "routeSteps": [
+      {
+        "id": "1.base.json:route",
+        "preset": "1.base.json"
+      },
+      {
+        "id": "1.policy-user-d.json:route",
+        "preset": "1.policy-user-d.json"
+      },
+      {
+        "id": "2.inbounds-tun.json:route",
+        "preset": "2.inbounds-tun.json"
+      },
+      {
+        "id": "6.user-d.route.json:route",
+        "preset": "6.user-d.route.json"
+      }
+    ]
+  },
+  "dependencies": {
+    "templates": [
+      {
+        "schemaVersion": 1,
+        "id": "user-d-tun-template",
+        "revision": "01fd03bc8cf1587770bf98d67e241b7068be49fe",
+        "targetVersion": "1.14.4",
+        "defaults": {
+          "log": {
+            "disabled": false,
+            "level": "warn"
+          },
+          "experimental": {
+            "cache_file": {
+              "enabled": true,
+              "store_dns": true
+            }
+          },
+          "dns": {
+            "final": "dns_proxy",
+            "strategy": "ipv4_only"
+          },
+          "route": {
+            "default_domain_resolver": "dns_direct",
+            "default_http_client": "rule-set-download",
+            "final": "漏网之鱼",
+            "auto_detect_interface": true
+          }
+        },
+        "resources": {
+          "outbounds": [
+            {
+              "type": "selector",
+              "tag": "漏网之鱼",
+              "outbounds": [
+                "直连",
+                "代理"
+              ],
+              "default": "直连",
+              "interrupt_exist_connections": true
+            },
+            {
+              "type": "direct",
+              "tag": "直连"
+            },
+            {
+              "type": "selector",
+              "tag": "代理",
+              "outbounds": [
+                "自动选择",
+                "jms-s1",
+                "jms-s2",
+                "jms-s3",
+                "jms-s4",
+                "jms-s5",
+                "jms-s801"
+              ],
+              "default": "自动选择",
+              "interrupt_exist_connections": true
+            },
+            {
+              "type": "urltest",
+              "tag": "自动选择",
+              "outbounds": [
+                "jms-s1",
+                "jms-s2",
+                "jms-s3",
+                "jms-s4",
+                "jms-s5"
+              ],
+              "interrupt_exist_connections": true
+            }
+          ],
+          "services": [
+            {
+              "type": "api",
+              "tag": "api",
+              "listen": "127.0.0.1",
+              "listen_port": 9090,
+              "secret": "",
+              "dashboard": {
+                "enabled": true,
+                "path": "dashboard",
+                "http_client": "rule-set-download"
+              }
+            }
+          ],
+          "dnsServers": [
+            {
+              "tag": "dns_direct",
+              "type": "https",
+              "server": "223.5.5.5",
+              "server_port": 443,
+              "path": "/dns-query",
+              "headers": {
+                "Host": "dns.alidns.com"
+              },
+              "tls": {
+                "server_name": "dns.alidns.com"
+              }
+            },
+            {
+              "tag": "dns_proxy",
+              "type": "https",
+              "server": "8.8.8.8",
+              "server_port": 443,
+              "path": "/dns-query",
+              "headers": {
+                "Host": "dns.google"
+              },
+              "tls": {
+                "server_name": "dns.google"
+              },
+              "detour": "代理"
+            },
+            {
+              "type": "local",
+              "tag": "dns_local",
+              "prefer_go": false,
+              "neighbor_domain": []
+            }
+          ],
+          "ruleSets": [
+            {
+              "kind": "inline",
+              "definition": {
+                "type": "inline",
+                "tag": "Process-Direct-required",
+                "rules": [
+                  {
+                    "process_name": [
+                      "TencentMeeting",
+                      "Thunder",
+                      "LocalSend",
+                      "WeChat",
+                      "Tailscale",
+                      "softwareupdated",
+                      "kubectl"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "inline",
+              "definition": {
+                "type": "inline",
+                "tag": "Domain-Direct-required",
+                "rules": [
+                  {
+                    "domain_suffix": [
+                      "jsdelivr.net"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "inline",
+              "definition": {
+                "type": "inline",
+                "tag": "LocalNames",
+                "rules": [
+                  {
+                    "domain_regex": [
+                      "^[^.]+\\.?$",
+                      "(?i)^(?:[^.]+\\.)*(?:local|localdomain|lan|home\\.arpa|internal|intranet)\\.?$"
+                    ]
+                  }
+                ]
+              }
+            }
+          ],
+          "httpClients": [
+            {
+              "tag": "rule-set-download",
+              "detour": "代理"
+            }
+          ],
+          "inbounds": [
+            {
+              "type": "tun",
+              "tag": "in",
+              "address": [
+                "172.19.0.1/30",
+                "fd82:25ea:4d13::1/126"
+              ],
+              "auto_route": true,
+              "strict_route": true
+            }
+          ]
+        },
+        "platformDnsServers": {
+          "macos-standalone": [
+            {
+              "type": "dhcp",
+              "tag": "dns_lan"
+            }
+          ]
+        },
+        "dnsPresets": {
+          "1.base.json": [
+            {
+              "preferred_by": "dns_local",
+              "action": "route",
+              "server": "dns_local",
+              "remove_client_subnet": true,
+              "disable_cache": true
+            },
+            {
+              "domain_suffix": [
+                "local"
+              ],
+              "action": "route",
+              "server": "dns_local",
+              "remove_client_subnet": true,
+              "disable_cache": true
+            },
+            {
+              "domain_regex": "^[^.]+$",
+              "action": "route",
+              "server": "dns_lan",
+              "remove_client_subnet": true,
+              "disable_cache": true
+            },
+            {
+              "domain_suffix": [
+                "localdomain",
+                "lan",
+                "home.arpa",
+                "internal",
+                "intranet"
+              ],
+              "action": "route",
+              "server": "dns_lan",
+              "remove_client_subnet": true,
+              "disable_cache": true
+            },
+            {
+              "query_type": "AAAA",
+              "action": "predefined",
+              "rcode": "NOERROR"
+            },
+            {
+              "clash_mode": "Direct",
+              "action": "route",
+              "server": "dns_direct",
+              "remove_client_subnet": true
+            },
+            {
+              "clash_mode": "Global",
+              "action": "route",
+              "server": "dns_proxy",
+              "remove_client_subnet": true
+            },
+            {
+              "rule_set": [
+                "Process-Direct-required",
+                "Domain-Direct-required"
+              ],
+              "action": "route",
+              "server": "dns_direct",
+              "remove_client_subnet": true
+            },
+            {
+              "protocol": [
+                "bittorrent",
+                "rdp",
+                "ssh"
+              ],
+              "action": "route",
+              "server": "dns_direct",
+              "remove_client_subnet": true
+            }
+          ],
+          "5.user-d.dns.json": [
+            {
+              "rule_set": [
+                "DNS_OpenAI_domain",
+                "Anthropic",
+                "Claude",
+                "DNS_Google_domain",
+                "Gemini"
+              ],
+              "action": "route",
+              "server": "dns_proxy",
+              "remove_client_subnet": true
+            },
+            {
+              "rule_set": "DNS_ChinaMaxNoIP_domain",
+              "action": "route",
+              "server": "dns_direct",
+              "remove_client_subnet": true
+            },
+            {
+              "rule_set": "DNS_Global_domain",
+              "action": "route",
+              "server": "dns_proxy",
+              "remove_client_subnet": true
+            },
+            {
+              "action": "evaluate",
+              "server": "dns_proxy",
+              "tag": "first",
+              "remove_client_subnet": true
+            },
+            {
+              "match_response": "first",
+              "rule_set": "DNS_Global_ipcidr",
+              "action": "respond"
+            },
+            {
+              "match_response": "first",
+              "response_rcode": "NOERROR",
+              "rule_set": "ChinaIPs",
+              "action": "evaluate",
+              "server": "dns_proxy",
+              "tag": "ecs"
+            },
+            {
+              "match_response": "ecs",
+              "response_rcode": "NOERROR",
+              "rule_set": "ChinaIPs",
+              "action": "respond"
+            },
+            {
+              "match_response": "first",
+              "action": "respond"
+            },
+            {
+              "action": "predefined",
+              "rcode": "SERVFAIL"
+            }
+          ]
+        },
+        "routePresets": {
+          "1.base.json": [
+            {
+              "action": "sniff"
+            },
+            {
+              "type": "logical",
+              "mode": "or",
+              "rules": [
+                {
+                  "protocol": "dns"
+                },
+                {
+                  "port": 53
+                }
+              ],
+              "action": "hijack-dns"
+            },
+            {
+              "rule_set": "LocalNames",
+              "action": "resolve"
+            },
+            {
+              "rule_set": "LocalNames",
+              "action": "route",
+              "outbound": "直连"
+            },
+            {
+              "ip_is_private": true,
+              "action": "route",
+              "outbound": "直连"
+            },
+            {
+              "ip_version": 6,
+              "action": "reject"
+            },
+            {
+              "type": "logical",
+              "mode": "or",
+              "rules": [
+                {
+                  "port": 853
+                },
+                {
+                  "network": "udp",
+                  "port": 443
+                },
+                {
+                  "protocol": [
+                    "stun"
+                  ]
+                }
+              ],
+              "action": "reject"
+            }
+          ],
+          "1.policy-user-d.json": [
+            {
+              "clash_mode": "Direct",
+              "action": "route",
+              "outbound": "直连"
+            },
+            {
+              "clash_mode": "Global",
+              "action": "route",
+              "outbound": "代理"
+            },
+            {
+              "rule_set": [
+                "Process-Direct-required",
+                "Domain-Direct-required"
+              ],
+              "action": "route",
+              "outbound": "直连"
+            },
+            {
+              "protocol": [
+                "bittorrent",
+                "rdp",
+                "ssh"
+              ],
+              "action": "route",
+              "outbound": "直连"
+            }
+          ],
+          "2.inbounds-tun.json": [
+            {
+              "inbound": "in",
+              "action": "resolve"
+            }
+          ],
+          "6.user-d.route.json": [
+            {
+              "type": "logical",
+              "mode": "or",
+              "rules": [
+                {
+                  "rule_set": [
+                    "OpenAI",
+                    "Anthropic",
+                    "Claude",
+                    "Google",
+                    "Gemini"
+                  ]
+                },
+                {
+                  "process_name": [
+                    "ChatGPT",
+                    "ChatGPTHelper",
+                    "Claude",
+                    "Claude Helper",
+                    "Antigravity",
+                    "Antigravity Helper",
+                    "Antigravity Helper (GPU)",
+                    "Antigravity Helper (Plugin)",
+                    "Antigravity Helper (Renderer)"
+                  ]
+                },
+                {
+                  "process_path_regex": [
+                    "^/Applications/(Claude|ChatGPT|Antigravity)\\.app(/.*)?"
+                  ]
+                },
+                {
+                  "domain_suffix": [
+                    "chat.com"
+                  ]
+                }
+              ],
+              "action": "route",
+              "outbound": "海外AI"
+            },
+            {
+              "rule_set": "OneDrive",
+              "action": "route",
+              "outbound": "OneDrive"
+            },
+            {
+              "rule_set": "Microsoft",
+              "action": "route",
+              "outbound": "Microsoft"
+            },
+            {
+              "rule_set": "YouTube",
+              "action": "route",
+              "outbound": "YouTube"
+            },
+            {
+              "rule_set": "海外媒体",
+              "action": "route",
+              "outbound": "海外媒体"
+            },
+            {
+              "rule_set": [
+                "ChinaMax"
+              ],
+              "action": "route",
+              "outbound": "直连"
+            },
+            {
+              "rule_set": "Global",
+              "action": "route",
+              "outbound": "代理"
+            },
+            {
+              "type": "logical",
+              "mode": "and",
+              "rules": [
+                {
+                  "rule_set": "ChinaIPs"
+                },
+                {
+                  "rule_set": "Global",
+                  "invert": true
+                }
+              ],
+              "action": "route",
+              "outbound": "直连"
+            }
+          ]
+        },
+        "ecsResponseTags": [
+          "ecs"
+        ]
+      }
+    ],
+    "nodes": [
+      {
+        "schemaVersion": 1,
+        "id": "user-d-tun:node:1",
+        "revision": "1",
+        "connection": {
+          "type": "shadowsocks",
+          "server": "192.0.2.10",
+          "server_port": 6987,
+          "method": "aes-256-gcm",
+          "password": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
+        }
+      },
+      {
+        "schemaVersion": 1,
+        "id": "user-d-tun:node:2",
+        "revision": "1",
+        "connection": {
+          "type": "vless",
+          "server": "192.0.2.10",
+          "server_port": 443,
+          "uuid": "00000000-0000-4000-8000-000000000001",
+          "flow": "xtls-rprx-vision",
+          "tls": {
+            "enabled": true,
+            "server_name": "fixture.example.invalid",
+            "reality": {
+              "enabled": true,
+              "public_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+              "short_id": "0123456789abcdef"
+            },
+            "utls": {
+              "enabled": true,
+              "fingerprint": "chrome"
+            }
+          }
+        }
+      },
+      {
+        "schemaVersion": 1,
+        "id": "user-d-tun:node:3",
+        "revision": "1",
+        "connection": {
+          "type": "vless",
+          "server": "192.0.2.10",
+          "server_port": 443,
+          "uuid": "00000000-0000-4000-8000-000000000001",
+          "flow": "xtls-rprx-vision",
+          "tls": {
+            "enabled": true,
+            "server_name": "fixture.example.invalid",
+            "reality": {
+              "enabled": true,
+              "public_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+              "short_id": "0123456789abcdef"
+            },
+            "utls": {
+              "enabled": true,
+              "fingerprint": "chrome"
+            }
+          }
+        }
+      },
+      {
+        "schemaVersion": 1,
+        "id": "user-d-tun:node:4",
+        "revision": "1",
+        "connection": {
+          "type": "vless",
+          "server": "192.0.2.10",
+          "server_port": 443,
+          "uuid": "00000000-0000-4000-8000-000000000001",
+          "flow": "xtls-rprx-vision",
+          "tls": {
+            "enabled": true,
+            "server_name": "fixture.example.invalid",
+            "reality": {
+              "enabled": true,
+              "public_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+              "short_id": "0123456789abcdef"
+            },
+            "utls": {
+              "enabled": true,
+              "fingerprint": "chrome"
+            }
+          }
+        }
+      },
+      {
+        "schemaVersion": 1,
+        "id": "user-d-tun:node:5",
+        "revision": "1",
+        "connection": {
+          "type": "vless",
+          "server": "192.0.2.10",
+          "server_port": 443,
+          "uuid": "00000000-0000-4000-8000-000000000001",
+          "flow": "xtls-rprx-vision",
+          "tls": {
+            "enabled": true,
+            "server_name": "fixture.example.invalid",
+            "reality": {
+              "enabled": true,
+              "public_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+              "short_id": "0123456789abcdef"
+            },
+            "utls": {
+              "enabled": true,
+              "fingerprint": "chrome"
+            }
+          }
+        }
+      },
+      {
+        "schemaVersion": 1,
+        "id": "user-d-tun:node:6",
+        "revision": "1",
+        "connection": {
+          "type": "vless",
+          "server": "192.0.2.10",
+          "server_port": 443,
+          "uuid": "00000000-0000-4000-8000-000000000001",
+          "flow": "xtls-rprx-vision",
+          "tls": {
+            "enabled": true,
+            "server_name": "fixture.example.invalid",
+            "reality": {
+              "enabled": true,
+              "public_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+              "short_id": "0123456789abcdef"
+            },
+            "utls": {
+              "enabled": true,
+              "fingerprint": "chrome"
+            }
+          }
+        }
+      }
+    ],
+    "manifests": [
+      {
+        "schemaVersion": 1,
+        "id": "legacy:OpenAI",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "targetVersion": "1.14.4",
+        "sourceFormatVersion": 4,
+        "artifacts": [
+          {
+            "id": "OpenAI",
+            "sha256": "6739c84f6ce825a9bd229c207756ffbd5f84d6014dcdd0805dbc2560aad22a15",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/OpenAI.srs",
+            "format": "binary",
+            "requiredCapabilities": [],
+            "byteLength": 1,
+            "termCount": 1
+          }
+        ],
+        "projections": {
+          "route": {
+            "artifactIds": [
+              "OpenAI"
+            ]
+          },
+          "dns-query": {
+            "unavailable": "empty"
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      {
+        "schemaVersion": 1,
+        "id": "legacy:DNS_OpenAI_domain",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "targetVersion": "1.14.4",
+        "sourceFormatVersion": 4,
+        "artifacts": [
+          {
+            "id": "DNS_OpenAI_domain",
+            "sha256": "37325eeef1be0f7d356bfdbfec00cc85b884d3b8874bc831ce8130d0891a3fb8",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/DNS_OpenAI_domain.srs",
+            "format": "binary",
+            "requiredCapabilities": [],
+            "byteLength": 1,
+            "termCount": 1
+          }
+        ],
+        "projections": {
+          "route": {
+            "unavailable": "empty"
+          },
+          "dns-query": {
+            "artifactIds": [
+              "DNS_OpenAI_domain"
+            ]
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      {
+        "schemaVersion": 1,
+        "id": "legacy:Anthropic",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "targetVersion": "1.14.4",
+        "sourceFormatVersion": 4,
+        "artifacts": [
+          {
+            "id": "Anthropic",
+            "sha256": "62a7e7ff919792ca473230b5db8452c7cd0cc53f487f1a1509f908df847bd27c",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Anthropic.srs",
+            "format": "binary",
+            "requiredCapabilities": [],
+            "byteLength": 1,
+            "termCount": 1
+          }
+        ],
+        "projections": {
+          "route": {
+            "artifactIds": [
+              "Anthropic"
+            ]
+          },
+          "dns-query": {
+            "artifactIds": [
+              "Anthropic"
+            ]
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      {
+        "schemaVersion": 1,
+        "id": "legacy:Claude",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "targetVersion": "1.14.4",
+        "sourceFormatVersion": 4,
+        "artifacts": [
+          {
+            "id": "Claude",
+            "sha256": "e9c87ae24f336682fd8882b6d2753932cdac5d1946ace56d55bbc0cfbe358608",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Claude.srs",
+            "format": "binary",
+            "requiredCapabilities": [],
+            "byteLength": 1,
+            "termCount": 1
+          }
+        ],
+        "projections": {
+          "route": {
+            "artifactIds": [
+              "Claude"
+            ]
+          },
+          "dns-query": {
+            "artifactIds": [
+              "Claude"
+            ]
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      {
+        "schemaVersion": 1,
+        "id": "legacy:Gemini",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "targetVersion": "1.14.4",
+        "sourceFormatVersion": 4,
+        "artifacts": [
+          {
+            "id": "Gemini",
+            "sha256": "fa7c1542d34ccb1b17d001f59e1e917b056d2491451b060300b51cf37b8b5923",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Gemini.srs",
+            "format": "binary",
+            "requiredCapabilities": [],
+            "byteLength": 1,
+            "termCount": 1
+          }
+        ],
+        "projections": {
+          "route": {
+            "artifactIds": [
+              "Gemini"
+            ]
+          },
+          "dns-query": {
+            "artifactIds": [
+              "Gemini"
+            ]
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      {
+        "schemaVersion": 1,
+        "id": "legacy:OneDrive",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "targetVersion": "1.14.4",
+        "sourceFormatVersion": 4,
+        "artifacts": [
+          {
+            "id": "OneDrive",
+            "sha256": "2a3743995d7e5570f8cc54deb8d82ad55c03f90e9b55063ae77314970a3b057b",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/OneDrive.srs",
+            "format": "binary",
+            "requiredCapabilities": [
+              "processMatching"
+            ],
+            "byteLength": 1,
+            "termCount": 1
+          }
+        ],
+        "projections": {
+          "route": {
+            "artifactIds": [
+              "OneDrive"
+            ]
+          },
+          "dns-query": {
+            "unavailable": "empty"
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      {
+        "schemaVersion": 1,
+        "id": "legacy:Microsoft",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "targetVersion": "1.14.4",
+        "sourceFormatVersion": 4,
+        "artifacts": [
+          {
+            "id": "Microsoft",
+            "sha256": "dc6c37fd3b80281563762614903ed500e14374098306f4ceee5ec5326f966089",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Microsoft.srs",
+            "format": "binary",
+            "requiredCapabilities": [
+              "processMatching"
+            ],
+            "byteLength": 1,
+            "termCount": 1
+          }
+        ],
+        "projections": {
+          "route": {
+            "artifactIds": [
+              "Microsoft"
+            ]
+          },
+          "dns-query": {
+            "unavailable": "empty"
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      {
+        "schemaVersion": 1,
+        "id": "legacy:Google",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "targetVersion": "1.14.4",
+        "sourceFormatVersion": 4,
+        "artifacts": [
+          {
+            "id": "Google",
+            "sha256": "ec7346865f6c23a1636885a6b5d73baeff233ac0e2fbfffd1e848e4369bc926a",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Google.srs",
+            "format": "binary",
+            "requiredCapabilities": [
+              "processMatching"
+            ],
+            "byteLength": 1,
+            "termCount": 1
+          }
+        ],
+        "projections": {
+          "route": {
+            "artifactIds": [
+              "Google"
+            ]
+          },
+          "dns-query": {
+            "unavailable": "empty"
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      {
+        "schemaVersion": 1,
+        "id": "legacy:DNS_Google_domain",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "targetVersion": "1.14.4",
+        "sourceFormatVersion": 4,
+        "artifacts": [
+          {
+            "id": "DNS_Google_domain",
+            "sha256": "6b5ff78c2b4f2795ba89ca84238314a459e6c085db55ce956d64c0469a06a9df",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/DNS_Google_domain.srs",
+            "format": "binary",
+            "requiredCapabilities": [],
+            "byteLength": 1,
+            "termCount": 1
+          }
+        ],
+        "projections": {
+          "route": {
+            "unavailable": "empty"
+          },
+          "dns-query": {
+            "artifactIds": [
+              "DNS_Google_domain"
+            ]
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      {
+        "schemaVersion": 1,
+        "id": "legacy:YouTube",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "targetVersion": "1.14.4",
+        "sourceFormatVersion": 4,
+        "artifacts": [
+          {
+            "id": "YouTube",
+            "sha256": "da4163404185d0c106158bad3bc246a7df1388b1974bceace0dfa1f0443abd30",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/YouTube.srs",
+            "format": "binary",
+            "requiredCapabilities": [],
+            "byteLength": 1,
+            "termCount": 1
+          }
+        ],
+        "projections": {
+          "route": {
+            "artifactIds": [
+              "YouTube"
+            ]
+          },
+          "dns-query": {
+            "unavailable": "empty"
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      {
+        "schemaVersion": 1,
+        "id": "legacy:海外媒体",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "targetVersion": "1.14.4",
+        "sourceFormatVersion": 4,
+        "artifacts": [
+          {
+            "id": "海外媒体",
+            "sha256": "0b13536eb159f92502f3cb3645432f9f1b34810e9f59c4ea1aa8b990f72a9442",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/GlobalMedia.srs",
+            "format": "binary",
+            "requiredCapabilities": [
+              "processMatching"
+            ],
+            "byteLength": 1,
+            "termCount": 1
+          }
+        ],
+        "projections": {
+          "route": {
+            "artifactIds": [
+              "海外媒体"
+            ]
+          },
+          "dns-query": {
+            "unavailable": "empty"
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      {
+        "schemaVersion": 1,
+        "id": "legacy:Global",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "targetVersion": "1.14.4",
+        "sourceFormatVersion": 4,
+        "artifacts": [
+          {
+            "id": "Global",
+            "sha256": "a66cc5d831893559f68951289eb29013d62cbca7929cef929bc6416c6b38c1c2",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Global.srs",
+            "format": "binary",
+            "requiredCapabilities": [
+              "processMatching"
+            ],
+            "byteLength": 1,
+            "termCount": 1
+          }
+        ],
+        "projections": {
+          "route": {
+            "artifactIds": [
+              "Global"
+            ]
+          },
+          "dns-query": {
+            "unavailable": "empty"
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      {
+        "schemaVersion": 1,
+        "id": "legacy:DNS_Global_domain",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "targetVersion": "1.14.4",
+        "sourceFormatVersion": 4,
+        "artifacts": [
+          {
+            "id": "DNS_Global_domain",
+            "sha256": "6a26c4e4587f04da848e3dfbf00a718a98030b1be9aa6252de16061c60bbf02d",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/DNS_Global_domain.srs",
+            "format": "binary",
+            "requiredCapabilities": [],
+            "byteLength": 1,
+            "termCount": 1
+          }
+        ],
+        "projections": {
+          "route": {
+            "unavailable": "empty"
+          },
+          "dns-query": {
+            "artifactIds": [
+              "DNS_Global_domain"
+            ]
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      {
+        "schemaVersion": 1,
+        "id": "legacy:DNS_Global_ipcidr",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "targetVersion": "1.14.4",
+        "sourceFormatVersion": 4,
+        "artifacts": [
+          {
+            "id": "DNS_Global_ipcidr",
+            "sha256": "42a74efce84a46459465c78ec89555283cc2e47f8627f367670ca447dd3620e8",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/DNS_Global_ipcidr.srs",
+            "format": "binary",
+            "requiredCapabilities": [],
+            "byteLength": 1,
+            "termCount": 1
+          }
+        ],
+        "projections": {
+          "route": {
+            "unavailable": "empty"
+          },
+          "dns-query": {
+            "unavailable": "empty"
+          },
+          "dns-response": {
+            "artifactIds": [
+              "DNS_Global_ipcidr"
+            ]
+          }
+        }
+      },
+      {
+        "schemaVersion": 1,
+        "id": "legacy:ChinaIPs",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "targetVersion": "1.14.4",
+        "sourceFormatVersion": 4,
+        "artifacts": [
+          {
+            "id": "ChinaIPs",
+            "sha256": "96d4480f2f673b5feac8da5c30e49d184b0e50ed2eb682b8a38116aa5bd9a7f8",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/ChinaIPs.srs",
+            "format": "binary",
+            "requiredCapabilities": [],
+            "byteLength": 1,
+            "termCount": 1
+          }
+        ],
+        "projections": {
+          "route": {
+            "artifactIds": [
+              "ChinaIPs"
+            ]
+          },
+          "dns-query": {
+            "unavailable": "empty"
+          },
+          "dns-response": {
+            "artifactIds": [
+              "ChinaIPs"
+            ]
+          }
+        }
+      },
+      {
+        "schemaVersion": 1,
+        "id": "legacy:ChinaMaxNoIP",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "targetVersion": "1.14.4",
+        "sourceFormatVersion": 4,
+        "artifacts": [
+          {
+            "id": "ChinaMaxNoIP",
+            "sha256": "15ef1a722ac5de17c3ec7b314c8cccda023367c4e3cfccd8fe52bb7912a8ecf8",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/ChinaMaxNoIP.srs",
+            "format": "binary",
+            "requiredCapabilities": [
+              "processMatching"
+            ],
+            "byteLength": 1,
+            "termCount": 1
+          }
+        ],
+        "projections": {
+          "route": {
+            "artifactIds": [
+              "ChinaMaxNoIP"
+            ]
+          },
+          "dns-query": {
+            "unavailable": "empty"
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      {
+        "schemaVersion": 1,
+        "id": "legacy:DNS_ChinaMaxNoIP_domain",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "targetVersion": "1.14.4",
+        "sourceFormatVersion": 4,
+        "artifacts": [
+          {
+            "id": "DNS_ChinaMaxNoIP_domain",
+            "sha256": "161420a96cb0bccad30811c77b1b6c4591afb5bf37271b6f378f337b8df2e192",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/DNS_ChinaMaxNoIP_domain.srs",
+            "format": "binary",
+            "requiredCapabilities": [],
+            "byteLength": 1,
+            "termCount": 1
+          }
+        ],
+        "projections": {
+          "route": {
+            "unavailable": "empty"
+          },
+          "dns-query": {
+            "artifactIds": [
+              "DNS_ChinaMaxNoIP_domain"
+            ]
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      {
+        "schemaVersion": 1,
+        "id": "legacy:ChinaMax",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "targetVersion": "1.14.4",
+        "sourceFormatVersion": 4,
+        "artifacts": [
+          {
+            "id": "ChinaMax",
+            "sha256": "38b5e95ee0d98bc770a72a90ca5859c4447e24570d5852963727e790cd14cf87",
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/ChinaMax.srs",
+            "format": "binary",
+            "requiredCapabilities": [
+              "processMatching"
+            ],
+            "byteLength": 1,
+            "termCount": 1
+          }
+        ],
+        "projections": {
+          "route": {
+            "artifactIds": [
+              "ChinaMax"
+            ]
+          },
+          "dns-query": {
+            "unavailable": "empty"
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      }
+    ]
+  },
+  "params": {
+    "ecs": {
+      "address": "8.8.8.8",
+      "prefix": 24
+    }
+  }
+}

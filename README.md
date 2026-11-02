@@ -5,7 +5,7 @@
 | 模块 | 目录 | 当前状态 |
 | --- | --- | --- |
 | Rule Set Pipeline | [packages/rule-set-pipeline](packages/rule-set-pipeline/README.md) | 骨架；后续实现规则采集、转换、编译和发布 |
-| Config Compiler | [packages/config-compiler](packages/config-compiler/README.md) | 配置组合、校验、受限 ECS 修改和本地发布适配器 |
+| Config Compiler | [packages/config-compiler](packages/config-compiler/README.md) | 固定修订 Recipe 解析、配置组合、校验、受限 ECS 修改和本地发布适配器 |
 | Configuration Manager Web App | [apps/web](apps/web/README.md) | 骨架；通过 workspace 依赖调用 Compiler |
 
 Pipeline 发布版本化规则文件和元数据，Compiler 不依赖其源码或运行时。Web App 通过 Compiler 的公开包入口调用功能。各模块分别声明依赖；根目录只管理工作区和统一命令。
@@ -47,12 +47,15 @@ pnpm --dir packages/config-compiler build
 
 - `@sing-box-config-manager/config-compiler`：独立核心包，不依赖 Node、数据库、文件、网络或 binary。
 - `compile(input)`：返回完整配置或结构化错误；有错误时不返回成功配置。
+- `compileRecipe(input)`／`resolveRecipe(input)`：验证封闭 Recipe 契约并解析固定修订依赖。
+- `prepareRecipePublication(input, check)`：沿新契约校验两种 ECS 输出，保留完整输入摘要和固定依赖记录；Node 入口提供 `publishRecipe`。
+- `inspectRecipeComposition(input)`：新契约迁移审计，带错误候选不得交付。
 - `inspectComposition(input)`：预览及迁移审计，可返回带错误的候选，不能将候选直接用于发布或下载。
 - `preparePublication(input, check)`：校验启用／关闭 ECS 两种配置，并固定输入和输出摘要。`check` 是可信宿主提供的执行器；mock 只用于单元测试。
 - `renderSubscription(publication, params)`：校验可信发布快照，只修改声明的 ECS 字段，不调用 binary。
 - `@sing-box-config-manager/config-compiler/publisher`：Node 专用适配器，提供原生检查和本地原子发布；不从核心入口导入。
 
-模块内部接口和使用方式见 [Compiler README](packages/config-compiler/README.md)。当前类型是 D06 的已解析输入契约，不是 M2 的完整数据库或 Web API Schema。
+模块内部接口和使用方式见 [Compiler README](packages/config-compiler/README.md)。同时保留 D06 已解析输入与新 Recipe 数据契约；未实现数据库或 Web API。五份静态迁移映射及发布边界见该模块的“五份样本迁移与 Recipe 发布”说明。
 
 `pnpm build` 生成浏览器兼容的核心 bundle 和 Node 发布适配器。Schema 校验代码由固定 Schema 预生成，运行时无需 `new Function`。尚未实现 Web 页面、HTTP 订阅端点或线上部署。
 

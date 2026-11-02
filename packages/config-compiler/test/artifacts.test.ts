@@ -160,3 +160,27 @@ test('Pipeline fixed contract sample and Compiler boundary agree on versions, fo
   mutable.dependencies.manifests![0]!.artifacts[0]!.url = 'https://rules.example.invalid/latest/domains.json';
   rejects(mutable, 'ARTIFACT_URL_MUTABLE');
 });
+
+test('one local binding can explicitly permit multiple uses without broadening unlisted consumer positions', () => {
+  const request = artifactInput();
+  const binding = request.recipe.resources.ruleSets![0]!;
+  assert.equal(binding.kind, 'curated');
+  if (binding.kind !== 'curated') return;
+  const { id, revision } = binding.artifactRef;
+  binding.artifactRef = { id, revision, usages: ['route', 'dns-query'] };
+  request.recipe.dnsSteps[0] = { id: 'same-physical-set', rule: { rule_set: binding.tag, server: 'local' } };
+  assert.ok(compileRecipe(request).ok);
+  request.recipe.dnsSteps.push({ id: 'evaluate', rule: { action: 'evaluate', server: 'local', tag: 'first' } },
+    { id: 'response', rule: { match_response: 'first', rule_set: binding.tag, action: 'respond' } });
+  rejects(request, 'ARTIFACT_USAGE_MISMATCH');
+  for (const usages of [[], ['route', 'route'], ['route', 'unknown']]) {
+    const invalid: any = artifactInput();
+    invalid.recipe.resources.ruleSets[0].artifactRef = { id, revision, usages };
+    rejects(invalid, 'STRUCTURE_INVALID');
+  }
+  const contradictory: any = artifactInput();
+  contradictory.recipe.resources.ruleSets[0].artifactRef = { id, revision, usage: 'route', usages: ['route'] };
+  rejects(contradictory, 'STRUCTURE_INVALID');
+  binding.artifactRef = { id, revision, usages: ['route', 'dns-response'] };
+  rejects(request, 'ARTIFACT_PROJECTION_EMPTY');
+});

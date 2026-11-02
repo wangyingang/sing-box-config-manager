@@ -1,0 +1,316 @@
+{
+  "legacyCase": "user-b-tun",
+  "profile": "macos-standalone",
+  "templateRef": {
+    "id": "user-b-tun-template",
+    "revision": "01fd03bc8cf1587770bf98d67e241b7068be49fe"
+  },
+  "fragments": [
+    {
+      "fragment": "1.base.json",
+      "resources": "template",
+      "policy": "preset"
+    },
+    {
+      "fragment": "1.dns-lan.json",
+      "resources": "template",
+      "policy": "preset"
+    },
+    {
+      "fragment": "1.policy-common.json",
+      "resources": "template",
+      "policy": "preset"
+    },
+    {
+      "fragment": "2.inbounds-tun.json",
+      "resources": "template",
+      "policy": "preset"
+    },
+    {
+      "fragment": "3.outbounds-common.json",
+      "resources": "template",
+      "policy": "preset"
+    },
+    {
+      "fragment": "4.user-b.json",
+      "resources": "recipe",
+      "policy": "inline"
+    },
+    {
+      "fragment": "5.dns.json",
+      "resources": "template",
+      "policy": "preset"
+    },
+    {
+      "fragment": "6.route.json",
+      "resources": "recipe",
+      "policy": "preset"
+    },
+    {
+      "fragment": "9.outbounds-dmit-vps.json",
+      "resources": "recipe",
+      "policy": "inline"
+    },
+    {
+      "fragment": "9.outbounds-justmysocks.json",
+      "resources": "recipe",
+      "policy": "inline"
+    }
+  ],
+  "nodes": [
+    {
+      "fragment": "9.outbounds-dmit-vps.json",
+      "tag": "dmit-vps-reality-ipv6",
+      "nodeRef": {
+        "id": "user-b-tun:node:1",
+        "revision": "1"
+      }
+    },
+    {
+      "fragment": "9.outbounds-dmit-vps.json",
+      "tag": "dmit-vps-reality",
+      "nodeRef": {
+        "id": "user-b-tun:node:2",
+        "revision": "1"
+      }
+    },
+    {
+      "fragment": "9.outbounds-dmit-vps.json",
+      "tag": "dmit-vps-cf-backup",
+      "nodeRef": {
+        "id": "user-b-tun:node:3",
+        "revision": "1"
+      }
+    },
+    {
+      "fragment": "9.outbounds-dmit-vps.json",
+      "tag": "dmit-vps-hy2",
+      "nodeRef": {
+        "id": "user-b-tun:node:4",
+        "revision": "1"
+      }
+    },
+    {
+      "fragment": "9.outbounds-justmysocks.json",
+      "tag": "jms-s1",
+      "nodeRef": {
+        "id": "user-b-tun:node:5",
+        "revision": "1"
+      }
+    },
+    {
+      "fragment": "9.outbounds-justmysocks.json",
+      "tag": "jms-s2",
+      "nodeRef": {
+        "id": "user-b-tun:node:6",
+        "revision": "1"
+      }
+    },
+    {
+      "fragment": "9.outbounds-justmysocks.json",
+      "tag": "jms-s3",
+      "nodeRef": {
+        "id": "user-b-tun:node:7",
+        "revision": "1"
+      }
+    },
+    {
+      "fragment": "9.outbounds-justmysocks.json",
+      "tag": "jms-s4",
+      "nodeRef": {
+        "id": "user-b-tun:node:8",
+        "revision": "1"
+      }
+    },
+    {
+      "fragment": "9.outbounds-justmysocks.json",
+      "tag": "jms-s5",
+      "nodeRef": {
+        "id": "user-b-tun:node:9",
+        "revision": "1"
+      }
+    },
+    {
+      "fragment": "9.outbounds-justmysocks.json",
+      "tag": "jms-s801",
+      "nodeRef": {
+        "id": "user-b-tun:node:10",
+        "revision": "1"
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "tag": "Steam",
+      "artifactRef": {
+        "id": "Steam",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "usage": "route"
+      }
+    },
+    {
+      "tag": "SteamCN",
+      "artifactRef": {
+        "id": "SteamCN",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "usage": "route"
+      }
+    },
+    {
+      "tag": "OpenAI",
+      "artifactRef": {
+        "id": "OpenAI",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "usage": "route"
+      }
+    },
+    {
+      "tag": "DNS_OpenAI_domain",
+      "artifactRef": {
+        "id": "DNS_OpenAI_domain",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "usage": "dns-query"
+      }
+    },
+    {
+      "tag": "Anthropic",
+      "artifactRef": {
+        "id": "Anthropic",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "usages": [
+          "dns-query",
+          "route"
+        ]
+      }
+    },
+    {
+      "tag": "Claude",
+      "artifactRef": {
+        "id": "Claude",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "usages": [
+          "dns-query",
+          "route"
+        ]
+      }
+    },
+    {
+      "tag": "Gemini",
+      "artifactRef": {
+        "id": "Gemini",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "usages": [
+          "dns-query",
+          "route"
+        ]
+      }
+    },
+    {
+      "tag": "OneDrive",
+      "artifactRef": {
+        "id": "OneDrive",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "usage": "route"
+      }
+    },
+    {
+      "tag": "Microsoft",
+      "artifactRef": {
+        "id": "Microsoft",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "usage": "route"
+      }
+    },
+    {
+      "tag": "Google",
+      "artifactRef": {
+        "id": "Google",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "usage": "route"
+      }
+    },
+    {
+      "tag": "DNS_Google_domain",
+      "artifactRef": {
+        "id": "DNS_Google_domain",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "usage": "dns-query"
+      }
+    },
+    {
+      "tag": "YouTube",
+      "artifactRef": {
+        "id": "YouTube",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "usage": "route"
+      }
+    },
+    {
+      "tag": "海外媒体",
+      "artifactRef": {
+        "id": "海外媒体",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "usage": "route"
+      }
+    },
+    {
+      "tag": "Global",
+      "artifactRef": {
+        "id": "Global",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "usage": "route"
+      }
+    },
+    {
+      "tag": "DNS_Global_domain",
+      "artifactRef": {
+        "id": "DNS_Global_domain",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "usage": "dns-query"
+      }
+    },
+    {
+      "tag": "DNS_Global_ipcidr",
+      "artifactRef": {
+        "id": "DNS_Global_ipcidr",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "usage": "dns-response"
+      }
+    },
+    {
+      "tag": "ChinaIPs",
+      "artifactRef": {
+        "id": "ChinaIPs",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "usages": [
+          "dns-response",
+          "route"
+        ]
+      }
+    },
+    {
+      "tag": "ChinaMaxNoIP",
+      "artifactRef": {
+        "id": "ChinaMaxNoIP",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "usage": "route"
+      }
+    },
+    {
+      "tag": "DNS_ChinaMaxNoIP_domain",
+      "artifactRef": {
+        "id": "DNS_ChinaMaxNoIP_domain",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "usage": "dns-query"
+      }
+    },
+    {
+      "tag": "ChinaMax",
+      "artifactRef": {
+        "id": "ChinaMax",
+        "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
+        "usage": "route"
+      }
+    }
+  ]
+}
