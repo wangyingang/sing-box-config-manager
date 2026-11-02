@@ -16,11 +16,13 @@ export function resolveRecipe(input: unknown): Result<CompileInput> {
       return matches.length === 1 ? matches[0] : undefined;
     };
     const template = exact(dependencies.templates, recipe.templateRef, '/recipe/templateRef');
-    const stepIds = new Set<string>();
-    recipe.routeSteps.forEach((step, i) => {
-      if (stepIds.has(step.id)) diagnostics.push({ severity: 'error', code: 'STEP_ID_DUPLICATE', path: `/recipe/routeSteps/${i}/id`, message: 'Route 步骤 ID 必须唯一', source: { stepId: step.id, stepIndex: i } });
-      stepIds.add(step.id);
-    });
+    for (const section of ['dns', 'route'] as const) {
+      const stepIds = new Set<string>();
+      recipe[`${section}Steps`].forEach((step, i) => {
+        if (stepIds.has(step.id)) diagnostics.push({ severity: 'error', code: 'STEP_ID_DUPLICATE', path: `/recipe/${section}Steps/${i}/id`, message: '同一策略的步骤 ID 必须唯一', source: { stepId: step.id, stepIndex: i } });
+        stepIds.add(step.id);
+      });
+    }
     const outbounds = (recipe.resources.outbounds ?? []).flatMap<Obj>((binding, i) => {
       if (!('kind' in binding)) return [binding];
       const node = exact(dependencies.nodes, binding.nodeRef, `/recipe/resources/outbounds/${i}/nodeRef`);
@@ -28,8 +30,10 @@ export function resolveRecipe(input: unknown): Result<CompileInput> {
     });
     if (!template || diagnostics.length) return { ok: false, diagnostics };
     return { ok: true, diagnostics, value: {
-      template: { id: template.id, revision: template.revision, targetVersion: template.targetVersion, defaults: template.defaults, resources: template.resources, platformDnsServers: template.platformDnsServers, dnsPresets: {}, routePresets: template.routePresets ?? {}, ecsResponseTags: [] },
-      recipe: { id: recipe.id, revision: recipe.revision, resources: { outbounds, ...(recipe.resources.ruleSets ? { ruleSets: recipe.resources.ruleSets } : {}) }, ...(recipe.settings ? { settings: recipe.settings } : {}), dnsSteps: [], routeSteps: recipe.routeSteps.map(step => 'preset' in step ? { preset: step.preset } : { rule: step.rule }) },
+      template: { id: template.id, revision: template.revision, targetVersion: template.targetVersion, defaults: template.defaults, resources: template.resources, platformDnsServers: template.platformDnsServers, dnsPresets: template.dnsPresets ?? {}, routePresets: template.routePresets ?? {}, ecsResponseTags: template.ecsResponseTags ?? [] },
+      recipe: { id: recipe.id, revision: recipe.revision, resources: { ...recipe.resources, outbounds }, ...(recipe.settings ? { settings: recipe.settings } : {}),
+        dnsSteps: recipe.dnsSteps.map(step => 'preset' in step ? { preset: step.preset } : { rule: step.rule }),
+        routeSteps: recipe.routeSteps.map(step => 'preset' in step ? { preset: step.preset } : { rule: step.rule }) },
       artifacts: [], profile: recipe.profile, params,
     } };
   } catch (cause) {
@@ -44,25 +48,28 @@ export function compileRecipe(input: unknown): Result<CompiledConfig> {
   if (!resolved.ok) return resolved;
   const result = compile(resolved.value);
   const { recipe } = recipeInputSchema.parse(input, '');
-  const origins = recipe.routeSteps.flatMap<NonNullable<Diagnostic['source']>>((step, stepIndex) => {
+  const originsFor = (section: 'dns' | 'route') => recipe[`${section}Steps`].flatMap<NonNullable<Diagnostic['source']>>((step, stepIndex) => {
     const source = { stepId: step.id, stepIndex };
+    const presets = resolved.value.template[`${section}Presets`];
     return 'preset' in step
-      ? (resolved.value.template.routePresets[step.preset] ?? []).map((_, presetRuleIndex) => ({ ...source, preset: step.preset, presetRuleIndex }))
+      ? (Object.hasOwn(presets, step.preset) ? presets[step.preset]! : []).map((_, presetRuleIndex) => ({ ...source, preset: step.preset, presetRuleIndex }))
       : [source];
   });
+  const origins = { dns: originsFor('dns'), route: originsFor('route') };
   result.diagnostics = result.diagnostics.map(diagnostic => {
-    const output = /^\/route\/rules\/(\d+)(.*)$/.exec(diagnostic.path);
+    const output = /^\/(dns|route)\/rules\/(\d+)(.*)$/.exec(diagnostic.path);
     if (output) {
-      const outputRuleIndex = Number(output[1]);
-      const origin = origins[outputRuleIndex];
+      const section = output[1] as 'dns' | 'route';
+      const outputRuleIndex = Number(output[2]);
+      const origin = origins[section][outputRuleIndex];
       if (origin) return { ...diagnostic,
-        path: `/recipe/routeSteps/${origin.stepIndex}/${'preset' in origin ? 'preset' : 'rule' + output[2]}`,
+        path: `/recipe/${section}Steps/${origin.stepIndex}/${'preset' in origin ? 'preset' : 'rule' + output[3]}`,
         source: { ...origin, outputRuleIndex, outputPath: diagnostic.path },
       };
     }
-    const stepPath = /^\/recipe\/routeSteps\/(\d+)/.exec(diagnostic.path);
-    const stepIndex = stepPath ? Number(stepPath[1]) : -1;
-    const step = recipe.routeSteps[stepIndex];
+    const stepPath = /^\/recipe\/(dns|route)Steps\/(\d+)/.exec(diagnostic.path);
+    const stepIndex = stepPath ? Number(stepPath[2]) : -1;
+    const step = stepPath ? recipe[`${stepPath[1] as 'dns' | 'route'}Steps`][stepIndex] : undefined;
     return step ? { ...diagnostic, source: { stepId: step.id, stepIndex, ...('preset' in step ? { preset: step.preset } : {}) } } : diagnostic;
   });
   return result;
