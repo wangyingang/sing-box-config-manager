@@ -62,5 +62,7 @@ pnpm --dir packages/config-compiler build
 - [D06 组合、ECS 与发布契约](packages/config-compiler/docs/architecture/config-composition-design.md)
 - [D06 原始验收与 M2 待办](packages/config-compiler/docs/architecture/d06-validation.md)
 - [monorepo 迁移记录](docs/architecture/monorepo-migration.md)
+- [M2 契约设计与实施计划（草案）](docs/architecture/m2-contract-plan.md)
+- [领域术语索引](GLOSSARY-MAP.md)
 
 各层 `node_modules/`、`dist/` 和生成的 validator 均被 Git 忽略。依赖锁文件只维护根目录 `pnpm-lock.yaml`。
