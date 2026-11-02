@@ -63,3 +63,45 @@ python3 scripts/import-legacy-fixtures.py \
 - [D06 组合、ECS 与发布契约](docs/architecture/config-composition-design.md)
 - [原始验收与 M2 输入](docs/architecture/d06-validation.md)
 - [固定 Schema 来源与许可证](schemas/README.md)
+
+### 固定修订 Recipe 入口（首个切片）
+
+核心包导出 `RecipeDocument`、`TemplateDocument`、`NodeRevision` 和
+`RecipeCompileInput`。`resolveRecipe(input)` 返回 `Result<CompileInput>`；
+`compileRecipe(input)` 继续调用现有 Compiler，返回 `Result<CompiledConfig>`。
+两者接受未知输入并先严格校验结构，Profile 只能来自 Recipe：
+
+```ts
+import { compileRecipe, type RecipeCompileInput } from '@sing-box-config-manager/config-compiler';
+
+const input: RecipeCompileInput = {
+  recipe: {
+    schemaVersion: 1, id: 'alice', revision: '1', profile: 'macos-standalone',
+    templateRef: { id: 'base', revision: '1' },
+    resources: { outbounds: [{ kind: 'node', tag: 'proxy', nodeRef: { id: 'shared', revision: '1' } }] },
+    dnsSteps: [], routeSteps: [],
+  },
+  dependencies: {
+    templates: [{ schemaVersion: 1, id: 'base', revision: '1', targetVersion: '1.14.4',
+      defaults: {}, resources: {}, platformDnsServers: {} }],
+    nodes: [{ schemaVersion: 1, id: 'shared', revision: '1', connection: {
+      type: 'shadowsocks', server: '192.0.2.1', server_port: 443,
+      method: 'aes-256-gcm', password: 'synthetic-example',
+    } }],
+  },
+  params: { ecs: null },
+};
+const result = compileRecipe(input);
+```
+
+依赖按 `id` 和 `revision` 精确匹配，缺失或重复返回结构化诊断，不选择最新版。
+解析结果独立拥有资源，宿主负责修订不可变性、持久化和授权。
+`recipeSchema`、`templateSchema`、`nodeRevisionSchema` 提供 `parse(value, path)`
+结构检查入口，失败抛出带 `path` 的错误；公开类型从同一结构定义推导。
+
+本切片支持节点绑定、direct 基础出站、mixed 入站、local／UDP／HTTPS resolver、
+日志／DNS／Route 的有限默认值及四个既有 Recipe settings。
+节点连接支持 VLESS（含 REALITY、uTLS、WebSocket）、Hysteria2（含内嵌证书）和
+Shadowsocks。所有对象拒绝未声明字段，不接受文件路径、任意 options 或 JSON patch。
+策略数组当前只接受空数组；预设、Inline Rule、规则产物及节点生命周期约束由后续切片实现。
+底层 D06 API 保持原契约，仍可供可信宿主直接使用。

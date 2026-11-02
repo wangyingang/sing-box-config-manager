@@ -12,7 +12,7 @@ const name = '@sing-box-config-manager/config-compiler';
 try {
   await writeFile(join(temporary, 'runtime.mjs'), `
 import assert from 'node:assert/strict';
-import { compile, preparePublication, renderSubscription } from '${name}';
+import { compile, compileRecipe, resolveRecipe, preparePublication, renderSubscription } from '${name}';
 import { createSingBoxChecker, publish } from '${name}/publisher';
 const result = compile({
   template: { id: 'smoke', revision: '1', targetVersion: '1.14.4', defaults: {},
@@ -21,19 +21,24 @@ const result = compile({
   profile: 'macos-standalone', artifacts: [], params: { ecs: null }
 });
 assert.equal(result.ok, true, JSON.stringify(result.diagnostics));
-for (const fn of [preparePublication, renderSubscription, createSingBoxChecker, publish]) assert.equal(typeof fn, 'function');
+for (const fn of [compileRecipe, resolveRecipe, preparePublication, renderSubscription, createSingBoxChecker, publish]) assert.equal(typeof fn, 'function');
 `);
   execFileSync(process.execPath, [join(temporary, 'runtime.mjs')], { cwd: web, stdio: 'inherit' });
 
   await writeFile(join(temporary, 'consumer.mts'), `
-import { compile, type CompileInput, type Result, type CompiledConfig } from '${name}';
+import { compile, compileRecipe, resolveRecipe, type RecipeCompileInput, type RecipeDocument, type TemplateDocument, type NodeRevision, type CompileInput, type Result, type CompiledConfig } from '${name}';
 import { createSingBoxChecker } from '${name}/publisher';
 const compileTyped: (input: CompileInput) => Result<CompiledConfig> = compile;
 const check: (config: CompiledConfig['config']) => Promise<void> = createSingBoxChecker('/unused');
 // This must be a type error: an untyped JS export would make the directive fail.
 // @ts-expect-error target version is deliberately unsupported
 const invalidVersion: CompileInput['template']['targetVersion'] = 'invalid';
-void [compileTyped, check, invalidVersion];
+const resolveTyped: (input: RecipeCompileInput) => Result<CompileInput> = resolveRecipe;
+const recipeTyped: (input: RecipeCompileInput) => Result<CompiledConfig> = compileRecipe;
+// @ts-expect-error Profile is fixed to the supported five variants
+const invalidProfile: RecipeDocument['profile'] = 'linux';
+const dependencies: RecipeCompileInput['dependencies'] = { templates: [] as TemplateDocument[], nodes: [] as NodeRevision[] };
+void [compileTyped, check, invalidVersion, resolveTyped, recipeTyped, invalidProfile, dependencies];
 `);
   await writeFile(join(temporary, 'tsconfig.json'), JSON.stringify({
     compilerOptions: { target: 'ES2022', module: 'NodeNext', moduleResolution: 'NodeNext', strict: true, noEmit: true, types: [] },
@@ -42,7 +47,7 @@ void [compileTyped, check, invalidVersion];
   // The Compiler owns these tools; root and Web App do not rely on hoisted dev dependencies.
   execFileSync('pnpm', ['--dir', compiler, 'exec', 'tsc', '-p', join(temporary, 'tsconfig.json')], { cwd: root, stdio: 'inherit' });
 
-  await writeFile(join(temporary, 'browser.mjs'), `export { compile, renderSubscription } from '${name}';\n`);
+  await writeFile(join(temporary, 'browser.mjs'), `export { compile, compileRecipe, resolveRecipe, recipeSchema, templateSchema, nodeRevisionSchema, renderSubscription } from '${name}';\n`);
   execFileSync('pnpm', ['--dir', compiler, 'exec', 'esbuild', join(temporary, 'browser.mjs'), '--bundle', '--platform=browser', '--format=esm', '--log-level=error', `--outfile=${join(temporary, 'browser.bundle.mjs')}`], { cwd: root, stdio: 'inherit' });
   console.log('Workspace smoke passed: Web App imports, public declarations, and browser bundle.');
 } finally {
