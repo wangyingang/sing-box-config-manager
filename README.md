@@ -34,6 +34,10 @@ pnpm check
 SING_BOX_TEST_BINARY=/absolute/path/to/sing-box pnpm test:integration
 ```
 
+[CI](.github/workflows/ci.yml) 在 PR、推送到 `main` 和手动触发时运行：Linux job 执行 `pnpm check`；原生测试 job 下载配置指定的官方 sing-box linux-amd64 发布包，核对归档 SHA-256 后执行 `pnpm test:integration`，测试继续核对 Schema 摘要。两个 job 使用锁文件安装依赖，检查日志作为含提交 SHA 的 artifact 保留 14 天（失败时也尝试上传）。此 workflow 提供检查结果；是否强制阻止合并由 GitHub 分支保护另行配置。
+
+CI 的 sing-box 版本读取自 [Schema 构建配置](packages/config-compiler/schemas/build.json) 的 `version`，Linux 发布包摘要读取自 `releaseAssets.linux-amd64.sha256`。下载地址和解压路径自动生成。升级时更新该配置，并同步核验 Schema、原生校验器和测试基线，无需修改 workflow。
+
 测试仅在临时目录 merge/check，不启动代理、不修改旧配置仓库。五份旧配置候选保持生成语义并通过原生 check；旧 Android 配置含不支持的进程规则，正式 compile 和发布会拒绝它。
 
 当前测试和构建来自 Compiler；两个骨架模块没有占位构建或空测试。递归命令只执行模块实际声明的脚本。单独操作 Compiler：
