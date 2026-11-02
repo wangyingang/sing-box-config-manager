@@ -1,18 +1,25 @@
-# Build and Release Folders
-bin-debug/
-bin-release/
-[Oo]bj/
-[Bb]in/
+# Dependencies and generated output
+node_modules/
+dist/
+.pnpm-store/
+coverage/
+*.tsbuildinfo
 
-# Other files and folders
-.settings/
+# Python tooling
+__pycache__/
+*.py[cod]
+.pytest_cache/
 
-# Executables
-*.swf
-*.air
-*.ipa
-*.apk
+# Local configuration and logs
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.log
+/apps/web/.workspace-smoke-*/
 
-# Project files, i.e. `.project`, `.actionScriptProperties` and `.flexProperties`
-# should NOT be excluded as they contain compiler settings and other important
-# information for Eclipse / Flash Builder.
+# Machine-local files and skill links
+.DS_Store
+/.agents/skills/
+/.claude/skills/
+/.dsh/skills/
