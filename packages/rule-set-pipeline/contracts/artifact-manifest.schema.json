@@ -1,0 +1,203 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "revision": {
+      "type": "string",
+      "minLength": 1
+    },
+    "targetVersion": {
+      "const": "1.14.4"
+    },
+    "sourceFormatVersion": {
+      "const": 4
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "format": {
+            "enum": [
+              "source",
+              "binary"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "pattern": "^https://[^/?#@]+/[^?#]*$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "byteLength": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "termCount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "requiredCapabilities": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "processMatching",
+                "packageMatching",
+                "dhcpDns"
+              ]
+            },
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "id",
+          "format",
+          "url",
+          "sha256",
+          "byteLength",
+          "termCount",
+          "requiredCapabilities"
+        ]
+      }
+    },
+    "projections": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "route": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "artifactIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "minItems": 1,
+                  "uniqueItems": true
+                }
+              },
+              "required": [
+                "artifactIds"
+              ]
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "unavailable": {
+                  "const": "empty"
+                }
+              },
+              "required": [
+                "unavailable"
+              ]
+            }
+          ]
+        },
+        "dns-query": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "artifactIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "minItems": 1,
+                  "uniqueItems": true
+                }
+              },
+              "required": [
+                "artifactIds"
+              ]
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "unavailable": {
+                  "const": "empty"
+                }
+              },
+              "required": [
+                "unavailable"
+              ]
+            }
+          ]
+        },
+        "dns-response": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "artifactIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "minItems": 1,
+                  "uniqueItems": true
+                }
+              },
+              "required": [
+                "artifactIds"
+              ]
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "unavailable": {
+                  "const": "empty"
+                }
+              },
+              "required": [
+                "unavailable"
+              ]
+            }
+          ]
+        }
+      },
+      "required": [
+        "route",
+        "dns-query",
+        "dns-response"
+      ]
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "id",
+    "revision",
+    "targetVersion",
+    "sourceFormatVersion",
+    "artifacts",
+    "projections"
+  ]
+}

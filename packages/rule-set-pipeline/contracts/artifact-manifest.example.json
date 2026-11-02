@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "synthetic:domains",
+  "revision": "1",
+  "targetVersion": "1.14.4",
+  "sourceFormatVersion": 4,
+  "artifacts": [
+    {
+      "id": "synthetic:domains@1:source",
+      "format": "source",
+      "url": "https://rules.example.invalid/1/domains.json",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "byteLength": 90,
+      "termCount": 1,
+      "requiredCapabilities": []
+    }
+  ],
+  "projections": {
+    "route": {
+      "artifactIds": [
+        "synthetic:domains@1:source"
+      ]
+    },
+    "dns-query": {
+      "artifactIds": [
+        "synthetic:domains@1:source"
+      ]
+    },
+    "dns-response": {
+      "unavailable": "empty"
+    }
+  }
+}

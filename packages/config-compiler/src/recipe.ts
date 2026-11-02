@@ -1,6 +1,7 @@
 import { compile } from './compiler.js';
 import { isJson } from './json.js';
 import { recipeInputSchema, StructureError } from './recipe-schema.js';
+import { resolveRecipeArtifacts } from './recipe-artifacts.js';
 import type { CompileInput, CompiledConfig, Diagnostic, Obj, Result } from './types.js';
 
 /** Resolve exact immutable dependencies. The caller owns persistence and authorization. */
@@ -9,7 +10,8 @@ export function resolveRecipe(input: unknown): Result<CompileInput> {
   const error = (code: string, path: string, message: string) => diagnostics.push({ severity: 'error', code, path, message });
   try {
     if (!isJson(input)) throw new StructureError('');
-    const { recipe, dependencies, params } = recipeInputSchema.parse(input, '');
+    const parsed = recipeInputSchema.parse(input, '');
+    const { recipe, dependencies, params } = parsed;
     const exact = <T extends { id: string; revision: string }>(items: T[], ref: { id: string; revision: string }, path: string): T | undefined => {
       const matches = items.filter(item => item.id === ref.id && item.revision === ref.revision);
       if (matches.length !== 1) error(matches.length ? 'DEPENDENCY_DUPLICATE' : 'DEPENDENCY_MISSING', path, '固定依赖必须且只能存在一份；不会回退其他修订');
@@ -29,12 +31,15 @@ export function resolveRecipe(input: unknown): Result<CompileInput> {
       return node ? [{ ...node.connection, tag: binding.tag }] : [];
     });
     if (!template || diagnostics.length) return { ok: false, diagnostics };
+    const resolvedArtifacts = resolveRecipeArtifacts(parsed, template);
+    diagnostics.push(...resolvedArtifacts.diagnostics);
+    if (diagnostics.length) return { ok: false, diagnostics };
     return { ok: true, diagnostics, value: {
-      template: { id: template.id, revision: template.revision, targetVersion: template.targetVersion, defaults: template.defaults, resources: template.resources, platformDnsServers: template.platformDnsServers, dnsPresets: template.dnsPresets ?? {}, routePresets: template.routePresets ?? {}, ecsResponseTags: template.ecsResponseTags ?? [] },
-      recipe: { id: recipe.id, revision: recipe.revision, resources: { ...recipe.resources, outbounds }, ...(recipe.settings ? { settings: recipe.settings } : {}),
+      template: { id: template.id, revision: template.revision, targetVersion: template.targetVersion, defaults: template.defaults, resources: { ...template.resources, ruleSets: resolvedArtifacts.templateRuleSets }, platformDnsServers: template.platformDnsServers, dnsPresets: template.dnsPresets ?? {}, routePresets: template.routePresets ?? {}, ecsResponseTags: template.ecsResponseTags ?? [] },
+      recipe: { id: recipe.id, revision: recipe.revision, resources: { ...recipe.resources, outbounds, ruleSets: resolvedArtifacts.recipeRuleSets }, ...(recipe.settings ? { settings: recipe.settings } : {}),
         dnsSteps: recipe.dnsSteps.map(step => 'preset' in step ? { preset: step.preset } : { rule: step.rule }),
         routeSteps: recipe.routeSteps.map(step => 'preset' in step ? { preset: step.preset } : { rule: step.rule }) },
-      artifacts: [], profile: recipe.profile, params,
+      artifacts: resolvedArtifacts.artifacts, profile: recipe.profile, params,
     } };
   } catch (cause) {
     error('STRUCTURE_INVALID', cause instanceof StructureError ? cause.path : '', '输入不符合当前 Recipe 切片契约');

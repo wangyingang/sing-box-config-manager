@@ -1,6 +1,6 @@
 # Rule Set Pipeline
 
-包名：`@sing-box-config-manager/rule-set-pipeline`。当前仅建立工作区骨架，没有采集、转换或发布实现，也没有占位测试。
+包名：`@sing-box-config-manager/rule-set-pipeline`。当前维护[最小固定产物 Manifest 契约](contracts/README.md)，没有采集、转换或发布实现。契约样本由 Compiler 的公开入口测试验证。
 
 后续职责：
 

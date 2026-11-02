@@ -104,14 +104,14 @@ const result = compileRecipe(input);
 节点连接支持 VLESS（含 REALITY、uTLS、WebSocket）、Hysteria2（含内嵌证书）和
 Shadowsocks。所有对象拒绝未声明字段，不接受文件路径、任意 options 或 JSON patch。
 DNS／Route 策略支持预设与 Inline Rule，具体契约见下节。
-固定规则产物由后续切片实现。
+固定规则产物绑定见下节。
 底层 D06 API 保持原契约，仍可供可信宿主直接使用。
 
 ### Recipe Route 策略
 
 Recipe `resources.outbounds` 按声明顺序支持固定 Node Binding，以及显式的
 `direct`、`selector`、`urltest` 对象。Selector 的默认成员和组引用沿用 D06 校验。
-`resources.ruleSets` 只允许 `{ kind: 'inline', definition: { type: 'inline', tag, rules } }`；
+`resources.ruleSets` 支持固定 curated binding，以及 `{ kind: 'inline', definition: { type: 'inline', tag, rules } }`；
 其中 Headless Rule 只描述匹配条件，不允许动作或出站引用。
 
 Template 可提供固定 `routePresets: Record<string, RouteRule[]>`。Recipe 的
@@ -193,3 +193,22 @@ if (decision.allowed) {
 两个引用标志均为显式 boolean，由宿主针对该固定修订查询；任何一个为 true 都拒绝删除。
 成功值是独立的节点修订引用。本函数不扫描引用、不执行删除、不保证事务完整性。
 这些纯判定不执行身份认证；宿主不能直接信任来自编辑请求的先前状态或引用标志。
+
+### 固定规则产物
+
+`dependencies.manifests` 接受 Pipeline 维护的[Manifest v1](../../rule-set-pipeline/contracts/README.md)。
+核心入口导出 `ArtifactManifest` 和 `artifactManifestSchema`；依赖可以省略，已有调用保持兼容。
+Recipe 和 Template 的 `resources.ruleSets` 支持
+`{ kind: 'curated', tag, artifactRef: { id, revision, usage }, httpClient? }`。
+用途仅开放 `route`、`dns-query`、`dns-response`，在每个实际消费位置检查，
+包括预设及逻辑子规则。用户不能提交 URL、路径、摘要或能力声明。
+
+解析检查精确修订、用途可用性、非空投影、已知格式／能力及 Recipe 固定 Profile，
+显式转换为 D06 的 `RuleArtifact` 和绑定。多个本地 tag／用途可以共享一份物理产物。
+DNS 响应用途要求当前匹配对象引用此前已 evaluate 的响应；
+具名和无 tag 响应分别验证，不能将目标 IP 投影改作 source IP。
+消费位置错误携带稳定 step、预设及最终输出位置诊断。
+
+此入口是纯内存适配器，不读取 Pipeline 或远程文件。
+Manifest 地址、摘要和能力声明的真实性由可信接入方验证，
+合成样本和真实 binary check 均不能替代远程内容验收。
