@@ -1,6 +1,6 @@
 # M2 契约设计与实施计划
 
-设计日期：2026-11-02。状态更新：2026-11-03，Spec #1 范围内的 Recipe／共享节点编译契约、最小固定产物 Manifest 契约及五份样本迁移与本地发布路径已合入 main；父 Spec 待验收收尾。
+设计日期：2026-11-02。本文保留 M2 的设计背景与后续方向。Recipe／共享节点编译路径的实施范围和验收记录见 [Spec #1](https://github.com/wangyingang/sing-box-config-manager/issues/1)；当前公开契约与调用方式见下方实现文档链接。
 
 本文保留原始设计背景。下文的基线描述、M2-01 至 M2-04 计划和设计阶段记录反映 2026-11-02 的讨论，不作为当前完成状态。当前公开契约与交付证据见 [Compiler 使用与验收说明](../../packages/config-compiler/README.md#五份样本迁移与-recipe-发布)及 [Manifest v1 契约](../../packages/rule-set-pipeline/contracts/README.md)。完整 Rule IR／Parser、Pipeline 生产与发布、Web 和线上交付仍属后续工作。
 

@@ -20,6 +20,10 @@
 
 Skill 要求“发布到 issue tracker”时，创建 GitHub issue；要求“获取相关 ticket”时，读取对应 issue。
 
+## 实施前核对
+
+推荐或开始实施工单前，核对原始需求、相关已确认决策、未决问题及实际阻塞关系。判断每个未决问题是否影响当前工单的验收行为。事实问题先通过源码、文档或探针核实；影响行为的产品决定应先确认；范围外的问题注明依据，不作为当前工单的阻塞项。工单已标记就绪或前置工单已关闭，不替代上述核对。
+
 ## Pull requests as a triage surface
 
 **PRs as a request surface: no.**
