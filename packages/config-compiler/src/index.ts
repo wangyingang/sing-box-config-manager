@@ -5,3 +5,6 @@ export { preparePublication, renderSubscription } from './publication.js';
 export { PROFILES, CAPABILITY_VERSION } from './profiles.js';
 export type * from './types.js';
 export type { Publication, NativeCheck } from './publication.js';
+export { compileRecipe, resolveRecipe } from './recipe.js';
+export { recipeSchema, templateSchema, nodeRevisionSchema } from './recipe-schema.js';
+export type { RecipeDocument, TemplateDocument, NodeRevision, RecipeCompileInput } from './recipe-schema.js';
