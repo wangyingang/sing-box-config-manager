@@ -1,6 +1,6 @@
 # M2 Rule IR 与产物契约草案
 
-日期：2026-11-02。状态：语言无关设计，尚未冻结 Schema 或迁移旧 Pipeline。上层计划见 [M2 契约与实施计划](../../../../docs/architecture/m2-contract-plan.md)。
+设计日期：2026-11-02。状态更新：2026-11-03，Compiler 消费所需的[最小固定产物 Manifest v1 契约](../../contracts/README.md)及其结构、固定版本、用途和能力校验已实现。本文保留更完整的 Rule IR、Parser、产物生产与发布设计草案；这些后续契约尚未全部定稿，旧 Pipeline 尚未迁移。上层计划见 [M2 契约与实施计划](../../../../docs/architecture/m2-contract-plan.md)。
 
 ## Rule Source 与规则集身份
 
@@ -90,7 +90,7 @@ format               ← source | binary
 requiredCapabilities ← 实际产物能力要求
 ```
 
-这些元数据目前由 D06 信任，D06 不下载并验证文件。M2 的新 manifest 校验与 M3 的内容门禁是待实现能力；单靠 `sing-box check` 不能证明远程文件与摘要一致。只允许受支持的 Manifest／能力词汇版本，遇到未知能力不能按“无要求”处理。
+D06 接收宿主提供的产物元数据，不下载并验证文件。Recipe 入口已在适配器中实现 Manifest 结构、固定修订、用途、消费位置及 Profile 能力校验，并拒绝未知 Manifest 版本、格式或能力词汇。远程内容获取、实际字节摘要、用途内容与能力声明的一致性，以及发布内容门禁仍待后续实现；单靠 `sing-box check` 不能证明远程文件与摘要一致。
 
 ## 验收重点
 
