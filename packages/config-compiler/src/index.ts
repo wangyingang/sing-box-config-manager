@@ -8,3 +8,6 @@ export type { Publication, NativeCheck } from './publication.js';
 export { compileRecipe, resolveRecipe } from './recipe.js';
 export { recipeSchema, templateSchema, nodeRevisionSchema } from './recipe-schema.js';
 export type { RecipeDocument, TemplateDocument, NodeRevision, RecipeCompileInput } from './recipe-schema.js';
+export { validateRecipeDraft, decideRecipeEdit, decideNodeRevisionDeletion } from './edit.js';
+export type { EditDecision } from './edit.js';
+export type { RecipeEditInput, NodeRevisionDeletionInput } from './recipe-schema.js';

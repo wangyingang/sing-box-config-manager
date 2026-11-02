@@ -137,8 +137,24 @@ export const templateSchema = object({ ...identity, targetVersion: literal('1.14
 export type RecipeDocument = Value<typeof recipeSchema>;
 export type TemplateDocument = Value<typeof templateSchema>;
 export type NodeRevision = Value<typeof nodeRevisionSchema>;
+const params = object({ ecs: union(schema((v): v is null => v === null), object({ address: string, prefix: integer(0, 32) })) });
 export const recipeInputSchema = object({ recipe: recipeSchema,
   dependencies: object({ templates: array(templateSchema), nodes: array(nodeRevisionSchema) }),
-  params: object({ ecs: union(schema((v): v is null => v === null), object({ address: string, prefix: integer(0, 32) })) }),
+  params,
 });
 export type RecipeCompileInput = Value<typeof recipeInputSchema>;
+
+// Lifecycle state is supplied by a trusted host, separately from immutable dependencies.
+export const recipeEditSchema = object({
+  previous: union(schema((v): v is null => v === null), recipeSchema),
+  candidate: recipeSchema,
+  dependencies: object({ templates: array(templateSchema), nodes: array(nodeRevisionSchema) }),
+  params,
+  nodes: array(object({ id: string, archived: bool })),
+});
+export const nodeRevisionDeletionSchema = object({
+  nodeRef: ref,
+  references: object({ recipeRevisions: bool, publications: bool }),
+});
+export type RecipeEditInput = Value<typeof recipeEditSchema>;
+export type NodeRevisionDeletionInput = Value<typeof nodeRevisionDeletionSchema>;
