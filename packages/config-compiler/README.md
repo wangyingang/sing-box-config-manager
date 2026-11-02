@@ -103,5 +103,45 @@ const result = compileRecipe(input);
 日志／DNS／Route 的有限默认值及四个既有 Recipe settings。
 节点连接支持 VLESS（含 REALITY、uTLS、WebSocket）、Hysteria2（含内嵌证书）和
 Shadowsocks。所有对象拒绝未声明字段，不接受文件路径、任意 options 或 JSON patch。
-策略数组当前只接受空数组；预设、Inline Rule、规则产物及节点生命周期约束由后续切片实现。
+策略数组当前只接受空数组；预设、Inline Rule 和规则产物由后续切片实现。
 底层 D06 API 保持原契约，仍可供可信宿主直接使用。
+
+### 草稿与编辑判定
+
+`validateRecipeDraft(unknown)` 仅验证 Recipe 结构，返回 `Result<RecipeDocument>`。
+成功值拥有独立数据副本；缺少必填字段、错误类型或未开放字段返回 `STRUCTURE_INVALID`。
+缺失固定依赖、悬空出站引用等语义问题不属于结构错误。
+
+`decideRecipeEdit(unknown)` 接受 `RecipeEditInput`，返回 `EditDecision<RecipeDocument>`：
+
+```ts
+const decision = decideRecipeEdit({
+  previous: trustedPrevious, // 由宿主按候选 ID 加载；全新 ID 才能使用 null
+  candidate: candidateRecipe,
+  dependencies: fixedDependencies,
+  params: { ecs: null },
+  nodes: [{ id: 'shared', archived: true }], // 宿主提供当前归档状态
+});
+if (decision.allowed) {
+  // decision.value 是独立的可保存草稿；diagnostics 仍可能含 error。
+  // 宿主负责授权、持久化及并发一致性。
+}
+```
+
+`reasons` 是阻止保存的结构或编辑约束，`diagnostics` 是调用正式编译获得的语义诊断。
+`allowed: true` 不代表可以下载或发布；语义错误仍会使 `compileRecipe` 失败。
+结构不完整时直接拒绝，无法执行后续语义诊断。编辑输入也拒绝额外 Profile 覆盖字段。
+
+同一 Recipe ID 的 Profile 固定；修改内容必须使用新 revision，原样重试允许。
+换 Profile 需要全新 ID，并重新校验。复制时可以提供源 Recipe 作为 `previous`，
+但不同 ID 不继承已有绑定资格；宿主必须确认目标 ID 确实尚不存在。
+同一身份的归档绑定按 `tag + nodeRef.id + nodeRef.revision` 保留，允许正常编辑、
+重排或移除。新增、重复添加、改 tag、升级归档修订以及复制到新 Recipe 都是新增绑定，
+返回 `NODE_ARCHIVED`。候选绑定缺少唯一宿主节点状态时返回 `NODE_STATE_INVALID`，
+即使固定修订缺失也不能绕过归档检查。编译和发布不读取归档状态，已有固定绑定继续可用。
+
+`decideNodeRevisionDeletion(unknown)` 接受 `NodeRevisionDeletionInput`：
+`{ nodeRef: { id, revision }, references: { recipeRevisions, publications } }`。
+两个引用标志均为显式 boolean，由宿主针对该固定修订查询；任何一个为 true 都拒绝删除。
+成功值是独立的节点修订引用。本函数不扫描引用、不执行删除、不保证事务完整性。
+这些纯判定不执行身份认证；宿主不能直接信任来自编辑请求的先前状态或引用标志。
