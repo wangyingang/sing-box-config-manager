@@ -99,9 +99,30 @@ const result = compileRecipe(input);
 `recipeSchema`、`templateSchema`、`nodeRevisionSchema` 提供 `parse(value, path)`
 结构检查入口，失败抛出带 `path` 的错误；公开类型从同一结构定义推导。
 
-本切片支持节点绑定、direct 基础出站、mixed 入站、local／UDP／HTTPS resolver、
+本切片支持节点绑定、Direct／Selector／URLTest 出站、mixed／TUN 入站、local／UDP／HTTPS resolver、
 日志／DNS／Route 的有限默认值及四个既有 Recipe settings。
 节点连接支持 VLESS（含 REALITY、uTLS、WebSocket）、Hysteria2（含内嵌证书）和
 Shadowsocks。所有对象拒绝未声明字段，不接受文件路径、任意 options 或 JSON patch。
-策略数组当前只接受空数组；预设、Inline Rule、规则产物及节点生命周期约束由后续切片实现。
+Route 策略支持预设与 Inline Rule，具体契约见下节。DNS steps 当前只接受空数组；
+固定规则产物及节点生命周期约束由后续切片实现。
 底层 D06 API 保持原契约，仍可供可信宿主直接使用。
+
+### Recipe Route 策略
+
+Recipe `resources.outbounds` 按声明顺序支持固定 Node Binding，以及显式的
+`direct`、`selector`、`urltest` 对象。Selector 的默认成员和组引用沿用 D06 校验。
+`resources.ruleSets` 只允许 `{ kind: 'inline', definition: { type: 'inline', tag, rules } }`；
+其中 Headless Rule 只描述匹配条件，不允许动作或出站引用。
+
+Template 可提供固定 `routePresets: Record<string, RouteRule[]>`。Recipe 的
+`routeSteps` 是有序的 `{ id, preset }` 或 `{ id, rule }`，两者互斥，ID 必须唯一。
+引用可自由添加、移除、移动和重复；内部规则随 Template revision 固定。
+支持 route（含省略 action 的出站规则）、resolve、sniff、hijack-dns、reject，
+以及递归 and／or 匹配。数组顺序不排序或去重，也不恢复已移除的预设。
+
+`compileRecipe` 的 Route 语义诊断将 `path` 指向 Recipe step，附加 `source`
+中的 `stepId`、`stepIndex`、`outputRuleIndex`、`outputPath`；预设规则还包含
+`preset` 和 `presetRuleIndex`。D06 `compile` 的输出路径保持原样。
+四项 settings 均为明确字段：logLevel、tunMtu、dnsFinal、routeFinal。
+dnsFinal 是 DNS server tag；tunMtu 要求 Template 中有且仅有一个 TUN 入站。
+DNS steps 的完整契约仍属于后续切片。

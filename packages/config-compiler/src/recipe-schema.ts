@@ -56,11 +56,61 @@ const connection = union(
   object({ type: literal('shadowsocks'), ...endpoint, method: enumeration(['aes-128-gcm', 'aes-256-gcm', 'chacha20-ietf-poly1305', '2022-blake3-aes-128-gcm', '2022-blake3-aes-256-gcm', '2022-blake3-chacha20-poly1305'] as const), password: string }),
 );
 export const nodeRevisionSchema = object({ ...identity, connection });
+const group = { tag: string, outbounds: array(string), interrupt_exist_connections: optional(bool) };
+const outbound = union(
+  object({ type: literal('direct'), tag: string }),
+  object({ type: literal('selector'), ...group, default: optional(string) }),
+  object({ type: literal('urltest'), ...group, url: optional(string), interval: optional(string), tolerance: optional(integer(0, 65535)), idle_timeout: optional(string) }),
+);
+const strings = union(string, array(string));
+const ports = union(integer(0, 65535), array(integer(0, 65535)));
+const network = union(enumeration(['tcp', 'udp', 'icmp'] as const), array(enumeration(['tcp', 'udp', 'icmp'] as const)));
+const protocol = enumeration(['tls', 'http', 'quic', 'dns', 'stun', 'bittorrent', 'dtls', 'ssh', 'rdp', 'ntp'] as const);
+const protocols = union(protocol, array(protocol));
+const strategy = enumeration(['prefer_ipv4', 'prefer_ipv6', 'ipv4_only', 'ipv6_only'] as const);
+const headlessFields = {
+  type: optional(literal('default')), network: optional(network),
+  domain: optional(strings), domain_suffix: optional(strings), domain_keyword: optional(strings), domain_regex: optional(strings),
+  source_ip_cidr: optional(strings), ip_cidr: optional(strings), source_port: optional(ports), port: optional(ports),
+  source_port_range: optional(strings), port_range: optional(strings),
+  process_name: optional(strings), process_path: optional(strings), process_path_regex: optional(strings),
+  package_name: optional(strings), package_name_regex: optional(strings), invert: optional(bool),
+};
+const headlessDefault = object(headlessFields);
+type HeadlessRule = Value<typeof headlessDefault> | { type: 'logical'; mode: 'and' | 'or'; rules: HeadlessRule[]; invert?: boolean };
+function logical<T>(nested: Schema<T>) { return { type: literal('logical'), mode: enumeration(['and', 'or'] as const), rules: array(nested), invert: optional(bool) }; }
+const headlessRule: Schema<HeadlessRule> = { parse: (v, p) => union(headlessDefault, object(logical(headlessRule))).parse(v, p) };
+const routeFields = { ...headlessFields,
+  inbound: optional(strings), ip_version: optional(union(literal(4), literal(6))),
+  protocol: optional(protocols), ip_is_private: optional(bool), source_ip_is_private: optional(bool),
+  clash_mode: optional(string), rule_set: optional(strings), rule_set_ip_cidr_match_source: optional(bool),
+};
+const routeDefault = object(routeFields);
+type RouteMatch = Value<typeof routeDefault> | { type: 'logical'; mode: 'and' | 'or'; rules: RouteMatch[]; invert?: boolean };
+const routeMatch: Schema<RouteMatch> = { parse: (v, p) => union(routeDefault, object(logical(routeMatch))).parse(v, p) };
+function actionRule<S extends Shape>(action: S) {
+  return union(object({ ...routeFields, ...action }), object({ ...logical(routeMatch), ...action }));
+}
+const routeRule = union(
+  actionRule({ action: optional(literal('route')), outbound: string }),
+  actionRule({ action: literal('resolve'), server: optional(string), strategy: optional(strategy), timeout: optional(string), disable_cache: optional(bool), rewrite_ttl: optional(integer(0, 4294967295)) }),
+  actionRule({ action: literal('sniff'), sniffer: optional(protocols), timeout: optional(string) }),
+  actionRule({ action: literal('hijack-dns') }),
+  actionRule({ action: literal('reject'), method: optional(enumeration(['default', 'drop', 'reply'] as const)), no_drop: optional(bool) }),
+);
+const routeStep = union(object({ id: string, preset: string }), object({ id: string, rule: routeRule }));
+function record<T>(inner: Schema<T>): Schema<Record<string, T>> {
+  return { parse(value, path) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new StructureError(path);
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, inner.parse(item, `${path}/${key.replaceAll('~', '~0').replaceAll('/', '~1')}`)]));
+  } };
+}
+const inlineSet = object({ kind: literal('inline'), definition: object({ type: literal('inline'), tag: string, rules: array(headlessRule) }) });
 export const recipeSchema = object({ ...identity, profile, templateRef: ref,
-  resources: object({ outbounds: optional(array(object({ kind: literal('node'), tag: string, nodeRef: ref }))) }),
+  resources: object({ outbounds: optional(array(union(object({ kind: literal('node'), tag: string, nodeRef: ref }), outbound))), ruleSets: optional(array(inlineSet)) }),
   settings: optional(object({ logLevel: optional(enumeration(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'panic'] as const)), tunMtu: optional(integer(576, 65535)), dnsFinal: optional(string), routeFinal: optional(string) })),
-  // Policy contracts are delivered by later slices; empty arrays are explicit.
-  dnsSteps: array(schema((v): v is never => false)), routeSteps: array(schema((v): v is never => false)),
+  // DNS policy is a separate slice; its steps remain explicitly empty.
+  dnsSteps: array(schema((v): v is never => false)), routeSteps: array(routeStep),
 });
 const resolver = union(
   object({ type: literal('local'), tag: string, prefer_go: optional(bool) }),
@@ -73,10 +123,15 @@ export const templateSchema = object({ ...identity, targetVersion: literal('1.14
     route: optional(object({ final: optional(string), auto_detect_interface: optional(bool), default_domain_resolver: optional(string) })),
   }),
   resources: object({
-    outbounds: optional(array(object({ type: literal('direct'), tag: string }))),
+    outbounds: optional(array(outbound)),
     dnsServers: optional(array(resolver)),
-    inbounds: optional(array(object({ type: literal('mixed'), tag: string, listen: string, listen_port: integer(1, 65535) }))),
+    ruleSets: optional(array(inlineSet)),
+    inbounds: optional(array(union(
+      object({ type: literal('mixed'), tag: string, listen: string, listen_port: integer(1, 65535) }),
+      object({ type: literal('tun'), tag: string, address: strings, mtu: optional(integer(576, 65535)), auto_route: optional(bool), strict_route: optional(bool), stack: optional(enumeration(['system', 'gvisor', 'mixed'] as const)) }),
+    ))),
   }),
+  routePresets: optional(record(array(routeRule))),
   platformDnsServers: object({ 'windows-standalone': optional(array(resolver)), 'macos-standalone': optional(array(resolver)), 'macos-appstore': optional(array(resolver)), 'ios-appstore': optional(array(resolver)), 'android-google-play': optional(array(resolver)) }),
 });
 export type RecipeDocument = Value<typeof recipeSchema>;

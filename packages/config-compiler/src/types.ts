@@ -2,7 +2,7 @@ export type Json = null | boolean | number | string | Json[] | { [key: string]: 
 export type Obj = { [key: string]: Json };
 export type ProfileId = 'windows-standalone' | 'macos-appstore' | 'macos-standalone' | 'ios-appstore' | 'android-google-play';
 export type Capability = 'processMatching' | 'packageMatching' | 'dhcpDns';
-export interface Diagnostic { severity: 'error' | 'warning'; code: string; path: string; message: string }
+export interface Diagnostic { severity: 'error' | 'warning'; code: string; path: string; message: string; source?: { stepId: string; stepIndex: number; preset?: string; presetRuleIndex?: number; outputRuleIndex?: number; outputPath?: string } }
 export type Result<T> = { ok: true; value: T; diagnostics: Diagnostic[] } | { ok: false; diagnostics: Diagnostic[] };
 export interface RuleArtifact {
   id: string; revision: string; sha256: string; url: string; format: 'source' | 'binary';
