@@ -22,7 +22,24 @@ export function githubActivation(branch = 'main', request: typeof ghJson = ghJso
       if (!/^[a-f0-9]{40}$/.test(ref.object.sha)) throw new Error('Invalid remote head');
       return ref.object.sha;
     },
-    download: githubPublication(request).download,
+    async download(url) {
+      const prefix = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/`;
+      const match = url.startsWith(prefix) ? /^([a-f0-9]{40})\/stable\/activation\.json$/.exec(url.slice(prefix.length)) : null;
+      if (!match) return githubPublication(request).download(url);
+      // A fresh raw/CDN 404 cannot prove the old record is absent. Read the
+      // immutable Git tree/blob for concurrency state, failing closed on errors.
+      const parent = await api(`git/commits/${match[1]}`);
+      const tree = await api(`git/trees/${parent.tree.sha}?recursive=1`);
+      if (tree.truncated) throw new Error('Cannot establish previous activation: truncated tree');
+      const entry = tree.tree.find((item: { path: string }) => item.path === 'stable/activation.json');
+      if (!entry) throw new Error(`Readback HTTP 404: ${url}`);
+      if (entry.type !== 'blob' || entry.mode !== '100644') throw new Error('Invalid previous activation entry');
+      const blob = await api(`git/blobs/${entry.sha}`);
+      if (blob.encoding !== 'base64' || typeof blob.content !== 'string') throw new Error('Invalid previous activation blob');
+      const bytes = Buffer.from(blob.content, 'base64');
+      if (bytes.length !== blob.size) throw new Error('Previous activation blob size mismatch');
+      return bytes;
+    },
     async commit(expectedHead, files, message) {
       if (!/^[a-f0-9]{40}$/.test(expectedHead)) throw new Error('Expected full old commit');
       // Recheck immediately before constructing the single-parent update.

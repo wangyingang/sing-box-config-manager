@@ -3,13 +3,13 @@
   "timezone": "Asia/Shanghai",
   "implementationBase": "3258f8a376f4da0c7c018ea13fd4a66150bf4629",
   "official": {
-    "date": "2026-11-03T18:34:56.122Z",
+    "date": "2026-11-03T18:44:06.684Z",
     "result": {
       "status": "activated",
-      "commit": "8b1118eb8060d65ac0da5a1aba6dff05d456654b",
+      "commit": "4208b055c9690495eb500b26a9129d3e3a7e69c5",
       "activation": {
         "schemaVersion": 1,
-        "id": "a9857dc3-eaf7-4ef0-8036-67e63c125a46",
+        "id": "67112f61-c308-4198-9ab7-74c9c1bedfed",
         "candidateId": "6e76b4ef-883c-46d1-8058-ef3f803b347b",
         "candidateEvidenceUrl": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/3f06056ee6f1c6336936d3b1e7b776215c8b2ded/candidates/6e76b4ef-883c-46d1-8058-ef3f803b347b/readback.json",
         "source": {
@@ -41,7 +41,7 @@
           "buildId": "72bbeccb72bd286594d5dac19bb924d5268d3df421950918e36555bb84062cea",
           "nativeBuildId": "77ad50641f764c7c501319f23d80279a9b3089a500f336965735ed7b31d6384d"
         },
-        "expectedHead": "ae3cf588169226618eb30271f123c29608eb754a",
+        "expectedHead": "8b1118eb8060d65ac0da5a1aba6dff05d456654b",
         "subscription": {
           "schemaVersion": 1,
           "systemRuleSetId": "v2fly:domain-list-community:category-ai-!cn",
@@ -191,8 +191,8 @@
     "transport": "in-memory commit fixture and loopback HTTPS; candidate/commit identities here are not published GitHub commits",
     "source": "synthetic controlled fixture, not an official Release",
     "a": {
-      "id": "2f89c371-fd4f-4b97-ba5a-ff0e9a9b68bc",
-      "candidateEvidenceUrl": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/0000000000000000000000000000000000000003/candidates/2f89c371-fd4f-4b97-ba5a-ff0e9a9b68bc/readback.json",
+      "id": "e612c2c6-94f1-4c59-8382-a08f36e12ec8",
+      "candidateEvidenceUrl": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/0000000000000000000000000000000000000003/candidates/e612c2c6-94f1-4c59-8382-a08f36e12ec8/readback.json",
       "source": {
         "kind": "synthetic",
         "description": "issue-19 A/B controlled fixture",
@@ -204,8 +204,8 @@
       "evidenceCommit": "0000000000000000000000000000000000000003"
     },
     "b": {
-      "id": "0997b197-4710-4b31-b6d2-ea566ed03a74",
-      "candidateEvidenceUrl": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/0000000000000000000000000000000000000006/candidates/0997b197-4710-4b31-b6d2-ea566ed03a74/readback.json",
+      "id": "7d23d810-130d-47bb-b75d-bd2c185f9b1d",
+      "candidateEvidenceUrl": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/0000000000000000000000000000000000000006/candidates/7d23d810-130d-47bb-b75d-bd2c185f9b1d/readback.json",
       "source": {
         "kind": "synthetic",
         "description": "issue-19 A/B controlled fixture",
@@ -221,9 +221,9 @@
       "commit": "0000000000000000000000000000000000000007",
       "activation": {
         "schemaVersion": 1,
-        "id": "8dba5e7c-7c3b-4e86-ba09-b75a41321003",
-        "candidateId": "2f89c371-fd4f-4b97-ba5a-ff0e9a9b68bc",
-        "candidateEvidenceUrl": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/0000000000000000000000000000000000000003/candidates/2f89c371-fd4f-4b97-ba5a-ff0e9a9b68bc/readback.json",
+        "id": "b7e45a18-fc80-40b0-b733-b1003f592c4b",
+        "candidateId": "e612c2c6-94f1-4c59-8382-a08f36e12ec8",
+        "candidateEvidenceUrl": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/0000000000000000000000000000000000000003/candidates/e612c2c6-94f1-4c59-8382-a08f36e12ec8/readback.json",
         "source": {
           "kind": "synthetic",
           "description": "issue-19 A/B controlled fixture",
@@ -280,9 +280,9 @@
       "commit": "0000000000000000000000000000000000000008",
       "activation": {
         "schemaVersion": 1,
-        "id": "bb561234-04be-40da-9862-9bce4d8aa136",
-        "candidateId": "0997b197-4710-4b31-b6d2-ea566ed03a74",
-        "candidateEvidenceUrl": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/0000000000000000000000000000000000000006/candidates/0997b197-4710-4b31-b6d2-ea566ed03a74/readback.json",
+        "id": "71d466a2-ecf5-426d-89d2-713081b9803d",
+        "candidateId": "7d23d810-130d-47bb-b75d-bd2c185f9b1d",
+        "candidateEvidenceUrl": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/0000000000000000000000000000000000000006/candidates/7d23d810-130d-47bb-b75d-bd2c185f9b1d/readback.json",
         "source": {
           "kind": "synthetic",
           "description": "issue-19 A/B controlled fixture",
@@ -335,9 +335,9 @@
       }
     },
     "client": {
-      "pid": 43999,
+      "pid": 48151,
       "binary": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
-      "configSha256": "d4dedbdb5637fed37bd1cd3ade12d1ebfd5b68085a5ec4347be2da07dab573e8",
+      "configSha256": "40d6ffb3ac111c0213217779e9099f8f9362b5db5144290514d824bf6624ec87",
       "sameProcess": true,
       "sameConfig": true,
       "updateInterval": "1s"
@@ -345,12 +345,12 @@
     "before": {
       "route": "route-fallback-A",
       "dns": "192.0.2.10",
-      "observedAt": "2026-11-03T18:37:06.443Z"
+      "observedAt": "2026-11-03T18:44:07.819Z"
     },
     "after": {
       "route": "route-matched-B",
       "dns": "192.0.2.20",
-      "observedAt": "2026-11-03T18:37:07.364Z"
+      "observedAt": "2026-11-03T18:44:08.700Z"
     },
     "published": [
       {
@@ -360,7 +360,7 @@
       },
       {
         "path": "stable/activation.json",
-        "sha256": "0922152ab528a0c645138ba5b6ef7485fe8ec26c948596f39cb2df87e97e600e",
+        "sha256": "96394f2796c2a26592d89e23752fb6cd74184cf3cce4ea7d839a7677e1a0997d",
         "commit": "0000000000000000000000000000000000000007"
       },
       {
@@ -370,7 +370,7 @@
       },
       {
         "path": "stable/activation.json",
-        "sha256": "805fbf147c411aa05a2fda5bf9a7d73369c739b73f6f059859179fec1bb46a55",
+        "sha256": "e689b330d93e8975d53d526d463f8f041e891fb6a0653ba397f0010df7fb13c3",
         "commit": "0000000000000000000000000000000000000008"
       }
     ]
@@ -384,30 +384,39 @@
   },
   "checks": {
     "workspace": {
-      "sha256": "f9a0c259ff8d6b557e297537ef67f0b52f0a3f94fb40dea65b85ec7e0cd66f4c",
+      "sha256": "9d64ef00eceece07dbb696f0c6d3e75ebc6b2613c7cc87ef0d9783579f9c6dd6",
       "summaries": [
-        "packages/rule-set-pipeline test: ℹ tests 72",
-        "packages/rule-set-pipeline test: ℹ pass 72",
-        "packages/rule-set-pipeline test: ℹ fail 0",
-        "packages/rule-set-pipeline test: ℹ skipped 0",
         "packages/config-compiler test: ℹ tests 96",
         "packages/config-compiler test: ℹ pass 96",
         "packages/config-compiler test: ℹ fail 0",
         "packages/config-compiler test: ℹ skipped 0",
+        "packages/rule-set-pipeline test: ℹ tests 84",
+        "packages/rule-set-pipeline test: ℹ pass 84",
+        "packages/rule-set-pipeline test: ℹ fail 0",
+        "packages/rule-set-pipeline test: ℹ skipped 0",
         "Workspace smoke passed: Web App imports, public declarations, and browser bundle."
       ]
     },
     "native": {
-      "sha256": "40343680bdd5858346d8f64e664b74691c5ad425c3cda30436936a652cff63a8",
+      "sha256": "c1c08decf63e34784fe425046a254b36dd4b9dbe6e5a9f907181f41375ef485d",
       "summaries": [
         "packages/config-compiler test:integration: ℹ tests 27",
         "packages/config-compiler test:integration: ℹ pass 27",
         "packages/config-compiler test:integration: ℹ fail 0",
         "packages/config-compiler test:integration: ℹ skipped 0",
-        "packages/rule-set-pipeline test:integration: ℹ tests 51",
-        "packages/rule-set-pipeline test:integration: ℹ pass 51",
+        "packages/rule-set-pipeline test:integration: ℹ tests 52",
+        "packages/rule-set-pipeline test:integration: ℹ pass 52",
         "packages/rule-set-pipeline test:integration: ℹ fail 0",
         "packages/rule-set-pipeline test:integration: ℹ skipped 0"
+      ]
+    },
+    "officialActivation": {
+      "sha256": "0a38d2972fb5f9258440c14c280a230d1918f781d4823e20eb563267f2fbe521",
+      "summaries": [
+        "ℹ tests 1",
+        "ℹ pass 1",
+        "ℹ fail 0",
+        "ℹ skipped 0"
       ]
     }
   },
@@ -424,5 +433,10 @@
       "skipped": 0
     },
     "remoteWriteRerun": false
+  },
+  "ciCorrection": {
+    "initialRun": "https://github.com/wangyingang/sing-box-config-manager/actions/runs/41696126618",
+    "failure": "clean checkout loaded Compiler source before generated validator existed",
+    "fix": "test-only workspace dependency establishes task order; integration and acceptance scripts prepare validator explicitly"
   }
 }

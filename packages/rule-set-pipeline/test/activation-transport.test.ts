@@ -97,3 +97,66 @@ test('非法 expectedHead 在访问远端前拒绝；候选分支和路径型分
   assert.equal(remote.calls.length, 0);
   for (const branch of ['candidates', 'acceptance/issue-19', '../main', 'main?x=1']) assert.throws(() => githubActivation(branch), /Invalid activation branch/);
 });
+
+const recordUrl = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${oldHead}/stable/activation.json`;
+function activationRecord(options: { absent?: boolean; truncated?: boolean; pathType?: string; pathMode?: string; blobEncoding?: string; blobContent?: unknown; blobSize?: number; failureAt?: 'commit' | 'tree' | 'blob' } = {}) {
+  const paths: string[] = [];
+  const content = Buffer.from('{"subscription":{"schemaVersion":1},"note":"已激活"}\n');
+  const request: typeof ghJson = async (args, input) => {
+    assert.equal(input, undefined, 'Record inspection must be read-only');
+    const path = args[1].replace(`repos/${ARTIFACT_REPOSITORY}/`, ''); paths.push(path);
+    const failurePath = options.failureAt === 'commit' ? `git/commits/${oldHead}`
+      : options.failureAt === 'tree' ? `git/trees/${'b'.repeat(40)}?recursive=1`
+      : options.failureAt === 'blob' ? `git/blobs/${'c'.repeat(40)}` : undefined;
+    if (path === failurePath) throw new Error(`API unavailable: ${options.failureAt}`);
+    if (path === `git/commits/${oldHead}`) return { tree: { sha: 'b'.repeat(40) } };
+    if (path === `git/trees/${'b'.repeat(40)}?recursive=1`) return { truncated: options.truncated ?? false,
+      tree: options.absent ? [{ path: 'README.md', type: 'blob', sha: 'd'.repeat(40) }]
+        : [{ path: 'stable/activation.json', type: options.pathType ?? 'blob', mode: options.pathMode ?? '100644', sha: 'c'.repeat(40) }] };
+    if (path === `git/blobs/${'c'.repeat(40)}`) return { encoding: options.blobEncoding ?? 'base64', size: options.blobSize ?? content.length, content: options.blobContent ?? content.toString('base64').replace(/.{24}/g, '$&\n') };
+    throw new Error(`Unexpected record API ${path}`);
+  };
+  return { transport: githubActivation('main', request), paths, content };
+}
+
+test('固定 commit 的激活记录经 tree 定位并从 Git blob 解码，返回原始 UTF-8 字节', async () => {
+  const remote = activationRecord();
+  assert.deepEqual(await remote.transport.download(recordUrl), remote.content);
+  assert.deepEqual(remote.paths, [`git/commits/${oldHead}`, `git/trees/${'b'.repeat(40)}?recursive=1`, `git/blobs/${'c'.repeat(40)}`]);
+});
+
+test('完整 tree 证明激活记录不存在后才报告 404，不请求 blob 或 raw CDN', async () => {
+  const remote = activationRecord({ absent: true });
+  await assert.rejects(remote.transport.download(recordUrl), error => {
+    assert.ok(error instanceof Error); assert.match(error.message, /^Readback HTTP 404:/); return true;
+  });
+  assert.deepEqual(remote.paths, [`git/commits/${oldHead}`, `git/trees/${'b'.repeat(40)}?recursive=1`]);
+});
+
+for (const failureAt of ['commit', 'tree', 'blob'] as const) {
+  test(`读取激活记录的 ${failureAt} API 故障不误报记录缺失`, async () => {
+    const remote = activationRecord({ failureAt });
+    await assert.rejects(remote.transport.download(recordUrl), error => {
+      assert.ok(error instanceof Error); assert.match(error.message, /API unavailable/); assert.doesNotMatch(error.message, /Readback HTTP 404:/); return true;
+    });
+  });
+}
+
+for (const options of [{ absent: true, truncated: true }, { pathType: 'tree' }, { pathType: 'commit' }]) {
+  test(`tree 不完整或记录不是 blob 时拒绝推断激活状态 ${JSON.stringify(options)}`, async () => {
+    const remote = activationRecord(options);
+    await assert.rejects(remote.transport.download(recordUrl), error => {
+      assert.ok(error instanceof Error); assert.doesNotMatch(error.message, /Readback HTTP 404:/); return true;
+    });
+    assert.ok(!remote.paths.some(path => path.startsWith('git/blobs/')));
+  });
+}
+
+for (const options of [{ pathMode: '120000' }, { blobEncoding: 'utf-8' }, { blobContent: 123 }, { blobSize: 999 }]) {
+  test(`激活记录为符号链接或 blob 编码与长度不符时拒绝 ${JSON.stringify(options)}`, async () => {
+    const remote = activationRecord(options);
+    await assert.rejects(remote.transport.download(recordUrl), error => {
+      assert.ok(error instanceof Error); assert.doesNotMatch(error.message, /Readback HTTP 404:/); return true;
+    });
+  });
+}

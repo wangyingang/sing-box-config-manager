@@ -70,7 +70,7 @@ pnpm --dir packages/rule-set-pipeline activate \
 
 激活重新下载候选的六份文件并核对回读链、来源、Conversion Report、构建身份、实际摘要／字节数／非空 term 数、用途映射及能力。重新用指定 1.14.4 编译、解码、加载实际 JSON，并逐字节比对 SRS。本地 `verified`、单独的 `passed` 或 `build.json` 不能放行。明确标识 `kind: synthetic`、description 和 revision 的合成候选只可进入 `acceptance-*` 分支。
 
-规则订阅中的全部入口须指向目标分支的 `stable/`，默认 SRS，也可维护契约声明的 JSON。首次激活后，后续激活须保持完整订阅契约及入口不变。每次以预期旧 head 为唯一父提交，在一个 tree／commit 内更新所有稳定文件和 `stable/activation.json`；非强制 PATCH 拒绝并发覆盖。激活记录保存候选证据、来源、契约、原生验证身份和稳定文件摘要。
+规则订阅中的全部入口须指向目标分支的 `stable/`，默认 SRS，也可维护契约声明的 JSON。首次激活后，后续激活须保持完整订阅契约及入口不变。每次以预期旧 head 为唯一父提交，在一个 tree／commit 内更新所有稳定文件和 `stable/activation.json`；非强制 PATCH 拒绝并发覆盖。激活记录保存候选证据、来源、契约、原生验证身份和稳定文件摘要。旧激活记录通过预期旧 commit 的 Git tree／blob 读取；只有完整 tree 证明缺失才视为首次激活，不能凭 raw CDN 的临时 404 绕过契约保护。API 故障、tree 截断及坏记录均拒绝激活。
 
 PATCH 回复丢失时，先读取远端 head 对照已知 attempted commit，不重复写入。远端不可达报告 `ACTIVATION_UNKNOWN`；远端仍是旧 head 报告 `ACTIVATION_NOT_APPLIED`；其他 head 报告冲突或已被后续操作替代。成功提交后，使用完整 commit HTTPS 地址逐字节回读；尚不能完成则报告 `ACTIVATION_APPLIED_READBACK_PENDING` 及 commit，不能称旧规则未变。CLI 本地回执写入失败同样保留已生效 commit。重试须先核对远端 head 和激活记录，再选择正确预期值；不要盲目覆盖。
 
@@ -114,7 +114,7 @@ pnpm check
 
 `test:integration` 使用固定真实样本和合成 IR，通过 `rule-set match` 实际读取、初始化并匹配 JSON／SRS。非法 Go regexp 会在此被拒绝，不能以编译或配置 `check` 代替加载。测试覆盖域名边界、regexp 大小写、IPv4／IPv6 投影、相邻 CIDR 归并等价性及扩大／缺失反例、term 字段顺序、独立构建确定性及编译／解码／加载／语义错配故障；现有 native CI 自动执行此脚本。
 
-`pnpm build` 输出 Node ESM 和 TypeScript 声明至 `dist/`。本包不提供浏览器运行时，不引入 Compiler 依赖。
+`pnpm build` 输出 Node ESM 和 TypeScript 声明至 `dist/`。本包不提供浏览器运行时，运行时代码不导入 Compiler。集成验收通过 devDependency 声明 Compiler 的准备顺序；`test:integration`、`test:activation` 和 `test:release` 在加载跨模块测试前生成 Compiler validator，干净 checkout 不依赖已有构建文件。
 
 固定官方样本的真实公开发布验收需要显式提供以下环境变量；它会在产物仓库追加候选，请仅在获得发布授权后执行：
 

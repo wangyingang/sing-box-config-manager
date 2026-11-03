@@ -10,7 +10,7 @@
 - 输入 YAML SHA-256：`bfa4ab62d0f47216029ce6b777a2364978c3f28086060b592453684a0dd830ee`。
 - 候选：`6e76b4ef-883c-46d1-8058-ef3f803b347b`；[不可变回读记录](https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/3f06056ee6f1c6336936d3b1e7b776215c8b2ded/candidates/6e76b4ef-883c-46d1-8058-ef3f803b347b/readback.json)。首次发布的完整输入和 HTTPS 证据保留在 [#18](issue-18.md)。
 - 隔离分支：`acceptance-issue-19`，从 `ae3cf588169226618eb30271f123c29608eb754a` 开始。
-- 激活 commit：[8b1118eb8060d65ac0da5a1aba6dff05d456654b](https://github.com/wangyingang/sing-box-rule-artifacts/commit/8b1118eb8060d65ac0da5a1aba6dff05d456654b)。一次提交更新 JSON、SRS 和 [激活记录](https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/8b1118eb8060d65ac0da5a1aba6dff05d456654b/stable/activation.json)。
+- 最终激活 commit：[4208b055c9690495eb500b26a9129d3e3a7e69c5](https://github.com/wangyingang/sing-box-rule-artifacts/commit/4208b055c9690495eb500b26a9129d3e3a7e69c5)（预期旧 head 为首次激活 `8b1118eb8060d65ac0da5a1aba6dff05d456654b`）。一次提交更新 JSON、SRS 和 [激活记录](https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/4208b055c9690495eb500b26a9129d3e3a7e69c5/stable/activation.json)。
 - [稳定 SRS](https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-19/stable/v2fly/category-ai-not-cn/domains.srs)：2164 bytes，SHA-256 `b66a1797d2850ba2c2c632ae6f61cb40184134a3d4bcb584dc07273361c167d5`。
 - [稳定 JSON](https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-19/stable/v2fly/category-ai-not-cn/domains.json)：6316 bytes，SHA-256 `181b855217d871ed8f0ec40923a8606489c5ffb0fe0b14de3c47aeeb0a5a63d5`。
 
@@ -31,18 +31,18 @@ Compiler 只生成一次配置；启动前一次性设置测试用 `update_inter
 
 ## 门禁、并发与不确定结果
 
-25 项真实 binary 激活集成测试覆盖：完整候选成功；缺失来源和证据、摘要错配、全部摘要同步修改后的坏 SRS、合法空内容、虚假通过标记、错误转换报告、来源缺失、目标版本、用途、term 数、能力及订阅不兼容均拒绝写入；合成来源禁止进入生产分支。
+26 项真实 binary 激活集成测试覆盖：完整候选成功；缺失来源和证据、摘要错配、全部摘要同步修改后的坏 SRS、合法空内容、虚假通过标记、错误转换报告、来源缺失、目标版本、用途、term 数、能力及订阅不兼容均拒绝写入；合成来源禁止进入生产分支。
 
 同一预期旧 head 的并发请求只有一个成功，旧 head 无法覆盖。注入提交未生效、回复丢失但已生效、远端不可达、其他提交替代以及提交后 HTTPS 回读失败，分别核实并报告结果，不执行重复写入。失败后复用原候选重试成功，历史候选和 Release 成功处理记录不变。后续激活也拒绝改变已交付订阅契约。
 
-16 项 transport 单元测试核对 GitHub 请求：只用预期旧 head 为父提交，一次 tree 更新稳定文件与激活记录，PATCH `force:false`；拒绝非法路径、并发 head 变化及私有仓库，PATCH 回复丢失保留 attempted commit。
+28 项 transport 单元测试核对 GitHub 请求：只用预期旧 head 为父提交，一次 tree 更新稳定文件与激活记录，PATCH `force:false`；拒绝非法路径、并发 head 变化及私有仓库，PATCH 回复丢失保留 attempted commit；用完整 Git tree／blob 核实旧激活记录，API 故障、截断、非 blob／符号链接、错误编码或长度均拒绝。旧记录包含 `Readback HTTP 404:` 文本也不能被当作缺失。
 
 ## 回归与边界
 
 实际执行并通过：
 
-- Node 24.15.0、pnpm 10.33.2：`pnpm check`。Pipeline 72 项、Compiler 96 项测试全部通过，typecheck、build 和 workspace smoke 通过。
-- 指定安装路径的真实 1.14.4：`SING_BOX_TEST_BINARY=... pnpm test:integration`。Pipeline 51 项（含 25 项激活门禁和 1 项 A／B 客户端测试）、Compiler 27 项全部通过，无跳过。
+- Node 24.15.0、pnpm 10.33.2：`pnpm check`。Pipeline 84 项、Compiler 96 项测试全部通过，typecheck、build 和 workspace smoke 通过。
+- 指定安装路径的真实 1.14.4：`SING_BOX_TEST_BINARY=... pnpm test:integration`。Pipeline 52 项（含 26 项激活门禁和 1 项 A／B 客户端测试）、Compiler 27 项全部通过，无跳过。
 - 显式提供隔离分支、候选 URL、预期旧 head 和证据路径：`pnpm --dir packages/rule-set-pipeline test:activation`，1 项通过。执行参数含义见包 README；输出文件须不存在，重跑前核对实际远端 head。
 - `git diff --check` 通过。检查日志摘要与 SHA-256 保存在机器证据。
 
@@ -53,3 +53,5 @@ Compiler 只生成一次配置；启动前一次性设置测试用 `update_inter
 ## 双轴审查
 
 固定比较基线 `3258f8a376f4da0c7c018ea13fd4a66150bf4629`，实现提交 `23e22c1`。Standards 与 Spec 由独立 subagents 分别审查完整 diff，均为 0 项发现。Standards 独立执行 `git diff --check`；Spec 独立重跑 16 项 transport 与 25 项真实 binary 激活测试，共 41 项全部通过，无跳过。审查未重复执行外部写入；官方激活和 A／B 更新部分复核已保存证据与测试实现。
+
+首次 PR 原生 CI 在干净 checkout 中发现跨包测试过早加载尚未生成的 Compiler validator。已通过测试用 workspace devDependency 建立执行顺序，并在集成与验收脚本显式准备 validator；移除本地 generated 文件后重跑全部原生测试通过。Pipeline 运行时代码仍不导入 Compiler。随后补强旧激活记录读取，并在已激活的同一隔离分支再次完成真实官方候选验收。最终回归为常规 180 项、原生 79 项，全部通过。

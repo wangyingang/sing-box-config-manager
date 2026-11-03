@@ -7,15 +7,15 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test test/*.test.ts",
-    "test:release": "node --import tsx --test test/acceptance/*.test.ts",
+    "test:release": "pnpm --filter @sing-box-config-manager/config-compiler generate:validator && node --import tsx --test test/acceptance/*.test.ts",
     "build": "tsc -p tsconfig.build.json",
     "build:release": "node --import tsx src/cli.ts build",
-    "test:integration": "node --import tsx --test test/integration/*.test.ts",
+    "test:integration": "pnpm --filter @sing-box-config-manager/config-compiler generate:validator && node --import tsx --test test/integration/*.test.ts",
     "update": "node --import tsx src/cli.ts update",
     "status": "node --import tsx src/cli.ts status",
     "test:publication": "node --import tsx --test test/acceptance/publication.test.ts",
     "activate": "node --import tsx src/cli.ts activate",
-    "test:activation": "node --import tsx --test test/acceptance/activation.test.ts"
+    "test:activation": "pnpm --filter @sing-box-config-manager/config-compiler generate:validator && node --import tsx --test test/acceptance/activation.test.ts"
   },
   "exports": {
     ".": {
@@ -34,6 +34,7 @@
   "devDependencies": {
     "@types/node": "26.6.6",
     "tsx": "4.23.15",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "@sing-box-config-manager/config-compiler": "workspace:*"
   }
 }

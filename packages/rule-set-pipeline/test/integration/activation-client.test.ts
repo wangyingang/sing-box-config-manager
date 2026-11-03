@@ -83,7 +83,7 @@ test('正式激活 A/B 后同一 Compiler 配置及运行实例自动更新 Rout
   const directory = await mkdtemp(join(tmpdir(), 'activation-client-'));
   const servers: Server[] = [], sockets = new Set<Duplex>();
   const dns = createSocket('udp4');
-  let child: ChildProcess | undefined, log = '';
+  let child: ChildProcess | undefined, log = '', failed = false, dnsBound = false;
   const immutable = new Map<string, Buffer>(), stable = new Map<string, Buffer>();
   let count = 0, head = 'a'.repeat(40);
   const published: { path: string; sha256: string; commit: string }[] = [];
@@ -143,7 +143,7 @@ test('正式激活 A/B 后同一 Compiler 配置及运行实例自动更新 Rout
       const answer = Buffer.from([0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0, 0, 0, 4, 192, 0, 2, 10]);
       dns.send(Buffer.concat([response, answer]), remote.port, remote.address);
     });
-    await new Promise<void>(resolve => dns.bind(0, '127.0.0.1', resolve));
+    await new Promise<void>(resolve => dns.bind(0, '127.0.0.1', () => { dnsBound = true; resolve(); }));
     const dnsPort = (dns.address() as { port: number }).port;
     const input: CompileInput = {
       profile: 'macos-standalone', params: { ecs: null }, artifacts: [], subscriptions: [subscription],
@@ -194,10 +194,29 @@ test('正式激活 A/B 后同一 Compiler 配置及运行实例自动更新 Rout
       client: { pid, binary, configSha256: sha256(configBytes), sameProcess: true, sameConfig: true, updateInterval: '1s' }, before, after, published };
     console.log(JSON.stringify({ activationClient: evidence }));
     if (process.env.RULE_ACTIVATION_CLIENT_EVIDENCE) await writeFile(process.env.RULE_ACTIVATION_CLIENT_EVIDENCE, JSON.stringify(evidence, null, 2) + '\n');
+  } catch (error) {
+    failed = true;
+    throw error;
   } finally {
-    if (child && child.exitCode === null) { child.kill('SIGTERM'); await new Promise(resolve => child!.once('exit', resolve)); }
-    dns.close(); for (const socket of sockets) socket.destroy();
-    for (const server of servers) { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
-    await rm(directory, { recursive: true, force: true });
+    // A build/gate failure can occur before any listener binds. Close only live
+    // resources and preserve that original failure if cleanup also fails.
+    const cleanup = await Promise.allSettled([
+      (async () => {
+        if (child?.pid && child.exitCode === null && child.signalCode === null) {
+          await new Promise<void>(resolve => { child!.once('exit', () => resolve()); child!.kill('SIGTERM'); });
+        }
+      })(),
+      (async () => { if (dnsBound) await new Promise<void>(resolve => dns.close(resolve)); })(),
+      (async () => {
+        for (const socket of sockets) socket.destroy();
+        await Promise.all(servers.filter(server => server.listening).map(server => {
+          server.closeAllConnections();
+          return new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+        }));
+      })(),
+    ]);
+    const removed = await Promise.allSettled([rm(directory, { recursive: true, force: true })]);
+    const cleanupFailure = [...cleanup, ...removed].find(result => result.status === 'rejected');
+    if (!failed && cleanupFailure?.status === 'rejected') throw cleanupFailure.reason;
   }
 });

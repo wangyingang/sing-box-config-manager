@@ -147,11 +147,14 @@ export async function activateRules(options: ActivationOptions) {
   // Existing contract is part of the remote old state, not a mutable local status file.
   const root = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${options.expectedHead}/`;
   // Transport must distinguish an absent record (404) from an unavailable server.
-  try {
-    const previous = JSON.parse((await transport.download(root + RECORD_PATH)).toString());
+  let previousBytes: Buffer | undefined;
+  try { previousBytes = await transport.download(root + RECORD_PATH); }
+  catch (error) {
+    if (!(error instanceof Error) || !error.message.startsWith('Readback HTTP 404: ')) throw error;
+  }
+  if (previousBytes) {
+    const previous = JSON.parse(previousBytes.toString());
     requireThat(equal(previous.subscription, subscription), 'Existing subscription contract cannot change during activation');
-  } catch (error) {
-    if (!(error instanceof Error) || !/Readback HTTP 404:/.test(error.message)) throw error;
   }
   const activation = { schemaVersion: 1, id: randomUUID(), candidateId: candidate.candidateId,
     candidateEvidenceUrl: candidate.evidenceUrl, source: candidate.source, validation: candidate.validation,

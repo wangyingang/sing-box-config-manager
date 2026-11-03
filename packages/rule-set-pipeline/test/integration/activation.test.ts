@@ -115,3 +115,10 @@ test('已激活订阅契约不能随下次激活改变，避免旧配置指向�
   env.subscription.projections.route.formats.binary.requiredCapabilities = ['processMatching'];
   await assert.rejects(activateRules(env.options()), /contract cannot change|Conflicting/); assert.equal(env.writes(), 1);
 });
+
+test('坏旧激活记录包含 404 文本也不能被当作不存在而绕过契约保护', async () => {
+  const env = await environment(); await activateRules(env.options());
+  env.stored.set(immutableUrl(env.head(), 'stable/activation.json'), Buffer.from('Readback HTTP 404: malformed record'));
+  await assert.rejects(activateRules(env.options()), SyntaxError);
+  assert.equal(env.writes(), 1);
+});
