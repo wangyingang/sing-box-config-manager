@@ -1,6 +1,6 @@
 # Rule Set Pipeline
 
-包名：`@sing-box-config-manager/rule-set-pipeline`。已实现 [#15](https://github.com/wangyingang/sing-box-config-manager/issues/15) 的固定来源转换，以及 [#16](https://github.com/wangyingang/sing-box-config-manager/issues/16) 的确定性 JSON／SRS、本地原生验证和用途投影。另已实现 [#18](https://github.com/wangyingang/sing-box-config-manager/issues/18) 的正常更新、不可变候选发布与 HTTPS 回读。另已实现 [#19](https://github.com/wangyingang/sing-box-config-manager/issues/19) 的显式激活与受控客户端自动更新。验收记录见 [#15](docs/verification/issue-15.md)、[#16](docs/verification/issue-16.md)、[#18](docs/verification/issue-18.md) 和 [#19](docs/verification/issue-19.md)。另已实现 [#20](https://github.com/wangyingang/sing-box-config-manager/issues/20) 的历史激活回滚，验收见 [#20](docs/verification/issue-20.md)。客户端故障／缓存恢复仍由 #21 交付。
+包名：`@sing-box-config-manager/rule-set-pipeline`。已实现 [#15](https://github.com/wangyingang/sing-box-config-manager/issues/15) 的固定来源转换，以及 [#16](https://github.com/wangyingang/sing-box-config-manager/issues/16) 的确定性 JSON／SRS、本地原生验证和用途投影。另已实现 [#18](https://github.com/wangyingang/sing-box-config-manager/issues/18) 的正常更新、不可变候选发布与 HTTPS 回读。另已实现 [#19](https://github.com/wangyingang/sing-box-config-manager/issues/19) 的显式激活与受控客户端自动更新。验收记录见 [#15](docs/verification/issue-15.md)、[#16](docs/verification/issue-16.md)、[#18](docs/verification/issue-18.md) 和 [#19](docs/verification/issue-19.md)。另已实现 [#20](https://github.com/wangyingang/sing-box-config-manager/issues/20) 的历史激活回滚，验收见 [#20](docs/verification/issue-20.md)。客户端故障保留与缓存离线恢复已由 [#21](docs/verification/issue-21.md) 验证。
 
 ## 本地构建
 
@@ -159,6 +159,22 @@ pnpm --dir packages/rule-set-pipeline test:activation
 
 该命令真实更新隔离分支，分别回读不可变提交和稳定 HTTPS URL，再通过公开 Recipe／Compiler 接口生成稳定 SRS 配置并执行原生检查。受控 A／B 自动更新测试随 `test:integration` 运行，需本机 `openssl`；通过 loopback HTTPS、临时 CA 和配置内的 HTTP 隧道隔离网络，不改 hosts 或系统信任。它使用内存 Git transport，提交身份不代表真实 GitHub commit；与真实发布证据分别保存。
 
+
+### 客户端故障与缓存离线恢复（#21）
+
+`test/integration/client-failure-recovery.test.ts` 随 `test:integration` 和 native CI 自动运行，复用 Compiler 订阅入口与 #19 的 loopback HTTPS 验收方式。测试使用独立临时目录、缓存文件、动态端口和测试专用 `acceptance-issue-21` URL；不写远程分支，也不依赖 #20 的状态。单独运行并保存机器证据：
+
+```sh
+pnpm --filter @sing-box-config-manager/config-compiler generate:validator
+cd packages/rule-set-pipeline
+SING_BOX_TEST_BINARY=/absolute/path/to/sing-box-1.14.4 \
+RULE_CLIENT_FAILURE_EVIDENCE=/absolute/path/to/issue-21.evidence.json \
+node --import tsx --test test/integration/client-failure-recovery.test.ts
+```
+
+测试通过 A／B 域名的正反 Route／DNS 新请求，分别证明四类更新故障后 A 仍有效、故障解除后 B 生效，以及停止客户端和规则服务后从持久缓存重启恢复 B。运行期间保持同一配置；重启前后的证据分开保存。临时 CA、DNS 缓存禁用、`1s` 更新周期与持久缓存仅属于受控测试，不是实际客户端的统一要求。测试结束清理进程、监听器及临时目录，结果保留在指定证据文件和 CI 日志中。
+
+原生客户端不额外校验 Artifact Manifest 摘要；缓存写入失败不会回滚已生效的内存规则。首次启动无有效缓存、缓存损坏或无法写入缓存时，不具有跨重启旧规则保证。合法空 SRS 可能被客户端接受，必须依靠发布端激活门禁拒绝；本测试不以客户端拒绝空规则为前提。具体证据与未覆盖边界见 [#21 验收记录](docs/verification/issue-21.md)。
 
 ## 显式重建固定 Release
 

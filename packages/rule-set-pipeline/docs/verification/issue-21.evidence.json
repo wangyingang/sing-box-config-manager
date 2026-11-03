@@ -1,0 +1,527 @@
+{
+  "source": "synthetic issue-21 loopback fixture; no remote branch writes or official Release claim",
+  "tool": {
+    "path": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+    "version": "1.14.4",
+    "identity": "sing-box version 1.14.4\n\nEnvironment: go1.26.10 darwin/arm64\nTags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0\nRevision: c005f35300ce76427dc285481ec5695f5b179cd2\nCGO: enabled",
+    "sha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2"
+  },
+  "rules": {
+    "A": {
+      "sha256": "30214c230fa0ea089fc57a52c178d772066f94daa354980397a6782a9e0d8372",
+      "byteLength": 54,
+      "domain": "updated.issue21.test"
+    },
+    "B": {
+      "sha256": "c1ab6065c8ad0148d0f2bb4319f13151b0c972301fd735b7b5d5dfce89473f3e",
+      "byteLength": 54,
+      "domain": "other.issue21.test"
+    }
+  },
+  "client": {
+    "pids": [
+      79615,
+      79664
+    ],
+    "configSha256": "18a9d277bbbe82eb323a58d396202943b8831afcc50bc1f21ca1f6dcac624bab",
+    "sameConfig": true,
+    "updateInterval": "1s",
+    "cacheEnabled": true,
+    "dnsCacheDisabled": true
+  },
+  "subscription": {
+    "schemaVersion": 1,
+    "systemRuleSetId": "v2fly:domain-list-community:category-ai-!cn",
+    "targetVersion": "1.14.4",
+    "sourceFormatVersion": 4,
+    "projections": {
+      "route": {
+        "formats": {
+          "binary": {
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-21/stable/domains.srs",
+            "requiredCapabilities": []
+          }
+        }
+      },
+      "dns-query": {
+        "formats": {
+          "binary": {
+            "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-21/stable/domains.srs",
+            "requiredCapabilities": []
+          }
+        }
+      },
+      "dns-response": {
+        "unavailable": "empty"
+      }
+    }
+  },
+  "config": {
+    "log": {
+      "level": "debug"
+    },
+    "dns": {
+      "final": "fallback",
+      "disable_cache": true,
+      "servers": [
+        {
+          "type": "udp",
+          "tag": "fallback",
+          "server": "127.0.0.1",
+          "server_port": 50411
+        }
+      ],
+      "rules": [
+        {
+          "type": "logical",
+          "mode": "and",
+          "rules": [
+            {
+              "rule_set": "live"
+            },
+            {
+              "domain": "updated.issue21.test"
+            }
+          ],
+          "action": "predefined",
+          "answer": [
+            "updated.issue21.test. 0 IN A 192.0.2.20"
+          ]
+        },
+        {
+          "type": "logical",
+          "mode": "and",
+          "rules": [
+            {
+              "rule_set": "live"
+            },
+            {
+              "domain": "other.issue21.test"
+            }
+          ],
+          "action": "predefined",
+          "answer": [
+            "other.issue21.test. 0 IN A 192.0.2.20"
+          ]
+        }
+      ]
+    },
+    "route": {
+      "final": "direct",
+      "rule_set": [
+        {
+          "type": "remote",
+          "tag": "live",
+          "format": "binary",
+          "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-21/stable/domains.srs",
+          "http_client": "rules",
+          "update_interval": "1s"
+        }
+      ],
+      "rules": [
+        {
+          "port": 53,
+          "action": "hijack-dns"
+        },
+        {
+          "rule_set": "live",
+          "action": "route",
+          "outbound": "direct",
+          "override_address": "127.0.0.1",
+          "override_port": 61990
+        },
+        {
+          "domain": [
+            "updated.issue21.test",
+            "other.issue21.test"
+          ],
+          "action": "route",
+          "outbound": "direct",
+          "override_address": "127.0.0.1",
+          "override_port": 61991
+        }
+      ]
+    },
+    "certificate": {
+      "store": "none",
+      "certificate_path": [
+        "/var/folders/dh/qsdst4gs4h9cs66fxvg085v80000gn/T/client-failure-issue-21-0nxypZ/cert.pem"
+      ]
+    },
+    "inbounds": [
+      {
+        "type": "mixed",
+        "tag": "probe",
+        "listen": "127.0.0.1",
+        "listen_port": 61992
+      }
+    ],
+    "outbounds": [
+      {
+        "type": "direct",
+        "tag": "direct"
+      },
+      {
+        "type": "http",
+        "tag": "fixture",
+        "server": "127.0.0.1",
+        "server_port": 61989
+      }
+    ],
+    "http_clients": [
+      {
+        "tag": "rules",
+        "version": 1,
+        "detour": "fixture"
+      }
+    ],
+    "experimental": {
+      "cache_file": {
+        "enabled": true,
+        "path": "/var/folders/dh/qsdst4gs4h9cs66fxvg085v80000gn/T/client-failure-issue-21-0nxypZ/rules.db"
+      }
+    }
+  },
+  "before": {
+    "version": "A",
+    "results": [
+      {
+        "domain": "updated.issue21.test",
+        "route": "route-matched",
+        "dns": "192.0.2.20"
+      },
+      {
+        "domain": "other.issue21.test",
+        "route": "route-fallback",
+        "dns": "192.0.2.10"
+      }
+    ],
+    "observedAt": "2026-11-03T19:30:05.998Z"
+  },
+  "faults": [
+    {
+      "fault": "network",
+      "loadedA": {
+        "version": "A",
+        "results": [
+          {
+            "domain": "updated.issue21.test",
+            "route": "route-matched",
+            "dns": "192.0.2.20"
+          },
+          {
+            "domain": "other.issue21.test",
+            "route": "route-fallback",
+            "dns": "192.0.2.10"
+          }
+        ],
+        "observedAt": "2026-11-03T19:30:06.002Z"
+      },
+      "failureLog": [
+        "\u001b[31mERROR\u001b[0m[0001] router: fetch rule-set live: Get \"https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-21/stable/domains.srs\": EOF"
+      ],
+      "retained": {
+        "version": "A",
+        "results": [
+          {
+            "domain": "updated.issue21.test",
+            "route": "route-matched",
+            "dns": "192.0.2.20"
+          },
+          {
+            "domain": "other.issue21.test",
+            "route": "route-fallback",
+            "dns": "192.0.2.10"
+          }
+        ],
+        "observedAt": "2026-11-03T19:30:06.922Z"
+      },
+      "recovered": {
+        "version": "B",
+        "results": [
+          {
+            "domain": "updated.issue21.test",
+            "route": "route-fallback",
+            "dns": "192.0.2.10"
+          },
+          {
+            "domain": "other.issue21.test",
+            "route": "route-matched",
+            "dns": "192.0.2.20"
+          }
+        ],
+        "observedAt": "2026-11-03T19:30:07.970Z"
+      },
+      "requests": [
+        {
+          "mode": "network",
+          "at": "2026-11-03T19:30:06.875Z"
+        },
+        {
+          "mode": "B",
+          "at": "2026-11-03T19:30:07.875Z"
+        }
+      ],
+      "sameProcess": true
+    },
+    {
+      "fault": "http",
+      "loadedA": {
+        "version": "A",
+        "results": [
+          {
+            "domain": "updated.issue21.test",
+            "route": "route-matched",
+            "dns": "192.0.2.20"
+          },
+          {
+            "domain": "other.issue21.test",
+            "route": "route-fallback",
+            "dns": "192.0.2.10"
+          }
+        ],
+        "observedAt": "2026-11-03T19:30:09.007Z"
+      },
+      "failureLog": [
+        "\u001b[31mERROR\u001b[0m[0004] router: fetch rule-set live: unexpected status: 503 Service Unavailable"
+      ],
+      "retained": {
+        "version": "A",
+        "results": [
+          {
+            "domain": "updated.issue21.test",
+            "route": "route-matched",
+            "dns": "192.0.2.20"
+          },
+          {
+            "domain": "other.issue21.test",
+            "route": "route-fallback",
+            "dns": "192.0.2.10"
+          }
+        ],
+        "observedAt": "2026-11-03T19:30:09.921Z"
+      },
+      "recovered": {
+        "version": "B",
+        "results": [
+          {
+            "domain": "updated.issue21.test",
+            "route": "route-fallback",
+            "dns": "192.0.2.10"
+          },
+          {
+            "domain": "other.issue21.test",
+            "route": "route-matched",
+            "dns": "192.0.2.20"
+          }
+        ],
+        "observedAt": "2026-11-03T19:30:10.952Z"
+      },
+      "requests": [
+        {
+          "mode": "http",
+          "at": "2026-11-03T19:30:09.874Z"
+        },
+        {
+          "mode": "B",
+          "at": "2026-11-03T19:30:10.881Z"
+        }
+      ],
+      "sameProcess": true
+    },
+    {
+      "fault": "truncated",
+      "loadedA": {
+        "version": "A",
+        "results": [
+          {
+            "domain": "updated.issue21.test",
+            "route": "route-matched",
+            "dns": "192.0.2.20"
+          },
+          {
+            "domain": "other.issue21.test",
+            "route": "route-fallback",
+            "dns": "192.0.2.10"
+          }
+        ],
+        "observedAt": "2026-11-03T19:30:11.988Z"
+      },
+      "failureLog": [
+        "\u001b[31mERROR\u001b[0m[0007] router: fetch rule-set live: read rule[0]: unexpected EOF"
+      ],
+      "retained": {
+        "version": "A",
+        "results": [
+          {
+            "domain": "updated.issue21.test",
+            "route": "route-matched",
+            "dns": "192.0.2.20"
+          },
+          {
+            "domain": "other.issue21.test",
+            "route": "route-fallback",
+            "dns": "192.0.2.10"
+          }
+        ],
+        "observedAt": "2026-11-03T19:30:12.904Z"
+      },
+      "recovered": {
+        "version": "B",
+        "results": [
+          {
+            "domain": "updated.issue21.test",
+            "route": "route-fallback",
+            "dns": "192.0.2.10"
+          },
+          {
+            "domain": "other.issue21.test",
+            "route": "route-matched",
+            "dns": "192.0.2.20"
+          }
+        ],
+        "observedAt": "2026-11-03T19:30:13.936Z"
+      },
+      "requests": [
+        {
+          "mode": "truncated",
+          "at": "2026-11-03T19:30:12.882Z"
+        },
+        {
+          "mode": "B",
+          "at": "2026-11-03T19:30:13.882Z"
+        }
+      ],
+      "sameProcess": true
+    },
+    {
+      "fault": "bad-rules",
+      "loadedA": {
+        "version": "A",
+        "results": [
+          {
+            "domain": "updated.issue21.test",
+            "route": "route-matched",
+            "dns": "192.0.2.20"
+          },
+          {
+            "domain": "other.issue21.test",
+            "route": "route-fallback",
+            "dns": "192.0.2.10"
+          }
+        ],
+        "observedAt": "2026-11-03T19:30:14.974Z"
+      },
+      "failureLog": [
+        "\u001b[31mERROR\u001b[0m[0010] router: fetch rule-set live: invalid sing-box rule-set file"
+      ],
+      "retained": {
+        "version": "A",
+        "results": [
+          {
+            "domain": "updated.issue21.test",
+            "route": "route-matched",
+            "dns": "192.0.2.20"
+          },
+          {
+            "domain": "other.issue21.test",
+            "route": "route-fallback",
+            "dns": "192.0.2.10"
+          }
+        ],
+        "observedAt": "2026-11-03T19:30:15.992Z"
+      },
+      "recovered": {
+        "version": "B",
+        "results": [
+          {
+            "domain": "updated.issue21.test",
+            "route": "route-fallback",
+            "dns": "192.0.2.10"
+          },
+          {
+            "domain": "other.issue21.test",
+            "route": "route-matched",
+            "dns": "192.0.2.20"
+          }
+        ],
+        "observedAt": "2026-11-03T19:30:17.032Z"
+      },
+      "requests": [
+        {
+          "mode": "bad-rules",
+          "at": "2026-11-03T19:30:15.882Z"
+        },
+        {
+          "mode": "B",
+          "at": "2026-11-03T19:30:16.880Z"
+        }
+      ],
+      "sameProcess": true
+    }
+  ],
+  "persistence": {
+    "cacheByteLength": 131072,
+    "cacheSha256": "30aef120eea02eefaf0b0eefa9bfda6c25407cb98ead6530b47318efd5d7661b",
+    "serviceClosedBeforeRestart": true,
+    "noRuleBytesDelivered": true,
+    "offline": {
+      "version": "B",
+      "results": [
+        {
+          "domain": "updated.issue21.test",
+          "route": "route-fallback",
+          "dns": "192.0.2.10"
+        },
+        {
+          "domain": "other.issue21.test",
+          "route": "route-matched",
+          "dns": "192.0.2.20"
+        }
+      ],
+      "observedAt": "2026-11-03T19:30:17.243Z"
+    },
+    "afterOfflineFailure": {
+      "version": "B",
+      "results": [
+        {
+          "domain": "updated.issue21.test",
+          "route": "route-fallback",
+          "dns": "192.0.2.10"
+        },
+        {
+          "domain": "other.issue21.test",
+          "route": "route-matched",
+          "dns": "192.0.2.20"
+        }
+      ],
+      "observedAt": "2026-11-03T19:30:17.247Z"
+    },
+    "failureLog": [
+      "\u001b[31mERROR\u001b[0m[0000] router: fetch rule-set live: Get \"https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-21/stable/domains.srs\": unexpected EOF"
+    ]
+  },
+  "execution": {
+    "date": "2026-11-04 Asia/Shanghai",
+    "baseCommit": "03f506ee950631ebd7c2845344b6ed94b35fde84",
+    "node": "24.15.0",
+    "pnpm": "10.33.2",
+    "checks": [
+      {
+        "command": "pnpm check",
+        "result": "passed",
+        "logSha256": "453792c07eed4eb68824546c6f553da7c939f8b17d1e2f81d3ac3c4d32a4df30"
+      },
+      {
+        "command": "SING_BOX_TEST_BINARY=<absolute 1.14.4 path> pnpm test:integration",
+        "result": "passed",
+        "logSha256": "b11e7f2292121591605ca7d8cd72d1a8b534110184c80c39074e79c396676878"
+      },
+      {
+        "command": "node --import tsx --test test/integration/client-failure-recovery.test.ts",
+        "result": "passed after listener cleanup fix",
+        "logSha256": "3539f44be04acf3717d90e181169f1430fff185484f08b7e348876db0d86c294"
+      }
+    ]
+  }
+}
