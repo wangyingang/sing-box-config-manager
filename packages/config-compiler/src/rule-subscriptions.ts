@@ -3,22 +3,30 @@ import type { Capability, Diagnostic, Obj } from './types.js';
 
 type Usage = keyof RuleSubscription['projections'];
 
+/** Shared files must have consistent declarations across all selected contracts. */
+export function validateSubscriptionEndpoints(subscriptions: RuleSubscription[], path: string): Diagnostic[] {
+  const diagnostics: Diagnostic[] = [];
+  const endpoints = new Map<string, string>();
+  for (const subscription of subscriptions) {
+    for (const projection of Object.values(subscription.projections)) {
+      if (!('formats' in projection)) continue;
+      for (const [format, endpoint] of Object.entries(projection.formats)) {
+        const signature = JSON.stringify([format, [...endpoint.requiredCapabilities].sort()]);
+        if (endpoints.has(endpoint.url) && endpoints.get(endpoint.url) !== signature) {
+          diagnostics.push({ severity: 'error', code: 'SUBSCRIPTION_ENDPOINT_CONFLICT', path,
+            message: '同一稳定 URL 的格式及能力声明必须一致，包括跨规则订阅复用的入口' });
+        }
+        endpoints.set(endpoint.url, signature);
+      }
+    }
+  }
+  return diagnostics;
+}
+
 /** One local tag can name several purposes only when they share the same SRS. */
 export function resolveSubscriptionProjection(subscription: RuleSubscription, usages: Usage[], path: string) {
   const diagnostics: Diagnostic[] = [];
   const error = (code: string, message: string) => diagnostics.push({ severity: 'error', code, path, message });
-  // One URL identifies one physical format and one capability budget across purposes.
-  const endpoints = new Map<string, string>();
-  for (const projection of Object.values(subscription.projections)) {
-    if (!('formats' in projection)) continue;
-    for (const [format, endpoint] of Object.entries(projection.formats)) {
-      const signature = JSON.stringify([format, [...endpoint.requiredCapabilities].sort()]);
-      if (endpoints.has(endpoint.url) && endpoints.get(endpoint.url) !== signature) {
-        error('SUBSCRIPTION_ENDPOINT_CONFLICT', '同一稳定 URL 的格式及能力声明必须一致');
-      }
-      endpoints.set(endpoint.url, signature);
-    }
-  }
   const requiredCapabilities = new Set<Capability>();
   let url: string | undefined;
   if (!Array.isArray(usages) || !usages.length || new Set(usages).size !== usages.length) {

@@ -267,3 +267,25 @@ test('conflicting capabilities or formats for one stable URL fail before publica
   const publication = success(await prepareRecipePublication(r, async () => {}));
   assert.ok((await renderSubscription(publication, r.params)).ok);
 });
+
+
+test('cross-subscription URL conflicts cannot publish an undeliverable Profile snapshot', async () => {
+  const r: any = subscriptionInput();
+  r.recipe.profile = 'ios-appstore';
+  r.dependencies.templates[0].platformDnsServers['ios-appstore'] = [{ type: 'local', tag: 'local' }];
+  const a = r.dependencies.subscriptions[0];
+  const b = structuredClone(a);
+  b.systemRuleSetId = 'other:domains';
+  b.projections.route = { formats: { binary: { url: 'https://rules.example.invalid/stable/other.srs', requiredCapabilities: [] } } };
+  b.projections['dns-query'] = { formats: { binary: { url: a.projections['dns-query'].formats.binary.url, requiredCapabilities: ['processMatching'] } } };
+  r.dependencies.subscriptions.push(b);
+  r.recipe.resources.ruleSets[0].subscriptionRef.systemRuleSetId = b.systemRuleSetId;
+  rejects(r, 'SUBSCRIPTION_ENDPOINT_CONFLICT');
+  let checks = 0;
+  assert.equal((await prepareRecipePublication(r, async () => { checks++; })).ok, false);
+  assert.equal(checks, 0);
+  // Consistent shared metadata restores the existing publication/delivery path.
+  b.projections['dns-query'].formats.binary.requiredCapabilities = [];
+  const publication = success(await prepareRecipePublication(r, async () => {}));
+  assert.ok((await renderSubscription(publication, r.params)).ok);
+});

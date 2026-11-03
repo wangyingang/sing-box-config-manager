@@ -1,4 +1,4 @@
-import { resolveSubscriptionProjection, validateRuleSetUsages } from './rule-subscriptions.js';
+import { resolveSubscriptionProjection, validateRuleSetUsages, validateSubscriptionEndpoints } from './rule-subscriptions.js';
 import { ruleSubscriptionSchema } from './recipe-schema.js';
 import build from '../schemas/build.json' with { type: 'json' };
 import { applyEcs } from './ecs.js';
@@ -77,6 +77,7 @@ export function inspectComposition(input: CompileInput): CompositionInspection {
       artifactMap.set(artifact.id, artifact);
     }
     const subscriptions = (input.subscriptions ?? []).map((s, i) => ruleSubscriptionSchema.parse(s, `/subscriptions/${i}`));
+    diagnostics.push(...validateSubscriptionEndpoints(subscriptions, '/subscriptions'));
     const subscriptionMap = new Map(subscriptions.map(s => [s.systemRuleSetId, s]));
     if (subscriptionMap.size !== subscriptions.length) error('DEPENDENCY_DUPLICATE', '/subscriptions', '系统规则订阅身份重复');
     const selectedSubscriptions = new Map<string, typeof subscriptions[number]>();

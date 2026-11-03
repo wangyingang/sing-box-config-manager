@@ -1,4 +1,4 @@
-import { resolveSubscriptionProjection, validateRuleSetUsages } from './rule-subscriptions.js';
+import { resolveSubscriptionProjection, validateRuleSetUsages, validateSubscriptionEndpoints } from './rule-subscriptions.js';
 import { PROFILES } from './profiles.js';
 import type { RecipeCompileInput, TemplateDocument, RuleSubscription } from './recipe-schema.js';
 import type { Diagnostic, Obj, RuleArtifact, RuleSetBinding } from './types.js';
@@ -89,6 +89,7 @@ export function resolveRecipeArtifacts(input: RecipeCompileInput, template: Temp
   });
   const templateRuleSets = resolve(template.resources.ruleSets ?? [], '/dependencies/templates/' + input.dependencies.templates.indexOf(template) + '/resources/ruleSets');
   const recipeRuleSets = resolve(input.recipe.resources.ruleSets ?? [], '/recipe/resources/ruleSets');
+  diagnostics.push(...validateSubscriptionEndpoints([...subscriptions.values()], '/dependencies/subscriptions'));
   const rules: { dns: Obj[]; route: Obj[] } = { dns: [], route: [] };
   const origins = new Map<string, { stepId: string; stepIndex: number; outputRuleIndex: number; preset?: string; presetRuleIndex?: number }>();
   for (const section of ['dns', 'route'] as const) {
