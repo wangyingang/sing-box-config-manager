@@ -38,6 +38,9 @@ importers:
 
   packages/rule-set-pipeline:
     dependencies:
+      ajv:
+        specifier: 8.20.0
+        version: 8.20.0
       ipaddr.js:
         specifier: 2.5.0
         version: 2.5.0
@@ -45,6 +48,9 @@ importers:
         specifier: 2.9.1
         version: 2.9.1
     devDependencies:
+      '@sing-box-config-manager/config-compiler':
+        specifier: workspace:*
+        version: link:../config-compiler
       '@types/node':
         specifier: 26.6.6
         version: 26.6.6

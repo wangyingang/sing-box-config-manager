@@ -3,17 +3,19 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "固定 V2Fly Release 的可追溯域名规则构建",
+  "description": "\u56fa\u5b9a V2Fly Release \u7684\u53ef\u8ffd\u6eaf\u57df\u540d\u89c4\u5219\u6784\u5efa",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test test/*.test.ts",
-    "test:release": "node --import tsx --test test/acceptance/*.test.ts",
+    "test:release": "pnpm --filter @sing-box-config-manager/config-compiler generate:validator && node --import tsx --test test/acceptance/*.test.ts",
     "build": "tsc -p tsconfig.build.json",
     "build:release": "node --import tsx src/cli.ts build",
-    "test:integration": "node --import tsx --test test/integration/*.test.ts",
+    "test:integration": "pnpm --filter @sing-box-config-manager/config-compiler generate:validator && node --import tsx --test test/integration/*.test.ts",
     "update": "node --import tsx src/cli.ts update",
     "status": "node --import tsx src/cli.ts status",
-    "test:publication": "node --import tsx --test test/acceptance/publication.test.ts"
+    "test:publication": "node --import tsx --test test/acceptance/publication.test.ts",
+    "activate": "node --import tsx src/cli.ts activate",
+    "test:activation": "pnpm --filter @sing-box-config-manager/config-compiler generate:validator && node --import tsx --test test/acceptance/activation.test.ts"
   },
   "exports": {
     ".": {
@@ -25,12 +27,14 @@
     "node": ">=24"
   },
   "dependencies": {
+    "ajv": "8.20.0",
     "ipaddr.js": "2.5.0",
     "yaml": "2.9.1"
   },
   "devDependencies": {
     "@types/node": "26.6.6",
     "tsx": "4.23.15",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "@sing-box-config-manager/config-compiler": "workspace:*"
   }
 }

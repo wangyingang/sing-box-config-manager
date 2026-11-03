@@ -1,9 +1,11 @@
 #!/usr/bin/env node
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { activateRules } from './activation.js';
+import { githubActivation } from './activation-transport.js';
 import { updateRules, readUpdateState } from './update.js';
 import { sha256 } from './release.js';
 import { buildRelease, buildNative, decodedTerms, NativeBuildError, type SourceRecord } from './index.js';
@@ -11,12 +13,28 @@ import { buildRelease, buildNative, decodedTerms, NativeBuildError, type SourceR
 async function main(): Promise<number> {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
-    options: { state: { type: 'string' }, release: { type: 'string' }, out: { type: 'string' }, 'expected-source': { type: 'string' }, binary: { type: 'string' }, help: { type: 'boolean' } },
+    options: { state: { type: 'string' }, release: { type: 'string' }, out: { type: 'string' }, 'expected-source': { type: 'string' }, binary: { type: 'string' }, candidate: { type: 'string' }, subscription: { type: 'string' }, 'expected-head': { type: 'string' }, branch: { type: 'string' }, help: { type: 'boolean' } },
   });
   if (values.help) {
-    console.log('Usage: update --state <directory> --binary <absolute-1.14.4-path> | status --state <directory> |  build --release <fixed-tag> --out <new-directory> --binary <absolute-1.14.4-path> [--expected-source <source.json>]');
+    console.log('Usage: activate --state <directory> --candidate <immutable-readback-url> --subscription <trusted-contract.json> --expected-head <full-commit> --binary <absolute-1.14.4-path> [--branch <existing-environment>] | update --state <directory> --binary <absolute-1.14.4-path> | status --state <directory> |  build --release <fixed-tag> --out <new-directory> --binary <absolute-1.14.4-path> [--expected-source <source.json>]');
     return 0;
   }
+  if (positionals.length === 1 && positionals[0] === 'activate') {
+    if (!values.state || !values.candidate || !values.subscription || !values['expected-head'] || !values.binary
+      || values.release || values.out || values['expected-source']) throw new Error('activate requires --state, --candidate, --subscription, --expected-head and --binary');
+    const result = await activateRules({ candidateEvidenceUrl: values.candidate,
+      subscription: JSON.parse(await readFile(values.subscription, 'utf8')), binary: values.binary,
+      expectedHead: values['expected-head'], transport: githubActivation(values.branch) });
+    const temporary = join(resolve(values.state), `active-${result.activation.id}.tmp`);
+    try {
+      await mkdir(resolve(values.state), { recursive: true });
+      await writeFile(temporary, JSON.stringify(result, null, 2) + '\n', { flag: 'wx' });
+      await rename(temporary, join(resolve(values.state), 'active-version.json'));
+    } catch (error) { throw new Error(`ACTIVATION_APPLIED_LOCAL_RECEIPT_PENDING: commit ${result.commit}`, { cause: error }); }
+    console.log(JSON.stringify(result));
+    return 0;
+  }
+  if (values.candidate || values.subscription || values['expected-head'] || values.branch) throw new Error('Activation options require activate');
   if (positionals.length === 1 && ['update', 'status'].includes(positionals[0])) {
     if (!values.state || values.release || values.out || values['expected-source']) throw new Error('update/status requires --state; fixed build options are not accepted');
     if (positionals[0] === 'status') {
