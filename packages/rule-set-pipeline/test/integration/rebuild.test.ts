@@ -3,13 +3,14 @@ import { copyFile, mkdtemp, readFile, rm, writeFile, appendFile } from 'node:fs/
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { verifyActivationCandidate } from '../../src/activation.js';
 import { rebuildRules, updateRules, readUpdateState } from '../../src/update.js';
 import { sha256 } from '../../src/release.js';
 import type { PublicationTransport } from '../../src/publication.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
 if (!binary) throw new Error('Set SING_BOX_TEST_BINARY to an absolute 1.14.4 binary path');
-const tag = 'fixed-issue-22';
+const tag = '20261102130044';
 function environment() {
   let input = JSON.stringify({ lists: [{ name: 'category-ai-!cn', length: 2, rules: ['domain:example.com', 'full:other.test'] }] });
   let assetId = 11, commitCount = 0, fail = '';
@@ -80,6 +81,28 @@ test('同一 Release 重建复验固定 ID、保留历史与成功处理记录�
   assert.deepEqual(after.pinned, before.pinned);
   assert.deepEqual(after.candidates[initial.candidate.id], before.candidates[initial.candidate.id]);
   assert.equal(after.candidates[rebuilt.candidate.id].status, 'verified');
+  const activationTransport = { branch: 'acceptance-issue-22-test', download: env.publication.download,
+    async head(): Promise<string> { throw new Error('must not access stable head'); },
+    async commit(): Promise<string> { throw new Error('must not activate'); } };
+  for (const candidate of [initial.candidate, rebuilt.candidate]) {
+    const verified = await verifyActivationCandidate({ candidateEvidenceUrl: candidate.evidenceUrl!, binary: binary! }, activationTransport);
+    assert.equal(verified.candidateId, candidate.id);
+  }
+  // Re-seal transport digests so unsupported contracts reach the version gate.
+  const buildKey = `${rebuilt.candidate.metadataCommit}/candidates/${rebuilt.candidate.id}/build.json`;
+  const evidenceKey = `${rebuilt.candidate.evidenceCommit}/candidates/${rebuilt.candidate.id}/readback.json`;
+  const originalBuild = env.stored.get(buildKey)!, originalEvidence = env.stored.get(evidenceKey)!;
+  for (const contracts of [null, { artifactManifest: 2, sourceFormat: 4, buildRecord: 1 },
+    { artifactManifest: 1, sourceFormat: 4 }, { artifactManifest: 1, sourceFormat: 4, buildRecord: 2 }]) {
+    const changedBuild = Buffer.from(JSON.stringify({ ...JSON.parse(originalBuild.toString()), contracts }));
+    const changedEvidence = JSON.parse(originalEvidence.toString());
+    const receipt = changedEvidence.readback.find((item: { url: string }) => item.url.endsWith('/build.json'));
+    receipt.sha256 = sha256(changedBuild); receipt.byteLength = changedBuild.length;
+    env.stored.set(buildKey, changedBuild);
+    env.stored.set(evidenceKey, Buffer.from(JSON.stringify(changedEvidence)));
+    await assert.rejects(verifyActivationCandidate({ candidateEvidenceUrl: rebuilt.candidate.evidenceUrl!, binary: binary! }, activationTransport), /Unsupported build contracts/);
+  }
+  env.stored.set(buildKey, originalBuild); env.stored.set(evidenceKey, originalEvidence);
   assert.equal(await readFile(join(directory, 'active-version.json'), 'utf8'), active);
   const count = env.requests.length;
   const remoteCount = env.stored.size;

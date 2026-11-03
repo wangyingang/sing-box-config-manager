@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import test from 'node:test';
+import { verifyActivationCandidate } from '../../src/activation.js';
 import { rebuildRules, updateRules, readUpdateState } from '../../src/update.js';
 import { githubPublication } from '../../src/publication.js';
 
@@ -62,10 +63,18 @@ test('固定官方 Release 真实重建、HTTPS 回读、历史保留与正常�
   const after = await readUpdateState(directory!);
   assert.deepEqual(after.state.processed, before.state.processed);
   assert.equal(after.activeRuleVersion, null);
+  const activationTransport = { branch: branch!, download: publication.download,
+    async head(): Promise<string> { throw new Error('must not access stable head'); },
+    async commit(): Promise<string> { throw new Error('must not activate'); } };
+  const activationPreflight = [];
+  for (const candidate of [first.candidate, rebuilt.candidate]) {
+    const verified = await verifyActivationCandidate({ candidateEvidenceUrl: candidate.evidenceUrl!, binary: binary! }, activationTransport);
+    activationPreflight.push({ candidateId: verified.candidateId, validation: verified.validation });
+  }
   const build = JSON.parse((await publication.download(`https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/${rebuilt.candidate.metadataCommit}/candidates/${rebuilt.candidate.id}/build.json`)).toString());
   assert.equal(build.operation, 'rebuild');
   const evidence = { date: new Date().toISOString(), branch, source, first, rebuilt, historyReadback,
-    firstState: JSON.parse(firstStateBytes), after, requests, build, skipped,
+    firstState: JSON.parse(firstStateBytes), after, requests, build, skipped, activationPreflight,
     skipProbe: 'normal update requested latest; acceptance adapter returned fixed sample Release metadata' };
   await writeFile(evidenceFile!, JSON.stringify(evidence, null, 2) + '\n', { flag: 'wx' });
 });

@@ -46,3 +46,12 @@ pnpm --config.verifyDepsBeforeRun=false --dir packages/rule-set-pipeline test:re
 真实验收先发布原候选，注入缺失 binary 的重建失败，再按原固定 Release 重试成功。重新下载原候选全部历史文件并核对摘要，成功处理记录与原值一致。正常更新跳过探针调用真实 `updateRules` 的 latest 路径，由验收适配器返回固定样本的真实 ID 元数据；只发生一次元数据查询，不下载资产或启动 binary。该探针不声称旧样本仍是官方 latest。
 
 本工单不执行激活、客户端自动更新或回滚；已有显式激活流程保持原样，相关回归随集成检查通过。
+
+
+## 审查与激活兼容性
+
+本地 Standards 审查没有 findings。Spec 审查发现新 `buildId` 纳入契约版本后，既有激活验证仍使用旧公式。已在 `verifyActivationCandidate` 中保留无 `contracts` 历史记录的原公式，并对新记录严格检查三项契约版本后使用新公式。
+
+新增从正常更新及重建实际输出进入 `verifyActivationCandidate` 的独立回归：修复前明确报 `Build identity mismatch`，修复后通过；null、缺项及不支持的契约版本被拒绝。旧候选相关原生集成回归仍通过。修复后完整 `check`、全量原生集成与 #22 独立 8 项原生测试通过。
+
+已对上述两个真实远程候选执行只读激活前复验，两者均通过；结果附于 evidence 的 `activationPreflight`。验证 transport 禁止访问稳定 head 和提交，未执行激活。

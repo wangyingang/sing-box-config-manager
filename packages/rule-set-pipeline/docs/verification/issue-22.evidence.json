@@ -505,5 +505,33 @@
     "evidenceUrl": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/843b7a80b40b744cf70079bde067ca492c1c1b63/candidates/2fd076eb-d65a-4088-809e-0316cfe76ece/readback.json",
     "activeRuleVersion": null
   },
-  "skipProbe": "normal update requested latest; acceptance adapter returned fixed sample Release metadata"
+  "skipProbe": "normal update requested latest; acceptance adapter returned fixed sample Release metadata",
+  "activationPreflight": [
+    {
+      "candidateId": "2fd076eb-d65a-4088-809e-0316cfe76ece",
+      "validation": {
+        "tool": {
+          "path": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+          "version": "1.14.4",
+          "identity": "sing-box version 1.14.4\n\nEnvironment: go1.26.10 darwin/arm64\nTags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0\nRevision: c005f35300ce76427dc285481ec5695f5b179cd2\nCGO: enabled",
+          "sha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2"
+        },
+        "buildId": "194d33f9d4f0a8a961839a5551480dff9456fe79b3aec3adce42d9f0b2b85969",
+        "nativeBuildId": "77ad50641f764c7c501319f23d80279a9b3089a500f336965735ed7b31d6384d"
+      }
+    },
+    {
+      "candidateId": "0e83e2a7-6c13-4c7b-b76c-b0de444430e5",
+      "validation": {
+        "tool": {
+          "path": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+          "version": "1.14.4",
+          "identity": "sing-box version 1.14.4\n\nEnvironment: go1.26.10 darwin/arm64\nTags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0\nRevision: c005f35300ce76427dc285481ec5695f5b179cd2\nCGO: enabled",
+          "sha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2"
+        },
+        "buildId": "194d33f9d4f0a8a961839a5551480dff9456fe79b3aec3adce42d9f0b2b85969",
+        "nativeBuildId": "77ad50641f764c7c501319f23d80279a9b3089a500f336965735ed7b31d6384d"
+      }
+    }
+  ]
 }

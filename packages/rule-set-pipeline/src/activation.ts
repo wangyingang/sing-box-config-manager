@@ -71,7 +71,15 @@ export async function verifyActivationCandidate(options: Pick<ActivationOptions,
     && build.tool?.version === '1.14.4' && /^[a-f0-9]{64}$/.test(build.tool.sha256)
     && evidence.native?.status === 'passed' && evidence.native.semanticRoundTrip === true
     && evidence.tool?.sha256 === build.tool.sha256, 'Incomplete native validation record');
-  requireThat(build.buildId === evidence.buildId && build.buildId === sha256(JSON.stringify({ source, tools: build.tools, nativeBuildId: build.nativeBuildId })), 'Build identity mismatch');
+  // Historical candidates predate explicit contract versions in the build identity.
+  const identity = { source, tools: build.tools, nativeBuildId: build.nativeBuildId };
+  if (build.contracts !== undefined) {
+    requireThat(build.contracts !== null && typeof build.contracts === 'object' && !Array.isArray(build.contracts)
+      && Object.keys(build.contracts).length === 3 && build.contracts.artifactManifest === 1
+      && build.contracts.sourceFormat === 4 && build.contracts.buildRecord === 1, 'Unsupported build contracts');
+  }
+  requireThat(build.buildId === evidence.buildId && build.buildId === sha256(JSON.stringify(
+    build.contracts === undefined ? identity : { ...identity, contracts: build.contracts })), 'Build identity mismatch');
   requireThat(['inputCount', 'convertedCount', 'invalidCount', 'unsupportedCount', 'duplicateCount', 'outputTermCount']
     .every(key => Number.isSafeInteger(report[key]) && report[key] >= 0), 'Invalid conversion counts');
   requireThat(report.status === 'converted' && report.inputCount > 0 && report.inputCount === report.convertedCount
