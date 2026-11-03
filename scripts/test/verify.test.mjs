@@ -161,6 +161,26 @@ test('preflight process failures preserve launcher identity, original exit code 
   }
 }));
 
+test('successful version stdout is accepted while pnpm and binary stderr warnings remain in evidence', () => fixture(async ({ root, launch }) => {
+  const launcher = await pnpm(root, 'warning.cjs', `
+    if (process.argv[2] === '--version') { console.error('launcher warning'); console.log('10.33.2'); }
+    else console.log('ℹ tests 1\\nℹ pass 1\\nℹ fail 0\\nℹ skipped 0');
+  `);
+  const binary = await binaryFixture(root);
+  await writeFile(binary, `#!/usr/bin/env node\nconsole.error('binary warning'); console.log('sing-box version 1.14.4');\n`);
+  const output = join(root, 'evidence');
+  const result = await launch(['--pnpm', launcher, '--binary', binary, '--out', output]);
+  assert.equal(result.code, 0, result.stderr);
+  const summary = JSON.parse(await readFile(join(output, 'summary.json'), 'utf8'));
+  assert.equal(summary.tools.pnpm.actual, '10.33.2');
+  assert.equal(summary.tools.singBox.identity, 'sing-box version 1.14.4');
+  for (const record of summary.preflight) {
+    assert.match(await readFile(join(output, record.log), 'utf8'), /warning/);
+    const bytes = await readFile(join(output, record.stdout.log));
+    assert.equal(record.stdout.sha256, createHash('sha256').update(bytes).digest('hex'));
+  }
+}));
+
 test('full verification runs ordered checks, captures separate suites and client evidence, and selects only the read-only Release test', () => fixture(async ({ root, launch }) => {
   const launcher = await pnpm(root, 'pinned.cjs', `
     const fs = require('node:fs');

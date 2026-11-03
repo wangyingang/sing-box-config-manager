@@ -39,12 +39,13 @@ function testCounts(log) {
 }
 
 async function runStep(step, env, output) {
-  const record = { name: step.name, command: step.command, cwd: step.cwd, startedAt: new Date().toISOString(), log: `${step.name}.log` };
+  const record = { name: step.name, command: step.command, cwd: step.cwd, startedAt: new Date().toISOString(), log: `${step.name}${step.captureStdout ? '.stderr' : ''}.log` };
   const log = await open(join(output, record.log), 'wx', 0o600);
-  let result;
+  let result, stdout;
   try {
+    if (step.captureStdout) stdout = await open(join(output, `${step.name}.stdout.log`), 'wx', 0o600);
     result = await new Promise(resolve => {
-      const child = spawn(step.command[0], step.command.slice(1), { cwd: step.cwd, env, detached: true, stdio: ['ignore', log.fd, log.fd] });
+      const child = spawn(step.command[0], step.command.slice(1), { cwd: step.cwd, env, detached: true, stdio: ['ignore', stdout?.fd ?? log.fd, log.fd] });
       let error, interrupted, forceStop;
       const send = signal => { if (child.pid) { try { process.kill(-child.pid, signal); } catch (cause) { if (cause.code !== 'ESRCH') error = cause.message; } } };
       const stop = signal => {
@@ -63,8 +64,12 @@ async function runStep(step, env, output) {
         resolve({ exitCode, signal, ...(error ? { error } : {}), ...(interrupted ? { interrupted } : {}) });
       });
     });
-  } finally { await log.close(); }
+  } finally { await stdout?.close(); await log.close(); }
   const bytes = await readFile(join(output, record.log));
+  if (step.captureStdout) {
+    const path = `${step.name}.stdout.log`, bytes = await readFile(join(output, path));
+    record.stdout = { log: path, sha256: sha256(bytes), byteLength: bytes.length };
+  }
   return { ...record, ...result, finishedAt: new Date().toISOString(), sha256: sha256(bytes), byteLength: bytes.length, suites: testCounts(bytes.toString()) };
 }
 
@@ -102,10 +107,10 @@ async function main() {
     const path = await launcherPath(values.pnpm ?? 'pnpm');
     const command = /\.[cm]?js$/.test(path) ? [process.execPath, path] : [path];
     const preflight = async (name, command) => {
-      const record = await runStep({ name, command, cwd: root, timeout: 30_000 }, process.env, output);
+      const record = await runStep({ name, command, cwd: root, timeout: 30_000, captureStdout: true }, process.env, output);
       summary.preflight.push(record);
       if (record.exitCode !== 0 || record.interrupted) throw new Error(`${name} failed (${record.interrupted ?? record.signal ?? record.exitCode ?? record.error}); see ${record.log}`);
-      return (await readFile(join(output, record.log), 'utf8')).trim();
+      return (await readFile(join(output, record.stdout.log), 'utf8')).trim();
     };
     summary.tools.pnpm = { expected, launcher: path, launcherSha256: sha256(await readFile(path)) };
     const actual = await preflight('pnpm-version', [...command, '--version']);
