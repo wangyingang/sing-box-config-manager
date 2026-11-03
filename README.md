@@ -1,10 +1,10 @@
 # sing-box-config-manager
 
-面向 sing-box 的配置管理平台，采用三模块 pnpm monorepo。Config Compiler 已完成 D06 最小实现，另外两个模块为骨架。
+面向 sing-box 的配置管理平台，采用三模块 pnpm monorepo。Config Compiler 已完成 D06 最小实现，Rule Set Pipeline 已支持固定官方 Release 的本地 JSON 构建，Web App 为骨架。
 
 | 模块 | 目录 | 当前状态 |
 | --- | --- | --- |
-| Rule Set Pipeline | [packages/rule-set-pipeline](packages/rule-set-pipeline/README.md) | 骨架；后续实现规则采集、转换、编译和发布 |
+| Rule Set Pipeline | [packages/rule-set-pipeline](packages/rule-set-pipeline/README.md) | 固定 V2Fly Release 下载、摘要校验、域名 JSON 转换和来源追溯；编译和发布待实现 |
 | Config Compiler | [packages/config-compiler](packages/config-compiler/README.md) | 固定修订 Recipe 解析、配置组合、校验、受限 ECS 修改和本地发布适配器 |
 | Configuration Manager Web App | [apps/web](apps/web/README.md) | 骨架；通过 workspace 依赖调用 Compiler |
 
@@ -40,7 +40,7 @@ CI 的 sing-box 版本读取自 [Schema 构建配置](packages/config-compiler/s
 
 测试仅在临时目录 merge/check，不启动代理、不修改旧配置仓库。五份旧配置候选保持生成语义并通过原生 check；旧 Android 配置含不支持的进程规则，正式 compile 和发布会拒绝它。
 
-当前测试和构建来自 Compiler；两个骨架模块没有占位构建或空测试。递归命令只执行模块实际声明的脚本。单独操作 Compiler：
+当前测试和构建来自 Compiler 与 Pipeline；Web App 骨架没有占位构建或空测试。递归命令只执行模块实际声明的脚本。单独操作 Compiler：
 
 ```sh
 pnpm --filter @sing-box-config-manager/config-compiler check
