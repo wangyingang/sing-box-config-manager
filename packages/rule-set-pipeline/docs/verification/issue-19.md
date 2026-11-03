@@ -55,3 +55,5 @@ Compiler 只生成一次配置；启动前一次性设置测试用 `update_inter
 固定比较基线 `3258f8a376f4da0c7c018ea13fd4a66150bf4629`，实现提交 `23e22c1`。Standards 与 Spec 由独立 subagents 分别审查完整 diff，均为 0 项发现。Standards 独立执行 `git diff --check`；Spec 独立重跑 16 项 transport 与 25 项真实 binary 激活测试，共 41 项全部通过，无跳过。审查未重复执行外部写入；官方激活和 A／B 更新部分复核已保存证据与测试实现。
 
 首次 PR 原生 CI 在干净 checkout 中发现跨包测试过早加载尚未生成的 Compiler validator。已通过测试用 workspace devDependency 建立执行顺序，并在集成与验收脚本显式准备 validator；移除本地 generated 文件后重跑全部原生测试通过。Pipeline 运行时代码仍不导入 Compiler。随后补强旧激活记录读取，并在已激活的同一隔离分支再次完成真实官方候选验收。最终回归为常规 180 项、原生 79 项，全部通过。
+
+最终代码提交 `7656d80` 的 Standards／Spec 增量复审同样均为 0 项发现。Standards 独立重跑 28 项 transport 测试；Spec 独立重跑 28 项 transport 与 26 项真实 binary 激活测试，共 54 项通过，无跳过。

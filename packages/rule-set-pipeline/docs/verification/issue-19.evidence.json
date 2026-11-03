@@ -432,7 +432,18 @@
       "failed": 0,
       "skipped": 0
     },
-    "remoteWriteRerun": false
+    "remoteWriteRerun": false,
+    "finalCodeHead": "7656d80",
+    "incremental": {
+      "standardsFindings": 0,
+      "specFindings": 0,
+      "standardsTransportPassed": 28,
+      "specTransportPassed": 28,
+      "specNativeActivationPassed": 26,
+      "specPassed": 54,
+      "failed": 0,
+      "skipped": 0
+    }
   },
   "ciCorrection": {
     "initialRun": "https://github.com/wangyingang/sing-box-config-manager/actions/runs/41696126618",
