@@ -38,6 +38,9 @@ importers:
 
   packages/rule-set-pipeline:
     dependencies:
+      ipaddr.js:
+        specifier: 2.5.0
+        version: 2.5.0
       yaml:
         specifier: 2.9.1
         version: 2.9.1

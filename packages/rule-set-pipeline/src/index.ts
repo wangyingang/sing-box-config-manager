@@ -39,3 +39,8 @@ export async function buildRelease(options: ReleaseOptions): Promise<BuildResult
     tools: { pipeline: packageInfo.version, conversionPolicy: 'v2fly-domain-v1', node: process.versions.node, yaml: yamlPackage.version, sourceFormat: 4 },
     json, artifact, usages: { route: artifact, 'dns-query': artifact, 'dns-response': { status: 'unavailable', reason: 'empty' } } };
 }
+
+export { buildNative, inspectBinary, NativeBuildError } from './native.js';
+export type { NativeBuild, NativeTool, BuiltArtifact } from './native.js';
+export { projectTerms, renderRuleJson, decodedTerms } from './projection.js';
+export type { BuildTerm, Usage } from './projection.js';

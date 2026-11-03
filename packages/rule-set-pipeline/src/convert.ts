@@ -1,3 +1,4 @@
+import { renderRuleJson } from './projection.js';
 import { diagnostic, emptyReport, TERM_TYPES, type ConversionReport, type InputRule, type RuleTerm, type TermType } from './types.js';
 
 const mapping: Record<string, TermType> = {
@@ -68,10 +69,5 @@ export function convertRules(rules: readonly InputRule[]): ConversionResult {
 }
 
 export function renderDomainJson(terms: readonly RuleTerm[]): string {
-  if (!terms.length) throw new Error('不能生成空匹配文件');
-  // One field per rule keeps the IR's OR semantics even across predicate types.
-  return JSON.stringify({ version: 4, rules: TERM_TYPES.flatMap((type) => {
-    const values = terms.filter((term) => term.type === type).map((term) => term.value);
-    return values.length ? [{ [type]: values }] : [];
-  }) }, null, 2) + '\n';
+  return renderRuleJson(terms);
 }
