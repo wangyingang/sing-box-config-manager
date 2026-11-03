@@ -22,6 +22,7 @@
     "node": ">=24"
   },
   "dependencies": {
+    "ipaddr.js": "2.5.0",
     "yaml": "2.9.1"
   },
   "devDependencies": {

@@ -3,6 +3,7 @@ import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { promisify } from 'node:util';
+import { sameSemantics } from './semantics.js';
 import { sha256 } from './release.js';
 import { decodedTerms, projectTerms, renderRuleJson, USAGES, type BuildTerm, type Usage } from './projection.js';
 
@@ -64,8 +65,10 @@ export async function buildNative(terms: readonly BuildTerm[], binary: string): 
       await writeFile(join(directory, source), json);
       await run(['rule-set', 'compile', source, '-o', srs]);
       await run(['rule-set', 'decompile', srs, '-o', decoded]);
+      let decodedProjection: BuildTerm[];
       try {
-        if (JSON.stringify(decodedTerms(JSON.parse(await readFile(join(directory, decoded), 'utf8')))) !== JSON.stringify(projected)) {
+        decodedProjection = decodedTerms(JSON.parse(await readFile(join(directory, decoded), 'utf8')));
+        if (!sameSemantics(projected, decodedProjection)) {
           throw new Error('Decoded semantics differ from projected Rule IR');
         }
       } catch (error) { throw new NativeBuildError(`Semantic round trip failed: ${String(error)}`, steps); }
@@ -75,7 +78,7 @@ export async function buildNative(terms: readonly BuildTerm[], binary: string): 
         await run(['rule-set', 'match', file, 'native-validation.invalid', '--format', format]);
         const content = await readFile(join(directory, file));
         artifacts.push({ file, format, sha256: sha256(content), bytes: content.length,
-          termCount: projected.length, requiredCapabilities: [], content });
+          termCount: format === 'source' ? projected.length : decodedProjection.length, requiredCapabilities: [], content });
       }
       const files = [source, srs];
       filesByContent.set(json, files);
@@ -83,7 +86,7 @@ export async function buildNative(terms: readonly BuildTerm[], binary: string): 
     }
     // Guard against a binary replaced during validation; no passed record on drift.
     if (sha256(await readFile(tool.path)) !== tool.sha256) throw new NativeBuildError('Binary changed during build', steps);
-    const buildId = sha256(JSON.stringify({ policy: 'native-projection-v1', sourceFormat: 4,
+    const buildId = sha256(JSON.stringify({ policy: 'native-projection-v2', sourceFormat: 4,
       tool: tool.sha256, terms: projections.route }));
     return { status: 'built-validated', tool, buildId, artifacts, usages,
       validation: { status: 'passed', semanticRoundTrip: true, steps } };

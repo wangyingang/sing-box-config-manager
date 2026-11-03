@@ -21,7 +21,7 @@ Conversion Report：214 条输入全部转换，13 条属性记录全部保留�
 /Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box
 ```
 
-版本 `1.14.4`，Go `go1.26.10`，平台 `darwin/arm64`，revision `c005f35300ce76427dc285481ec5695f5b179cd2`，binary SHA-256 `6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2`。未运行 `sbvm use`，没有切换或替换全局 binary。CLI 构建身份 `e93b8baf0a37d2271c8614b2ac4cef0184db06fd3b9c95e9dcf9bc2e69f711f2` 关联来源、转换工具和 native 构建身份；不同平台的 binary 摘要可能不同。
+版本 `1.14.4`，Go `go1.26.10`，平台 `darwin/arm64`，revision `c005f35300ce76427dc285481ec5695f5b179cd2`，binary SHA-256 `6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2`。未运行 `sbvm use`，没有切换或替换全局 binary。CLI 构建身份 `72bbeccb72bd286594d5dac19bb924d5268d3df421950918e36555bb84062cea` 关联来源、转换工具和 native 构建身份；不同平台的 binary 摘要可能不同。
 
 ## 原生行为与失败边界
 
@@ -39,8 +39,8 @@ Conversion Report：214 条输入全部转换，13 条属性记录全部保留�
 
 | 命令 | 结果 |
 | --- | --- |
-| `npx --yes pnpm@10.33.2 check` | Pipeline 46 项、Compiler 81 项通过；类型检查、构建与 workspace smoke 通过 |
-| `SING_BOX_TEST_BINARY=<binary> npx --yes pnpm@10.33.2 test:integration` | Pipeline 5 项、既有 Compiler 26 项通过，无失败或跳过 |
+| `npx --yes pnpm@10.33.2 check` | Pipeline 49 项、Compiler 81 项通过；类型检查、构建与 workspace smoke 通过 |
+| `SING_BOX_TEST_BINARY=<binary> npx --yes pnpm@10.33.2 test:integration` | Pipeline 8 项、既有 Compiler 26 项通过，无失败或跳过 |
 | `SING_BOX_TEST_BINARY=<binary> npx --yes pnpm@10.33.2 --dir packages/rule-set-pipeline test:release` | 1 项通过；完整来源下载、两次独立构建、摘要／字节核对及失败目录检查 |
 | `git diff --check` | 通过 |
 
@@ -52,4 +52,20 @@ Conversion Report：214 条输入全部转换，13 条属性记录全部保留�
 
 ## 交付审查
 
-按 `code-review` 流程以 `0c92452...HEAD` 分别执行独立 Standards／Spec 审查。Standards 发现根 README 仍称编译待实现，已同步并由原审查者只读复核；最终 0 项待处理 finding。Spec 审查 0 项 finding，核对 108 条实际匹配记录与 #16 验收要求，没有发现 #17 契约变更。审查者没有重跑联网验收；实际运行结果来自上述执行证据。
+首次交付按 `code-review` 流程以 `0c92452...8d74428` 分别执行 Standards／Spec 审查；根 README 状态问题已修复。当时的 108 条实际匹配记录未覆盖相邻 CIDR 和 term 字段顺序。随后针对 PR #23 的复审发现以下两项 P2，本次已补充回归并修复；首次审查的无遗留结论不能代替这些边界的验证。
+
+
+## PR #23 两项 P2 修复验收
+
+修复基线 `8d744288ac1c1947663446a2e899d5bf937225ac`。先加入公开 `buildNative` 边界的回归测试；指定同一真实 1.14.4 binary 执行，两项均因 `Semantic round trip failed` 失败，修复后全部通过。机器证据的 `beforeFix` 保存执行命令与失败结果；`native` 中的 `regression` 记录保存修复后的实际结果。
+
+- term 规范化固定复制为 `{type, value}`，字段顺序与枚举顺序不再改变构建结果。原字段顺序与反向字段／枚举顺序分别构建，所有 JSON／SRS 字节、元数据、用途映射和构建身份一致。
+- CIDR 仅在比较层转换为精确地址区间集合；使用 Pipeline 显式依赖的既有锁定版本 `ipaddr.js 2.5.0` 解析，不依赖 Compiler 运行时代码。IPv4 的两个 `/25` 与 IPv6 的两个 `/33` 经真实解码归并为 `/24`／`/32`，纯 IP 和混合 IR 均通过。JSON 仍保留四条原始 IP term；SRS 实际解码为两条。对应两种文件分别记录实际 term 数；混合 Route 的 JSON／SRS 分别为 5／3 条。
+- 按 IPv4 两个半段、网段边缘、网段外地址及 IPv6 两个半段执行两种文件格式的真实匹配；纯 IP 与混合 IR 各自逆序重复构建，字节及身份一致。新增 80 条匹配结果，总计 188 条，全部符合预期。
+- 故障注入将解码 IPv4 扩大为 `/23`、丢失 IPv4 半段或丢失 IPv6 半段，三种情况仍拒绝构建。独立比较测试另覆盖包含／重复网段、IPv6 文本表示、完整地址空间、单 IP、集合缺口和地址族变化；没有将不等价内容放行。
+
+原生验证策略升级为 `native-projection-v2`，构建身份随之更新，避免将不同验证策略标为同一构建。真实官方样本仍为 214 个 term；JSON／SRS 的字节、摘要和大小与上述表格一致。
+
+本次重新执行完整 `pnpm check`（49 + 81 项）、指定绝对 binary 的全仓库 native 集成（8 + 26 项）及联网 `test:release`（1 项），均通过，无失败或跳过。联网验收重新下载完整固定 Release 两次，逐字节核对两种产物，不使用首次运行结果代替本次验证。根锁文件只增加 Pipeline 对现有 `ipaddr.js 2.5.0` 的直接依赖，没有改变 Compiler importer、任何 #17 文件或共享订阅契约。
+
+修复后以 `8d74428...HEAD` 执行独立 Standards／Spec 两轴复核，均为 0 项 finding。Standards 审查者另行运行 3 项语义比较测试通过；两位审查者均只核对既有完整 native／Release 执行证据，没有把证据审阅表述为独立重跑。

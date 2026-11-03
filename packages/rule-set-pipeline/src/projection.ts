@@ -12,7 +12,7 @@ export function normalizeTerms(terms: readonly BuildTerm[]): BuildTerm[] {
       throw new Error('Invalid or empty Rule IR term');
     }
   }
-  return [...new Map(terms.map(term => [JSON.stringify([term.type, term.value]), term])).values()]
+  return [...new Map(terms.map(term => [JSON.stringify([term.type, term.value]), { type: term.type, value: term.value }])).values()]
     .sort((a, b) => BUILD_TERM_TYPES.indexOf(a.type) - BUILD_TERM_TYPES.indexOf(b.type)
       || (a.value < b.value ? -1 : a.value > b.value ? 1 : 0));
 }

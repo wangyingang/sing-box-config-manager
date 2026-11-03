@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import test from 'node:test';
-import { buildNative, convertRules, readTargetList, type BuildTerm, type NativeBuild } from '../../src/index.js';
+import { buildNative, convertRules, readTargetList, NativeBuildError, type BuildTerm, type NativeBuild } from '../../src/index.js';
 import { sha256 } from '../../src/release.js';
 
 const exec = promisify(execFile);
@@ -124,5 +124,97 @@ test('compile, decode, load and semantic mismatch faults never return passed bui
       await chmod(wrapper, 0o700);
       await assert.rejects(buildNative(semantics, wrapper), stage === 'version' ? /Expected sing-box 1\.14\.4/ : stage === 'semantic' ? /Semantic round trip failed/ : /injected-/);
     }
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('term field insertion order does not change validated bytes or build identity', async () => {
+  const first = await buildNative(semantics, binary);
+  const reordered = semantics.map(({ type, value }) => ({ value, type })).reverse();
+  const second = await buildNative(reordered, binary);
+  assert.equal(second.buildId, first.buildId);
+  assert.deepEqual(second.artifacts, first.artifacts);
+  assert.deepEqual(second.usages, first.usages);
+  console.log(JSON.stringify({ regression: 'term-field-order', buildId: first.buildId,
+    reorderedBuildId: second.buildId, identicalArtifacts: true, tool: second.tool,
+    validation: second.validation }));
+});
+
+test('native CIDR coalescing preserves pure IP and mixed projection semantics without rewriting source terms', async () => {
+  const adjacent: BuildTerm[] = [
+    { type: 'ip_cidr', value: '192.0.2.0/25' }, { type: 'ip_cidr', value: '192.0.2.128/25' },
+    { type: 'ip_cidr', value: '2001:db8::/33' }, { type: 'ip_cidr', value: '2001:db8:8000::/33' },
+  ];
+  for (const terms of [adjacent, [semantics[0], ...adjacent]]) {
+    const build = await buildNative(terms, binary);
+    const repeat = await buildNative([...terms].reverse(), binary);
+    assert.equal(build.buildId, repeat.buildId);
+    assert.deepEqual(build.artifacts, repeat.artifacts);
+    for (const artifact of build.artifacts.filter(artifact => artifact.format === 'source')) {
+      const ipRules = JSON.parse(artifact.content.toString()).rules.filter((rule: object) => 'ip_cidr' in rule);
+      if (!artifact.file.startsWith('dns-query')) {
+        assert.deepEqual(ipRules, [{ ip_cidr: adjacent.map(term => term.value).sort() }]);
+      }
+    }
+    const probes: [string, boolean][] = [['192.0.2.0', true], ['192.0.2.127', true],
+      ['192.0.2.128', true], ['192.0.2.255', true], ['192.0.1.255', false], ['192.0.3.0', false],
+      ['2001:db8::1', true], ['2001:db8:8000::1', true], ['2001:db9::1', false]];
+    await matches(build, probes.flatMap(([value, expected]) =>
+      ['route', 'dns-response'].map(usage => [usage, value, expected] as [string, string, boolean])));
+    if (terms.length > adjacent.length) {
+      await matches(build, [['dns-query', 'example.test', true], ['dns-query', '192.0.2.1', false],
+        ['route', 'example.test', true], ['dns-response', 'example.test', false]]);
+    }
+    for (const artifact of build.artifacts) {
+      const domainCount = artifact.file.startsWith('dns-response') || terms.length === adjacent.length ? 0 : 1;
+      const ipCount = artifact.file.startsWith('dns-query') ? 0 : artifact.format === 'source' ? 4 : 2;
+      assert.equal(artifact.termCount, domainCount + ipCount);
+    }
+    // Independently inspect actual decoder output to lock down the trigger.
+    const directory = await mkdtemp(join(tmpdir(), 'cidr-regression-'));
+    try {
+      const srs = build.artifacts.find(artifact => artifact.file.endsWith('.srs'))!;
+      const path = join(directory, srs.file), decoded = join(directory, 'decoded.json');
+      await writeFile(path, srs.content);
+      await exec(binary, ['rule-set', 'decompile', path, '-o', decoded]);
+      const result = JSON.parse(await readFile(decoded, 'utf8'));
+      assert.deepEqual(result.rules.filter((rule: object) => 'ip_cidr' in rule), [
+        { ip_cidr: ['192.0.2.0/24', '2001:db8::/32'] },
+      ]);
+      console.log(JSON.stringify({ regression: 'adjacent-cidr', input: terms, decoded: result,
+        buildId: build.buildId, identicalRepeat: true, tool: build.tool,
+        artifacts: build.artifacts.map(({ content: _content, ...metadata }) => metadata),
+        validation: build.validation }));
+    } finally { await rm(directory, { recursive: true, force: true }); }
+  }
+});
+
+test('decoded CIDR widening and missing IPv4 or IPv6 halves still block validated builds', async () => {
+  const terms: BuildTerm[] = [
+    { type: 'ip_cidr', value: '192.0.2.0/25' }, { type: 'ip_cidr', value: '192.0.2.128/25' },
+    { type: 'ip_cidr', value: '2001:db8::/33' }, { type: 'ip_cidr', value: '2001:db8:8000::/33' },
+  ];
+  const directory = await mkdtemp(join(tmpdir(), 'cidr-drift-'));
+  const failures: { decoded: string[]; message: string; steps: unknown[] }[] = [];
+  try {
+    for (const [index, decoded] of [
+      ['192.0.2.0/23', '2001:db8::/32'],
+      ['192.0.2.0/25', '2001:db8::/32'],
+      ['192.0.2.0/24', '2001:db8::/33'],
+    ].entries()) {
+      const wrapper = join(directory, `drift-${index}`);
+      const json = JSON.stringify({ version: 2, rules: [{ ip_cidr: decoded }] });
+      await writeFile(wrapper, `#!/bin/sh
+if [ "$2" = decompile ]; then printf '%s' '${json}' > "$5"; exit 0; fi
+exec '${binary.replaceAll("'", "'\\''")}' "$@"
+`);
+      await chmod(wrapper, 0o700);
+      await assert.rejects(buildNative(terms, wrapper), (error: unknown) => {
+        assert.ok(error instanceof NativeBuildError);
+        assert.match(error.message, /Semantic round trip failed/);
+        failures.push({ decoded, message: error.message, steps: error.steps });
+        return true;
+      });
+    }
+    console.log(JSON.stringify({ regression: 'cidr-drift-rejection', input: terms, failures }));
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
