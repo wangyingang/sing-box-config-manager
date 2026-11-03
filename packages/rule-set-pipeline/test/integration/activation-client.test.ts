@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import test from 'node:test';
 import { compile, type CompileInput, type RuleSubscription } from '../../../config-compiler/src/index.js';
-import { activateRules } from '../../src/activation.js';
+import { activateRules, rollbackRules } from '../../src/activation.js';
 import { ARTIFACT_REPOSITORY } from '../../src/publication.js';
 import { sha256 } from '../../src/release.js';
 import { syntheticCandidate } from './activation-client-fixture.js';
@@ -79,7 +79,7 @@ async function proxyDns(port: number) {
 
 // All network redirection, trust material and accelerated timing belong only to
 // this isolated process. No hosts, production endpoint or actual client is changed.
-test('正式激活 A/B 后同一 Compiler 配置及运行实例自动更新 Route 与 DNS 新请求行为', { timeout: 60_000 }, async () => {
+test('正式激活 A/B 并回滚 A 后同一 Compiler 配置及运行实例恢复 Route 与 DNS 新请求行为', { timeout: 60_000 }, async () => {
   const directory = await mkdtemp(join(tmpdir(), 'activation-client-'));
   const servers: Server[] = [], sockets = new Set<Duplex>();
   const dns = createSocket('udp4');
@@ -188,10 +188,14 @@ test('正式激活 A/B 后同一 Compiler 配置及运行实例自动更新 Rout
     const before = await observe('route-fallback-A', '192.0.2.10');
     const activeB = await activateRules({ candidateEvidenceUrl: b.candidateEvidenceUrl, subscription, binary, expectedHead: head, transport });
     const after = await observe('route-matched-B', '192.0.2.20');
+    const rolledBack = await rollbackRules({ historicalActivationCommit: activeA.commit, subscription, binary, expectedHead: head, transport });
+    const restored = await observe('route-fallback-A', '192.0.2.10');
+    assert.equal(rolledBack.activation.candidateId, a.id);
+    assert.equal(rolledBack.activation.historicalActivationCommit, activeA.commit);
     assert.equal(child.pid, pid); assert.equal(child.exitCode, null);
     assert.deepEqual(await readFile(configPath), configBytes);
-    const evidence = { source: 'synthetic controlled fixture, not an official Release', a, b, activeA, activeB,
-      client: { pid, binary, configSha256: sha256(configBytes), sameProcess: true, sameConfig: true, updateInterval: '1s' }, before, after, published };
+    const evidence = { source: 'synthetic controlled fixture, not an official Release', a, b, activeA, activeB, rolledBack,
+      client: { pid, binary, configSha256: sha256(configBytes), sameProcess: true, sameConfig: true, updateInterval: '1s' }, before, after, restored, published };
     console.log(JSON.stringify({ activationClient: evidence }));
     if (process.env.RULE_ACTIVATION_CLIENT_EVIDENCE) await writeFile(process.env.RULE_ACTIVATION_CLIENT_EVIDENCE, JSON.stringify(evidence, null, 2) + '\n');
   } catch (error) {
