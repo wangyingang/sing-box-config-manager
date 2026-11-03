@@ -47,11 +47,11 @@ Route／DNS 请求复用文件，DNS 响应为 `unavailable: empty`；target 1.1
 | 检查 | 结果 |
 | --- | --- |
 | `pnpm check` | Pipeline 56、Compiler 96 项通过；typecheck、build、workspace smoke 通过 |
-| `SING_BOX_TEST_BINARY=<binary> pnpm test:integration` | Pipeline 25、Compiler 26 项通过，无失败或跳过 |
+| `SING_BOX_TEST_BINARY=<binary> pnpm test:integration` | Pipeline 25、Compiler 27 项通过，无失败或跳过 |
 | 显式授权环境下 `test:publication` | 固定完整官方样本真实发布、七份 HTTPS 回读与持久成功状态，1 项通过，无跳过 |
 | 正常 `update` + 新进程 `update` / `status` | latest 发布、无新版本跳过及磁盘恢复证据通过 |
 | `git diff --check` | 通过 |
 
-`2c8209b...93071e2` 由独立 Standards／Spec subagents 完整审查，各为 0 findings；审查者未额外重跑测试或发布。随后增加排他锁断言并重跑 `pnpm check`，补充本次实测证据。PR 远程 CI 以最新提交为准，本机结果不能替代它。
+`2c8209b...93071e2` 由独立 Standards／Spec subagents 完整审查，各为 0 findings；审查者未额外重跑测试或发布。随后增加排他锁断言并重跑 `pnpm check`，补充本次实测证据。增量 Standards 审查发现文档误写 Compiler native 数量为 26；已按原始日志及 JSON 修正为 27，无遗留问题。PR 远程 CI 以最新提交为准，本机结果不能替代它。
 
 显式激活、稳定入口、实际客户端配置及客户端更新／缓存／回滚未执行，由 #19 及后续工单交付。未手动关闭 #18、未合并实现 PR。

@@ -352,6 +352,11 @@
     "head": "93071e2a9512ff06fee922199f779bf67798d237",
     "standardsFindings": 0,
     "specFindings": 0,
-    "independentlyReranTests": false
+    "independentlyReranTests": false,
+    "incrementalStandards": {
+      "findings": 1,
+      "resolved": 1,
+      "detail": "Compiler native count corrected from 26 to 27 against actual log; no code finding"
+    }
   }
 }
