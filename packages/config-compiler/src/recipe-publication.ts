@@ -1,4 +1,5 @@
 import { compileRecipe, resolveRecipe } from './recipe.js';
+import type { RuleSubscription } from './recipe-schema.js';
 import { recipeInputSchema } from './recipe-schema.js';
 import { digest } from './json.js';
 import { preparePublication } from './publication.js';
@@ -12,6 +13,7 @@ export interface RecipePublicationSource {
   template: { id: string; revision: string };
   nodes: { id: string; revision: string }[];
   artifacts: { id: string; revision: string; sha256: string }[];
+  subscriptions?: RuleSubscription[];
 }
 
 /** Strict Recipe entry to the existing D06 publication and native-check path. */
@@ -27,10 +29,12 @@ export async function prepareRecipePublication(input: unknown, check: NativeChec
   const nodes = dependencies.nodes.filter(n => (recipe.resources.outbounds ?? []).some(b => 'kind' in b && b.nodeRef.id === n.id && b.nodeRef.revision === n.revision));
   const manifests = (dependencies.manifests ?? []).filter(m => m.artifacts.some(a => resolved.value.artifacts.some(r => r.id === a.id && r.revision === m.revision)));
   // Unreferenced latest revisions and template candidates are not publication inputs.
+  const subscriptions = resolved.value.subscriptions;
   const source: RecipePublicationSource = {
-    inputHash: await digest({ recipe, template, nodes, manifests, params }),
+    inputHash: await digest({ recipe, template, nodes, manifests, params, ...(subscriptions ? { subscriptions } : {}) }),
     recipe: { id: recipe.id, revision: recipe.revision }, template: recipe.templateRef,
     nodes: nodes.map(({ id, revision }) => ({ id, revision })),
+    ...(subscriptions ? { subscriptions } : {}),
     artifacts: resolved.value.artifacts.map(({ id, revision, sha256 }) => ({ id, revision, sha256 })),
   };
   const prepared = await preparePublication(resolved.value, check);

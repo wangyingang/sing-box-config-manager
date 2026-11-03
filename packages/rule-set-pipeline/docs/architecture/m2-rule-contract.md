@@ -2,7 +2,7 @@
 
 后续设计确认（2026-11-03）：首个完整交付采用 V2Fly 官方 Release 的 dlc.dat_plain.yml，不自行解析原始 Include、attribute 筛选或 affiliation。规则生产、失败策略、投影、不可变候选及稳定订阅的本次范围，以[首个完整交付设计](../../../../docs/architecture/rule-set-pipeline-first-delivery.md)为准。下文保留更广泛的历史草案，未被该交付明确纳入的字段、Parser 和迁移工作仍属后续方向。
 
-设计日期：2026-11-02。状态更新：2026-11-03，Compiler 消费所需的[最小固定产物 Manifest v1 契约](../../contracts/README.md)及其结构、固定版本、用途和能力校验已实现。本文保留更完整的 Rule IR、Parser、产物生产与发布设计草案；这些后续契约尚未全部定稿，旧 Pipeline 尚未迁移。上层计划见 [M2 契约与实施计划](../../../../docs/architecture/m2-contract-plan.md)。
+设计日期：2026-11-02。状态更新：2026-11-03，Compiler 消费所需的[最小固定产物 Manifest v1 契约](../../contracts/README.md)及其结构、固定版本、用途和能力校验已实现。2026-11-04，#17 新增 [Rule Subscription v1](../../contracts/rule-subscription.md) 及 Recipe／Compiler v2 消费路径，与不可变 Manifest 分别管理。本文保留更完整的 Rule IR、Parser、产物生产与发布设计草案；这些后续契约尚未全部定稿，旧 Pipeline 尚未迁移。上层计划见 [M2 契约与实施计划](../../../../docs/architecture/m2-contract-plan.md)。
 
 ## Rule Source 与规则集身份
 

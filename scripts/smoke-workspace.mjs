@@ -26,7 +26,7 @@ for (const fn of [compileRecipe, resolveRecipe, inspectRecipeComposition, prepar
   execFileSync(process.execPath, [join(temporary, 'runtime.mjs')], { cwd: web, stdio: 'inherit' });
 
   await writeFile(join(temporary, 'consumer.mts'), `
-import { compile, compileRecipe, resolveRecipe, inspectRecipeComposition, prepareRecipePublication, artifactManifestSchema, preparePublication, type ArtifactManifest, type RecipePublicationSource, type RecipeCompileInput, type RecipeDocument, type TemplateDocument, type NodeRevision, type CompileInput, type Result, type CompiledConfig } from '${name}';
+import { compile, compileRecipe, resolveRecipe, inspectRecipeComposition, prepareRecipePublication, artifactManifestSchema, ruleSubscriptionSchema, preparePublication, type RuleSubscription, type ArtifactManifest, type RecipePublicationSource, type RecipeCompileInput, type RecipeDocument, type TemplateDocument, type NodeRevision, type CompileInput, type Result, type CompiledConfig } from '${name}';
 import { createSingBoxChecker } from '${name}/publisher';
 import { validateRecipeDraft, decideRecipeEdit, decideNodeRevisionDeletion, type RecipeEditInput, type NodeRevisionDeletionInput, type EditDecision } from '${name}';
 const compileTyped: (input: CompileInput) => Result<CompiledConfig> = compile;
@@ -51,6 +51,11 @@ const httpClients: TemplateDocument['resources']['httpClients'] = [{ tag: 'downl
 const staleEcs: RecipeDocument['dnsSteps'] = [{ id: 'bad', rule: { action: 'evaluate', server: 'dns', client_subnet: '8.8.8.0/24' } }];
 const artifactRef: NonNullable<RecipeDocument['resources']['ruleSets']>[number] = { kind: 'curated', tag: 'domains', artifactRef: { id: 'system@1:source', revision: '1', usage: 'dns-query' }, httpClient: 'download' };
 const manifests: ArtifactManifest[] = [];
+const subscriptions: RuleSubscription[] = [];
+const subscriptionBinding: NonNullable<Extract<RecipeDocument, { schemaVersion: 2 }>['resources']['ruleSets']>[number] = { kind: 'subscription', tag: 'stable', subscriptionRef: { systemRuleSetId: 'v2fly:category-ai', usages: ['route', 'dns-query'] } };
+// @ts-expect-error v2 no longer permits fixed rule artifact bindings
+const v2FixedBinding: NonNullable<Extract<RecipeDocument, { schemaVersion: 2 }>['resources']['ruleSets']>[number] = artifactRef;
+void [subscriptions, subscriptionBinding, v2FixedBinding, ruleSubscriptionSchema];
 // @ts-expect-error unknown artifact capabilities must never be treated as compatible
 const unknownCapability: ArtifactManifest['artifacts'][number]['requiredCapabilities'] = ['unknown'];
 void [dnsSteps, dnsServers, httpClients, staleEcs, artifactRef, manifests, unknownCapability, artifactManifestSchema];
@@ -70,7 +75,7 @@ void [draftTyped, editTyped, deleteTyped, invalidState];
   // The Compiler owns these tools; root and Web App do not rely on hoisted dev dependencies.
   execFileSync('pnpm', ['--dir', compiler, 'exec', 'tsc', '-p', join(temporary, 'tsconfig.json')], { cwd: root, stdio: 'inherit' });
 
-  await writeFile(join(temporary, 'browser.mjs'), `export { compile, compileRecipe, resolveRecipe, inspectRecipeComposition, prepareRecipePublication, recipeSchema, templateSchema, nodeRevisionSchema, artifactManifestSchema, renderSubscription, validateRecipeDraft, decideRecipeEdit, decideNodeRevisionDeletion } from '${name}';\n`);
+  await writeFile(join(temporary, 'browser.mjs'), `export { compile, compileRecipe, resolveRecipe, inspectRecipeComposition, prepareRecipePublication, recipeSchema, templateSchema, nodeRevisionSchema, artifactManifestSchema, ruleSubscriptionSchema, renderSubscription, validateRecipeDraft, decideRecipeEdit, decideNodeRevisionDeletion } from '${name}';\n`);
   execFileSync('pnpm', ['--dir', compiler, 'exec', 'esbuild', join(temporary, 'browser.mjs'), '--bundle', '--platform=browser', '--format=esm', '--log-level=error', `--outfile=${join(temporary, 'browser.bundle.mjs')}`], { cwd: root, stdio: 'inherit' });
   console.log('Workspace smoke passed: Web App imports, public declarations, and browser bundle.');
 } finally {

@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "systemRuleSetId": "v2fly:domain-list-community:category-ai-!cn",
+  "targetVersion": "1.14.4",
+  "sourceFormatVersion": 4,
+  "projections": {
+    "route": {
+      "formats": {
+        "binary": {
+          "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/main/stable/v2fly/category-ai-not-cn/domains.srs",
+          "requiredCapabilities": []
+        },
+        "source": {
+          "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/main/stable/v2fly/category-ai-not-cn/domains.json",
+          "requiredCapabilities": []
+        }
+      }
+    },
+    "dns-query": {
+      "formats": {
+        "binary": {
+          "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/main/stable/v2fly/category-ai-not-cn/domains.srs",
+          "requiredCapabilities": []
+        },
+        "source": {
+          "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/main/stable/v2fly/category-ai-not-cn/domains.json",
+          "requiredCapabilities": []
+        }
+      }
+    },
+    "dns-response": {
+      "unavailable": "empty"
+    }
+  }
+}

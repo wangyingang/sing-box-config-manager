@@ -3,7 +3,7 @@ import { object, objects, strings } from './json.js';
 import { PROFILES } from './profiles.js';
 import type { Diagnostic, Json, Obj, ProfileId, RuleArtifact } from './types.js';
 
-export function validateConfig(config: Obj, profile: ProfileId, artifacts: RuleArtifact[] = []): Diagnostic[] {
+export function validateConfig(config: Obj, profile: ProfileId, artifacts: Pick<RuleArtifact, 'requiredCapabilities'>[] = []): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
   const error = (code: string, path: string, message: string) => diagnostics.push({ severity: 'error', code, path, message });
   if (!Object.hasOwn(PROFILES, profile)) {

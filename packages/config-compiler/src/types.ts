@@ -1,3 +1,4 @@
+import type { RuleSubscription } from './recipe-schema.js';
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type Obj = { [key: string]: Json };
 export type ProfileId = 'windows-standalone' | 'macos-appstore' | 'macos-standalone' | 'ios-appstore' | 'android-google-play';
@@ -10,6 +11,7 @@ export interface RuleArtifact {
 }
 export type RuleSetBinding =
   | { kind: 'inline'; definition: Obj }
+  | { kind: 'subscription'; systemRuleSetId: string; usages: ('route' | 'dns-query' | 'dns-response')[]; tag: string; httpClient?: string }
   | { kind: 'curated'; artifactId: string; tag: string; httpClient?: string };
 export interface Resources {
   inbounds?: Obj[]; outbounds?: Obj[]; dnsServers?: Obj[]; httpClients?: Obj[];
@@ -34,11 +36,13 @@ export interface GenerationParams { ecs: { address: string; prefix: number } | n
 export interface CompileInput {
   template: Template; recipe: Recipe; artifacts: RuleArtifact[]; profile: ProfileId;
   params: GenerationParams;
+  subscriptions?: RuleSubscription[];
 }
 export interface CompiledConfig {
   config: Obj;
   profile: ProfileId;
   ecsResponseTags: string[];
   artifacts: RuleArtifact[];
+  subscriptions?: RuleSubscription[];
   versions: { target: '1.14.4'; compiler: string; capabilities: string; template: string; recipe: string; schema: string };
 }

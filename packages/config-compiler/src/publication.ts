@@ -3,7 +3,8 @@ import { compile, COMPILER_VERSION } from './compiler.js';
 import { CAPABILITY_VERSION } from './profiles.js';
 import build from '../schemas/build.json' with { type: 'json' };
 import { applyEcs } from './ecs.js';
-import { digest } from './json.js';
+import { digest, objects } from './json.js';
+import { ruleSubscriptionSchema } from './recipe-schema.js';
 import { validateConfig } from './validate.js';
 import type { CompileInput, CompiledConfig, Diagnostic, GenerationParams, Obj, Result } from './types.js';
 
@@ -50,9 +51,12 @@ export async function renderSubscription(publication: Publication, params: Gener
     const versions = snapshot.body.compiled.versions;
     if (versions.target !== '1.14.4' || versions.compiler !== COMPILER_VERSION ||
       versions.capabilities !== CAPABILITY_VERSION || versions.schema !== build.schemaSha256) return invalid();
-    const { config, ecsResponseTags, profile, artifacts } = snapshot.body.compiled;
+    const { config, ecsResponseTags, profile, artifacts, subscriptions } = snapshot.body.compiled;
     const diagnostics: Diagnostic[] = applyEcs(config, ecsResponseTags, params);
-    diagnostics.push(...validateConfig(config, profile, artifacts));
+    const urls = new Set(objects((config.route as Obj)?.rule_set).map(s => s.url));
+    const endpoints = (subscriptions ?? []).flatMap((s, i) => Object.values(ruleSubscriptionSchema.parse(s, `/subscriptions/${i}`).projections)
+      .flatMap(p => 'formats' in p && urls.has(p.formats.binary.url) ? [p.formats.binary] : []));
+    diagnostics.push(...validateConfig(config, profile, [...artifacts, ...endpoints]));
     return diagnostics.some(d => d.severity === 'error') ? { ok: false, diagnostics } : { ok: true, value: config, diagnostics };
   } catch { return invalid(); }
 }
