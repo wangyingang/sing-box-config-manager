@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, realpath, rm, writeFile, cp, chmod } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile, cp, chmod, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -73,7 +73,7 @@ test('an explicit pinned launcher is used by nested pnpm despite a wrong PATH ve
   const summary = JSON.parse(await readFile(join(output, 'summary.json'), 'utf8'));
   assert.equal(summary.status, 'passed');
   assert.equal(summary.scope, 'check-only');
-  assert.deepEqual(summary.steps[0].command, [process.execPath, await realpath(launcher), 'check']);
+  assert.deepEqual(summary.steps[0].command, [process.execPath, launcher, 'check']);
   assert.equal(summary.steps[0].suites[0].pass, 2);
   const log = await readFile(join(output, 'check.log'));
   assert.match(log.toString(), /nested pnpm=10\.33\.2/);
@@ -84,6 +84,23 @@ test('an explicit pinned launcher is used by nested pnpm despite a wrong PATH ve
     assert.equal(bytes.length, file.byteLength);
     assert.equal(createHash('sha256').update(bytes).digest('hex'), file.sha256);
   }
+}));
+
+test('PATH shims keep their pnpm invocation name instead of executing the tool manager itself', () => fixture(async ({ root, launch }) => {
+  const target = await pnpm(root, 'tool-manager', `
+    const name = require('node:path').basename(process.argv[1]);
+    if (name !== 'pnpm') { console.log('tool-manager 2026.10'); }
+    else if (process.argv[2] === '--version') console.log('10.33.2');
+    else console.log('ℹ tests 1\\nℹ pass 1\\nℹ fail 0\\nℹ skipped 0');
+  `);
+  const bin = join(root, 'bin'); await mkdir(bin);
+  await symlink(target, join(bin, 'pnpm'));
+  const output = join(root, 'evidence');
+  const result = await launch(['--check-only', '--out', output], { PATH: `${bin}:${process.env.PATH}` });
+  assert.equal(result.code, 0, result.stderr);
+  const summary = JSON.parse(await readFile(join(output, 'summary.json'), 'utf8'));
+  assert.equal(summary.tools.pnpm.actual, '10.33.2');
+  assert.equal(summary.status, 'passed');
 }));
 
 async function binaryFixture(root, version = '1.14.4') {
@@ -117,6 +134,31 @@ test('wrong binary version fails before running check', () => fixture(async ({ r
   const summary = JSON.parse(await readFile(join(output, 'summary.json'), 'utf8'));
   assert.equal(summary.steps.length, 0);
   assert.match(summary.error, /Expected sing-box 1\.14\.4/);
+}));
+
+test('preflight process failures preserve launcher identity, original exit code and stderr without running checks', () => fixture(async ({ root, launch }) => {
+  const goodPnpm = await pnpm(root, 'pinned.cjs', `console.log('10.33.2');`);
+  const failedPnpm = await pnpm(root, 'broken.cjs', `console.error('pnpm failed before version'); process.exitCode = 7;`);
+  const failedBinary = await binaryFixture(root);
+  await writeFile(failedBinary, `#!/usr/bin/env node\nconsole.error('binary failed before version'); process.exitCode = 9;\n`);
+  for (const [name, args, code, tool] of [
+    ['pnpm-version', ['--check-only', '--pnpm', failedPnpm], 7, 'pnpm'],
+    ['sing-box-version', ['--pnpm', goodPnpm, '--binary', failedBinary], 9, 'singBox'],
+  ]) {
+    const output = join(root, name);
+    const result = await launch([...args, '--out', output]);
+    assert.equal(result.code, 1);
+    const summary = JSON.parse(await readFile(join(output, 'summary.json'), 'utf8'));
+    assert.equal(summary.status, 'failed');
+    assert.equal(summary.steps.length, 0);
+    assert.ok(summary.tools[tool]);
+    const record = summary.preflight.at(-1);
+    assert.equal(record.exitCode, code);
+    assert.equal(record.command.at(-1), name === 'pnpm-version' ? '--version' : 'version');
+    const bytes = await readFile(join(output, record.log));
+    assert.match(bytes.toString(), /failed before version/);
+    assert.equal(record.sha256, createHash('sha256').update(bytes).digest('hex'));
+  }
 }));
 
 test('full verification runs ordered checks, captures separate suites and client evidence, and selects only the read-only Release test', () => fixture(async ({ root, launch }) => {

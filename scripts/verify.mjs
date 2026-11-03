@@ -13,11 +13,12 @@ const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const shellQuote = value => `'${value.replaceAll("'", "'\\''")}'`;
 
 async function launcherPath(value) {
-  if (isAbsolute(value)) return realpath(value);
+  // Keep invocation names: mise/asdf-style shims dispatch by argv[0].
+  if (isAbsolute(value)) { await access(value, constants.R_OK); return value; }
   if (value.includes('/') || value.includes('\\')) throw new Error('--pnpm requires an absolute path');
   for (const directory of (process.env.PATH ?? '').split(delimiter)) {
     const path = resolve(directory, value);
-    try { await access(path, constants.X_OK); return await realpath(path); } catch { /* Try the next PATH entry. */ }
+    try { await access(path, constants.X_OK); return path; } catch { /* Try the next PATH entry. */ }
   }
   throw new Error(`Cannot find ${value}; install the packageManager version and pass --pnpm <absolute launcher path>`);
 }
@@ -53,9 +54,11 @@ async function runStep(step, env, output) {
       };
       const interrupt = () => stop('SIGINT'), terminate = () => stop('SIGTERM');
       process.on('SIGINT', interrupt); process.on('SIGTERM', terminate);
+      const timeout = step.timeout ? setTimeout(() => stop('SIGTERM'), step.timeout) : undefined;
       child.on('error', cause => { error = cause.message; });
       child.on('close', (exitCode, signal) => {
         clearTimeout(forceStop);
+        clearTimeout(timeout);
         process.off('SIGINT', interrupt); process.off('SIGTERM', terminate);
         resolve({ exitCode, signal, ...(error ? { error } : {}), ...(interrupted ? { interrupted } : {}) });
       });
@@ -87,7 +90,7 @@ async function main() {
   const summary = { schemaVersion: 1, startedAt: new Date().toISOString(), status: 'running',
     scope: values['check-only'] ? 'check-only' : values.release ? 'check-native-release' : 'check-native',
     source: { commit, clean: status.length === 0, status, trackedDiffSha256: sha256(diff) },
-    tools: { node: { version: process.version, executable: process.execPath } }, steps: [] };
+    tools: { node: { version: process.version, executable: process.execPath } }, preflight: [], steps: [] };
   let binDirectory;
   try {
     if (process.platform === 'win32') throw new Error('This verification entry currently requires a macOS or Linux host');
@@ -98,8 +101,15 @@ async function main() {
     if (!expected) throw new Error('package.json must pin an exact pnpm packageManager version');
     const path = await launcherPath(values.pnpm ?? 'pnpm');
     const command = /\.[cm]?js$/.test(path) ? [process.execPath, path] : [path];
-    const actual = (await exec(command[0], [...command.slice(1), '--version'], { cwd: root, timeout: 30_000 })).stdout.trim();
-    summary.tools.pnpm = { expected, actual, launcher: path, launcherSha256: sha256(await readFile(path)) };
+    const preflight = async (name, command) => {
+      const record = await runStep({ name, command, cwd: root, timeout: 30_000 }, process.env, output);
+      summary.preflight.push(record);
+      if (record.exitCode !== 0 || record.interrupted) throw new Error(`${name} failed (${record.interrupted ?? record.signal ?? record.exitCode ?? record.error}); see ${record.log}`);
+      return (await readFile(join(output, record.log), 'utf8')).trim();
+    };
+    summary.tools.pnpm = { expected, launcher: path, launcherSha256: sha256(await readFile(path)) };
+    const actual = await preflight('pnpm-version', [...command, '--version']);
+    summary.tools.pnpm.actual = actual;
     if (actual !== expected) throw new Error(`Expected pnpm ${expected}, got ${actual}. Select the installed matching launcher with --pnpm <absolute path>; no checks or installs were run.`);
     binDirectory = await mkdtemp(join(tmpdir(), 'verification-bin-'));
     await writeFile(join(binDirectory, 'pnpm'), `#!/bin/sh\nexec ${command.map(shellQuote).join(' ')} "$@"\n`, { mode: 0o700 });
@@ -113,9 +123,11 @@ async function main() {
       if (!binary || !isAbsolute(binary)) throw new Error('Provide --binary <absolute sing-box path> or SING_BOX_TEST_BINARY, or use --check-only');
       const resolved = await realpath(binary);
       const expectedVersion = JSON.parse(await readFile(join(root, 'packages/config-compiler/schemas/build.json'), 'utf8')).version;
-      const identity = (await exec(resolved, ['version'], { cwd: root, timeout: 30_000 })).stdout.trim();
+      summary.tools.singBox = { path: resolved, expectedVersion, sha256: sha256(await readFile(resolved)) };
+      const identity = await preflight('sing-box-version', [resolved, 'version']);
+      summary.tools.singBox.identity = identity;
       if (identity.split(/\r?\n/)[0] !== `sing-box version ${expectedVersion}`) throw new Error(`Expected sing-box ${expectedVersion}; got ${identity.split(/\r?\n/)[0]}`);
-      summary.tools.singBox = { path: resolved, version: expectedVersion, identity, sha256: sha256(await readFile(resolved)) };
+      summary.tools.singBox.version = expectedVersion;
       env.SING_BOX_TEST_BINARY = resolved;
       env.RULE_ACTIVATION_CLIENT_EVIDENCE = join(output, 'client-update-rollback.json');
       env.RULE_CLIENT_FAILURE_EVIDENCE = join(output, 'client-failure-cache.json');
