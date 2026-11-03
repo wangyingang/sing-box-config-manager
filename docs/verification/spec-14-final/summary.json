@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-04 Asia/Shanghai",
+  "commit": "6ec308a964fcce737ac3b627cc54aba27f7f0b42",
+  "isolation": "git archive of exact commit; original worktree unchanged",
+  "node": "26.13.0",
+  "pnpm": "10.33.2",
+  "binary": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+  "binarySha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2",
+  "checks": {
+    "pnpm check": {
+      "compiler": 96,
+      "pipeline": 91,
+      "failed": 0,
+      "skipped": 0,
+      "typecheck": "passed",
+      "build": "passed",
+      "workspaceSmoke": "passed"
+    },
+    "SING_BOX_TEST_BINARY=<absolute path> pnpm test:integration": {
+      "compiler": 27,
+      "pipeline": 75,
+      "failed": 0,
+      "skipped": 0
+    },
+    "node --import tsx --test test/acceptance/release.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "remoteReadback": {
+      "passed": 32,
+      "failed": 0
+    }
+  },
+  "scope": "No code edits, GitHub writes, new publication, activation, rollback or production switch. Historical remote-write evidence audited and bytes read again; controlled update/rollback/failure/cache rerun.",
+  "ci": "https://github.com/wangyingang/sing-box-config-manager/actions/runs/41705749771"
+}

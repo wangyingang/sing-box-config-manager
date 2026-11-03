@@ -38,7 +38,9 @@ SING_BOX_TEST_BINARY=/absolute/path/to/sing-box pnpm test:integration
 
 CI 的 sing-box 版本读取自 [Schema 构建配置](packages/config-compiler/schemas/build.json) 的 `version`，Linux 发布包摘要读取自 `releaseAssets.linux-amd64.sha256`。下载地址和解压路径自动生成。升级时更新该配置，并同步核验 Schema、原生校验器和测试基线，无需修改 workflow。
 
-测试在临时目录执行 Compiler merge/check，以及 Pipeline 编译、解码与真实规则匹配；不启动代理、不修改旧配置仓库。五份旧配置候选保持生成语义并通过原生 check；旧 Android 配置含不支持的进程规则，正式 compile 和发布会拒绝它。
+测试在临时目录执行 Compiler 检查和 Pipeline 原生验证。自动更新、回滚及故障恢复测试会启动隔离的 sing-box 实例和本地服务，结束后清理；不修改生产规则入口、系统代理或旧配置仓库。
+
+五份旧配置候选保持生成语义并通过原生 check；旧 Android 配置含不支持的进程规则，正式 compile 和发布会拒绝它。
 
 当前测试和构建来自 Compiler 与 Pipeline；Web App 骨架没有占位构建或空测试。递归命令只执行模块实际声明的脚本。单独操作 Compiler：
 
