@@ -44,3 +44,6 @@ export { buildNative, inspectBinary, NativeBuildError } from './native.js';
 export type { NativeBuild, NativeTool, BuiltArtifact } from './native.js';
 export { projectTerms, renderRuleJson, decodedTerms } from './projection.js';
 export type { BuildTerm, Usage } from './projection.js';
+
+export { updateRules, readUpdateState } from './update.js';
+export type { UpdateOptions, UpdateState } from './update.js';
