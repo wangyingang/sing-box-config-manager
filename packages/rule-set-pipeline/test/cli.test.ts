@@ -31,7 +31,7 @@ test('CLI 缺少固定 Release 或存在未知参数时明确退出', async () =
 
 // Run the real CLI and receipt filesystem operations. Only remote activation is
 // replaced; its journal proves the remote commit was applied before the failure.
-async function activationCli(directory: string, state: string) {
+async function activationCli(directory: string, state: string, operation = 'activate') {
   const commit = 'c'.repeat(40), applied = join(directory, 'applied.json');
   const activationModule = join(directory, 'activation.mjs'), preload = join(directory, 'preload.mjs');
   const subscription = join(directory, 'subscription.json');
@@ -41,7 +41,8 @@ export async function activateRules() {
   const result = { status: 'activated', commit: ${JSON.stringify(commit)}, activation: { id: 'receipt-test' } };
   await writeFile(${JSON.stringify(applied)}, JSON.stringify(result));
   return result;
-}`);
+}
+export const rollbackRules = activateRules;`);
   await writeFile(preload, `import { registerHooks } from 'node:module';
 import { pathToFileURL } from 'node:url';
 registerHooks({ resolve(specifier, context, nextResolve) {
@@ -50,7 +51,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
   return nextResolve(specifier, context);
 } });`);
   return { commit, applied, run: () => exec(process.execPath, ['--import', 'tsx', '--import', preload,
-    'src/cli.ts', 'activate', '--state', state, '--candidate', 'controlled-fixture',
+    'src/cli.ts', operation, '--state', state, operation === 'rollback' ? '--activation' : '--candidate', 'controlled-fixture',
     '--subscription', subscription, '--expected-head', 'a'.repeat(40), '--binary', '/unused-controlled-fixture']) };
 }
 
@@ -81,4 +82,26 @@ test('CLI 激活成功后创建缺失的状态目录并保存可恢复回执', a
     assert.equal(result.commit, fixture.commit);
     assert.deepEqual(JSON.parse(await readFile(join(state, 'active-version.json'), 'utf8')), result);
   } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('CLI 回滚保存独立激活回执且不改变 Release 成功记录', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'rule-rollback-receipt-'));
+  try {
+    const state = join(directory, 'state');
+    const fixture = await activationCli(directory, state, 'rollback');
+    const { mkdir } = await import('node:fs/promises');
+    await mkdir(state);
+    const success = Buffer.from('{"release":"newer-success"}\n');
+    await writeFile(join(state, 'update-state.json'), success);
+    const { stdout } = await fixture.run();
+    assert.equal(JSON.parse(stdout).commit, fixture.commit);
+    assert.deepEqual(await readFile(join(state, 'update-state.json')), success);
+    assert.equal(JSON.parse(await readFile(join(state, 'active-version.json'), 'utf8')).commit, fixture.commit);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('CLI 回滚拒绝缺失目标、candidate 混用和非回滚命令上的历史参数', async () => {
+  for (const args of [['rollback'], ['activate', '--activation', 'a'.repeat(40)], ['status', '--activation', 'a'.repeat(40)]]) {
+    await assert.rejects(exec(process.execPath, ['--import', 'tsx', 'src/cli.ts', ...args]), (error: { code?: number }) => error.code === 1);
+  }
 });

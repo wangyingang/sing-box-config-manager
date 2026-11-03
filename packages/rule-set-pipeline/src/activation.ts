@@ -119,8 +119,28 @@ export async function verifyActivationCandidate(options: Pick<ActivationOptions,
     validation: { tool: native.tool, buildId: build.buildId, nativeBuildId: native.buildId } };
 }
 
+export interface RollbackOptions extends Omit<ActivationOptions, 'candidateEvidenceUrl'> {
+  /** Full artifact-repository commit of a retained successful activation. */
+  historicalActivationCommit: string;
+}
+
+/** Revalidate a retained activation against today's contract, without rewriting history. */
+export async function rollbackRules(options: RollbackOptions) {
+  requireThat(/^[a-f0-9]{40}$/.test(options.historicalActivationCommit), 'Expected full historical activation commit');
+  const transport = options.transport ?? githubActivation();
+  const historical = JSON.parse((await transport.download(immutableUrl(options.historicalActivationCommit, RECORD_PATH))).toString());
+  requireThat(historical.schemaVersion === 1 && typeof historical.id === 'string' && historical.id.length > 0
+    && typeof historical.candidateId === 'string' && typeof historical.candidateEvidenceUrl === 'string'
+    && historical.files && equal(historical.subscription, options.subscription), 'Invalid or incompatible historical activation');
+  return performActivation({ ...options, transport, candidateEvidenceUrl: historical.candidateEvidenceUrl },
+    { commit: options.historicalActivationCommit, record: historical });
+}
+
 /** Explicit, retryable activation; never mutates Release processing state. */
 export async function activateRules(options: ActivationOptions) {
+  return performActivation(options);
+}
+async function performActivation(options: ActivationOptions, historical?: { commit: string; record: any }) {
   const transport = options.transport ?? githubActivation();
   requireThat(/^[a-f0-9]{40}$/.test(options.expectedHead), 'Expected full old remote head is required');
   requireThat(validateSubscription(options.subscription) as boolean, 'Invalid Rule Subscription');
@@ -152,6 +172,17 @@ export async function activateRules(options: ActivationOptions) {
       files[path] = candidate.bytesByFormat[format];
     }
   }
+  if (historical) {
+    requireThat(candidate.candidateId === historical.record.candidateId, 'Historical candidate identity mismatch');
+    const entries = Object.entries(files);
+    requireThat(Object.keys(historical.record.files).length === entries.length, 'Historical stable file set mismatch');
+    for (const [path, bytes] of entries) {
+      const recorded = historical.record.files[path];
+      requireThat(recorded?.sha256 === sha256(bytes) && recorded?.byteLength === bytes.length, 'Historical stable file metadata mismatch');
+      const retained = await transport.download(immutableUrl(historical.commit, path));
+      requireThat(retained.equals(bytes), 'Historical stable file integrity mismatch');
+    }
+  }
   // Existing contract is part of the remote old state, not a mutable local status file.
   const root = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${options.expectedHead}/`;
   // Transport must distinguish an absent record (404) from an unavailable server.
@@ -164,13 +195,14 @@ export async function activateRules(options: ActivationOptions) {
     const previous = JSON.parse(previousBytes.toString());
     requireThat(equal(previous.subscription, subscription), 'Existing subscription contract cannot change during activation');
   }
-  const activation = { schemaVersion: 1, id: randomUUID(), candidateId: candidate.candidateId,
+  const activation = { schemaVersion: 1, id: randomUUID(),
+    ...(historical ? { operation: 'rollback' as const, historicalActivationCommit: historical.commit, historicalActivationId: historical.record.id } : {}), candidateId: candidate.candidateId,
     candidateEvidenceUrl: candidate.evidenceUrl, source: candidate.source, validation: candidate.validation,
     expectedHead: options.expectedHead, subscription,
     files: Object.fromEntries(Object.entries(files).map(([path, bytes]) => [path, { sha256: sha256(bytes), byteLength: bytes.length }])) };
   files[RECORD_PATH] = encode(activation);
   let commit: string;
-  try { commit = await transport.commit(options.expectedHead, files, `激活规则候选 ${candidate.candidateId}`); }
+  try { commit = await transport.commit(options.expectedHead, files, `${historical ? '回滚到历史规则候选' : '激活规则候选'} ${candidate.candidateId}`); }
   catch (error) {
     // No second write. Resolve a lost PATCH reply using its known immutable identity.
     if (!(error instanceof ActivationWriteError)) throw error;

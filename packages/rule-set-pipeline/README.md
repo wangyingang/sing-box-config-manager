@@ -1,6 +1,6 @@
 # Rule Set Pipeline
 
-包名：`@sing-box-config-manager/rule-set-pipeline`。已实现 [#15](https://github.com/wangyingang/sing-box-config-manager/issues/15) 的固定来源转换，以及 [#16](https://github.com/wangyingang/sing-box-config-manager/issues/16) 的确定性 JSON／SRS、本地原生验证和用途投影。另已实现 [#18](https://github.com/wangyingang/sing-box-config-manager/issues/18) 的正常更新、不可变候选发布与 HTTPS 回读。另已实现 [#19](https://github.com/wangyingang/sing-box-config-manager/issues/19) 的显式激活与受控客户端自动更新。验收记录见 [#15](docs/verification/issue-15.md)、[#16](docs/verification/issue-16.md)、[#18](docs/verification/issue-18.md) 和 [#19](docs/verification/issue-19.md)。回滚与客户端故障／缓存恢复仍由 #20、#21 交付。
+包名：`@sing-box-config-manager/rule-set-pipeline`。已实现 [#15](https://github.com/wangyingang/sing-box-config-manager/issues/15) 的固定来源转换，以及 [#16](https://github.com/wangyingang/sing-box-config-manager/issues/16) 的确定性 JSON／SRS、本地原生验证和用途投影。另已实现 [#18](https://github.com/wangyingang/sing-box-config-manager/issues/18) 的正常更新、不可变候选发布与 HTTPS 回读。另已实现 [#19](https://github.com/wangyingang/sing-box-config-manager/issues/19) 的显式激活与受控客户端自动更新。验收记录见 [#15](docs/verification/issue-15.md)、[#16](docs/verification/issue-16.md)、[#18](docs/verification/issue-18.md) 和 [#19](docs/verification/issue-19.md)。另已实现 [#20](https://github.com/wangyingang/sing-box-config-manager/issues/20) 的历史激活回滚，验收见 [#20](docs/verification/issue-20.md)。客户端故障／缓存恢复仍由 #21 交付。
 
 ## 本地构建
 
@@ -77,6 +77,25 @@ PATCH 回复丢失时，先读取远端 head 对照已知 attempted commit，不
 Git 提交保持文件与记录一起更新，但 GitHub 缓存和客户端轮询存在传播延迟，不保证多文件在客户端同时切换。激活不修改 Recipe、配置发布或客户端设置。运行中的 sing-box 通过原生机制获取稳定 SRS；受控测试的 `1s` 更新周期和临时 CA 只存在于测试进程，不能用于承诺全设备更新时间。
 
 公开 API 为 `activateRules({ candidateEvidenceUrl, subscription, binary, expectedHead, transport? })`；默认使用 `githubActivation()`。API 的成功结果和远端记录可跨进程追溯，CLI 另外保存本地回执。Compiler 仍只消费契约，不导入激活运行时代码。
+
+## 历史回滚
+
+从目标环境的历史 `stable/activation.json` 所在完整 commit 选择已激活版本。历史记录及其候选必须仍然保留；本命令不查询 Release、不重新转换来源，也不重新发布配置。
+
+```sh
+pnpm --dir packages/rule-set-pipeline rollback \
+  --state /absolute/path/to/state \
+  --activation <historical-full-commit> \
+  --subscription /absolute/path/to/trusted-subscription.json \
+  --expected-head <current-full-commit> \
+  --binary /absolute/path/to/sing-box
+```
+
+隔离环境显式添加 `--branch acceptance-<name>`，契约入口须属于该分支。公开 API 为 `rollbackRules({ historicalActivationCommit, subscription, binary, expectedHead, transport? })`。
+
+回滚读取历史激活记录，核对当前完整订阅契约，重新执行正常激活的所有候选门禁，并比对历史稳定文件的实际字节及记录摘要。缺失、损坏、空内容或不兼容均在写入前拒绝。成功时只新增一次稳定入口提交，记录 `operation: rollback`、`historicalActivationCommit` 和 `historicalActivationId`；候选、Manifest、原验证记录及 `update-state.json` 均不改写。
+
+回滚沿用激活的预期旧 head、并发保护、不确定结果核实和本地回执行为，返回 `status: activated`；操作类型在 `activation.operation` 中区分。客户端按原生更新机制恢复历史规则，允许传播延迟。历史版本选择不支持跨环境迁移或同时修改订阅契约。
 
 ## 输入与转换边界
 
