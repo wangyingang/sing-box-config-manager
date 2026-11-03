@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import contract from '../../contracts/rule-subscription.example.json' with { type: 'json' };
-import { activateRules } from '../../src/activation.js';
+import { activateRules, rollbackRules } from '../../src/activation.js';
 import { ActivationWriteError, type ActivationTransport } from '../../src/activation-transport.js';
 import { immutableUrl } from '../../src/publication.js';
 import { sha256 } from '../../src/release.js';
@@ -46,7 +46,7 @@ async function environment() {
   };
   return { transport, candidate, subscription, stored, url, alter, seal,
     options: () => ({ candidateEvidenceUrl: candidate.candidateEvidenceUrl, binary: binary!, expectedHead: head, subscription, transport }),
-    writes: () => writes, fail(mode: string) { failure = mode; }, head: () => head };
+    writes: () => writes, fail(mode: string) { failure = mode; headReads = 0; }, head: () => head };
 }
 
 test('激活一次提交稳定 SRS、JSON 和激活记录；失败后重试已有候选', async () => {
@@ -121,4 +121,61 @@ test('坏旧激活记录包含 404 文本也不能被当作不存在而绕过契
   env.stored.set(immutableUrl(env.head(), 'stable/activation.json'), Buffer.from('Readback HTTP 404: malformed record'));
   await assert.rejects(activateRules(env.options()), SyntaxError);
   assert.equal(env.writes(), 1);
+});
+
+for (const failure of ['none', 'missing-record', 'missing-artifact', 'digest', 'bad-srs', 'empty', 'incompatible', 'stale', 'applied', 'unknown', 'conflict', 'readback']) {
+  test(`历史回滚 ${failure} 重新门禁、保护当前入口并保留不可变记录`, async () => {
+    const env = await environment();
+    const first = await activateRules(env.options());
+    const second = await activateRules(env.options());
+    const retained = new Map(env.stored);
+    const options = { ...env.options(), historicalActivationCommit: first.commit };
+    if (failure === 'missing-record') env.stored.delete(immutableUrl(first.commit, 'stable/activation.json'));
+    if (failure === 'missing-artifact') env.stored.delete(env.url('domains.srs'));
+    if (failure === 'digest') env.stored.set(env.url('domains.srs'), Buffer.from('damaged'));
+    if (failure === 'bad-srs') { env.stored.set(env.url('domains.srs'), Buffer.from('invalid SRS')); env.seal(); }
+    if (failure === 'empty') { env.alter('domains.json', () => ({ version: 4, rules: [] })); env.seal(); }
+    if (failure === 'incompatible') options.subscription.projections.route.formats.binary.requiredCapabilities = ['processMatching'];
+    if (failure === 'stale') options.expectedHead = first.commit;
+    if (['applied', 'unknown', 'conflict', 'readback'].includes(failure)) env.fail(failure);
+    const before = env.head(), writes = env.writes();
+    if (failure === 'none' || failure === 'applied') {
+      const result = await rollbackRules(options);
+      assert.equal(result.status, 'activated');
+      assert.equal(result.activation.operation, 'rollback');
+      assert.equal(result.activation.historicalActivationCommit, first.commit);
+      assert.equal(result.activation.historicalActivationId, first.activation.id);
+      assert.equal(result.activation.expectedHead, second.commit);
+      assert.equal(result.activation.candidateId, first.activation.candidateId);
+      for (const [url, bytes] of retained) assert.deepEqual(env.stored.get(url), bytes);
+      assert.equal(env.writes(), writes + 1);
+    } else {
+      const expected = ({ unknown: /ACTIVATION_UNKNOWN/, conflict: /ACTIVATION_CONFLICT_OR_SUPERSEDED/, readback: /ACTIVATION_APPLIED_READBACK_PENDING/, stale: /ACTIVATION_CONFLICT/ } as Record<string, RegExp>)[failure];
+      if (expected) await assert.rejects(rollbackRules(options), expected);
+      else await assert.rejects(rollbackRules(options));
+      if (!['unknown', 'conflict', 'readback'].includes(failure)) {
+        assert.equal(env.head(), before); assert.equal(env.writes(), writes);
+      } else assert.equal(env.writes(), writes + 1);
+    }
+  });
+}
+
+test('历史稳定文件损坏即使候选仍有效也拒绝回滚', async () => {
+  const env = await environment(), first = await activateRules(env.options());
+  await activateRules(env.options());
+  const path = Object.keys(first.activation.files)[0];
+  env.stored.set(immutableUrl(first.commit, path), Buffer.from('damaged history'));
+  const head = env.head();
+  await assert.rejects(rollbackRules({ ...env.options(), historicalActivationCommit: first.commit }), /Historical stable file integrity/);
+  assert.equal(env.head(), head); assert.equal(env.writes(), 2);
+});
+
+test('相同旧 head 的回滚和激活竞争只允许一次提交', async () => {
+  const env = await environment(), first = await activateRules(env.options());
+  await activateRules(env.options());
+  const options = env.options();
+  const results = await Promise.allSettled([rollbackRules({ ...options, historicalActivationCommit: first.commit }), activateRules(options)]);
+  assert.equal(results.filter(r => r.status === 'fulfilled').length, 1);
+  assert.equal(results.filter(r => r.status === 'rejected').length, 1);
+  assert.equal(env.writes(), 3);
 });

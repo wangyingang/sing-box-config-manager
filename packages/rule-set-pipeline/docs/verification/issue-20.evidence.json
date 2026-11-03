@@ -1,0 +1,683 @@
+{
+  "date": "2026-11-04",
+  "publicRollback": {
+    "date": "2026-11-03T19:21:12.636Z",
+    "result": {
+      "status": "activated",
+      "commit": "150cdc2555aba1d1339537e0248bddc31af0895b",
+      "activation": {
+        "schemaVersion": 1,
+        "id": "6174337f-4ee8-46be-99b1-d55aef111fb7",
+        "operation": "rollback",
+        "historicalActivationCommit": "fbbf055f00dbaf98cb0cb674269905e5981dec07",
+        "historicalActivationId": "6f4a2e6c-204f-4d20-8ca4-dc3e719253d4",
+        "candidateId": "6e76b4ef-883c-46d1-8058-ef3f803b347b",
+        "candidateEvidenceUrl": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/3f06056ee6f1c6336936d3b1e7b776215c8b2ded/candidates/6e76b4ef-883c-46d1-8058-ef3f803b347b/readback.json",
+        "source": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 431467724,
+          "tag": "20261102130044",
+          "commit": "328f6c5168653e809561c862757c966fc5012e5d",
+          "yaml": {
+            "id": 701778045,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261102130044/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 701778047,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261102130044/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "bfa4ab62d0f47216029ce6b777a2364978c3f28086060b592453684a0dd830ee",
+          "inputBytes": 3758877,
+          "checksumSha256": "fa9c9b78e6db7d4686554e9197ca13a4ea33af94e76a6ec908e553af3c9f183e"
+        },
+        "validation": {
+          "tool": {
+            "path": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+            "version": "1.14.4",
+            "identity": "sing-box version 1.14.4\n\nEnvironment: go1.26.10 darwin/arm64\nTags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0\nRevision: c005f35300ce76427dc285481ec5695f5b179cd2\nCGO: enabled",
+            "sha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2"
+          },
+          "buildId": "72bbeccb72bd286594d5dac19bb924d5268d3df421950918e36555bb84062cea",
+          "nativeBuildId": "77ad50641f764c7c501319f23d80279a9b3089a500f336965735ed7b31d6384d"
+        },
+        "expectedHead": "6df00a10c1d7b37d13511c8940356edd784a7182",
+        "subscription": {
+          "schemaVersion": 1,
+          "systemRuleSetId": "v2fly:domain-list-community:category-ai-!cn",
+          "targetVersion": "1.14.4",
+          "sourceFormatVersion": 4,
+          "projections": {
+            "route": {
+              "formats": {
+                "binary": {
+                  "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-20/stable/v2fly/category-ai-not-cn/domains.srs",
+                  "requiredCapabilities": []
+                },
+                "source": {
+                  "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-20/stable/v2fly/category-ai-not-cn/domains.json",
+                  "requiredCapabilities": []
+                }
+              }
+            },
+            "dns-query": {
+              "formats": {
+                "binary": {
+                  "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-20/stable/v2fly/category-ai-not-cn/domains.srs",
+                  "requiredCapabilities": []
+                },
+                "source": {
+                  "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-20/stable/v2fly/category-ai-not-cn/domains.json",
+                  "requiredCapabilities": []
+                }
+              }
+            },
+            "dns-response": {
+              "unavailable": "empty"
+            }
+          }
+        },
+        "files": {
+          "stable/v2fly/category-ai-not-cn/domains.srs": {
+            "sha256": "b66a1797d2850ba2c2c632ae6f61cb40184134a3d4bcb584dc07273361c167d5",
+            "byteLength": 2164
+          },
+          "stable/v2fly/category-ai-not-cn/domains.json": {
+            "sha256": "181b855217d871ed8f0ec40923a8606489c5ffb0fe0b14de3c47aeeb0a5a63d5",
+            "byteLength": 6316
+          }
+        }
+      }
+    },
+    "historical": {
+      "status": "activated",
+      "commit": "fbbf055f00dbaf98cb0cb674269905e5981dec07",
+      "activation": {
+        "schemaVersion": 1,
+        "id": "6f4a2e6c-204f-4d20-8ca4-dc3e719253d4",
+        "candidateId": "6e76b4ef-883c-46d1-8058-ef3f803b347b",
+        "candidateEvidenceUrl": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/3f06056ee6f1c6336936d3b1e7b776215c8b2ded/candidates/6e76b4ef-883c-46d1-8058-ef3f803b347b/readback.json",
+        "source": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 431467724,
+          "tag": "20261102130044",
+          "commit": "328f6c5168653e809561c862757c966fc5012e5d",
+          "yaml": {
+            "id": 701778045,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261102130044/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 701778047,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261102130044/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "bfa4ab62d0f47216029ce6b777a2364978c3f28086060b592453684a0dd830ee",
+          "inputBytes": 3758877,
+          "checksumSha256": "fa9c9b78e6db7d4686554e9197ca13a4ea33af94e76a6ec908e553af3c9f183e"
+        },
+        "validation": {
+          "tool": {
+            "path": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+            "version": "1.14.4",
+            "identity": "sing-box version 1.14.4\n\nEnvironment: go1.26.10 darwin/arm64\nTags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0\nRevision: c005f35300ce76427dc285481ec5695f5b179cd2\nCGO: enabled",
+            "sha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2"
+          },
+          "buildId": "72bbeccb72bd286594d5dac19bb924d5268d3df421950918e36555bb84062cea",
+          "nativeBuildId": "77ad50641f764c7c501319f23d80279a9b3089a500f336965735ed7b31d6384d"
+        },
+        "expectedHead": "ae3cf588169226618eb30271f123c29608eb754a",
+        "subscription": {
+          "schemaVersion": 1,
+          "systemRuleSetId": "v2fly:domain-list-community:category-ai-!cn",
+          "targetVersion": "1.14.4",
+          "sourceFormatVersion": 4,
+          "projections": {
+            "route": {
+              "formats": {
+                "binary": {
+                  "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-20/stable/v2fly/category-ai-not-cn/domains.srs",
+                  "requiredCapabilities": []
+                },
+                "source": {
+                  "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-20/stable/v2fly/category-ai-not-cn/domains.json",
+                  "requiredCapabilities": []
+                }
+              }
+            },
+            "dns-query": {
+              "formats": {
+                "binary": {
+                  "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-20/stable/v2fly/category-ai-not-cn/domains.srs",
+                  "requiredCapabilities": []
+                },
+                "source": {
+                  "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-20/stable/v2fly/category-ai-not-cn/domains.json",
+                  "requiredCapabilities": []
+                }
+              }
+            },
+            "dns-response": {
+              "unavailable": "empty"
+            }
+          }
+        },
+        "files": {
+          "stable/v2fly/category-ai-not-cn/domains.srs": {
+            "sha256": "b66a1797d2850ba2c2c632ae6f61cb40184134a3d4bcb584dc07273361c167d5",
+            "byteLength": 2164
+          },
+          "stable/v2fly/category-ai-not-cn/domains.json": {
+            "sha256": "181b855217d871ed8f0ec40923a8606489c5ffb0fe0b14de3c47aeeb0a5a63d5",
+            "byteLength": 6316
+          }
+        }
+      }
+    },
+    "current": {
+      "status": "activated",
+      "commit": "6df00a10c1d7b37d13511c8940356edd784a7182",
+      "activation": {
+        "schemaVersion": 1,
+        "id": "c63e30e0-aee6-433a-91e4-05577af9cf5c",
+        "candidateId": "6e76b4ef-883c-46d1-8058-ef3f803b347b",
+        "candidateEvidenceUrl": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/3f06056ee6f1c6336936d3b1e7b776215c8b2ded/candidates/6e76b4ef-883c-46d1-8058-ef3f803b347b/readback.json",
+        "source": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 431467724,
+          "tag": "20261102130044",
+          "commit": "328f6c5168653e809561c862757c966fc5012e5d",
+          "yaml": {
+            "id": 701778045,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261102130044/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 701778047,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261102130044/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "bfa4ab62d0f47216029ce6b777a2364978c3f28086060b592453684a0dd830ee",
+          "inputBytes": 3758877,
+          "checksumSha256": "fa9c9b78e6db7d4686554e9197ca13a4ea33af94e76a6ec908e553af3c9f183e"
+        },
+        "validation": {
+          "tool": {
+            "path": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+            "version": "1.14.4",
+            "identity": "sing-box version 1.14.4\n\nEnvironment: go1.26.10 darwin/arm64\nTags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0\nRevision: c005f35300ce76427dc285481ec5695f5b179cd2\nCGO: enabled",
+            "sha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2"
+          },
+          "buildId": "72bbeccb72bd286594d5dac19bb924d5268d3df421950918e36555bb84062cea",
+          "nativeBuildId": "77ad50641f764c7c501319f23d80279a9b3089a500f336965735ed7b31d6384d"
+        },
+        "expectedHead": "fbbf055f00dbaf98cb0cb674269905e5981dec07",
+        "subscription": {
+          "schemaVersion": 1,
+          "systemRuleSetId": "v2fly:domain-list-community:category-ai-!cn",
+          "targetVersion": "1.14.4",
+          "sourceFormatVersion": 4,
+          "projections": {
+            "route": {
+              "formats": {
+                "binary": {
+                  "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-20/stable/v2fly/category-ai-not-cn/domains.srs",
+                  "requiredCapabilities": []
+                },
+                "source": {
+                  "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-20/stable/v2fly/category-ai-not-cn/domains.json",
+                  "requiredCapabilities": []
+                }
+              }
+            },
+            "dns-query": {
+              "formats": {
+                "binary": {
+                  "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-20/stable/v2fly/category-ai-not-cn/domains.srs",
+                  "requiredCapabilities": []
+                },
+                "source": {
+                  "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-20/stable/v2fly/category-ai-not-cn/domains.json",
+                  "requiredCapabilities": []
+                }
+              }
+            },
+            "dns-response": {
+              "unavailable": "empty"
+            }
+          }
+        },
+        "files": {
+          "stable/v2fly/category-ai-not-cn/domains.srs": {
+            "sha256": "b66a1797d2850ba2c2c632ae6f61cb40184134a3d4bcb584dc07273361c167d5",
+            "byteLength": 2164
+          },
+          "stable/v2fly/category-ai-not-cn/domains.json": {
+            "sha256": "181b855217d871ed8f0ec40923a8606489c5ffb0fe0b14de3c47aeeb0a5a63d5",
+            "byteLength": 6316
+          }
+        }
+      }
+    },
+    "historicalReadback": [
+      {
+        "path": "stable/activation.json",
+        "sha256": "57d5b7a4df3d82c6ae3f9de80a480e53fc57c3d96a1653cfb8d324fdf2193d2f",
+        "byteLength": 3652
+      },
+      {
+        "path": "stable/v2fly/category-ai-not-cn/domains.srs",
+        "sha256": "b66a1797d2850ba2c2c632ae6f61cb40184134a3d4bcb584dc07273361c167d5",
+        "byteLength": 2164
+      },
+      {
+        "path": "stable/v2fly/category-ai-not-cn/domains.json",
+        "sha256": "181b855217d871ed8f0ec40923a8606489c5ffb0fe0b14de3c47aeeb0a5a63d5",
+        "byteLength": 6316
+      }
+    ],
+    "rejectedMissingHistory": true,
+    "productionBefore": "ae3cf588169226618eb30271f123c29608eb754a",
+    "productionAfter": "ae3cf588169226618eb30271f123c29608eb754a",
+    "stableReadback": [
+      {
+        "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-20/stable/v2fly/category-ai-not-cn/domains.srs",
+        "sha256": "b66a1797d2850ba2c2c632ae6f61cb40184134a3d4bcb584dc07273361c167d5",
+        "byteLength": 2164
+      },
+      {
+        "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-20/stable/v2fly/category-ai-not-cn/domains.json",
+        "sha256": "181b855217d871ed8f0ec40923a8606489c5ffb0fe0b14de3c47aeeb0a5a63d5",
+        "byteLength": 6316
+      }
+    ],
+    "compiler": {
+      "configSha256": "5022af2a900a1c2b078e2139352671319c730603367d101cf06e9d3fbe751ba1",
+      "ruleSets": [
+        {
+          "type": "remote",
+          "tag": "routing",
+          "format": "binary",
+          "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-20/stable/v2fly/category-ai-not-cn/domains.srs",
+          "http_client": "download"
+        },
+        {
+          "type": "remote",
+          "tag": "queries",
+          "format": "binary",
+          "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-20/stable/v2fly/category-ai-not-cn/domains.srs"
+        }
+      ],
+      "nativeCheck": "passed",
+      "config": {
+        "dns": {
+          "final": "local",
+          "servers": [
+            {
+              "type": "local",
+              "tag": "local"
+            }
+          ],
+          "rules": [
+            {
+              "rule_set": "queries",
+              "server": "local"
+            }
+          ]
+        },
+        "route": {
+          "final": "direct",
+          "default_domain_resolver": "local",
+          "rule_set": [
+            {
+              "type": "remote",
+              "tag": "routing",
+              "format": "binary",
+              "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-20/stable/v2fly/category-ai-not-cn/domains.srs",
+              "http_client": "download"
+            },
+            {
+              "type": "remote",
+              "tag": "queries",
+              "format": "binary",
+              "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-20/stable/v2fly/category-ai-not-cn/domains.srs"
+            }
+          ],
+          "rules": [
+            {
+              "rule_set": "routing",
+              "outbound": "direct"
+            }
+          ]
+        },
+        "outbounds": [
+          {
+            "type": "direct",
+            "tag": "direct"
+          },
+          {
+            "type": "vless",
+            "server": "192.0.2.1",
+            "server_port": 443,
+            "uuid": "00000000-0000-4000-8000-000000000001",
+            "tls": {
+              "enabled": true,
+              "server_name": "example.invalid"
+            },
+            "tag": "alice-proxy"
+          }
+        ],
+        "http_clients": [
+          {
+            "tag": "download",
+            "detour": "direct",
+            "domain_resolver": "local"
+          }
+        ]
+      }
+    }
+  },
+  "controlledClient": {
+    "source": "synthetic controlled fixture, not an official Release",
+    "a": {
+      "id": "e24d2d27-85da-4a59-942a-9eff0f73ea97",
+      "candidateEvidenceUrl": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/0000000000000000000000000000000000000003/candidates/e24d2d27-85da-4a59-942a-9eff0f73ea97/readback.json",
+      "source": {
+        "kind": "synthetic",
+        "description": "issue-19 A/B controlled fixture",
+        "revision": "A"
+      },
+      "buildId": "a60632f4e8fd817766c5a2bb8cf6e8c9754ba572d6ae8f46cc6a1cd005619336",
+      "filesCommit": "0000000000000000000000000000000000000001",
+      "metadataCommit": "0000000000000000000000000000000000000002",
+      "evidenceCommit": "0000000000000000000000000000000000000003"
+    },
+    "b": {
+      "id": "40d1315c-2c43-4504-9762-ce0a383af936",
+      "candidateEvidenceUrl": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/0000000000000000000000000000000000000006/candidates/40d1315c-2c43-4504-9762-ce0a383af936/readback.json",
+      "source": {
+        "kind": "synthetic",
+        "description": "issue-19 A/B controlled fixture",
+        "revision": "B"
+      },
+      "buildId": "0ee3bd9b5e5adcc0aa5ba92d4c6cb678590b40436e012fa164f9467c8a052109",
+      "filesCommit": "0000000000000000000000000000000000000004",
+      "metadataCommit": "0000000000000000000000000000000000000005",
+      "evidenceCommit": "0000000000000000000000000000000000000006"
+    },
+    "activeA": {
+      "status": "activated",
+      "commit": "0000000000000000000000000000000000000007",
+      "activation": {
+        "schemaVersion": 1,
+        "id": "a67ba7ef-27d0-464f-8c69-1afdabbc87c8",
+        "candidateId": "e24d2d27-85da-4a59-942a-9eff0f73ea97",
+        "candidateEvidenceUrl": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/0000000000000000000000000000000000000003/candidates/e24d2d27-85da-4a59-942a-9eff0f73ea97/readback.json",
+        "source": {
+          "kind": "synthetic",
+          "description": "issue-19 A/B controlled fixture",
+          "revision": "A"
+        },
+        "validation": {
+          "tool": {
+            "path": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+            "version": "1.14.4",
+            "identity": "sing-box version 1.14.4\n\nEnvironment: go1.26.10 darwin/arm64\nTags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0\nRevision: c005f35300ce76427dc285481ec5695f5b179cd2\nCGO: enabled",
+            "sha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2"
+          },
+          "buildId": "a60632f4e8fd817766c5a2bb8cf6e8c9754ba572d6ae8f46cc6a1cd005619336",
+          "nativeBuildId": "053230f88e76c985e3d6fd033fc24c5fa92a0b6388e947fbdcbbfae724e43347"
+        },
+        "expectedHead": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "subscription": {
+          "schemaVersion": 1,
+          "systemRuleSetId": "v2fly:domain-list-community:category-ai-!cn",
+          "targetVersion": "1.14.4",
+          "sourceFormatVersion": 4,
+          "projections": {
+            "route": {
+              "formats": {
+                "binary": {
+                  "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-19/stable/domains.srs",
+                  "requiredCapabilities": []
+                }
+              }
+            },
+            "dns-query": {
+              "formats": {
+                "binary": {
+                  "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-19/stable/domains.srs",
+                  "requiredCapabilities": []
+                }
+              }
+            },
+            "dns-response": {
+              "unavailable": "empty"
+            }
+          }
+        },
+        "files": {
+          "stable/domains.srs": {
+            "sha256": "de596c55b4ae82a59de16be5e16cd540721a617c4816910fb325be407a6add8c",
+            "byteLength": 52
+          }
+        }
+      }
+    },
+    "activeB": {
+      "status": "activated",
+      "commit": "0000000000000000000000000000000000000008",
+      "activation": {
+        "schemaVersion": 1,
+        "id": "382c305d-1709-47bb-9153-3a57b2c086be",
+        "candidateId": "40d1315c-2c43-4504-9762-ce0a383af936",
+        "candidateEvidenceUrl": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/0000000000000000000000000000000000000006/candidates/40d1315c-2c43-4504-9762-ce0a383af936/readback.json",
+        "source": {
+          "kind": "synthetic",
+          "description": "issue-19 A/B controlled fixture",
+          "revision": "B"
+        },
+        "validation": {
+          "tool": {
+            "path": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+            "version": "1.14.4",
+            "identity": "sing-box version 1.14.4\n\nEnvironment: go1.26.10 darwin/arm64\nTags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0\nRevision: c005f35300ce76427dc285481ec5695f5b179cd2\nCGO: enabled",
+            "sha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2"
+          },
+          "buildId": "0ee3bd9b5e5adcc0aa5ba92d4c6cb678590b40436e012fa164f9467c8a052109",
+          "nativeBuildId": "057e9447648c672c98d51f37227a055bad90ab0013cfd344c63b430d54130d85"
+        },
+        "expectedHead": "0000000000000000000000000000000000000007",
+        "subscription": {
+          "schemaVersion": 1,
+          "systemRuleSetId": "v2fly:domain-list-community:category-ai-!cn",
+          "targetVersion": "1.14.4",
+          "sourceFormatVersion": 4,
+          "projections": {
+            "route": {
+              "formats": {
+                "binary": {
+                  "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-19/stable/domains.srs",
+                  "requiredCapabilities": []
+                }
+              }
+            },
+            "dns-query": {
+              "formats": {
+                "binary": {
+                  "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-19/stable/domains.srs",
+                  "requiredCapabilities": []
+                }
+              }
+            },
+            "dns-response": {
+              "unavailable": "empty"
+            }
+          }
+        },
+        "files": {
+          "stable/domains.srs": {
+            "sha256": "f50affc166d3a8010f31dd43afda7f52c0ed185bf61edfbdcae11143ba4a0117",
+            "byteLength": 54
+          }
+        }
+      }
+    },
+    "rolledBack": {
+      "status": "activated",
+      "commit": "0000000000000000000000000000000000000009",
+      "activation": {
+        "schemaVersion": 1,
+        "id": "7d912b60-a241-4a93-a057-addfcedafbfa",
+        "operation": "rollback",
+        "historicalActivationCommit": "0000000000000000000000000000000000000007",
+        "historicalActivationId": "a67ba7ef-27d0-464f-8c69-1afdabbc87c8",
+        "candidateId": "e24d2d27-85da-4a59-942a-9eff0f73ea97",
+        "candidateEvidenceUrl": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/0000000000000000000000000000000000000003/candidates/e24d2d27-85da-4a59-942a-9eff0f73ea97/readback.json",
+        "source": {
+          "kind": "synthetic",
+          "description": "issue-19 A/B controlled fixture",
+          "revision": "A"
+        },
+        "validation": {
+          "tool": {
+            "path": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+            "version": "1.14.4",
+            "identity": "sing-box version 1.14.4\n\nEnvironment: go1.26.10 darwin/arm64\nTags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0\nRevision: c005f35300ce76427dc285481ec5695f5b179cd2\nCGO: enabled",
+            "sha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2"
+          },
+          "buildId": "a60632f4e8fd817766c5a2bb8cf6e8c9754ba572d6ae8f46cc6a1cd005619336",
+          "nativeBuildId": "053230f88e76c985e3d6fd033fc24c5fa92a0b6388e947fbdcbbfae724e43347"
+        },
+        "expectedHead": "0000000000000000000000000000000000000008",
+        "subscription": {
+          "schemaVersion": 1,
+          "systemRuleSetId": "v2fly:domain-list-community:category-ai-!cn",
+          "targetVersion": "1.14.4",
+          "sourceFormatVersion": 4,
+          "projections": {
+            "route": {
+              "formats": {
+                "binary": {
+                  "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-19/stable/domains.srs",
+                  "requiredCapabilities": []
+                }
+              }
+            },
+            "dns-query": {
+              "formats": {
+                "binary": {
+                  "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-19/stable/domains.srs",
+                  "requiredCapabilities": []
+                }
+              }
+            },
+            "dns-response": {
+              "unavailable": "empty"
+            }
+          }
+        },
+        "files": {
+          "stable/domains.srs": {
+            "sha256": "de596c55b4ae82a59de16be5e16cd540721a617c4816910fb325be407a6add8c",
+            "byteLength": 52
+          }
+        }
+      }
+    },
+    "client": {
+      "pid": 65306,
+      "binary": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+      "configSha256": "ba9a71de590b7de2f5c0f3f23dfa04c93000c81c1b2bf2649396846b47167eae",
+      "sameProcess": true,
+      "sameConfig": true,
+      "updateInterval": "1s"
+    },
+    "before": {
+      "route": "route-fallback-A",
+      "dns": "192.0.2.10",
+      "observedAt": "2026-11-03T19:21:07.088Z"
+    },
+    "after": {
+      "route": "route-matched-B",
+      "dns": "192.0.2.20",
+      "observedAt": "2026-11-03T19:21:07.987Z"
+    },
+    "restored": {
+      "route": "route-fallback-A",
+      "dns": "192.0.2.10",
+      "observedAt": "2026-11-03T19:21:09.077Z"
+    },
+    "published": [
+      {
+        "path": "stable/domains.srs",
+        "sha256": "de596c55b4ae82a59de16be5e16cd540721a617c4816910fb325be407a6add8c",
+        "commit": "0000000000000000000000000000000000000007"
+      },
+      {
+        "path": "stable/activation.json",
+        "sha256": "de7a4711e1d7b5fecc305112e27a7c54c42f52b1a3d3e0e6e01988288c95e0cc",
+        "commit": "0000000000000000000000000000000000000007"
+      },
+      {
+        "path": "stable/domains.srs",
+        "sha256": "f50affc166d3a8010f31dd43afda7f52c0ed185bf61edfbdcae11143ba4a0117",
+        "commit": "0000000000000000000000000000000000000008"
+      },
+      {
+        "path": "stable/activation.json",
+        "sha256": "68cd8f73f857432b15aefe583d6e6bfb887f73a950095c41bca85d94daf3982c",
+        "commit": "0000000000000000000000000000000000000008"
+      },
+      {
+        "path": "stable/domains.srs",
+        "sha256": "de596c55b4ae82a59de16be5e16cd540721a617c4816910fb325be407a6add8c",
+        "commit": "0000000000000000000000000000000000000009"
+      },
+      {
+        "path": "stable/activation.json",
+        "sha256": "b267585a6a7ea0ec265179a7e52f4487a184d58cc92f50bf7a596bd35c96a2f2",
+        "commit": "0000000000000000000000000000000000000009"
+      }
+    ]
+  },
+  "checks": {
+    "check": {
+      "sha256": "3cf203b57155ff8a56a1b82849f55aa77de91e90dd3e91074ba584388ce18a00",
+      "summary": [
+        "packages/config-compiler test: ℹ tests 96",
+        "packages/config-compiler test: ℹ pass 96",
+        "packages/config-compiler test: ℹ fail 0",
+        "packages/config-compiler test: ℹ skipped 0",
+        "packages/rule-set-pipeline test: ℹ tests 89",
+        "packages/rule-set-pipeline test: ℹ pass 89",
+        "packages/rule-set-pipeline test: ℹ fail 0",
+        "packages/rule-set-pipeline test: ℹ skipped 0",
+        "Workspace smoke passed: Web App imports, public declarations, and browser bundle."
+      ]
+    },
+    "integration": {
+      "sha256": "94d3608f5e67525bb1c7bfff3e589c1cd827c6a26fb24e1a6f865738d9dfa62e",
+      "summary": [
+        "packages/config-compiler test:integration: ℹ tests 27",
+        "packages/config-compiler test:integration: ℹ pass 27",
+        "packages/config-compiler test:integration: ℹ fail 0",
+        "packages/config-compiler test:integration: ℹ skipped 0",
+        "packages/rule-set-pipeline test:integration: ℹ tests 66",
+        "packages/rule-set-pipeline test:integration: ℹ pass 66",
+        "packages/rule-set-pipeline test:integration: ℹ fail 0",
+        "packages/rule-set-pipeline test:integration: ℹ skipped 0"
+      ]
+    },
+    "public": {
+      "sha256": "928335b2cf566f2c2dc8c2967adb392eece31bfd97168510643dc31fd9d8f03c",
+      "summary": [
+        "ℹ tests 1",
+        "ℹ pass 1",
+        "ℹ fail 0",
+        "ℹ skipped 0"
+      ]
+    }
+  }
+}
