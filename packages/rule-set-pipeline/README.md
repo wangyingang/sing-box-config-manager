@@ -144,7 +144,7 @@ SING_BOX_TEST_BINARY=/absolute/path/to/sing-box-1.14.4 \
 pnpm --dir packages/rule-set-pipeline test:publication
 ```
 
-该验收固定 Release `20261102130044`，状态目录需尚未成功处理此样本，证据输出文件需不存在；此入口不是同一 Release 的显式重建命令。正常 CLI 不接受固定 tag；#22 的重建维护入口仍未交付。受控集成测试不访问真实 GitHub 写接口，自动覆盖上传、远程回读、来源变化和重试边界。
+该验收固定 Release `20261102130044`，状态目录需尚未成功处理此样本，证据输出文件需不存在；此入口不是同一 Release 的显式重建命令。正常更新 CLI 不接受固定 tag；重建使用下面的独立命令。受控集成测试不访问真实 GitHub 写接口，自动覆盖上传、远程回读、来源变化和重试边界。
 
 固定官方候选的真实激活验收（候选需已通过 #18 发布，证据文件需不存在）：
 
@@ -175,3 +175,30 @@ node --import tsx --test test/integration/client-failure-recovery.test.ts
 测试通过 A／B 域名的正反 Route／DNS 新请求，分别证明四类更新故障后 A 仍有效、故障解除后 B 生效，以及停止客户端和规则服务后从持久缓存重启恢复 B。运行期间保持同一配置；重启前后的证据分开保存。临时 CA、DNS 缓存禁用、`1s` 更新周期与持久缓存仅属于受控测试，不是实际客户端的统一要求。测试结束清理进程、监听器及临时目录，结果保留在指定证据文件和 CI 日志中。
 
 原生客户端不额外校验 Artifact Manifest 摘要；缓存写入失败不会回滚已生效的内存规则。首次启动无有效缓存、缓存损坏或无法写入缓存时，不具有跨重启旧规则保证。合法空 SRS 可能被客户端接受，必须依靠发布端激活门禁拒绝；本测试不以客户端拒绝空规则为前提。具体证据与未覆盖边界见 [#21 验收记录](docs/verification/issue-21.md)。
+
+## 显式重建固定 Release
+
+使用已有状态目录中成功处理过的固定 Release tag：
+
+```sh
+pnpm --dir packages/rule-set-pipeline rebuild \
+  --state /absolute/path/to/rule-state \
+  --release 20261102130044 \
+  --binary /absolute/path/to/sing-box-1.14.4
+```
+
+`rebuildRules({ stateDirectory, release, binary, ... })` 与 CLI 使用同一入口。拒绝 `latest`、未固定或尚未成功处理的 Release；通过持久记录中的 Release ID 获取元数据，并重新核对 tag、源码 commit、资产身份及实际输入摘要。来源变化明确失败，不覆盖固定记录。
+
+重建复用正常更新的转换、原生验证、不可变发布和 HTTPS 回读门禁。每次尝试保存新候选 ID、操作类型、原成功候选 ID 和构建身份。`build.json` 记录输入、转换器实现摘要、Node／yaml 版本、目标 binary 的 SHA-256、契约版本和实际产物摘要。实现摘要覆盖当前运行的来源读取、解析、转换、投影与原生验证代码；TypeScript 源码和编译后 JavaScript 分别记录各自实际运行实现的摘要。
+
+成功和失败均保留原成功处理记录、固定来源及历史候选；失败可按原命令重试。相同输入与工具的规则字节及构建身份保持一致，候选 ID 和验证运行记录独立保存。重建不写稳定入口或激活回执，正常更新仍在无新 Release 时跳过。后续激活使用既有 `activate --candidate <new-readback-url>` 流程；激活验证同时支持历史构建身份和显式记录契约版本的新身份，拒绝不支持的契约版本。
+
+真实重建验收固定官方样本，使用专属状态目录与 `acceptance-issue-22-<suffix>` 远程分支。它发布原候选和重建候选、注入原生失败并重试、回读历史文件，并通过固定样本元数据适配器检验正常更新的 latest 跳过路径（不将旧样本声称为真实 latest）：
+
+```sh
+RULE_REBUILD_STATE=/tmp/issue-22-fresh-state \
+RULE_REBUILD_EVIDENCE=/tmp/issue-22-fresh-evidence.json \
+RULE_REBUILD_BRANCH=acceptance-issue-22-<unique-suffix> \
+SING_BOX_TEST_BINARY=/absolute/path/to/sing-box-1.14.4 \
+pnpm --dir packages/rule-set-pipeline test:rebuild
+```

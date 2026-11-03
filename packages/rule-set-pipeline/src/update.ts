@@ -13,6 +13,7 @@ type Pin = Pick<SourceRecord, 'repository' | 'releaseId' | 'tag' | 'commit' | 'y
 interface Candidate {
   id: string; releaseId: number; tag: string;
   status: 'building' | 'publishing' | 'verified' | 'failed';
+  operation?: 'update' | 'rebuild'; previousCandidateId?: string; buildId?: string;
   filesCommit?: string; metadataCommit?: string; evidenceCommit?: string;
   manifestUrl?: string; evidenceUrl?: string; error?: string;
 }
@@ -42,13 +43,24 @@ export interface UpdateOptions {
   sampleTag?: string;
 }
 
-/** Durable checkpoints survive failure; only a fully read-back candidate is processed. */
-export async function updateRules(options: UpdateOptions) {
+export interface RebuildOptions extends Omit<UpdateOptions, 'sampleTag'> { release: string }
+
+export function updateRules(options: UpdateOptions) { return processRelease(options); }
+
+/** Rebuild only a previously pinned, successfully processed Release, never latest. */
+export function rebuildRules(options: RebuildOptions) {
+  if (!options.release || options.release.toLowerCase() === 'latest') throw new Error('rebuild requires a fixed Release tag');
+  return processRelease(options, options.release);
+}
+
+/** Durable checkpoints and publication gates are shared by update and rebuild. */
+async function processRelease(options: UpdateOptions, rebuildTag?: string) {
   await mkdir(options.stateDirectory, { recursive: true });
   const lock = join(options.stateDirectory, 'update.lock');
   await mkdir(lock); // Refuse concurrent calls rather than losing pins or success records.
   let candidate: Candidate | undefined;
   let state: UpdateState | undefined;
+  let previousProcessed: UpdateState['processed'][string] | undefined;
   const save = async () => {
     const temporary = join(options.stateDirectory, `state-${randomUUID()}.tmp`);
     await writeFile(temporary, encode(state));
@@ -58,7 +70,11 @@ export async function updateRules(options: UpdateOptions) {
     const restored = await readUpdateState(options.stateDirectory);
     state = restored.state;
     const fetcher = options.fetch ?? fetch;
-    const endpoint = options.sampleTag ? `tags/${encodeURIComponent(options.sampleTag)}` : 'latest';
+    const pinnedRebuild = rebuildTag ? Object.values(state.pinned).find(entry => entry.identity?.tag === rebuildTag) : undefined;
+    if (rebuildTag && (!pinnedRebuild?.identity || !pinnedRebuild.source || !state.processed[String(pinnedRebuild.identity.releaseId)])) {
+      throw new Error('rebuild requires a previously pinned and successfully processed Release');
+    }
+    const endpoint = pinnedRebuild ? String(pinnedRebuild.identity!.releaseId) : options.sampleTag ? `tags/${encodeURIComponent(options.sampleTag)}` : 'latest';
     const response = await fetcher(`https://api.github.com/repos/v2fly/domain-list-community/releases/${endpoint}`, {
       headers: { Accept: 'application/vnd.github+json', ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}) },
       signal: AbortSignal.timeout(120_000),
@@ -67,7 +83,11 @@ export async function updateRules(options: UpdateOptions) {
     const release = await response.json() as Record<string, unknown>;
     if (!Number.isSafeInteger(release.id) || Number(release.id) <= 0 || typeof release.tag_name !== 'string') throw new Error('Invalid Release identity');
     const key = String(release.id), tag = release.tag_name;
-    if (state.processed[key]) {
+    if (pinnedRebuild && (release.id !== pinnedRebuild.identity!.releaseId || tag !== rebuildTag)) {
+      throw new Error('SOURCE_CHANGED: rebuild Release identity changed');
+    }
+    previousProcessed = state.processed[key];
+    if (!rebuildTag && previousProcessed) {
       if (state.processed[key].tag !== tag) throw new Error('SOURCE_CHANGED: processed Release identity changed');
       const pinned = state.pinned[key]?.identity;
       if (pinned && (!Array.isArray(release.assets) || [pinned.yaml, pinned.checksum].some(asset => {
@@ -76,7 +96,8 @@ export async function updateRules(options: UpdateOptions) {
       }))) throw new Error('SOURCE_CHANGED: processed Release assets changed');
       return { status: 'skipped' as const, releaseId: release.id, ...state.processed[key], activeRuleVersion: restored.activeRuleVersion };
     }
-    candidate = { id: randomUUID(), releaseId: Number(release.id), tag, status: 'building' };
+    candidate = { id: randomUUID(), releaseId: Number(release.id), tag, status: 'building',
+      operation: rebuildTag ? 'rebuild' : 'update', previousCandidateId: previousProcessed?.candidateId };
     state.candidates[candidate.id] = candidate;
     await save();
     const previousTag = Object.values(state.pinned).find(entry => entry.identity?.tag === tag && entry.identity.releaseId !== Number(release.id));
@@ -96,7 +117,8 @@ export async function updateRules(options: UpdateOptions) {
     const built = await buildRelease(sourceOptions);
     if (!built.ok) throw new Error(JSON.stringify(built.report.diagnostics));
     const native = await buildNative(decodedTerms(JSON.parse(built.json)), options.binary);
-    const buildId = sha256(JSON.stringify({ source: built.source, tools: built.tools, nativeBuildId: native.buildId }));
+    const contracts = { artifactManifest: 1, sourceFormat: 4, buildRecord: 1 };
+    const buildId = candidate.buildId = sha256(JSON.stringify({ source: built.source, tools: built.tools, nativeBuildId: native.buildId, contracts }));
     const publication = options.publication ?? githubPublication();
     const prefix = `candidates/${candidate.id}`;
     const files = Object.fromEntries(native.artifacts.map(artifact => [`${prefix}/${artifact.file}`, artifact.content]));
@@ -118,7 +140,7 @@ export async function updateRules(options: UpdateOptions) {
       [`${prefix}/manifest.json`]: encode(manifest),
       [`${prefix}/source.json`]: encode(built.source),
       [`${prefix}/conversion-report.json`]: encode(built.report),
-      [`${prefix}/build.json`]: encode({ buildId, source: built.source, tools: built.tools, nativeBuildId, ...validation,
+      [`${prefix}/build.json`]: encode({ buildId, candidateId: candidate.id, operation: candidate.operation, previousCandidateId: candidate.previousCandidateId, contracts, source: built.source, tools: built.tools, nativeBuildId, ...validation,
         artifacts: native.artifacts.map(({ content: _content, ...metadata }) => metadata) }),
     };
     const metadataCommit = candidate.metadataCommit = await publication.commit(records, `候选 ${candidate.id}：Manifest 与构建记录`);
@@ -147,14 +169,15 @@ export async function updateRules(options: UpdateOptions) {
     candidate.evidenceUrl = immutableUrl(candidate.evidenceCommit, evidencePath);
     await verify(evidencePath, evidence, candidate.evidenceCommit);
     candidate.status = 'verified';
-    state.processed[key] = { candidateId: candidate.id, tag, evidenceUrl: candidate.evidenceUrl };
+    if (!rebuildTag) state.processed[key] = { candidateId: candidate.id, tag, evidenceUrl: candidate.evidenceUrl };
     await save();
     return { status: 'processed' as const, candidate, activeRuleVersion: restored.activeRuleVersion, readback };
   } catch (error) {
     if (candidate && state) {
       candidate.status = 'failed'; candidate.error = error instanceof Error ? error.message : String(error);
       // A failed final save must never leave an in-memory success persisted by catch.
-      delete state.processed[String(candidate.releaseId)];
+      if (previousProcessed) state.processed[String(candidate.releaseId)] = previousProcessed;
+      else delete state.processed[String(candidate.releaseId)];
       await save();
     }
     throw error;
