@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -29,6 +29,9 @@ test('lookup 失败不产生成功记录；并发锁拒绝覆盖；状态损坏�
   try {
     await assert.rejects(updateRules({ stateDirectory: directory, binary: '', fetch: async () => new Response('', { status: 503 }) }), /503/);
     assert.deepEqual((await readUpdateState(directory)).state.processed, {});
+    await mkdir(join(directory, 'update.lock'));
+    await assert.rejects(updateRules({ stateDirectory: directory, binary: '', fetch: async () => { throw new Error('must not request'); } }), { code: 'EEXIST' });
+    await rm(join(directory, 'update.lock'), { recursive: true });
     await writeFile(join(directory, 'update-state.json'), '{broken');
     await assert.rejects(updateRules({ stateDirectory: directory, binary: '' }));
     assert.equal(await readFile(join(directory, 'update-state.json'), 'utf8'), '{broken');
