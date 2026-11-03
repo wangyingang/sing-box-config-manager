@@ -30,7 +30,10 @@ const subscription: RuleSubscription = { schemaVersion: 1, systemRuleSetId: 'v2f
   } };
 
 async function listen(server: Server) {
-  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => { server.off('error', reject); resolve(); });
+  });
   return (server.address() as { port: number }).port;
 }
 async function freePort() {
@@ -139,7 +142,10 @@ test('更新故障保留 A、恢复更新 B，并从持久缓存断网重启恢�
       const answer = Buffer.from([0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0, 0, 0, 4, 192, 0, 2, 10]);
       dns.send(Buffer.concat([response, answer]), remote.port, remote.address);
     });
-    await new Promise<void>(resolve => dns.bind(0, '127.0.0.1', () => { dnsBound = true; resolve(); }));
+    await new Promise<void>((resolve, reject) => {
+      dns.once('error', reject);
+      dns.bind(0, '127.0.0.1', () => { dns.off('error', reject); dnsBound = true; resolve(); });
+    });
     const dnsPort = (dns.address() as { port: number }).port;
     const input: CompileInput = {
       profile: 'macos-standalone', params: { ecs: null }, artifacts: [], subscriptions: [subscription],
