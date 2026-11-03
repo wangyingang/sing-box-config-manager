@@ -9,7 +9,7 @@
 本目录由 Rule Set Pipeline 维护，是 Compiler 接入固定内存产物数据的边界。
 `artifact-manifest.schema.json` 定义封闭的语言无关结构，
 `artifact-manifest.example.json` 是跨模块契约测试使用的合成样本。
-本页说明固定产物契约；包内的本地构建入口见 [Pipeline README](../README.md)，其输出尚未完成原生验证或发布，不能直接视为此契约的产物。
+本页说明固定产物契约；包内的本地构建入口见 [Pipeline README](../README.md)，本地 `build` 输出已原生验证，但不能直接视为此契约的产物。`update` 另行发布完整 commit 固定的 Manifest 与规则文件，并完成 HTTPS 回读；见 [#18 验收](../docs/verification/issue-18.md)。
 
 Manifest 的 `id` 标识系统规则集，`revision` 固定整个清单的不可变修订。
 `schemaVersion: 1`、`targetVersion: "1.14.4"` 和 `sourceFormatVersion: 4`

@@ -1,6 +1,6 @@
 # Rule Set Pipeline
 
-包名：`@sing-box-config-manager/rule-set-pipeline`。已实现 [#15](https://github.com/wangyingang/sing-box-config-manager/issues/15) 的固定来源转换，以及 [#16](https://github.com/wangyingang/sing-box-config-manager/issues/16) 的确定性 JSON／SRS、本地原生验证和用途投影。父 [Spec #14](https://github.com/wangyingang/sing-box-config-manager/issues/14) 的候选发布、激活和自动更新尚未交付。验收记录见 [#15](docs/verification/issue-15.md) 和 [#16](docs/verification/issue-16.md)。
+包名：`@sing-box-config-manager/rule-set-pipeline`。已实现 [#15](https://github.com/wangyingang/sing-box-config-manager/issues/15) 的固定来源转换，以及 [#16](https://github.com/wangyingang/sing-box-config-manager/issues/16) 的确定性 JSON／SRS、本地原生验证和用途投影。另已实现 [#18](https://github.com/wangyingang/sing-box-config-manager/issues/18) 的正常更新、不可变候选发布与 HTTPS 回读。父 [Spec #14](https://github.com/wangyingang/sing-box-config-manager/issues/14) 的激活和客户端自动更新尚未交付。验收记录见 [#15](docs/verification/issue-15.md) 、[#16](docs/verification/issue-16.md) 和 [#18](docs/verification/issue-18.md)。
 
 ## 本地构建
 
@@ -13,7 +13,7 @@ pnpm --dir packages/rule-set-pipeline build:release --binary /absolute/path/to/s
 
 `--binary` 必须明确提供绝对路径。构建检查版本恰为 1.14.4，记录完整 version 输出、真实路径及 binary SHA-256；不调用 PATH 中的默认 sing-box，不切换全局版本。缺失、不可执行或版本错误均失败。
 
-`--out` 必须是尚不存在的目录，其父目录必须已存在。已有目录直接拒绝，避免覆盖历史或把失败结果混入旧产物。`--expected-source` 可核对既有来源记录的 Release、commit、资产身份和实际输入摘要；变化时失败。CLI 不查询 latest。公开 API 受 GitHub 限额约束，可通过已有 `GITHUB_TOKEN` 提供只读认证，凭据不进入产物。
+`--out` 必须是尚不存在的目录，其父目录必须已存在。已有目录直接拒绝，避免覆盖历史或把失败结果混入旧产物。`--expected-source` 可核对既有来源记录的 Release、commit、资产身份和实际输入摘要；变化时失败。本地 `build` 不查询 latest。公开 API 受 GitHub 限额约束，可通过已有 `GITHUB_TOKEN` 提供只读认证，凭据不进入产物。
 
 构建从指定官方 Release 解析 tag，并递归解引用 annotated tag 至源码 commit。资产通过固定 ID 下载，核对官方摘要记录的文件名及完整 YAML 的实际字节 SHA-256。
 
@@ -25,6 +25,33 @@ pnpm --dir packages/rule-set-pipeline build:release --binary /absolute/path/to/s
 - `build.json`：`built-validated` 状态、来源、工具版本、binary 身份、构建身份、每份产物的实际 SHA-256／字节数／term 数／能力要求，以及用途映射和原生命令验证记录。域名及目标 IP 不要求额外 Profile 能力，`requiredCapabilities` 为 `[]`。
 
 输入、转换或原生验证失败返回非零退出码，只保存诊断及已取得的来源，不生成通过状态。原生验证在临时目录完成，全部通过才写入产物；`build.json` 最后写入。写入中断可能留下不完整目录，没有完成记录就不能交付。此处的成功仅表示本地验证通过，不表示已发布 Rule Candidate、成功处理的 Release 或已激活版本。构建身份关联来源、转换工具版本、规范化 IR、原生策略 `native-projection-v2` 和 binary 摘要。运行时间、临时路径和验证日志不进入规则文件。
+
+## 正常更新与候选发布
+
+先通过 `gh auth login` 配置有产物仓库写权限的现有 GitHub 身份。产物仓库固定为公开的 `wangyingang/sing-box-rule-artifacts`，需要已存在且至少有一次初始提交。CLI 复用 `gh` 登录；来源读取优先使用 `GITHUB_TOKEN`，否则读取现有 `gh auth token`，凭据只在进程内使用。
+
+```sh
+pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4
+pnpm --dir packages/rule-set-pipeline status --state /absolute/path/to/rule-state
+```
+
+每次 `update` 只在开始查询一次官方 latest。发现新 Release 后，固定该响应的 Release ID、tag 和资产身份，解析 tag 的源码 commit，复用本地完整来源校验、转换和原生构建路径。已成功处理的相同 Release 只检查 latest 元数据；资产身份改变时失败，否则跳过 YAML／摘要下载、转换和 binary 执行。跳过时不会重新下载同一资产来探测其内容变化；失败重试取得字节时会核对已保存的来源摘要。
+
+`--state` 必须指向可保留的本地目录。`update-state.json` 用原子 rename 保存来源固定记录、各次候选状态和已成功处理的 Release。三者分别管理；`status` 可在后续进程恢复查看。当前激活状态从独立的 `active-version.json` 读取，缺失表示此状态目录尚无激活记录；update 不写该文件，未来显式激活入口由 #19 交付。不要把隔离验收目录的 `null` 理解成实际设备没有激活版本。
+
+同一状态目录通过 `update.lock/` 拒绝并发更新。正常退出或失败会清理锁；进程被强制终止后，须确认没有存活的更新进程，再删除残留锁目录重试。保留状态目录以继续核对固定来源；不要删除来源记录来绕过来源变化错误。
+
+候选在产物仓库的 `candidates` 分支追加，采用三个有序提交：
+
+1. `candidates/<candidate-id>/domains.json` 和 `domains.srs`。
+2. 引用第一步完整 commit URL 的 `manifest.json`，以及 `source.json`、`conversion-report.json`、`build.json`。
+3. `readback.json` 引用前两步的完整 commit、实际 HTTPS 回读摘要／字节数，以及对下载字节重新执行的原生验证记录。
+
+发布只允许追加新的候选路径，保留父 tree，拒绝历史路径覆盖或并发非快进更新。Manifest 使用既有 v1 契约，物理产物 ID 包含候选修订；Route／DNS 请求复用文件，DNS 响应为 `unavailable: empty`。所有文件使用完整 commit 的 HTTPS URL；时间、日志和 Manifest 不进入规则文件，避免摘要循环。
+
+远程文件逐一核对字节数、SHA-256 和逐字节内容。下载的 JSON 重新编译、解码及加载，所得 SRS 必须与下载的 SRS 一致。随后回读元数据，并在第三步提交、回读证据文件后才记为 `verified` 和成功处理。任何失败返回非零，保存失败候选；重试创建新的候选并重新获取、验证，不把残留文件当作通过证据。发布的 `build.json` 仅表示本地验证，只有完整远程证据及成功候选状态才能供后续激活检查。
+
+本命令不写稳定路径、不激活候选、不修改实际客户端配置，也不切换全局 binary。首次创建产物仓库、候选发布属于外部写入，须有覆盖它们的授权；命令不自动创建仓库。
 
 ## 输入与转换边界
 
@@ -63,3 +90,14 @@ pnpm check
 `test:integration` 使用固定真实样本和合成 IR，通过 `rule-set match` 实际读取、初始化并匹配 JSON／SRS。非法 Go regexp 会在此被拒绝，不能以编译或配置 `check` 代替加载。测试覆盖域名边界、regexp 大小写、IPv4／IPv6 投影、相邻 CIDR 归并等价性及扩大／缺失反例、term 字段顺序、独立构建确定性及编译／解码／加载／语义错配故障；现有 native CI 自动执行此脚本。
 
 `pnpm build` 输出 Node ESM 和 TypeScript 声明至 `dist/`。本包不提供浏览器运行时，不引入 Compiler 依赖。
+
+固定官方样本的真实公开发布验收需要显式提供以下环境变量；它会在产物仓库追加候选，请仅在获得发布授权后执行：
+
+```sh
+RULE_PUBLICATION_STATE=/tmp/fresh-isolated-rule-state \
+RULE_PUBLICATION_EVIDENCE=/tmp/fresh-publication-evidence.json \
+SING_BOX_TEST_BINARY=/absolute/path/to/sing-box-1.14.4 \
+pnpm --dir packages/rule-set-pipeline test:publication
+```
+
+该验收固定 Release `20261102130044`，状态目录需尚未成功处理此样本，证据输出文件需不存在；此入口不是同一 Release 的显式重建命令。正常 CLI 不接受固定 tag；#22 的重建维护入口仍未交付。受控集成测试不访问真实 GitHub 写接口，自动覆盖上传、远程回读、来源变化和重试边界。

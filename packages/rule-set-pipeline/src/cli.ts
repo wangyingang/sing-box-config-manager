@@ -2,16 +2,32 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { updateRules, readUpdateState } from './update.js';
 import { sha256 } from './release.js';
 import { buildRelease, buildNative, decodedTerms, NativeBuildError, type SourceRecord } from './index.js';
 
 async function main(): Promise<number> {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
-    options: { release: { type: 'string' }, out: { type: 'string' }, 'expected-source': { type: 'string' }, binary: { type: 'string' }, help: { type: 'boolean' } },
+    options: { state: { type: 'string' }, release: { type: 'string' }, out: { type: 'string' }, 'expected-source': { type: 'string' }, binary: { type: 'string' }, help: { type: 'boolean' } },
   });
   if (values.help) {
-    console.log('Usage: build --release <fixed-tag> --out <new-directory> --binary <absolute-1.14.4-path> [--expected-source <source.json>]');
+    console.log('Usage: update --state <directory> --binary <absolute-1.14.4-path> | status --state <directory> |  build --release <fixed-tag> --out <new-directory> --binary <absolute-1.14.4-path> [--expected-source <source.json>]');
+    return 0;
+  }
+  if (positionals.length === 1 && ['update', 'status'].includes(positionals[0])) {
+    if (!values.state || values.release || values.out || values['expected-source']) throw new Error('update/status requires --state; fixed build options are not accepted');
+    if (positionals[0] === 'status') {
+      console.log(JSON.stringify(await readUpdateState(resolve(values.state))));
+    } else {
+      let token = process.env.GITHUB_TOKEN;
+      if (!token) {
+        try { token = (await promisify(execFile)('gh', ['auth', 'token'])).stdout.trim(); } catch { /* public API may work without auth */ }
+      }
+      console.log(JSON.stringify(await updateRules({ stateDirectory: resolve(values.state), binary: values.binary ?? '', token })));
+    }
     return 0;
   }
   if (positionals.length !== 1 || positionals[0] !== 'build' || !values.release || !values.out) {

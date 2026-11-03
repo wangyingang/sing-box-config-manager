@@ -6,7 +6,9 @@ export const sha256 = (input: Uint8Array | string): string => createHash('sha256
 export class SourceError extends Error {
   constructor(public readonly code: string, message: string) { super(message); }
 }
-export interface ReleaseOptions { tag: string; fetch?: typeof fetch; token?: string; expectedSource?: SourceRecord }
+export interface ReleaseOptions { tag: string; fetch?: typeof fetch; token?: string; expectedSource?: SourceRecord; releaseMetadata?: Record<string, unknown>;
+  onPinned?: (identity: Pick<SourceRecord, 'repository' | 'releaseId' | 'tag' | 'commit' | 'yaml' | 'checksum'>) => Promise<void>;
+  onSource?: (source: SourceRecord) => Promise<void> }
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new SourceError('INVALID_METADATA', 'GitHub 元数据不是 object');
   return value as Record<string, unknown>;
@@ -30,7 +32,7 @@ export async function readRelease(options: ReleaseOptions): Promise<{ bytes: Uin
     return response;
   };
   const api = async (path: string) => object(await (await get(`https://api.github.com/repos/${REPOSITORY}/${path}`, true)).json());
-  const release = await api(`releases/tags/${encodeURIComponent(tag)}`);
+  const release = options.releaseMetadata ?? await api(`releases/tags/${encodeURIComponent(tag)}`);
   if (release.tag_name !== tag) throw new SourceError('RELEASE_MISMATCH', 'Release tag 与指定值不一致');
   const releaseId = id(release.id);
   if (!Array.isArray(release.assets)) throw new SourceError('MISSING_ASSET', 'Release 缺少 assets');
@@ -56,6 +58,7 @@ export async function readRelease(options: ReleaseOptions): Promise<{ bytes: Uin
   if (ref.type !== 'commit' || typeof ref.sha !== 'string' || !/^[a-f0-9]{40}$/.test(ref.sha)) {
     throw new SourceError('INVALID_TAG_REF', 'tag 未指向有效源码 commit');
   }
+  await options.onPinned?.({ repository: REPOSITORY, releaseId, tag, commit: ref.sha, yaml, checksum });
   const [bytes, checksumBytes] = await Promise.all([yaml, checksum].map(async (entry) =>
     // Download by the pinned asset ID, so replacing an asset under the same tag
     // cannot silently supply new bytes labelled with the original identity.
@@ -81,5 +84,6 @@ export async function readRelease(options: ReleaseOptions): Promise<{ bytes: Uin
           return !old || entry.id !== old.id || entry.name !== old.name || entry.url !== old.url;
         })) throw new SourceError('SOURCE_CHANGED', '已固定输入身份或内容发生变化');
   }
+  await options.onSource?.(source);
   return { bytes, source };
 }
