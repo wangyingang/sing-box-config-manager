@@ -23,7 +23,7 @@ SING_BOX_TEST_BINARY=/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin
 git diff --check
 ```
 
-- `pnpm check`：类型检查通过；Compiler 94 项、Pipeline 43 项常规测试通过，均 0 失败、0 跳过；构建及 Web App 公开声明／浏览器 bundle smoke 通过。
+- `pnpm check`：类型检查通过；Compiler 95 项、Pipeline 43 项常规测试通过，均 0 失败、0 跳过；构建及 Web App 公开声明／浏览器 bundle smoke 通过。
 - `pnpm test:integration`：27 项通过，0 失败、0 跳过。
 - `git diff --check`：通过。
 - 指定 binary：`sing-box version 1.14.4`，Revision `c005f35300ce76427dc285481ec5695f5b179cd2`，go1.26.10 darwin/arm64。既有 checker 同时核对固定 Schema 摘要。
@@ -32,7 +32,7 @@ git diff --check
 
 | 工单要求 | 可复核证据 |
 | --- | --- |
-| 系统身份、稳定入口、用途、格式和能力约束；独立于 Manifest | Pipeline 的 `rule-subscription.schema.json`、示例和契约说明；JSON Schema 与 Compiler parser 的共同正反例 |
+| 系统身份、稳定入口、用途、格式和能力约束；独立于 Manifest | Pipeline 的 `rule-subscription.schema.json`、示例和契约说明；JSON Schema 与 Compiler parser 的共同正反例；共享 URL 的格式／能力冲突在语义校验阶段拒绝 |
 | 显式升级，绑定不接收固定产物版本或用户元数据覆盖 | `subscriptions.test.ts` 的 v1/v2 边界、URL／摘要／revision／格式／能力覆盖拒绝；公开声明 smoke 验证 v2 不能接受 curated binding |
 | 公开入口生成稳定 SRS；保留本地 tag、HTTP client 和多个用途复用 | `subscription-fixtures.ts`，`resolveRecipe`、`compileRecipe` 与 `compile` 输出对照；Template 预设、重复步骤与顺序测试 |
 | 未知契约、缺失订阅、空用途、错误位置、引用错误、Profile 失配 | `subscriptions.test.ts` 的结构与语义反例；DNS 具名／无 tag 响应、嵌套逻辑、定义顺序与目标 IP 检查；已解析 Compiler 入口绕过反例 |
@@ -41,7 +41,7 @@ git diff --check
 | 不强制客户端更新周期／缓存；Compiler 纯函数 | 输出断言没有新增 `update_interval` 或 `experimental` 默认设置；已有显式 Template 缓存回归保持有效；浏览器 bundle smoke 无 Pipeline runtime、网络或子进程依赖 |
 | Spec #1 历史回归 | 原有 81 项 Compiler 常规测试、26 项原生集成测试及五份 golden 均保留；固定产物 fixture 只增加 v1 类型防护，不改旧数据、策略或验收含义 |
 
-本次增加 13 项 Compiler 常规测试和 1 项原生集成测试。
+本次增加 14 项 Compiler 常规测试和 1 项原生集成测试。
 后续规则激活不要求修改 Recipe 或重新发布配置，但实际更新行为由父 Spec 后续工单集成验收。
 
 ## 证据边界

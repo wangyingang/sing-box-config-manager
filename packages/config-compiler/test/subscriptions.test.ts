@@ -148,7 +148,7 @@ test('Profile mismatches remain diagnostics on save and block both public and re
   const r: any = subscriptionInput();
   r.recipe.profile = 'ios-appstore';
   r.dependencies.templates[0].platformDnsServers['ios-appstore'] = [{ type: 'local', tag: 'local' }];
-  r.dependencies.subscriptions[0].projections.route.formats.binary.requiredCapabilities = ['processMatching'];
+  for (const usage of ['route', 'dns-query']) r.dependencies.subscriptions[0].projections[usage].formats.binary.requiredCapabilities = ['processMatching'];
   rejects(r, 'CAPABILITY_UNSUPPORTED');
   assert.ok(validateRecipeDraft(r.recipe).ok);
   const edit = decideRecipeEdit({ previous: null, candidate: r.recipe, dependencies: r.dependencies, params: r.params, nodes: [{ id: 'shared', archived: false }] });
@@ -239,4 +239,31 @@ test('resolved Compiler entry cannot bypass subscription consumer-position check
   const response = success(resolveRecipe(subscriptionResponseInput()));
   response.recipe.dnsSteps.splice(1, 1);
   assert.ok(compile(response).diagnostics.some(d => d.code === 'ARTIFACT_USAGE_MISMATCH'));
+});
+
+
+test('conflicting capabilities or formats for one stable URL fail before publication checks', async () => {
+  for (const conflict of ['capability', 'format']) {
+    const r: any = subscriptionInput();
+    r.recipe.profile = 'ios-appstore';
+    r.dependencies.templates[0].platformDnsServers['ios-appstore'] = [{ type: 'local', tag: 'local' }];
+    r.recipe.resources.ruleSets.shift(); r.recipe.routeSteps = [];
+    const route = r.dependencies.subscriptions[0].projections.route.formats;
+    if (conflict === 'capability') route.binary.requiredCapabilities = ['processMatching'];
+    else route.source.url = route.binary.url;
+    rejects(r, 'SUBSCRIPTION_ENDPOINT_CONFLICT');
+    let checked = false;
+    assert.equal((await prepareRecipePublication(r, async () => { checked = true; })).ok, false);
+    assert.equal(checked, false);
+  }
+  // Capability sets are unordered; equivalent declarations still share an endpoint.
+  const r: any = subscriptionInput();
+  r.recipe.profile = 'windows-standalone';
+  r.dependencies.templates[0].platformDnsServers['windows-standalone'] = [{ type: 'local', tag: 'local' }];
+  for (const usage of ['route', 'dns-query']) {
+    r.dependencies.subscriptions[0].projections[usage].formats.binary.requiredCapabilities = ['processMatching', 'dhcpDns'];
+  }
+  r.dependencies.subscriptions[0].projections['dns-query'].formats.binary.requiredCapabilities.reverse();
+  const publication = success(await prepareRecipePublication(r, async () => {}));
+  assert.ok((await renderSubscription(publication, r.params)).ok);
 });

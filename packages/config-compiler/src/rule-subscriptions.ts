@@ -7,6 +7,18 @@ type Usage = keyof RuleSubscription['projections'];
 export function resolveSubscriptionProjection(subscription: RuleSubscription, usages: Usage[], path: string) {
   const diagnostics: Diagnostic[] = [];
   const error = (code: string, message: string) => diagnostics.push({ severity: 'error', code, path, message });
+  // One URL identifies one physical format and one capability budget across purposes.
+  const endpoints = new Map<string, string>();
+  for (const projection of Object.values(subscription.projections)) {
+    if (!('formats' in projection)) continue;
+    for (const [format, endpoint] of Object.entries(projection.formats)) {
+      const signature = JSON.stringify([format, [...endpoint.requiredCapabilities].sort()]);
+      if (endpoints.has(endpoint.url) && endpoints.get(endpoint.url) !== signature) {
+        error('SUBSCRIPTION_ENDPOINT_CONFLICT', '同一稳定 URL 的格式及能力声明必须一致');
+      }
+      endpoints.set(endpoint.url, signature);
+    }
+  }
   const requiredCapabilities = new Set<Capability>();
   let url: string | undefined;
   if (!Array.isArray(usages) || !usages.length || new Set(usages).size !== usages.length) {
