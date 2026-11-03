@@ -1,5 +1,7 @@
 # M2 契约设计与实施计划
 
+后续设计确认（2026-11-03）：Rule Set Pipeline 的首个完整交付以 V2Fly 官方 Release YAML 为输入，并纳入稳定规则订阅及必要的 Recipe／Compiler 契约演进，见[首个完整交付设计](rule-set-pipeline-first-delivery.md)和 [ADR 0006](../adr/0006-follow-active-rule-subscriptions.md)。下文 Blackmatrix7 优先、原始 V2Fly Parser 及固定规则产物引用的安排保留为历史设计，不构成本次交付的前置要求。此处记录已确认方向，不表示已经实施。
+
 设计日期：2026-11-02。本文保留 M2 的设计背景与后续方向。Recipe／共享节点编译路径的实施范围和验收记录见 [Spec #1](https://github.com/wangyingang/sing-box-config-manager/issues/1)；当前公开契约与调用方式见下方实现文档链接。
 
 本文保留原始设计背景。下文的基线描述、M2-01 至 M2-04 计划和设计阶段记录反映 2026-11-02 的讨论，不作为当前完成状态。当前公开契约与交付证据见 [Compiler 使用与验收说明](../../packages/config-compiler/README.md#五份样本迁移与-recipe-发布)及 [Manifest v1 契约](../../packages/rule-set-pipeline/contracts/README.md)。完整 Rule IR／Parser、Pipeline 生产与发布、Web 和线上交付仍属后续工作。

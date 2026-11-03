@@ -1,5 +1,7 @@
 # 固定产物 Manifest v1
 
+后续设计确认（2026-11-03）：本目录当前实现的 Manifest v1 仍描述不可变产物，不接受以稳定可变 URL 冒充固定内容地址。[Pipeline 首个完整交付](../../../docs/architecture/rule-set-pipeline-first-delivery.md)将另行定义规则订阅契约，并演进 Recipe／Compiler 的消费边界；不可变 Manifest 继续用于版本产物追溯。该后续设计尚未实施，本页以下内容仍是当前固定产物契约说明。
+
 本目录由 Rule Set Pipeline 维护，是 Compiler 接入固定内存产物数据的边界。
 `artifact-manifest.schema.json` 定义封闭的语言无关结构，
 `artifact-manifest.example.json` 是跨模块契约测试使用的合成样本。
