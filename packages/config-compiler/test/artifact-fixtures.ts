@@ -20,6 +20,7 @@ export function artifactInput(): RecipeCompileInput {
 
 export function responseInput(): RecipeCompileInput {
   const request = artifactInput();
+  if (request.recipe.schemaVersion !== 1) throw new Error('Historical fixed-artifact fixture must remain v1');
   const manifest = request.dependencies.manifests![0]!;
   const artifact = manifest.artifacts[0]!;
   const id = 'synthetic:ips@1:binary';

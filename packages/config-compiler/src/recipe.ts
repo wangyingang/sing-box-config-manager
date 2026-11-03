@@ -28,6 +28,7 @@ function resolveRecipeInput(input: unknown, audit: boolean): Result<CompileInput
       return matches.length === 1 ? matches[0] : undefined;
     };
     const template = exact(dependencies.templates, recipe.templateRef, '/recipe/templateRef');
+    if (template && template.schemaVersion !== recipe.schemaVersion) error('CONTRACT_VERSION_MISMATCH', '/recipe/templateRef', 'Recipe 与 Template 必须使用相同版本的规则绑定契约');
     for (const section of ['dns', 'route'] as const) {
       const stepIds = new Set<string>();
       recipe[`${section}Steps`].forEach((step, i) => {
@@ -49,7 +50,7 @@ function resolveRecipeInput(input: unknown, audit: boolean): Result<CompileInput
       recipe: { id: recipe.id, revision: recipe.revision, resources: { ...recipe.resources, outbounds, ruleSets: resolvedArtifacts.recipeRuleSets }, ...(recipe.settings ? { settings: recipe.settings } : {}),
         dnsSteps: recipe.dnsSteps.map(step => 'preset' in step ? { preset: step.preset } : { rule: step.rule }),
         routeSteps: recipe.routeSteps.map(step => 'preset' in step ? { preset: step.preset } : { rule: step.rule }) },
-      artifacts: resolvedArtifacts.artifacts, profile: recipe.profile, params,
+      artifacts: resolvedArtifacts.artifacts, ...(recipe.schemaVersion === 2 ? { subscriptions: resolvedArtifacts.subscriptions } : {}), profile: recipe.profile, params,
     } };
   } catch (cause) {
     error('STRUCTURE_INVALID', cause instanceof StructureError ? cause.path : '', '输入不符合当前 Recipe 切片契约');

@@ -1,6 +1,6 @@
 # M2 Config Recipe 契约草案
 
-后续设计确认（2026-11-03）：[ADR 0006](../../../../docs/adr/0006-follow-active-rule-subscriptions.md)确认 Recipe 的系统规则选择改为自动跟随已激活版本。必要的 Recipe／Template 规则绑定、Compiler 接入和配置快照证据调整纳入[Pipeline 首个完整交付](../../../../docs/architecture/rule-set-pipeline-first-delivery.md)。下文固定规则产物引用保留为 Spec #1 的设计与实现历史；新契约尚未实施，不将其解释为现有 API 已支持自动跟随。
+后续设计确认（2026-11-03）：[ADR 0006](../../../../docs/adr/0006-follow-active-rule-subscriptions.md)确认 Recipe 的系统规则选择改为自动跟随已激活版本。必要的 Recipe／Template 规则绑定、Compiler 接入和配置快照证据调整纳入[Pipeline 首个完整交付](../../../../docs/architecture/rule-set-pipeline-first-delivery.md)。下文固定规则产物引用保留为 Spec #1 的设计与实现历史；2026-11-04 的 #17 实现显式 v2 订阅绑定与配置发布路径；当前 API 见 [Compiler README](../../README.md#稳定规则订阅recipetemplate-v2)，验收见 [#17 记录](../verification/issue-17.md)。稳定文件的真实发布与激活不在本工单范围。
 
 设计日期：2026-11-02。本文保留字段与映射设计草案。状态更新：2026-11-03，Spec #1 范围内的 Recipe、Template、NodeRevision 结构校验、固定依赖解析、编辑约束及发布入口已实现并合入 main。
 

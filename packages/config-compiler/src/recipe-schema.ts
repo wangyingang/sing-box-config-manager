@@ -160,6 +160,22 @@ export const artifactManifestSchema = object({ schemaVersion: literal(1), id: st
   projections: object({ route: projection, 'dns-query': projection, 'dns-response': projection }),
 });
 export type ArtifactManifest = Value<typeof artifactManifestSchema>;
+// Stable subscription contract owned by Pipeline; no artifact revision or content digest.
+const subscriptionEndpoint = object({ url: httpsUrl, requiredCapabilities: capabilities });
+const subscriptionProjection = union(
+  object({ formats: object({ binary: subscriptionEndpoint, source: optional(subscriptionEndpoint) }) }),
+  object({ unavailable: literal('empty') }),
+);
+export const ruleSubscriptionSchema = object({ schemaVersion: literal(1), systemRuleSetId: string,
+  targetVersion: literal('1.14.4'), sourceFormatVersion: literal(4),
+  projections: object({ route: subscriptionProjection, 'dns-query': subscriptionProjection, 'dns-response': subscriptionProjection }),
+});
+export type RuleSubscription = Value<typeof ruleSubscriptionSchema>;
+const subscriptionSet = object({ kind: literal('subscription'), tag: string,
+  subscriptionRef: union(object({ systemRuleSetId: string, usage: artifactUsage }), object({ systemRuleSetId: string, usages: { parse(v, p) {
+    const values = nonemptyStrings.parse(v, p); return values.map((usage, i) => artifactUsage.parse(usage, `${p}/${i}`));
+  } } })), httpClient: optional(string) });
+const subscriptionRuleSet = union(inlineSet, subscriptionSet);
 const domainResolver = union(string, object({ server: string, strategy: optional(strategy) }));
 const dialer = { detour: optional(string), domain_resolver: optional(domainResolver) };
 const headers = object({ Host: optional(strings) });
@@ -174,12 +190,12 @@ const httpClient = object({ tag: string, version: optional(union(literal(1), lit
 const apiService = object({ type: literal('api'), tag: string, listen: string, listen_port: integer(1, 65535),
   secret: optional(union(literal(''), string)), dashboard: optional(object({ enabled: optional(bool), path: optional(string), http_client: optional(string) })),
 });
-export const recipeSchema = object({ ...identity, profile, templateRef: ref,
-  resources: object({ outbounds: optional(array(union(object({ kind: literal('node'), tag: string, nodeRef: ref }), outbound))), ruleSets: optional(array(ruleSet)), dnsServers: optional(array(resolver)), httpClients: optional(array(httpClient)) }),
+function recipeDocument<V extends 1 | 2, T>(version: V, binding: Schema<T>) { return object({ ...identity, schemaVersion: literal(version), profile, templateRef: ref,
+  resources: object({ outbounds: optional(array(union(object({ kind: literal('node'), tag: string, nodeRef: ref }), outbound))), ruleSets: optional(array(binding)), dnsServers: optional(array(resolver)), httpClients: optional(array(httpClient)) }),
   settings: optional(object({ logLevel: optional(enumeration(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'panic'] as const)), tunMtu: optional(integer(576, 65535)), dnsFinal: optional(string), routeFinal: optional(string) })),
   dnsSteps: array(dnsStep), routeSteps: array(routeStep),
-});
-export const templateSchema = object({ ...identity, targetVersion: literal('1.14.4'),
+}); }
+function templateDocument<V extends 1 | 2, T>(version: V, binding: Schema<T>) { return object({ ...identity, schemaVersion: literal(version), targetVersion: literal('1.14.4'),
   defaults: object({ log: optional(object({ disabled: optional(bool), level: optional(enumeration(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'panic'] as const)) })),
     dns: optional(object({ final: optional(string), strategy: optional(enumeration(['prefer_ipv4', 'prefer_ipv6', 'ipv4_only', 'ipv6_only'] as const)) })),
     route: optional(object({ final: optional(string), auto_detect_interface: optional(bool), default_domain_resolver: optional(string), default_http_client: optional(string) })),
@@ -190,7 +206,7 @@ export const templateSchema = object({ ...identity, targetVersion: literal('1.14
     outbounds: optional(array(outbound)),
     dnsServers: optional(array(resolver)),
     httpClients: optional(array(httpClient)),
-    ruleSets: optional(array(ruleSet)),
+    ruleSets: optional(array(binding)),
     inbounds: optional(array(union(
       object({ type: literal('mixed'), tag: string, listen: string, listen_port: integer(1, 65535) }),
       object({ type: literal('tun'), tag: string, address: strings, mtu: optional(integer(576, 65535)), auto_route: optional(bool), strict_route: optional(bool), stack: optional(enumeration(['system', 'gvisor', 'mixed'] as const)) }),
@@ -200,12 +216,14 @@ export const templateSchema = object({ ...identity, targetVersion: literal('1.14
   dnsPresets: optional(record(array(dnsRule))),
   ecsResponseTags: optional(array(string)),
   platformDnsServers: object({ 'windows-standalone': optional(array(platformResolver)), 'macos-standalone': optional(array(platformResolver)), 'macos-appstore': optional(array(platformResolver)), 'ios-appstore': optional(array(platformResolver)), 'android-google-play': optional(array(platformResolver)) }),
-});
+}); }
+export const recipeSchema = union(recipeDocument(1, ruleSet), recipeDocument(2, subscriptionRuleSet));
+export const templateSchema = union(templateDocument(1, ruleSet), templateDocument(2, subscriptionRuleSet));
 export type RecipeDocument = Value<typeof recipeSchema>;
 export type TemplateDocument = Value<typeof templateSchema>;
 export type NodeRevision = Value<typeof nodeRevisionSchema>;
 const params = object({ ecs: union(schema((v): v is null => v === null), object({ address: string, prefix: integer(0, 32) })) });
-const dependencies = object({ templates: array(templateSchema), nodes: array(nodeRevisionSchema), manifests: optional(array(artifactManifestSchema)) });
+const dependencies = object({ templates: array(templateSchema), nodes: array(nodeRevisionSchema), manifests: optional(array(artifactManifestSchema)), subscriptions: optional(array(ruleSubscriptionSchema)) });
 export const recipeInputSchema = object({ recipe: recipeSchema,
   dependencies,
   params,

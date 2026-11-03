@@ -1,11 +1,15 @@
 # 固定产物 Manifest v1
 
-后续设计确认（2026-11-03）：本目录当前实现的 Manifest v1 仍描述不可变产物，不接受以稳定可变 URL 冒充固定内容地址。[Pipeline 首个完整交付](../../../docs/architecture/rule-set-pipeline-first-delivery.md)将另行定义规则订阅契约，并演进 Recipe／Compiler 的消费边界；不可变 Manifest 继续用于版本产物追溯。该后续设计分阶段实施；#15 已实现本地 JSON 构建，尚未改变此处的固定产物消费契约。
+契约演进（2026-11-04）：本页保留 Spec #1 的不可变产物 Manifest v1 契约。
+新增的 [Rule Subscription v1](rule-subscription.md) 描述稳定入口及兼容性约束，
+由 Recipe／Template v2 使用；不能用稳定可变 URL 冒充本页的固定内容地址。
+两者分别管理，不改变 Manifest 字段含义。#17 的范围和证据见
+[验收记录](../../config-compiler/docs/verification/issue-17.md)。
 
 本目录由 Rule Set Pipeline 维护，是 Compiler 接入固定内存产物数据的边界。
 `artifact-manifest.schema.json` 定义封闭的语言无关结构，
 `artifact-manifest.example.json` 是跨模块契约测试使用的合成样本。
-本目录仅维护固定产物契约；包内的本地构建入口见 [Pipeline README](../README.md)，其输出尚未完成原生验证或发布，不能直接视为此契约的产物。
+本页说明固定产物契约；包内的本地构建入口见 [Pipeline README](../README.md)，其输出尚未完成原生验证或发布，不能直接视为此契约的产物。
 
 Manifest 的 `id` 标识系统规则集，`revision` 固定整个清单的不可变修订。
 `schemaVersion: 1`、`targetVersion: "1.14.4"` 和 `sourceFormatVersion: 4`

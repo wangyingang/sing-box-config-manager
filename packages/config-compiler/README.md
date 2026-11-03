@@ -194,6 +194,33 @@ if (decision.allowed) {
 成功值是独立的节点修订引用。本函数不扫描引用、不执行删除、不保证事务完整性。
 这些纯判定不执行身份认证；宿主不能直接信任来自编辑请求的先前状态或引用标志。
 
+### 稳定规则订阅（Recipe／Template v2）
+
+[工单 #17](https://github.com/wangyingang/sing-box-config-manager/issues/17) 新增显式
+`schemaVersion: 2`。Recipe 与所选 Template 必须同版；系统规则绑定只选择
+`subscriptionRef: { systemRuleSetId, usage }` 或 `{ systemRuleSetId, usages }`，
+保留本地 `tag` 与可选 `httpClient`。多个用途共用一个 tag 时，必须引用同一 SRS 入口。
+不接受固定规则产物版本、任意 URL、摘要、格式或能力覆盖。
+
+可信宿主在 `dependencies.subscriptions` 提供 Pipeline 拥有的
+[Rule Subscription v1](../../rule-set-pipeline/contracts/rule-subscription.md)。
+导出 `RuleSubscription`、`ruleSubscriptionSchema`；已解析 `CompileInput`
+与编译输出使用独立 `subscriptions` 字段，稳定入口不转换成带伪造摘要的 `RuleArtifact`。
+Compiler 仍为纯函数，默认生成 binary SRS 远程配置，保留用途、响应上下文、
+资源引用和固定 Profile 检查。不会下载规则、调用 Pipeline 或统一注入更新周期／缓存。
+
+`compileRecipe`、`resolveRecipe`、草稿／编辑入口、`prepareRecipePublication` 和
+Node 端 `publishRecipe` 同时支持两版契约。发布继续执行两种 ECS 原生配置检查；
+快照的 `compiled.subscriptions` 和 `recipeSource.subscriptions` 固定契约，
+现有 `checks` 保存配置校验摘要。它们不承诺以后稳定入口的内容摘要。
+未引用的契约不会进入发布身份；异步检查期间的外部修改不会改变快照。
+
+旧 `schemaVersion: 1` 继续使用下述固定 Manifest 绑定，保留原验收含义；
+v2 不接受该绑定。迁移需要新 Recipe／Template 修订、显式改绑和重新发布。
+节点、模板和 Client Profile 的固定引用规则不变。
+具体输入样本见 [subscription-fixtures.ts](test/subscription-fixtures.ts)，
+验收与限制见 [#17 验证记录](docs/verification/issue-17.md)。
+
 ### 固定规则产物
 
 `dependencies.manifests` 接受 Pipeline 维护的[Manifest v1](../../rule-set-pipeline/contracts/README.md)。

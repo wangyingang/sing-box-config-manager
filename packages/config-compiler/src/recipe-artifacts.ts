@@ -1,10 +1,11 @@
+import { resolveSubscriptionProjection, validateRuleSetUsages } from './rule-subscriptions.js';
 import { PROFILES } from './profiles.js';
-import type { RecipeCompileInput, TemplateDocument } from './recipe-schema.js';
+import type { RecipeCompileInput, TemplateDocument, RuleSubscription } from './recipe-schema.js';
 import type { Diagnostic, Obj, RuleArtifact, RuleSetBinding } from './types.js';
 
 type Usage = 'route' | 'dns-query' | 'dns-response';
 
-/** Adapt trusted, fixed Manifest data. This never downloads or verifies remote bytes. */
+/** Adapt trusted Manifest and subscription data. This never downloads or verifies remote bytes. */
 export function resolveRecipeArtifacts(input: RecipeCompileInput, template: TemplateDocument, audit = false) {
   const diagnostics: Diagnostic[] = [];
   const error = (code: string, path: string, message: string) => diagnostics.push({ severity: 'error', code, path, message });
@@ -35,8 +36,32 @@ export function resolveRecipeArtifacts(input: RecipeCompileInput, template: Temp
   }
   const artifacts = new Map<string, RuleArtifact>();
   const usages = new Map<string, Usage[]>();
+  const subscriptions = new Map<string, RuleSubscription>();
+  const available = input.dependencies.subscriptions ?? [];
+  if (new Set(available.map(s => s.systemRuleSetId)).size !== available.length) {
+    error('DEPENDENCY_DUPLICATE', '/dependencies/subscriptions', '系统规则订阅身份重复');
+  }
   const resolve = (bindings: NonNullable<TemplateDocument['resources']['ruleSets']>, path: string): RuleSetBinding[] => bindings.flatMap<RuleSetBinding>((binding, i) => {
     if (binding.kind === 'inline') return [binding];
+    if (binding.kind === 'subscription') {
+      const bindingPath = `${path}/${i}/subscriptionRef`;
+      const { systemRuleSetId } = binding.subscriptionRef;
+      const selectedUsages = 'usage' in binding.subscriptionRef ? [binding.subscriptionRef.usage] : binding.subscriptionRef.usages;
+      const matches = available.filter(s => s.systemRuleSetId === systemRuleSetId);
+      if (matches.length !== 1) {
+        error(matches.length ? 'DEPENDENCY_DUPLICATE' : 'DEPENDENCY_MISSING', bindingPath, '系统规则集必须有唯一的可信订阅；不会回退固定产物');
+        return [];
+      }
+      const subscription = matches[0]!;
+      const projection = resolveSubscriptionProjection(subscription, selectedUsages, bindingPath);
+      diagnostics.push(...projection.diagnostics);
+      for (const capability of projection.requiredCapabilities) {
+        if (!audit && !PROFILES[input.recipe.profile][capability]) error('CAPABILITY_UNSUPPORTED', bindingPath, '规则订阅需要此 Profile 不支持的能力');
+      }
+      subscriptions.set(systemRuleSetId, subscription);
+      usages.set(binding.tag, selectedUsages);
+      return [{ kind: 'subscription', systemRuleSetId, usages: selectedUsages, tag: binding.tag, ...(binding.httpClient ? { httpClient: binding.httpClient } : {}) }];
+    }
     const bindingPath = `${path}/${i}/artifactRef`;
     const { id, revision } = binding.artifactRef;
     const selectedUsages = 'usage' in binding.artifactRef ? [binding.artifactRef.usage] : binding.artifactRef.usages;
@@ -64,43 +89,27 @@ export function resolveRecipeArtifacts(input: RecipeCompileInput, template: Temp
   });
   const templateRuleSets = resolve(template.resources.ruleSets ?? [], '/dependencies/templates/' + input.dependencies.templates.indexOf(template) + '/resources/ruleSets');
   const recipeRuleSets = resolve(input.recipe.resources.ruleSets ?? [], '/recipe/resources/ruleSets');
-  const responses = new Set<string>();
-  let untaggedResponse = false;
+  const rules: { dns: Obj[]; route: Obj[] } = { dns: [], route: [] };
+  const origins = new Map<string, { stepId: string; stepIndex: number; outputRuleIndex: number; preset?: string; presetRuleIndex?: number }>();
   for (const section of ['dns', 'route'] as const) {
-    let outputRuleIndex = 0;
     input.recipe[`${section}Steps`].forEach((step, stepIndex) => {
       const presets = template[`${section}Presets`] ?? {};
-      const rules: Obj[] = 'rule' in step ? [step.rule] : (Object.hasOwn(presets, step.preset) ? presets[step.preset]! : []);
-      rules.forEach((rule, presetRuleIndex) => {
-        const outputPath = `/${section}/rules/${outputRuleIndex}`;
-        const source = { stepId: step.id, stepIndex, outputRuleIndex, ...('preset' in step ? { preset: step.preset, presetRuleIndex } : {}) };
-        const walk = (match: Obj, suffix: string) => {
-          const tags = typeof match.rule_set === 'string' ? [match.rule_set] : (match.rule_set as string[] | undefined) ?? [];
-          for (const tag of tags) {
-            const allowedUsages = usages.get(tag);
-            if (!allowedUsages) continue; // Inline and missing references retain existing D06 validation.
-            const response = match.match_response;
-            const responseContext = response === true ? untaggedResponse : typeof response === 'string' && responses.has(response);
-            const compatible = section === 'route' ? allowedUsages.includes('route')
-              : response !== undefined && response !== false
-                ? allowedUsages.includes('dns-response') && responseContext && match.rule_set_ip_cidr_match_source !== true
-                : allowedUsages.includes('dns-query');
-            if (!compatible) diagnostics.push({ severity: 'error', code: 'ARTIFACT_USAGE_MISMATCH',
-              path: `/recipe/${section}Steps/${stepIndex}/${'preset' in step ? 'preset' : `rule${suffix}/rule_set`}`,
-              message: '规则产物用途与消费位置不符；DNS 响应用途要求此前已 evaluate 的响应上下文',
-              source: { ...source, outputPath: `${outputPath}${suffix}/rule_set` },
-            });
-          }
-          if (match.type === 'logical') (match.rules as Obj[]).forEach((child, i) => walk(child, `${suffix}/rules/${i}`));
-        };
-        walk(rule, '');
-        if (section === 'dns' && rule.action === 'evaluate') {
-          if (typeof rule.tag === 'string') responses.add(rule.tag);
-          else untaggedResponse = true;
-        }
-        outputRuleIndex++;
+      const expanded: Obj[] = 'rule' in step ? [step.rule] : (Object.hasOwn(presets, step.preset) ? presets[step.preset]! : []);
+      expanded.forEach((rule, presetRuleIndex) => {
+        const outputRuleIndex = rules[section].length;
+        rules[section].push(rule);
+        origins.set(`/${section}/rules/${outputRuleIndex}`, { stepId: step.id, stepIndex, outputRuleIndex,
+          ...('preset' in step ? { preset: step.preset, presetRuleIndex } : {}) });
       });
     });
   }
-  return { diagnostics, artifacts: [...artifacts.values()], templateRuleSets, recipeRuleSets };
+  for (const diagnostic of validateRuleSetUsages(rules, usages)) {
+    const [, section, index, suffix] = /^\/(dns|route)\/rules\/(\d+)(.*)$/.exec(diagnostic.path)!;
+    const source = origins.get(`/${section}/rules/${index}`)!;
+    diagnostics.push({ ...diagnostic,
+      path: `/recipe/${section}Steps/${source.stepIndex}/${'preset' in source ? 'preset' : `rule${suffix}`}`,
+      source: { ...source, outputPath: diagnostic.path },
+    });
+  }
+  return { diagnostics, artifacts: [...artifacts.values()], subscriptions: [...subscriptions.values()], templateRuleSets, recipeRuleSets };
 }
