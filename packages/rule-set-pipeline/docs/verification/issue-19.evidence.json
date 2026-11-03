@@ -410,5 +410,19 @@
         "packages/rule-set-pipeline test:integration: ℹ skipped 0"
       ]
     }
+  },
+  "review": {
+    "base": "3258f8a376f4da0c7c018ea13fd4a66150bf4629",
+    "head": "23e22c1",
+    "standardsFindings": 0,
+    "specFindings": 0,
+    "independentlyReran": {
+      "transport": 16,
+      "nativeActivation": 25,
+      "passed": 41,
+      "failed": 0,
+      "skipped": 0
+    },
+    "remoteWriteRerun": false
   }
 }
