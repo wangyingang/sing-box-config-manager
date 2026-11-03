@@ -1,0 +1,243 @@
+
+> sing-box-config-manager@0.1.0 check /private/tmp/spec14-final-D9nkQ2
+> pnpm typecheck && pnpm test && pnpm build && pnpm smoke:workspace
+
+
+> sing-box-config-manager@0.1.0 typecheck /private/tmp/spec14-final-D9nkQ2
+> pnpm -r --if-present run typecheck
+
+Scope: 3 of 4 workspace projects
+packages/config-compiler typecheck$ tsc --noEmit
+packages/config-compiler typecheck: Done
+packages/rule-set-pipeline typecheck$ tsc --noEmit
+packages/rule-set-pipeline typecheck: Done
+
+> sing-box-config-manager@0.1.0 test /private/tmp/spec14-final-D9nkQ2
+> pnpm -r --if-present run test
+
+Scope: 3 of 4 workspace projects
+packages/config-compiler test$ pnpm run generate:validator && tsx --test test/*.test.ts
+packages/config-compiler test: > @sing-box-config-manager/config-compiler@0.1.0 generate:validator /private/tmp/spec14-final-D9nkQ2/packages/config-compiler
+packages/config-compiler test: > node scripts/build-validator.mjs
+packages/config-compiler test: ✔ fixed Manifest bindings share physical files while keeping local tags, order and explicit D06 fields (23.101583ms)
+packages/config-compiler test: ✔ exact artifact revision never falls back; duplicate and conflicting physical identities fail (1.138791ms)
+packages/config-compiler test: ✔ unavailable projections and mismatched artifact selection cannot become empty match objects (0.719375ms)
+packages/config-compiler test: ✔ purpose is checked at every Route/DNS consumer, including preset and logical children (4.54125ms)
+packages/config-compiler test: ✔ DNS IP projections require an earlier matching named or untagged evaluate and destination IP context (1.996042ms)
+packages/config-compiler test: ✔ Profile capability failures block compilation but preserve structurally valid editable drafts (0.456792ms)
+packages/config-compiler test: ✔ bindings accept only fixed references, local tag and the open HTTP client reference (1.39425ms)
+packages/config-compiler test: ✔ Pipeline fixed contract sample and Compiler boundary agree on versions, formats and closed capability vocabulary (25.308375ms)
+packages/config-compiler test: ✔ one local binding can explicitly permit multiple uses without broadening unlisted consumer positions (1.246958ms)
+packages/config-compiler test: ✔ user-a-tun: preserved legacy semantics and ordering (88.761041ms)
+packages/config-compiler test: ✔ user-b-tun: preserved legacy semantics and ordering (14.179083ms)
+packages/config-compiler test: ✔ user-b-android-tun: preserved legacy semantics and ordering (16.133459ms)
+packages/config-compiler test: ✔ user-c-tun: preserved legacy semantics and ordering (7.219458ms)
+packages/config-compiler test: ✔ user-d-tun: preserved legacy semantics and ordering (6.214958ms)
+packages/config-compiler test: ✔ explicit settings replace defaults without merging arbitrary fields (2.965375ms)
+packages/config-compiler test: ✔ null is not a deletion operation and schema rejects invalid fields (2.425292ms)
+packages/config-compiler test: ✔ duplicate tags fail in every managed namespace (11.213709ms)
+packages/config-compiler test: ✔ missing references are checked independently of native check (20.961375ms)
+packages/config-compiler test: ✔ outbound dependency cycles and group defaults are rejected (4.118208ms)
+packages/config-compiler test: ✔ named DNS responses must precede references, including nested references (5.049709ms)
+packages/config-compiler test: ✔ rule steps retain duplicates and order; unreachable post rules get a warning (1.904334ms)
+packages/config-compiler test: ✔ platform resolver selection happens before duplicate detection (3.464166ms)
+packages/config-compiler test: ✔ a platform-appropriate Android recipe compiles without dropping rules (0.291583ms)
+packages/config-compiler test: ✔ five Profiles are distinct from five fixture combinations (7.344625ms)
+packages/config-compiler test: ✔ curated rule metadata participates in profile validation (2.6775ms)
+packages/config-compiler test: ✔ user-d remains independent; output mutation cannot alter future generations (4.841958ms)
+packages/config-compiler test: ✔ schema and semantic validation also reject invalid final configs (2.815209ms)
+packages/config-compiler test: ✔ missing presets and artifacts fail instead of generating a partial config (1.177667ms)
+packages/config-compiler test: ✔ local key resources cannot become a hidden dependency of an otherwise portable config (2.235042ms)
+packages/config-compiler test: ✔ non-JSON values cannot produce a non-serializable publication (0.463625ms)
+packages/config-compiler test: ✔ sample DNS first/ecs flow preserves every rule and only declared ECS positions vary (80.829375ms)
+packages/config-compiler test: ✔ DNS and Route steps are independent; DNS presets expand in place with independent repeats (6.177583ms)
+packages/config-compiler test: ✔ DNS response references require prior definitions, including nested logical conditions (3.307833ms)
+packages/config-compiler test: ✔ removing a declared ECS evaluate never repairs policy or disables ECS implicitly (7.232666ms)
+packages/config-compiler test: ✔ DNS diagnostics map preset offsets, missing presets and duplicate step IDs (1.397417ms)
+packages/config-compiler test: ✔ DNS servers, HTTP clients and dnsFinal preserve resource order and validate references (3.317667ms)
+packages/config-compiler test: ✔ Template selects Android local resolver; incompatible process and application matches fail (10.8725ms)
+packages/config-compiler test: ✔ DNS structured inputs reject arbitrary fields, dynamic ECS and malformed nested objects (1.474209ms)
+packages/config-compiler test: ✔ draft structure rejects incomplete, mistyped and unopened fields before save (1.353958ms)
+packages/config-compiler test: ✔ missing fixed dependencies and dangling final references are saveable drafts but fail compilation (11.176709ms)
+packages/config-compiler test: ✔ Profile remains fixed for the same Recipe even with semantic errors; a new identity is revalidated (2.102292ms)
+packages/config-compiler test: ✔ archived bindings survive ordinary edits and reordering but cannot be added, copied or upgraded (28.794875ms)
+packages/config-compiler test: ✔ active nodes allow new bindings; absent or ambiguous lifecycle state fails closed (0.864167ms)
+packages/config-compiler test: ✔ edits require a new Recipe revision and return isolated snapshots (1.055834ms)
+packages/config-compiler test: ✔ node revision deletion rejects either kind of reference and accepts only explicit unreferenced state (0.198041ms)
+packages/config-compiler test: ✔ retained archived bindings compile and publish; draft edits and new node revisions leave old publications intact (24.914958ms)
+packages/config-compiler test: ✔ non-node outbounds do not require node lifecycle state and cannot mask archived additions (2.786333ms)
+packages/config-compiler test: ✔ migrated Template cache, API dashboard and fixed HTTP client settings reach the generated configuration (70.826166ms)
+packages/config-compiler test: ✔ new Template fields retain closed nested objects and reject wrongly typed configuration data (9.089167ms)
+packages/config-compiler test: ✔ Template-only API and cache settings cannot be introduced through Recipe resources or settings (1.635166ms)
+packages/config-compiler test: ✔ user-a-tun: static fixed Recipe migration preserves the full golden and array order (61.617541ms)
+packages/config-compiler test: ✔ user-b-tun: static fixed Recipe migration preserves the full golden and array order (15.050458ms)
+packages/config-compiler test: ✔ user-b-android-tun: static fixed Recipe migration preserves the full golden and array order (17.199ms)
+packages/config-compiler test: ✔ user-c-tun: static fixed Recipe migration preserves the full golden and array order (12.890041ms)
+packages/config-compiler test: ✔ user-d-tun: static fixed Recipe migration preserves the full golden and array order (11.35675ms)
+packages/config-compiler test: ✔ migration node identities are assigned explicitly per case rather than inferred from redacted connection equality (1.748834ms)
+packages/config-compiler test: ✔ user-d retains its independent policy and Android retains its local resolver and Inline Rule Sets (0.656791ms)
+packages/config-compiler test: ✔ ECS is computed from explicit public IPv4 and prefix; no default mask (74.252167ms)
+packages/config-compiler test: ✔ unreliable addresses are rejected and null explicitly removes stored ECS (11.998083ms)
+packages/config-compiler test: ✔ undeclared ECS positions and duplicate declarations cannot leak an old subnet (1.454875ms)
+packages/config-compiler test: ✔ publication checks both variants; subscriptions only change declared fields (22.454084ms)
+packages/config-compiler test: ✔ a changed snapshot or compiler identity cannot reuse native validation (8.939625ms)
+packages/config-compiler test: ✔ changing recipe, template, artifacts, or profile requires a new publication (27.667584ms)
+packages/config-compiler test: ✔ native failure in either variant preserves the last published snapshot (31.078ms)
+packages/config-compiler test: ✔ caller/checker mutations during asynchronous checks cannot change the published snapshot (5.001541ms)
+packages/config-compiler test: ✔ fixed Recipe source and dependency records participate in publication identity without following latest revisions (165.722291ms)
+packages/config-compiler test: ✔ full-policy semantic draft can be saved and retained archived bindings can publish through the Recipe entry (29.356292ms)
+packages/config-compiler test: ✔ new-contract publication snapshots before asynchronous checks and refuses invalid or old Android input (26.332584ms)
+packages/config-compiler test: ✔ two Recipes share a fixed NodeRevision with independent local tags and upgrades (23.847875ms)
+packages/config-compiler test: ✔ missing exact revisions fail without latest fallback, duplicates are ambiguous (0.353292ms)
+packages/config-compiler test: ✔ closed schemas reject unknown nested fields, paths, policy shapes and Profile overrides (5.338416ms)
+packages/config-compiler test: ✔ all sample node connection forms pass the public contract without sharing credentials in diagnostics (1.9005ms)
+packages/config-compiler test: ✔ resolution and compilation are deterministic and own their output (0.725875ms)
+packages/config-compiler test: ✔ Recipe keeps Direct, fixed nodes, Selector and URLTest in declared resource order (11.529ms)
+packages/config-compiler test: ✔ Route presets expand at array positions, with independent repeats and headless sets (9.225083ms)
+packages/config-compiler test: ✔ Route diagnostics identify stable steps, preset offsets and output positions (1.094375ms)
+packages/config-compiler test: ✔ implicit route terminals warn about unreachable steps and capabilities stay blocking (0.80175ms)
+packages/config-compiler test: ✔ settings generate TUN MTU and reject missing or ambiguous TUN targets (9.108583ms)
+packages/config-compiler test: ✔ outbound references, duplicate tags, group defaults and cycles use existing validation (2.720334ms)
+packages/config-compiler test: ✔ new nested contracts reject arbitrary options, action-bearing headless rules and malformed steps (1.784458ms)
+packages/config-compiler test: ✔ representative existing sample Route policy survives the public Recipe path unchanged (16.076667ms)
+packages/config-compiler test: ✔ v2 public Recipe resolves stable SRS, shared physical URLs and local HTTP clients without fixed artifacts or client defaults (25.244666ms)
+packages/config-compiler test: ✔ v2 Template subscription bindings expand presets in place and keep duplicates and diagnostic origins (8.554958ms)
+packages/config-compiler test: ✔ v1 remains fixed; schema versions and binding types cannot be reinterpreted or mixed (1.53675ms)
+packages/config-compiler test: ✔ user bindings cannot supply URLs, digests, format, fixed revisions or capability overrides (0.650709ms)
+packages/config-compiler test: ✔ missing subscriptions, duplicate identities, empty projections, resource errors and unknown usages fail closed (8.141709ms)
+packages/config-compiler test: ✔ DNS response subscriptions still require an earlier matching response context and destination IP position (4.811583ms)
+packages/config-compiler test: ✔ Pipeline JSON contract and Compiler closed parser agree on subscription versions and constraints (29.598375ms)
+packages/config-compiler test: ✔ Profile mismatches remain diagnostics on save and block both public and resolved compilation (1.4805ms)
+packages/config-compiler test: ✔ subscription publication snapshots contract and native-check evidence without claiming future content hashes (23.979125ms)
+packages/config-compiler test: ✔ unused projection capabilities do not restrict a DNS-only publication (2.076583ms)
+packages/config-compiler test: ✔ one v2 local tag may declare multiple uses of a shared SRS while distinct endpoints cannot be conflated (0.826583ms)
+packages/config-compiler test: ✔ v2 still resolves exact Template and Node revisions and enforces fixed Profile edits (0.637792ms)
+packages/config-compiler test: ✔ resolved Compiler entry cannot bypass subscription consumer-position checks (0.981ms)
+packages/config-compiler test: ✔ conflicting capabilities or formats for one stable URL fail before publication checks (3.348917ms)
+packages/config-compiler test: ✔ cross-subscription URL conflicts cannot publish an undeliverable Profile snapshot (2.711417ms)
+packages/config-compiler test: ℹ tests 96
+packages/config-compiler test: ℹ suites 0
+packages/config-compiler test: ℹ pass 96
+packages/config-compiler test: ℹ fail 0
+packages/config-compiler test: ℹ cancelled 0
+packages/config-compiler test: ℹ skipped 0
+packages/config-compiler test: ℹ todo 0
+packages/config-compiler test: ℹ duration_ms 859.114041
+packages/config-compiler test: Done
+packages/rule-set-pipeline test$ node --import tsx --test test/*.test.ts
+packages/rule-set-pipeline test: ✔ main 使用既有分支的预期旧 head，一次提交稳定文件及记录且非强制更新 (2.866042ms)
+packages/rule-set-pipeline test: ✔ acceptance-issue-19 使用既有分支的预期旧 head，一次提交稳定文件及记录且非强制更新 (0.231958ms)
+packages/rule-set-pipeline test: ✔ 非法稳定路径 candidates/abc/domains.srs 不更新远端引用 (0.296542ms)
+packages/rule-set-pipeline test: ✔ 非法稳定路径 README.md 不更新远端引用 (0.076375ms)
+packages/rule-set-pipeline test: ✔ 非法稳定路径 /stable/domains.srs 不更新远端引用 (0.076125ms)
+packages/rule-set-pipeline test: ✔ 非法稳定路径 stable/../candidate.srs 不更新远端引用 (0.070167ms)
+packages/rule-set-pipeline test: ✔ 非法稳定路径 stable/./domains.srs 不更新远端引用 (0.061917ms)
+packages/rule-set-pipeline test: ✔ 非法稳定路径 stable//domains.srs 不更新远端引用 (0.071292ms)
+packages/rule-set-pipeline test: ✔ 非法稳定路径 stable/domains.srs?x=1 不更新远端引用 (0.0705ms)
+packages/rule-set-pipeline test: ✔ 非法稳定路径 stable/ 不更新远端引用 (0.092583ms)
+packages/rule-set-pipeline test: ✔ 预期旧 head 已被其他激活改变时直接冲突，不创建提交或 PATCH (0.1ms)
+packages/rule-set-pipeline test: ✔ PATCH 回复失败携带准确 attemptedCommit，保留 cause 且不重试覆盖 (0.153084ms)
+packages/rule-set-pipeline test: ✔ 分支缺失、仓库私有或 head 非法时拒绝激活 {"missing":true} (0.062458ms)
+packages/rule-set-pipeline test: ✔ 分支缺失、仓库私有或 head 非法时拒绝激活 {"private":true} (0.052833ms)
+packages/rule-set-pipeline test: ✔ 分支缺失、仓库私有或 head 非法时拒绝激活 {"head":"short-sha"} (0.042333ms)
+packages/rule-set-pipeline test: ✔ 非法 expectedHead 在访问远端前拒绝；候选分支和路径型分支不能作为激活分支 (0.093458ms)
+packages/rule-set-pipeline test: ✔ 固定 commit 的激活记录经 tree 定位并从 Git blob 解码，返回原始 UTF-8 字节 (0.229625ms)
+packages/rule-set-pipeline test: ✔ 完整 tree 证明激活记录不存在后才报告 404，不请求 blob 或 raw CDN (0.121625ms)
+packages/rule-set-pipeline test: ✔ 读取激活记录的 commit API 故障不误报记录缺失 (0.09ms)
+packages/rule-set-pipeline test: ✔ 读取激活记录的 tree API 故障不误报记录缺失 (0.042583ms)
+packages/rule-set-pipeline test: ✔ 读取激活记录的 blob API 故障不误报记录缺失 (0.044083ms)
+packages/rule-set-pipeline test: ✔ tree 不完整或记录不是 blob 时拒绝推断激活状态 {"absent":true,"truncated":true} (0.0645ms)
+packages/rule-set-pipeline test: ✔ tree 不完整或记录不是 blob 时拒绝推断激活状态 {"pathType":"tree"} (0.040292ms)
+packages/rule-set-pipeline test: ✔ tree 不完整或记录不是 blob 时拒绝推断激活状态 {"pathType":"commit"} (0.036042ms)
+packages/rule-set-pipeline test: ✔ 激活记录为符号链接或 blob 编码与长度不符时拒绝 {"pathMode":"120000"} (0.04675ms)
+packages/rule-set-pipeline test: ✔ 激活记录为符号链接或 blob 编码与长度不符时拒绝 {"blobEncoding":"utf-8"} (0.047291ms)
+packages/rule-set-pipeline test: ✔ 激活记录为符号链接或 blob 编码与长度不符时拒绝 {"blobContent":123} (0.050875ms)
+packages/rule-set-pipeline test: ✔ 激活记录为符号链接或 blob 编码与长度不符时拒绝 {"blobSize":999} (0.038792ms)
+packages/rule-set-pipeline test: ✔ 固定 Release 构建保留来源、属性匹配值和独立 OR 谓词，不声明原生验证成功 (28.442042ms)
+packages/rule-set-pipeline test: ✔ 四种谓词相等去重、固定排序，属性不会触发本地筛选，值只解码一次 (7.183208ms)
+packages/rule-set-pipeline test: ✔ 坏 YAML 明确失败且没有部分产物 (0.815792ms)
+packages/rule-set-pipeline test: ✔ 非目标区域坏 YAML 明确失败且没有部分产物 (0.712834ms)
+packages/rule-set-pipeline test: ✔ 多个 YAML 文档 明确失败且没有部分产物 (0.459459ms)
+packages/rule-set-pipeline test: ✔ 重复 mapping key 明确失败且没有部分产物 (0.38375ms)
+packages/rule-set-pipeline test: ✔ 未知 YAML tag 明确失败且没有部分产物 (0.446666ms)
+packages/rule-set-pipeline test: ✔ 缺失目标 明确失败且没有部分产物 (0.298375ms)
+packages/rule-set-pipeline test: ✔ 重复目标 明确失败且没有部分产物 (0.414458ms)
+packages/rule-set-pipeline test: ✔ 空列表 明确失败且没有部分产物 (0.326417ms)
+packages/rule-set-pipeline test: ✔ 错误长度 明确失败且没有部分产物 (0.357625ms)
+packages/rule-set-pipeline test: ✔ 非数值长度 明确失败且没有部分产物 (0.310709ms)
+packages/rule-set-pipeline test: ✔ 未知类型 明确失败且没有部分产物 (0.28175ms)
+packages/rule-set-pipeline test: ✔ 原型属性名不当作类型 明确失败且没有部分产物 (0.330875ms)
+packages/rule-set-pipeline test: ✔ 空值 明确失败且没有部分产物 (0.314166ms)
+packages/rule-set-pipeline test: ✔ 非法域名 明确失败且没有部分产物 (0.272458ms)
+packages/rule-set-pipeline test: ✔ 空 label 明确失败且没有部分产物 (0.396542ms)
+packages/rule-set-pipeline test: ✔ 非法 label 边界 明确失败且没有部分产物 (0.375667ms)
+packages/rule-set-pipeline test: ✔ 超长 label 明确失败且没有部分产物 (0.341834ms)
+packages/rule-set-pipeline test: ✔ 空白 明确失败且没有部分产物 (0.315917ms)
+packages/rule-set-pipeline test: ✔ 非法 keyword 明确失败且没有部分产物 (0.278125ms)
+packages/rule-set-pipeline test: ✔ 非字符串 明确失败且没有部分产物 (0.260583ms)
+packages/rule-set-pipeline test: ✔ mapping 规则 明确失败且没有部分产物 (0.280291ms)
+packages/rule-set-pipeline test: ✔ 控制字符 明确失败且没有部分产物 (0.3115ms)
+packages/rule-set-pipeline test: ✔ 空属性 明确失败且没有部分产物 (0.267667ms)
+packages/rule-set-pipeline test: ✔ 属性尾部垃圾 明确失败且没有部分产物 (0.259125ms)
+packages/rule-set-pipeline test: ✔ 正则属性 明确失败且没有部分产物 (0.265333ms)
+packages/rule-set-pipeline test: ✔ 正则字面歧义 明确失败且没有部分产物 (0.251792ms)
+packages/rule-set-pipeline test: ✔ 失败报告保留计数和来源位置，下游转换不依赖 YAML (0.230958ms)
+packages/rule-set-pipeline test: ✔ 摘要不符 拒绝构建 (0.218417ms)
+packages/rule-set-pipeline test: ✔ 摘要文件名错配 拒绝构建 (0.1585ms)
+packages/rule-set-pipeline test: ✔ 多条摘要 拒绝构建 (0.149458ms)
+packages/rule-set-pipeline test: ✔ Release tag 错配 拒绝构建 (0.075125ms)
+packages/rule-set-pipeline test: ✔ 缺失摘要资产 拒绝构建 (0.064583ms)
+packages/rule-set-pipeline test: ✔ 跨 Release 资产 拒绝构建 (0.081209ms)
+packages/rule-set-pipeline test: ✔ tag 指向 tree 拒绝构建 (0.085666ms)
+packages/rule-set-pipeline test: ✔ tag 解引用循环 拒绝构建 (0.100709ms)
+packages/rule-set-pipeline test: ✔ 轻量 tag 直接固定 commit，拒绝已固定资产身份或内容的改变 (6.735375ms)
+packages/rule-set-pipeline test: ✔ 网络或 HTTP 失败不会输出成功产物，latest 不作为固定 tag 接受 (0.223209ms)
+packages/rule-set-pipeline test: ✔ YAML alias 和无效 UTF-8 拒绝读取 (0.240833ms)
+packages/rule-set-pipeline test: ✔ CLI 失败退出只保留诊断，拒绝覆盖已有构建目录 (310.213417ms)
+packages/rule-set-pipeline test: ✔ CLI 缺少固定 Release 或存在未知参数时明确退出 (379.890375ms)
+packages/rule-set-pipeline test: ✔ CLI 激活已生效但回执目录 existing-file 时报告已应用 commit (126.349666ms)
+packages/rule-set-pipeline test: ✔ CLI 激活已生效但回执目录 parent-is-file 时报告已应用 commit (126.841291ms)
+packages/rule-set-pipeline test: ✔ CLI 激活成功后创建缺失的状态目录并保存可恢复回执 (124.907ms)
+packages/rule-set-pipeline test: ✔ CLI 回滚保存独立激活回执且不改变 Release 成功记录 (126.76175ms)
+packages/rule-set-pipeline test: ✔ CLI 回滚拒绝缺失目标、candidate 混用和非回滚命令上的历史参数 (373.712542ms)
+packages/rule-set-pipeline test: ✔ pure IP and mixed IR project independently, deduplicate and preserve OR (0.91625ms)
+packages/rule-set-pipeline test: ✔ decoder normalization tolerates only version, scalar, ordering and exact duplicate differences (0.186292ms)
+packages/rule-set-pipeline test: ✔ missing, relative and wrong-version binaries explicitly fail without a passed build (39.815041ms)
+packages/rule-set-pipeline test: ✔ GitHub 发布只追加候选文件，通过非强制 candidates 引用更新，保留历史 tree (1.285ms)
+packages/rule-set-pipeline test: ✔ 历史路径 拒绝发布，不强制覆盖 (0.263458ms)
+packages/rule-set-pipeline test: ✔ tree 截断 拒绝发布，不强制覆盖 (0.091834ms)
+packages/rule-set-pipeline test: ✔ 并发冲突 拒绝发布，不强制覆盖 (0.127041ms)
+packages/rule-set-pipeline test: ✔ 稳定路径 拒绝发布，不强制覆盖 (0.644666ms)
+packages/rule-set-pipeline test: ✔ 重建拒绝 latest、空 tag、未处理 Release，且不会查询 latest 或发布 (11.045583ms)
+packages/rule-set-pipeline test: ✔ CLI rebuild 必须显式提供固定 Release、状态目录及 binary；update 仍拒绝 tag (644.035917ms)
+packages/rule-set-pipeline test: ✔ 固定官方目标列表的 214 条记录全部转换，覆盖 13 条属性记录 (11.94675ms)
+packages/rule-set-pipeline test: ✔ IP semantics tolerate adjacent, contained, canonicalized and duplicate coverage (5.557584ms)
+packages/rule-set-pipeline test: ✔ IP comparison detects missing halves, widened networks, holes and address family changes (0.459125ms)
+packages/rule-set-pipeline test: ✔ term field order is irrelevant while domain type and value changes still fail (0.214917ms)
+packages/rule-set-pipeline test: ✔ 恢复成功处理与激活状态，无新 Release 只请求 latest，不下载资产或启动 binary (26.162583ms)
+packages/rule-set-pipeline test: ✔ lookup 失败不产生成功记录；并发锁拒绝覆盖；状态损坏不会当作空状态 (4.593208ms)
+packages/rule-set-pipeline test: ℹ tests 91
+packages/rule-set-pipeline test: ℹ suites 0
+packages/rule-set-pipeline test: ℹ pass 91
+packages/rule-set-pipeline test: ℹ fail 0
+packages/rule-set-pipeline test: ℹ cancelled 0
+packages/rule-set-pipeline test: ℹ skipped 0
+packages/rule-set-pipeline test: ℹ todo 0
+packages/rule-set-pipeline test: ℹ duration_ms 1679.320375
+packages/rule-set-pipeline test: Done
+
+> sing-box-config-manager@0.1.0 build /private/tmp/spec14-final-D9nkQ2
+> pnpm -r --if-present run build
+
+Scope: 3 of 4 workspace projects
+packages/config-compiler build$ pnpm run generate:validator && tsc -p tsconfig.build.json && node scripts/build.mjs
+packages/config-compiler build: > @sing-box-config-manager/config-compiler@0.1.0 generate:validator /private/tmp/spec14-final-D9nkQ2/packages/config-compiler
+packages/config-compiler build: > node scripts/build-validator.mjs
+packages/config-compiler build: Done
+packages/rule-set-pipeline build$ tsc -p tsconfig.build.json
+packages/rule-set-pipeline build: Done
+
+> sing-box-config-manager@0.1.0 smoke:workspace /private/tmp/spec14-final-D9nkQ2
+> node scripts/smoke-workspace.mjs
+
+Workspace smoke passed: Web App imports, public declarations, and browser bundle.

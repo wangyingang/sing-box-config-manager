@@ -13,7 +13,8 @@
     "typecheck": "pnpm -r --if-present run typecheck",
     "test": "pnpm -r --if-present run test",
     "test:integration": "pnpm -r --if-present run test:integration",
-    "check": "pnpm typecheck && pnpm test && pnpm build && pnpm smoke:workspace",
+    "test:tools": "node --test scripts/test/*.test.mjs",
+    "check": "pnpm test:tools && pnpm typecheck && pnpm test && pnpm build && pnpm smoke:workspace",
     "smoke:workspace": "node scripts/smoke-workspace.mjs"
   }
 }

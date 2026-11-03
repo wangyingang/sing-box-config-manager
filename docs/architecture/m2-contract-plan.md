@@ -4,9 +4,7 @@
 
 设计日期：2026-11-02。本文保留 M2 的设计背景与后续方向。Recipe／共享节点编译路径的实施范围和验收记录见 [Spec #1](https://github.com/wangyingang/sing-box-config-manager/issues/1)；当前公开契约与调用方式见下方实现文档链接。
 
-本文保留原始设计背景。下文的基线描述、M2-01 至 M2-04 计划和设计阶段记录反映 2026-11-02 的讨论，不作为当前完成状态。当前公开契约与交付证据见 [Compiler 使用与验收说明](../../packages/config-compiler/README.md#五份样本迁移与-recipe-发布)及 [Manifest v1 契约](../../packages/rule-set-pipeline/contracts/README.md)。完整 Rule IR／Parser、Pipeline 生产与发布、Web 和线上交付仍属后续工作。
-
-本文保留 M2 的设计讨论与后续方向。Recipe／共享节点编译路径的正式 spec 已发布为 [建立固定修订 Recipe 与共享节点编译契约](https://github.com/wangyingang/sing-box-config-manager/issues/1)，该路径的实施范围与验收以此 issue 为准。完整 Pipeline 和 Web 仍属后续工作，尚未拆分实施工单。
+本文保留 2026-11-02 的 M2 设计背景，下文基线、实施顺序和阶段记录不表示当前状态。Recipe／共享节点编译契约已由 [Spec #1](https://github.com/wangyingang/sing-box-config-manager/issues/1) 交付；V2Fly 单列表的规则生产、发布、激活、回滚、重建及受控客户端更新已由 [Spec #14](https://github.com/wangyingang/sing-box-config-manager/issues/14) 交付。其他来源与更广泛规则类型、Web 和线上配置交付仍属后续工作。当前公开契约见 [Compiler](../../packages/config-compiler/README.md) 与 [Pipeline](../../packages/rule-set-pipeline/README.md) 使用说明，完成范围及证据以对应 Spec 为准。
 
 ## 基线与范围
 

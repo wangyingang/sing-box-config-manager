@@ -1,0 +1,258 @@
+[
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/6000355c8f6932610eee0be23dc11311e969df0c/candidates/6e76b4ef-883c-46d1-8058-ef3f803b347b/domains.json",
+    "sha256": "181b855217d871ed8f0ec40923a8606489c5ffb0fe0b14de3c47aeeb0a5a63d5",
+    "byteLength": 6316,
+    "actualSha256": "181b855217d871ed8f0ec40923a8606489c5ffb0fe0b14de3c47aeeb0a5a63d5",
+    "actualBytes": 6316,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/6000355c8f6932610eee0be23dc11311e969df0c/candidates/6e76b4ef-883c-46d1-8058-ef3f803b347b/domains.srs",
+    "sha256": "b66a1797d2850ba2c2c632ae6f61cb40184134a3d4bcb584dc07273361c167d5",
+    "byteLength": 2164,
+    "actualSha256": "b66a1797d2850ba2c2c632ae6f61cb40184134a3d4bcb584dc07273361c167d5",
+    "actualBytes": 2164,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/559b0667e1485b911529c6810a437545e174237e/candidates/6e76b4ef-883c-46d1-8058-ef3f803b347b/manifest.json",
+    "sha256": "6618f0af187968eea306a0796302b7e55be6eaf6480e3b29fed5526127044504",
+    "byteLength": 1669,
+    "actualSha256": "6618f0af187968eea306a0796302b7e55be6eaf6480e3b29fed5526127044504",
+    "actualBytes": 1669,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/559b0667e1485b911529c6810a437545e174237e/candidates/6e76b4ef-883c-46d1-8058-ef3f803b347b/source.json",
+    "sha256": "71985fe839c0dc78c3f13715022fbdb9b05525871e77859b0f14772c335ff297",
+    "byteLength": 745,
+    "actualSha256": "71985fe839c0dc78c3f13715022fbdb9b05525871e77859b0f14772c335ff297",
+    "actualBytes": 745,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/559b0667e1485b911529c6810a437545e174237e/candidates/6e76b4ef-883c-46d1-8058-ef3f803b347b/conversion-report.json",
+    "sha256": "175b29afd6041c51988f0ad60d77ea7405b399a88b5cb4163aedeadd2fe37b82",
+    "byteLength": 682,
+    "actualSha256": "175b29afd6041c51988f0ad60d77ea7405b399a88b5cb4163aedeadd2fe37b82",
+    "actualBytes": 682,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/559b0667e1485b911529c6810a437545e174237e/candidates/6e76b4ef-883c-46d1-8058-ef3f803b347b/build.json",
+    "sha256": "d6f83a227d0791df74b356413ae4e47d54b55f4132e1a3f92da1b34786e08c2e",
+    "byteLength": 3507,
+    "actualSha256": "d6f83a227d0791df74b356413ae4e47d54b55f4132e1a3f92da1b34786e08c2e",
+    "actualBytes": 3507,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/3f06056ee6f1c6336936d3b1e7b776215c8b2ded/candidates/6e76b4ef-883c-46d1-8058-ef3f803b347b/readback.json",
+    "sha256": "cbd3ba0316f29f701e15885162c2531ea286f910669247a290ac86fd65c76e86",
+    "byteLength": 3925,
+    "actualSha256": "cbd3ba0316f29f701e15885162c2531ea286f910669247a290ac86fd65c76e86",
+    "actualBytes": 3925,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/dbe73019475f5ea403f93d4c2d804427330736de/candidates/a6f6d8c2-7c99-4ee9-b5a4-4026ac2af44a/domains.json",
+    "sha256": "181b855217d871ed8f0ec40923a8606489c5ffb0fe0b14de3c47aeeb0a5a63d5",
+    "byteLength": 6316,
+    "actualSha256": "181b855217d871ed8f0ec40923a8606489c5ffb0fe0b14de3c47aeeb0a5a63d5",
+    "actualBytes": 6316,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/dbe73019475f5ea403f93d4c2d804427330736de/candidates/a6f6d8c2-7c99-4ee9-b5a4-4026ac2af44a/domains.srs",
+    "sha256": "b66a1797d2850ba2c2c632ae6f61cb40184134a3d4bcb584dc07273361c167d5",
+    "byteLength": 2164,
+    "actualSha256": "b66a1797d2850ba2c2c632ae6f61cb40184134a3d4bcb584dc07273361c167d5",
+    "actualBytes": 2164,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/41054c67ddec80ea98c74f4b9ec95a942cee7d82/candidates/a6f6d8c2-7c99-4ee9-b5a4-4026ac2af44a/manifest.json",
+    "sha256": "a47bac78449c886e1ff52d36a3d8a85a4f1df2b3ad102ed850880cbd5f2603dc",
+    "byteLength": 1669,
+    "actualSha256": "a47bac78449c886e1ff52d36a3d8a85a4f1df2b3ad102ed850880cbd5f2603dc",
+    "actualBytes": 1669,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/41054c67ddec80ea98c74f4b9ec95a942cee7d82/candidates/a6f6d8c2-7c99-4ee9-b5a4-4026ac2af44a/source.json",
+    "sha256": "f1b451212d93710448158eca5ee7501dc61efc430074251e0ee9bab6e7a4e1e0",
+    "byteLength": 745,
+    "actualSha256": "f1b451212d93710448158eca5ee7501dc61efc430074251e0ee9bab6e7a4e1e0",
+    "actualBytes": 745,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/41054c67ddec80ea98c74f4b9ec95a942cee7d82/candidates/a6f6d8c2-7c99-4ee9-b5a4-4026ac2af44a/conversion-report.json",
+    "sha256": "175b29afd6041c51988f0ad60d77ea7405b399a88b5cb4163aedeadd2fe37b82",
+    "byteLength": 682,
+    "actualSha256": "175b29afd6041c51988f0ad60d77ea7405b399a88b5cb4163aedeadd2fe37b82",
+    "actualBytes": 682,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/41054c67ddec80ea98c74f4b9ec95a942cee7d82/candidates/a6f6d8c2-7c99-4ee9-b5a4-4026ac2af44a/build.json",
+    "sha256": "4559a73a5ff0f58e5f8ef8c8a291deaad67d31291eb40ca7315f4acc07ac972b",
+    "byteLength": 3507,
+    "actualSha256": "4559a73a5ff0f58e5f8ef8c8a291deaad67d31291eb40ca7315f4acc07ac972b",
+    "actualBytes": 3507,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/8eb83fc26954c6bd6e4bf514a9473568085b8961/candidates/a6f6d8c2-7c99-4ee9-b5a4-4026ac2af44a/readback.json",
+    "sha256": "cd1042c2503e1f20bd444ebb6e4952b865006550ec9fa1210fca79b941aa14e5",
+    "byteLength": 3925,
+    "actualSha256": "cd1042c2503e1f20bd444ebb6e4952b865006550ec9fa1210fca79b941aa14e5",
+    "actualBytes": 3925,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-19/stable/v2fly/category-ai-not-cn/domains.srs",
+    "sha256": "b66a1797d2850ba2c2c632ae6f61cb40184134a3d4bcb584dc07273361c167d5",
+    "byteLength": 2164,
+    "actualSha256": "b66a1797d2850ba2c2c632ae6f61cb40184134a3d4bcb584dc07273361c167d5",
+    "actualBytes": 2164,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-19/stable/v2fly/category-ai-not-cn/domains.json",
+    "sha256": "181b855217d871ed8f0ec40923a8606489c5ffb0fe0b14de3c47aeeb0a5a63d5",
+    "byteLength": 6316,
+    "actualSha256": "181b855217d871ed8f0ec40923a8606489c5ffb0fe0b14de3c47aeeb0a5a63d5",
+    "actualBytes": 6316,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-20/stable/v2fly/category-ai-not-cn/domains.srs",
+    "sha256": "b66a1797d2850ba2c2c632ae6f61cb40184134a3d4bcb584dc07273361c167d5",
+    "byteLength": 2164,
+    "actualSha256": "b66a1797d2850ba2c2c632ae6f61cb40184134a3d4bcb584dc07273361c167d5",
+    "actualBytes": 2164,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-20/stable/v2fly/category-ai-not-cn/domains.json",
+    "sha256": "181b855217d871ed8f0ec40923a8606489c5ffb0fe0b14de3c47aeeb0a5a63d5",
+    "byteLength": 6316,
+    "actualSha256": "181b855217d871ed8f0ec40923a8606489c5ffb0fe0b14de3c47aeeb0a5a63d5",
+    "actualBytes": 6316,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/4d865f09d29b9b4eb29b7a5b433f85a868439aa5/candidates/2fd076eb-d65a-4088-809e-0316cfe76ece/domains.json",
+    "sha256": "181b855217d871ed8f0ec40923a8606489c5ffb0fe0b14de3c47aeeb0a5a63d5",
+    "byteLength": 6316,
+    "actualSha256": "181b855217d871ed8f0ec40923a8606489c5ffb0fe0b14de3c47aeeb0a5a63d5",
+    "actualBytes": 6316,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/4d865f09d29b9b4eb29b7a5b433f85a868439aa5/candidates/2fd076eb-d65a-4088-809e-0316cfe76ece/domains.srs",
+    "sha256": "b66a1797d2850ba2c2c632ae6f61cb40184134a3d4bcb584dc07273361c167d5",
+    "byteLength": 2164,
+    "actualSha256": "b66a1797d2850ba2c2c632ae6f61cb40184134a3d4bcb584dc07273361c167d5",
+    "actualBytes": 2164,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/26233d7c4a6c1df3a115a4cdb09553d4bed2ebd2/candidates/2fd076eb-d65a-4088-809e-0316cfe76ece/manifest.json",
+    "sha256": "58907e8c257306cd7a308b8fcb7528c6daa900bd2e86ba1b86d852a208811720",
+    "byteLength": 1669,
+    "actualSha256": "58907e8c257306cd7a308b8fcb7528c6daa900bd2e86ba1b86d852a208811720",
+    "actualBytes": 1669,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/26233d7c4a6c1df3a115a4cdb09553d4bed2ebd2/candidates/2fd076eb-d65a-4088-809e-0316cfe76ece/source.json",
+    "sha256": "71985fe839c0dc78c3f13715022fbdb9b05525871e77859b0f14772c335ff297",
+    "byteLength": 745,
+    "actualSha256": "71985fe839c0dc78c3f13715022fbdb9b05525871e77859b0f14772c335ff297",
+    "actualBytes": 745,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/26233d7c4a6c1df3a115a4cdb09553d4bed2ebd2/candidates/2fd076eb-d65a-4088-809e-0316cfe76ece/conversion-report.json",
+    "sha256": "175b29afd6041c51988f0ad60d77ea7405b399a88b5cb4163aedeadd2fe37b82",
+    "byteLength": 682,
+    "actualSha256": "175b29afd6041c51988f0ad60d77ea7405b399a88b5cb4163aedeadd2fe37b82",
+    "actualBytes": 682,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/26233d7c4a6c1df3a115a4cdb09553d4bed2ebd2/candidates/2fd076eb-d65a-4088-809e-0316cfe76ece/build.json",
+    "sha256": "62a4b53b44aa9ccbd5803b01789c241b2779e8fb8d9c2ceb0281b6aa6435892b",
+    "byteLength": 3778,
+    "actualSha256": "62a4b53b44aa9ccbd5803b01789c241b2779e8fb8d9c2ceb0281b6aa6435892b",
+    "actualBytes": 3778,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/843b7a80b40b744cf70079bde067ca492c1c1b63/candidates/2fd076eb-d65a-4088-809e-0316cfe76ece/readback.json",
+    "sha256": "5d7b0a9fbb0ddaa51cb3581234323c47600cc67712d61630705a38556ae161dc",
+    "byteLength": 3925,
+    "actualSha256": "5d7b0a9fbb0ddaa51cb3581234323c47600cc67712d61630705a38556ae161dc",
+    "actualBytes": 3925,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/6a0431bd87be6960123eeec19a87c2350a063c00/candidates/0e83e2a7-6c13-4c7b-b76c-b0de444430e5/domains.json",
+    "sha256": "181b855217d871ed8f0ec40923a8606489c5ffb0fe0b14de3c47aeeb0a5a63d5",
+    "byteLength": 6316,
+    "actualSha256": "181b855217d871ed8f0ec40923a8606489c5ffb0fe0b14de3c47aeeb0a5a63d5",
+    "actualBytes": 6316,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/6a0431bd87be6960123eeec19a87c2350a063c00/candidates/0e83e2a7-6c13-4c7b-b76c-b0de444430e5/domains.srs",
+    "sha256": "b66a1797d2850ba2c2c632ae6f61cb40184134a3d4bcb584dc07273361c167d5",
+    "byteLength": 2164,
+    "actualSha256": "b66a1797d2850ba2c2c632ae6f61cb40184134a3d4bcb584dc07273361c167d5",
+    "actualBytes": 2164,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/eb3c71fc20c83aa84e16552eefbe5905e3cc7924/candidates/0e83e2a7-6c13-4c7b-b76c-b0de444430e5/manifest.json",
+    "sha256": "9440cccb49d636fd0bb9200b5e86b9b2ee575c4296e554b095bc9f953cceffa5",
+    "byteLength": 1669,
+    "actualSha256": "9440cccb49d636fd0bb9200b5e86b9b2ee575c4296e554b095bc9f953cceffa5",
+    "actualBytes": 1669,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/eb3c71fc20c83aa84e16552eefbe5905e3cc7924/candidates/0e83e2a7-6c13-4c7b-b76c-b0de444430e5/source.json",
+    "sha256": "71985fe839c0dc78c3f13715022fbdb9b05525871e77859b0f14772c335ff297",
+    "byteLength": 745,
+    "actualSha256": "71985fe839c0dc78c3f13715022fbdb9b05525871e77859b0f14772c335ff297",
+    "actualBytes": 745,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/eb3c71fc20c83aa84e16552eefbe5905e3cc7924/candidates/0e83e2a7-6c13-4c7b-b76c-b0de444430e5/conversion-report.json",
+    "sha256": "175b29afd6041c51988f0ad60d77ea7405b399a88b5cb4163aedeadd2fe37b82",
+    "byteLength": 682,
+    "actualSha256": "175b29afd6041c51988f0ad60d77ea7405b399a88b5cb4163aedeadd2fe37b82",
+    "actualBytes": 682,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/eb3c71fc20c83aa84e16552eefbe5905e3cc7924/candidates/0e83e2a7-6c13-4c7b-b76c-b0de444430e5/build.json",
+    "sha256": "597bfa79c1c05e999b7e6d8deab649c43716bf909b2ec5609dcc12508622d5d1",
+    "byteLength": 3844,
+    "actualSha256": "597bfa79c1c05e999b7e6d8deab649c43716bf909b2ec5609dcc12508622d5d1",
+    "actualBytes": 3844,
+    "passed": true
+  },
+  {
+    "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/30970b57766fc7add45170befdded4358ba1333f/candidates/0e83e2a7-6c13-4c7b-b76c-b0de444430e5/readback.json",
+    "sha256": "a32613faefcb8b57c02d3b1235bb074da08cfb32e05e4d0aac00b27928a2b5d2",
+    "byteLength": 3925,
+    "actualSha256": "a32613faefcb8b57c02d3b1235bb074da08cfb32e05e4d0aac00b27928a2b5d2",
+    "actualBytes": 3925,
+    "passed": true
+  }
+]
