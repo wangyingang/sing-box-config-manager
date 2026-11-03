@@ -1,10 +1,10 @@
 # sing-box-config-manager
 
-面向 sing-box 的配置管理平台，采用三模块 pnpm monorepo。Config Compiler 已完成 D06 最小实现，Rule Set Pipeline 已支持固定官方 Release 的本地 JSON 构建，Web App 为骨架。
+面向 sing-box 的配置管理平台，采用三模块 pnpm monorepo。Config Compiler 已完成 D06 最小实现，Rule Set Pipeline 已支持固定官方 Release 的确定性 JSON／SRS 构建与原生验证，Web App 为骨架。
 
 | 模块 | 目录 | 当前状态 |
 | --- | --- | --- |
-| Rule Set Pipeline | [packages/rule-set-pipeline](packages/rule-set-pipeline/README.md) | 固定 V2Fly Release 下载、摘要校验、域名 JSON 转换和来源追溯；编译和发布待实现 |
+| Rule Set Pipeline | [packages/rule-set-pipeline](packages/rule-set-pipeline/README.md) | 固定 V2Fly Release 下载、摘要校验、JSON／SRS 构建、用途投影与原生验证；发布待实现 |
 | Config Compiler | [packages/config-compiler](packages/config-compiler/README.md) | 固定修订 Recipe 解析、配置组合、校验、受限 ECS 修改和本地发布适配器 |
 | Configuration Manager Web App | [apps/web](apps/web/README.md) | 骨架；通过 workspace 依赖调用 Compiler |
 
@@ -38,7 +38,7 @@ SING_BOX_TEST_BINARY=/absolute/path/to/sing-box pnpm test:integration
 
 CI 的 sing-box 版本读取自 [Schema 构建配置](packages/config-compiler/schemas/build.json) 的 `version`，Linux 发布包摘要读取自 `releaseAssets.linux-amd64.sha256`。下载地址和解压路径自动生成。升级时更新该配置，并同步核验 Schema、原生校验器和测试基线，无需修改 workflow。
 
-测试仅在临时目录 merge/check，不启动代理、不修改旧配置仓库。五份旧配置候选保持生成语义并通过原生 check；旧 Android 配置含不支持的进程规则，正式 compile 和发布会拒绝它。
+测试在临时目录执行 Compiler merge/check，以及 Pipeline 编译、解码与真实规则匹配；不启动代理、不修改旧配置仓库。五份旧配置候选保持生成语义并通过原生 check；旧 Android 配置含不支持的进程规则，正式 compile 和发布会拒绝它。
 
 当前测试和构建来自 Compiler 与 Pipeline；Web App 骨架没有占位构建或空测试。递归命令只执行模块实际声明的脚本。单独操作 Compiler：
 
@@ -65,6 +65,7 @@ pnpm --dir packages/config-compiler build
 
 ## 设计与证据
 
+- [#16 JSON／SRS 原生构建验收](packages/rule-set-pipeline/docs/verification/issue-16.md)
 - [1.14.4 merge 源码审计](packages/config-compiler/docs/architecture/sing-box-merge-analysis.md)
 - [D06 组合、ECS 与发布契约](packages/config-compiler/docs/architecture/config-composition-design.md)
 - [D06 原始验收与 M2 待办](packages/config-compiler/docs/architecture/d06-validation.md)
