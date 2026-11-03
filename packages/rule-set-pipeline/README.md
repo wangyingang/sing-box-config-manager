@@ -125,7 +125,7 @@ SING_BOX_TEST_BINARY=/absolute/path/to/sing-box-1.14.4 \
 pnpm --dir packages/rule-set-pipeline test:publication
 ```
 
-该验收固定 Release `20261102130044`，状态目录需尚未成功处理此样本，证据输出文件需不存在；此入口不是同一 Release 的显式重建命令。正常 CLI 不接受固定 tag；#22 的重建维护入口仍未交付。受控集成测试不访问真实 GitHub 写接口，自动覆盖上传、远程回读、来源变化和重试边界。
+该验收固定 Release `20261102130044`，状态目录需尚未成功处理此样本，证据输出文件需不存在；此入口不是同一 Release 的显式重建命令。正常更新 CLI 不接受固定 tag；重建使用下面的独立命令。受控集成测试不访问真实 GitHub 写接口，自动覆盖上传、远程回读、来源变化和重试边界。
 
 固定官方候选的真实激活验收（候选需已通过 #18 发布，证据文件需不存在）：
 
@@ -139,3 +139,31 @@ pnpm --dir packages/rule-set-pipeline test:activation
 ```
 
 该命令真实更新隔离分支，分别回读不可变提交和稳定 HTTPS URL，再通过公开 Recipe／Compiler 接口生成稳定 SRS 配置并执行原生检查。受控 A／B 自动更新测试随 `test:integration` 运行，需本机 `openssl`；通过 loopback HTTPS、临时 CA 和配置内的 HTTP 隧道隔离网络，不改 hosts 或系统信任。它使用内存 Git transport，提交身份不代表真实 GitHub commit；与真实发布证据分别保存。
+
+
+## 显式重建固定 Release
+
+使用已有状态目录中成功处理过的固定 Release tag：
+
+```sh
+pnpm --dir packages/rule-set-pipeline rebuild \
+  --state /absolute/path/to/rule-state \
+  --release 20261102130044 \
+  --binary /absolute/path/to/sing-box-1.14.4
+```
+
+`rebuildRules({ stateDirectory, release, binary, ... })` 与 CLI 使用同一入口。拒绝 `latest`、未固定或尚未成功处理的 Release；通过持久记录中的 Release ID 获取元数据，并重新核对 tag、源码 commit、资产身份及实际输入摘要。来源变化明确失败，不覆盖固定记录。
+
+重建复用正常更新的转换、原生验证、不可变发布和 HTTPS 回读门禁。每次尝试保存新候选 ID、操作类型、原成功候选 ID 和构建身份。`build.json` 记录输入、转换器实现摘要、Node／yaml 版本、目标 binary 的 SHA-256、契约版本和实际产物摘要。实现摘要覆盖当前运行的来源读取、解析、转换、投影与原生验证代码；TypeScript 源码和编译后 JavaScript 分别记录各自实际运行实现的摘要。
+
+成功和失败均保留原成功处理记录、固定来源及历史候选；失败可按原命令重试。相同输入与工具的规则字节及构建身份保持一致，候选 ID 和验证运行记录独立保存。重建不写稳定入口或激活回执，正常更新仍在无新 Release 时跳过。后续激活使用既有 `activate --candidate <new-readback-url>` 流程。
+
+真实重建验收固定官方样本，使用专属状态目录与 `acceptance-issue-22-<suffix>` 远程分支。它发布原候选和重建候选、注入原生失败并重试、回读历史文件，并通过固定样本元数据适配器检验正常更新的 latest 跳过路径（不将旧样本声称为真实 latest）：
+
+```sh
+RULE_REBUILD_STATE=/tmp/issue-22-fresh-state \
+RULE_REBUILD_EVIDENCE=/tmp/issue-22-fresh-evidence.json \
+RULE_REBUILD_BRANCH=acceptance-issue-22-<unique-suffix> \
+SING_BOX_TEST_BINARY=/absolute/path/to/sing-box-1.14.4 \
+pnpm --dir packages/rule-set-pipeline test:rebuild
+```

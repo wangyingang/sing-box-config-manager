@@ -22,19 +22,20 @@ export function immutableUrl(commit: string, path: string): string {
   return `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${commit}/${path}`;
 }
 
-export function githubPublication(request: typeof ghJson = ghJson): PublicationTransport {
+export function githubPublication(request: typeof ghJson = ghJson, branch = PUBLICATION_BRANCH): PublicationTransport {
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(branch)) throw new Error('Invalid publication branch');
   const api = (path: string, input?: unknown) => request(['api', `repos/${ARTIFACT_REPOSITORY}${path ? `/${path}` : ''}`,
     ...(input === undefined ? [] : ['--method', 'POST', '--input', '-'])], input);
   return {
     async commit(files, message) {
       const repository = await api('');
       if (repository.private) throw new Error('Artifact repository must be public');
-      const refs = await api(`git/matching-refs/heads/${PUBLICATION_BRANCH}`);
-      let head = refs.find((ref: { ref: string }) => ref.ref === `refs/heads/${PUBLICATION_BRANCH}`)?.object.sha;
+      const refs = await api(`git/matching-refs/heads/${branch}`);
+      let head = refs.find((ref: { ref: string }) => ref.ref === `refs/heads/${branch}`)?.object.sha;
       if (!head) {
         const main = await api(`git/ref/heads/${repository.default_branch}`);
         // A concurrent creator causes a safe retry rather than an overwrite.
-        const ref = await api('git/refs', { ref: `refs/heads/${PUBLICATION_BRANCH}`, sha: main.object.sha });
+        const ref = await api('git/refs', { ref: `refs/heads/${branch}`, sha: main.object.sha });
         head = ref.object.sha;
       }
       const parent = await api(`git/commits/${head}`);
@@ -52,7 +53,7 @@ export function githubPublication(request: typeof ghJson = ghJson): PublicationT
       const createdTree = await api('git/trees', { base_tree: parent.tree.sha, tree });
       const commit = await api('git/commits', { message, tree: createdTree.sha, parents: [head] });
       // GitHub rejects a non-fast-forward update if another publisher moved head.
-      await request(['api', `repos/${ARTIFACT_REPOSITORY}/git/refs/heads/${PUBLICATION_BRANCH}`,
+      await request(['api', `repos/${ARTIFACT_REPOSITORY}/git/refs/heads/${branch}`,
         '--method', 'PATCH', '--input', '-'], { sha: commit.sha, force: false });
       return commit.sha;
     },

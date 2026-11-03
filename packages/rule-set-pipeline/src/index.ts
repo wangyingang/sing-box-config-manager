@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import yamlPackage from 'yaml/package.json' with { type: 'json' };
 import packageInfo from '../package.json' with { type: 'json' };
 import { convertRules, renderDomainJson } from './convert.js';
@@ -12,7 +13,7 @@ interface Artifact { file: 'domains.json'; sha256: string; bytes: number; termCo
 export type BuildResult = { ok: false; status: 'failed'; report: ConversionReport; source?: SourceRecord }
   | { ok: true; status: 'built-unvalidated'; source: SourceRecord; report: ConversionReport;
     json: string; artifact: Artifact; list: string;
-    tools: { pipeline: string; conversionPolicy: string; node: string; yaml: string; sourceFormat: number };
+    tools: { pipeline: string; implementationSha256: string; conversionPolicy: string; node: string; yaml: string; sourceFormat: number };
     usages: { route: Artifact; 'dns-query': Artifact; 'dns-response': { status: 'unavailable'; reason: 'empty' } } };
 
 export async function buildRelease(options: ReleaseOptions): Promise<BuildResult> {
@@ -36,7 +37,11 @@ export async function buildRelease(options: ReleaseOptions): Promise<BuildResult
   const json = renderDomainJson(converted.terms);
   const artifact: Artifact = { file: 'domains.json', sha256: sha256(json), bytes: Buffer.byteLength(json), termCount: converted.terms.length };
   return { ok: true, status: 'built-unvalidated', source: input.source, list: TARGET_LIST, report: converted.report,
-    tools: { pipeline: packageInfo.version, conversionPolicy: 'v2fly-domain-v1', node: process.versions.node, yaml: yamlPackage.version, sourceFormat: 4 },
+    tools: { pipeline: packageInfo.version,
+      implementationSha256: sha256(Buffer.concat(await Promise.all(
+        ['index', 'release', 'yaml-input', 'convert', 'types', 'projection', 'native', 'semantics'].map(name =>
+          readFile(new URL(`./${name}.${import.meta.url.endsWith('.ts') ? 'ts' : 'js'}`, import.meta.url))),
+      ))), conversionPolicy: 'v2fly-domain-v1', node: process.versions.node, yaml: yamlPackage.version, sourceFormat: 4 },
     json, artifact, usages: { route: artifact, 'dns-query': artifact, 'dns-response': { status: 'unavailable', reason: 'empty' } } };
 }
 
@@ -45,8 +50,8 @@ export type { NativeBuild, NativeTool, BuiltArtifact } from './native.js';
 export { projectTerms, renderRuleJson, decodedTerms } from './projection.js';
 export type { BuildTerm, Usage } from './projection.js';
 
-export { updateRules, readUpdateState } from './update.js';
-export type { UpdateOptions, UpdateState } from './update.js';
+export { updateRules, rebuildRules, readUpdateState } from './update.js';
+export type { UpdateOptions, RebuildOptions, UpdateState } from './update.js';
 
 export { activateRules, verifyActivationCandidate } from './activation.js';
 export type { ActivationOptions } from './activation.js';

@@ -6,7 +6,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { activateRules } from './activation.js';
 import { githubActivation } from './activation-transport.js';
-import { updateRules, readUpdateState } from './update.js';
+import { rebuildRules, updateRules, readUpdateState } from './update.js';
 import { sha256 } from './release.js';
 import { buildRelease, buildNative, decodedTerms, NativeBuildError, type SourceRecord } from './index.js';
 
@@ -16,7 +16,7 @@ async function main(): Promise<number> {
     options: { state: { type: 'string' }, release: { type: 'string' }, out: { type: 'string' }, 'expected-source': { type: 'string' }, binary: { type: 'string' }, candidate: { type: 'string' }, subscription: { type: 'string' }, 'expected-head': { type: 'string' }, branch: { type: 'string' }, help: { type: 'boolean' } },
   });
   if (values.help) {
-    console.log('Usage: activate --state <directory> --candidate <immutable-readback-url> --subscription <trusted-contract.json> --expected-head <full-commit> --binary <absolute-1.14.4-path> [--branch <existing-environment>] | update --state <directory> --binary <absolute-1.14.4-path> | status --state <directory> |  build --release <fixed-tag> --out <new-directory> --binary <absolute-1.14.4-path> [--expected-source <source.json>]');
+    console.log('Usage: activate --state <directory> --candidate <immutable-readback-url> --subscription <trusted-contract.json> --expected-head <full-commit> --binary <absolute-1.14.4-path> [--branch <existing-environment>] | rebuild --release <processed-fixed-tag> --state <directory> --binary <absolute-1.14.4-path> | update --state <directory> --binary <absolute-1.14.4-path> | status --state <directory> |  build --release <fixed-tag> --out <new-directory> --binary <absolute-1.14.4-path> [--expected-source <source.json>]');
     return 0;
   }
   if (positionals.length === 1 && positionals[0] === 'activate') {
@@ -35,8 +35,11 @@ async function main(): Promise<number> {
     return 0;
   }
   if (values.candidate || values.subscription || values['expected-head'] || values.branch) throw new Error('Activation options require activate');
-  if (positionals.length === 1 && ['update', 'status'].includes(positionals[0])) {
-    if (!values.state || values.release || values.out || values['expected-source']) throw new Error('update/status requires --state; fixed build options are not accepted');
+  if (positionals.length === 1 && ['update', 'status', 'rebuild'].includes(positionals[0])) {
+    const rebuild = positionals[0] === 'rebuild';
+    if (!values.state || values.out || values['expected-source'] || (rebuild ? !values.release || !values.binary || values.release.toLowerCase() === 'latest' : values.release)) {
+      throw new Error('update/status requires --state; rebuild requires --state, --release <fixed-tag> and --binary');
+    }
     if (positionals[0] === 'status') {
       console.log(JSON.stringify(await readUpdateState(resolve(values.state))));
     } else {
@@ -44,7 +47,8 @@ async function main(): Promise<number> {
       if (!token) {
         try { token = (await promisify(execFile)('gh', ['auth', 'token'])).stdout.trim(); } catch { /* public API may work without auth */ }
       }
-      console.log(JSON.stringify(await updateRules({ stateDirectory: resolve(values.state), binary: values.binary ?? '', token })));
+      const options = { stateDirectory: resolve(values.state), binary: values.binary ?? '', token };
+      console.log(JSON.stringify(await (rebuild ? rebuildRules({ ...options, release: values.release! }) : updateRules(options))));
     }
     return 0;
   }
