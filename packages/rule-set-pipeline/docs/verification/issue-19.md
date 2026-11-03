@@ -57,3 +57,13 @@ Compiler 只生成一次配置；启动前一次性设置测试用 `update_inter
 首次 PR 原生 CI 在干净 checkout 中发现跨包测试过早加载尚未生成的 Compiler validator。已通过测试用 workspace devDependency 建立执行顺序，并在集成与验收脚本显式准备 validator；移除本地 generated 文件后重跑全部原生测试通过。Pipeline 运行时代码仍不导入 Compiler。随后补强旧激活记录读取，并在已激活的同一隔离分支再次完成真实官方候选验收。最终回归为常规 180 项、原生 79 项，全部通过。
 
 最终代码提交 `7656d80` 的 Standards／Spec 增量复审同样均为 0 项发现。Standards 独立重跑 28 项 transport 测试；Spec 独立重跑 28 项 transport 与 26 项真实 binary 激活测试，共 54 项通过，无跳过。
+
+## PR #26 云端 Codex review 跟进
+
+已完整读取 review 正文、所有行内 comments 和 review threads，并核对分页均无剩余。共 1 条 P2：[回执目录创建失败时保留已激活身份](https://github.com/wangyingang/sing-box-config-manager/pull/26#discussion_r4458986096)。review 正文基于 `dcc7920`，行内 comment 映射到最新代码 `88278ff` 后仍成立：远端激活成功后，`mkdir(--state)` 位于回执错误处理之外，EEXIST／ENOTDIR 会漏报已生效 commit。
+
+修复将 `mkdir` 纳入现有回执 `try/catch`。目录创建、回执写入或 rename 失败统一报告 `ACTIVATION_APPLIED_LOCAL_RECEIPT_PENDING: commit <applied-commit>`；不重新执行激活，不误报旧规则未变。
+
+新增 3 项真实 CLI 子进程测试，只替换远端激活为记录已应用 commit 的隔离替身，实际执行文件系统操作：状态路径是文件、父路径是文件、正常创建缺失目录并持久化回执。前两项在修复前失败，只输出 EEXIST／ENOTDIR；修复后 3 项通过，完整 CLI 5 项通过。测试检查激活成功记录、明确错误标记、完整 commit 和既有文件保留，不依赖 CI 状态判断 finding 已解决。
+
+跟进后的 `pnpm check`：Pipeline 87 项、Compiler 96 项，共 183 项全部通过，typecheck、build、workspace smoke 通过；指定真实 1.14.4 的集成检查仍为 Pipeline 52 项、Compiler 27 项，共 79 项通过，无跳过。本次未执行真实远端规则切换或修改客户端配置。

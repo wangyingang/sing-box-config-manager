@@ -449,5 +449,74 @@
     "initialRun": "https://github.com/wangyingang/sing-box-config-manager/actions/runs/41696126618",
     "failure": "clean checkout loaded Compiler source before generated validator existed",
     "fix": "test-only workspace dependency establishes task order; integration and acceptance scripts prepare validator explicitly"
+  },
+  "cloudReviewFollowup": {
+    "reviewId": 5757680818,
+    "threadId": "PRRT_kwDOVfXgm86zR2SG",
+    "commentId": 4458986096,
+    "url": "https://github.com/wangyingang/sing-box-config-manager/pull/26#discussion_r4458986096",
+    "reviewedCommit": "dcc7920ee7506e9c0514db74cce541ea750cc80d",
+    "checkedLatestCommit": "88278ff15c98d3a2849d63eebae944e188e2a465",
+    "findingCount": 1,
+    "allReviewAndThreadPagesRead": true,
+    "verdict": "valid: receipt directory creation bypassed post-activation error handling",
+    "fix": "include mkdir in the existing receipt try/catch; preserve applied commit on filesystem failure",
+    "redBeforeFix": {
+      "tests": 3,
+      "pass": 1,
+      "fail": 2
+    },
+    "cliAfterFix": {
+      "tests": 5,
+      "pass": 5,
+      "fail": 0
+    },
+    "checks": {
+      "repro": {
+        "sha256": "34d00abd9cb2bd65949d416199d8b879121f6a73353c4e9d210c482a255020d1",
+        "summaries": [
+          "ℹ tests 3",
+          "ℹ pass 1",
+          "ℹ fail 2",
+          "ℹ skipped 0"
+        ]
+      },
+      "cli": {
+        "sha256": "e047aecb6472a107da8a1c988e480ce65d4c051616a9b41317199d5746612839",
+        "summaries": [
+          "ℹ tests 5",
+          "ℹ pass 5",
+          "ℹ fail 0",
+          "ℹ skipped 0"
+        ]
+      },
+      "workspace": {
+        "sha256": "b7bd97267588dad484ff524cf0bc6d2ae24a3a5155c4772a88b276cfcfeac145",
+        "summaries": [
+          "packages/config-compiler test: ℹ tests 96",
+          "packages/config-compiler test: ℹ pass 96",
+          "packages/config-compiler test: ℹ fail 0",
+          "packages/config-compiler test: ℹ skipped 0",
+          "packages/rule-set-pipeline test: ℹ tests 87",
+          "packages/rule-set-pipeline test: ℹ pass 87",
+          "packages/rule-set-pipeline test: ℹ fail 0",
+          "packages/rule-set-pipeline test: ℹ skipped 0",
+          "Workspace smoke passed: Web App imports, public declarations, and browser bundle."
+        ]
+      },
+      "native": {
+        "sha256": "ba3a743423c7309b526e5b1a7207826e8314e04f6c0121ceffd1f9ebc108c16a",
+        "summaries": [
+          "packages/config-compiler test:integration: ℹ tests 27",
+          "packages/config-compiler test:integration: ℹ pass 27",
+          "packages/config-compiler test:integration: ℹ fail 0",
+          "packages/config-compiler test:integration: ℹ skipped 0",
+          "packages/rule-set-pipeline test:integration: ℹ tests 52",
+          "packages/rule-set-pipeline test:integration: ℹ pass 52",
+          "packages/rule-set-pipeline test:integration: ℹ fail 0",
+          "packages/rule-set-pipeline test:integration: ℹ skipped 0"
+        ]
+      }
+    }
   }
 }

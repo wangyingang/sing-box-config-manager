@@ -25,9 +25,9 @@ async function main(): Promise<number> {
     const result = await activateRules({ candidateEvidenceUrl: values.candidate,
       subscription: JSON.parse(await readFile(values.subscription, 'utf8')), binary: values.binary,
       expectedHead: values['expected-head'], transport: githubActivation(values.branch) });
-    await mkdir(resolve(values.state), { recursive: true });
     const temporary = join(resolve(values.state), `active-${result.activation.id}.tmp`);
     try {
+      await mkdir(resolve(values.state), { recursive: true });
       await writeFile(temporary, JSON.stringify(result, null, 2) + '\n', { flag: 'wx' });
       await rename(temporary, join(resolve(values.state), 'active-version.json'));
     } catch (error) { throw new Error(`ACTIVATION_APPLIED_LOCAL_RECEIPT_PENDING: commit ${result.commit}`, { cause: error }); }
