@@ -20,10 +20,10 @@
   },
   "client": {
     "pids": [
-      72512,
-      73592
+      76592,
+      77367
     ],
-    "configSha256": "0047abf08232cb37634f0280cf5baab0bb55914fa0fbddadd3cfae2bfed49ef6",
+    "configSha256": "903e64e87ca403f19037f98bf184b074bfe6383523e01d66f99af66799c73125",
     "sameConfig": true,
     "updateInterval": "1s",
     "cacheEnabled": true,
@@ -68,7 +68,7 @@
           "type": "udp",
           "tag": "fallback",
           "server": "127.0.0.1",
-          "server_port": 62700
+          "server_port": 61560
         }
       ],
       "rules": [
@@ -128,7 +128,7 @@
           "action": "route",
           "outbound": "direct",
           "override_address": "127.0.0.1",
-          "override_port": 58762
+          "override_port": 61075
         },
         {
           "domain": [
@@ -138,14 +138,14 @@
           "action": "route",
           "outbound": "direct",
           "override_address": "127.0.0.1",
-          "override_port": 58763
+          "override_port": 61076
         }
       ]
     },
     "certificate": {
       "store": "none",
       "certificate_path": [
-        "/var/folders/dh/qsdst4gs4h9cs66fxvg085v80000gn/T/client-failure-issue-21-qQbxKJ/cert.pem"
+        "/var/folders/dh/qsdst4gs4h9cs66fxvg085v80000gn/T/client-failure-issue-21-1mpI6g/cert.pem"
       ]
     },
     "inbounds": [
@@ -153,7 +153,7 @@
         "type": "mixed",
         "tag": "probe",
         "listen": "127.0.0.1",
-        "listen_port": 58764
+        "listen_port": 61077
       }
     ],
     "outbounds": [
@@ -165,7 +165,7 @@
         "type": "http",
         "tag": "fixture",
         "server": "127.0.0.1",
-        "server_port": 58761
+        "server_port": 61074
       }
     ],
     "http_clients": [
@@ -178,7 +178,7 @@
     "experimental": {
       "cache_file": {
         "enabled": true,
-        "path": "/var/folders/dh/qsdst4gs4h9cs66fxvg085v80000gn/T/client-failure-issue-21-qQbxKJ/rules.db"
+        "path": "/var/folders/dh/qsdst4gs4h9cs66fxvg085v80000gn/T/client-failure-issue-21-1mpI6g/rules.db"
       }
     }
   },
@@ -196,7 +196,7 @@
         "dns": "192.0.2.10"
       }
     ],
-    "observedAt": "2026-11-03T19:26:03.253Z"
+    "observedAt": "2026-11-03T19:28:41.966Z"
   },
   "faults": [
     {
@@ -215,7 +215,7 @@
             "dns": "192.0.2.10"
           }
         ],
-        "observedAt": "2026-11-03T19:26:03.255Z"
+        "observedAt": "2026-11-03T19:28:41.969Z"
       },
       "failureLog": [
         "\u001b[31mERROR\u001b[0m[0001] router: fetch rule-set live: Get \"https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-21/stable/domains.srs\": EOF"
@@ -234,7 +234,7 @@
             "dns": "192.0.2.10"
           }
         ],
-        "observedAt": "2026-11-03T19:26:04.165Z"
+        "observedAt": "2026-11-03T19:28:42.880Z"
       },
       "recovered": {
         "version": "B",
@@ -250,16 +250,16 @@
             "dns": "192.0.2.20"
           }
         ],
-        "observedAt": "2026-11-03T19:26:05.184Z"
+        "observedAt": "2026-11-03T19:28:43.902Z"
       },
       "requests": [
         {
           "mode": "network",
-          "at": "2026-11-03T19:26:04.126Z"
+          "at": "2026-11-03T19:28:42.838Z"
         },
         {
           "mode": "B",
-          "at": "2026-11-03T19:26:05.127Z"
+          "at": "2026-11-03T19:28:43.839Z"
         }
       ],
       "sameProcess": true
@@ -280,7 +280,7 @@
             "dns": "192.0.2.10"
           }
         ],
-        "observedAt": "2026-11-03T19:26:06.205Z"
+        "observedAt": "2026-11-03T19:28:44.922Z"
       },
       "failureLog": [
         "\u001b[31mERROR\u001b[0m[0004] router: fetch rule-set live: unexpected status: 503 Service Unavailable"
@@ -299,7 +299,7 @@
             "dns": "192.0.2.10"
           }
         ],
-        "observedAt": "2026-11-03T19:26:07.217Z"
+        "observedAt": "2026-11-03T19:28:45.933Z"
       },
       "recovered": {
         "version": "B",
@@ -315,16 +315,16 @@
             "dns": "192.0.2.20"
           }
         ],
-        "observedAt": "2026-11-03T19:26:08.237Z"
+        "observedAt": "2026-11-03T19:28:46.954Z"
       },
       "requests": [
         {
           "mode": "http",
-          "at": "2026-11-03T19:26:07.128Z"
+          "at": "2026-11-03T19:28:45.841Z"
         },
         {
           "mode": "B",
-          "at": "2026-11-03T19:26:08.129Z"
+          "at": "2026-11-03T19:28:46.843Z"
         }
       ],
       "sameProcess": true
@@ -345,7 +345,7 @@
             "dns": "192.0.2.10"
           }
         ],
-        "observedAt": "2026-11-03T19:26:09.259Z"
+        "observedAt": "2026-11-03T19:28:47.974Z"
       },
       "failureLog": [
         "\u001b[31mERROR\u001b[0m[0007] router: fetch rule-set live: read rule[0]: unexpected EOF"
@@ -364,7 +364,7 @@
             "dns": "192.0.2.10"
           }
         ],
-        "observedAt": "2026-11-03T19:26:10.170Z"
+        "observedAt": "2026-11-03T19:28:48.884Z"
       },
       "recovered": {
         "version": "B",
@@ -380,16 +380,16 @@
             "dns": "192.0.2.20"
           }
         ],
-        "observedAt": "2026-11-03T19:26:11.194Z"
+        "observedAt": "2026-11-03T19:28:49.903Z"
       },
       "requests": [
         {
           "mode": "truncated",
-          "at": "2026-11-03T19:26:10.131Z"
+          "at": "2026-11-03T19:28:48.844Z"
         },
         {
           "mode": "B",
-          "at": "2026-11-03T19:26:11.132Z"
+          "at": "2026-11-03T19:28:49.846Z"
         }
       ],
       "sameProcess": true
@@ -410,7 +410,7 @@
             "dns": "192.0.2.10"
           }
         ],
-        "observedAt": "2026-11-03T19:26:12.217Z"
+        "observedAt": "2026-11-03T19:28:50.923Z"
       },
       "failureLog": [
         "\u001b[31mERROR\u001b[0m[0010] router: fetch rule-set live: invalid sing-box rule-set file"
@@ -429,7 +429,7 @@
             "dns": "192.0.2.10"
           }
         ],
-        "observedAt": "2026-11-03T19:26:13.233Z"
+        "observedAt": "2026-11-03T19:28:51.936Z"
       },
       "recovered": {
         "version": "B",
@@ -445,16 +445,16 @@
             "dns": "192.0.2.20"
           }
         ],
-        "observedAt": "2026-11-03T19:26:14.258Z"
+        "observedAt": "2026-11-03T19:28:52.956Z"
       },
       "requests": [
         {
           "mode": "bad-rules",
-          "at": "2026-11-03T19:26:13.134Z"
+          "at": "2026-11-03T19:28:51.847Z"
         },
         {
           "mode": "B",
-          "at": "2026-11-03T19:26:14.135Z"
+          "at": "2026-11-03T19:28:52.851Z"
         }
       ],
       "sameProcess": true
@@ -462,7 +462,7 @@
   ],
   "persistence": {
     "cacheByteLength": 131072,
-    "cacheSha256": "415429e86056be23524dc9f6efdce9c817dfb02608213c6bfaf6bd4c268f1941",
+    "cacheSha256": "e1e2025bfd46c17d60c9fe78ec1f2dcb4f2cf8cdfd1c09ba94e75a4a2fdaded7",
     "serviceClosedBeforeRestart": true,
     "noRuleBytesDelivered": true,
     "offline": {
@@ -479,7 +479,7 @@
           "dns": "192.0.2.20"
         }
       ],
-      "observedAt": "2026-11-03T19:26:14.465Z"
+      "observedAt": "2026-11-03T19:28:53.164Z"
     },
     "afterOfflineFailure": {
       "version": "B",
@@ -495,7 +495,7 @@
           "dns": "192.0.2.20"
         }
       ],
-      "observedAt": "2026-11-03T19:26:15.073Z"
+      "observedAt": "2026-11-03T19:28:53.167Z"
     },
     "failureLog": [
       "\u001b[31mERROR\u001b[0m[0000] router: fetch rule-set live: Get \"https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-21/stable/domains.srs\": unexpected EOF"
@@ -510,12 +510,12 @@
       {
         "command": "pnpm check",
         "result": "passed",
-        "logSha256": "8a8e1e86e5fed773d89c7a5ae15c3be8b37d59cdc6283a36284b142240d64849"
+        "logSha256": "453792c07eed4eb68824546c6f553da7c939f8b17d1e2f81d3ac3c4d32a4df30"
       },
       {
         "command": "SING_BOX_TEST_BINARY=<absolute 1.14.4 path> pnpm test:integration",
         "result": "passed",
-        "logSha256": "891d9a5c1c74d901c7d80f004866e0b955bddb14b53482b788941f3016415edf"
+        "logSha256": "b11e7f2292121591605ca7d8cd72d1a8b534110184c80c39074e79c396676878"
       }
     ]
   }

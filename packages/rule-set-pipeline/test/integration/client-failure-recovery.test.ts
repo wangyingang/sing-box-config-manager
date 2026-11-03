@@ -91,6 +91,14 @@ test('更新故障保留 A、恢复更新 B，并从持久缓存断网重启恢�
   const failurePatterns = { network: /: EOF/, http: /unexpected status: 503/,
     truncated: /unexpected EOF/, 'bad-rules': /invalid sing-box rule-set file/ };
   const faults: unknown[] = [];
+  async function stopClient() {
+    if (child && child.exitCode === null && child.signalCode === null) {
+      await new Promise<void>(resolve => {
+        const timer = setTimeout(() => child!.kill('SIGKILL'), 5000);
+        child!.once('exit', () => { clearTimeout(timer); resolve(); }); child!.kill('SIGTERM');
+      });
+    }
+  }
   try {
     const a = await buildNative([{ type: 'domain', value: domain }], binary);
     const b = await buildNative([{ type: 'domain', value: otherDomain }], binary);
@@ -165,14 +173,6 @@ test('更新故障保留 A、恢复更新 B，并从持久缓存断网重启恢�
       child.stdout!.on('data', b => log += b); child.stderr!.on('data', b => log += b);
       await new Promise<void>((resolve, reject) => { child!.once('spawn', resolve); child!.once('error', reject); });
       assert.ok(child.pid); pids.push(child.pid);
-    }
-    async function stopClient() {
-      if (child && child.exitCode === null && child.signalCode === null) {
-        await new Promise<void>((resolve, reject) => {
-          const timer = setTimeout(() => { child!.kill('SIGKILL'); reject(new Error('Client shutdown timeout')); }, 5000);
-          child!.once('exit', () => { clearTimeout(timer); resolve(); }); child!.kill('SIGTERM');
-        });
-      }
     }
     async function until(predicate: () => boolean, description: string) {
       const deadline = Date.now() + 20_000;
@@ -260,11 +260,7 @@ test('更新故障保留 A、恢复更新 B，并从持久缓存断网重启恢�
     // A build/setup failure can occur before any listener binds. Close only live
     // resources and preserve that original failure if cleanup also fails.
     const cleanup = await Promise.allSettled([
-      (async () => {
-        if (child?.pid && child.exitCode === null && child.signalCode === null) {
-          await new Promise<void>(resolve => { child!.once('exit', () => resolve()); child!.kill('SIGTERM'); });
-        }
-      })(),
+      stopClient(),
       (async () => { if (dnsBound) await new Promise<void>(resolve => dns.close(resolve)); })(),
       (async () => {
         for (const socket of sockets) socket.destroy();

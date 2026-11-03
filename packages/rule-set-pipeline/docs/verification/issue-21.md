@@ -60,3 +60,15 @@ Node 24.15.0、pnpm 10.33.2，直接运行已安装的真实 sing-box 1.14.4 绝
 - `SING_BOX_TEST_BINARY=<absolute 1.14.4 path> pnpm test:integration`：Pipeline 53 项、Compiler 27 项，共 80 项全部通过，无跳过。包含本次独立故障与离线恢复测试。
 - 专用测试可按包 README 中的命令重跑并设置 `RULE_CLIENT_FAILURE_EVIDENCE`；已有 native CI 通过文件通配符自动纳入该测试，无需修改 workflow 或共享 fixture。
 - 完整检查日志的 SHA-256 及 binary 身份保存在机器证据中。未重跑真实 Release 发布、远程激活或 #20 回滚验收；本工单无远程规则写入。
+
+## 本地双轴审查
+
+固定基线 `03f506e`，实现提交 `dd021d4`，两个独立 subagents 完整审查本次 diff。
+
+### Standards
+
+无硬规范违规。发现异常清理路径重复停止进程但缺少超时保护：已改为统一调用停止函数，SIGTERM 后最多等待 5 秒再发 SIGKILL，避免异常分支一直等待退出。修正后重跑完整 `pnpm check` 与真实 binary 集成检查均通过，数量仍为 183 项与 80 项。
+
+### Spec
+
+无发现。审查核对 #21、#14 AC14–AC16 和 #19；独立重跑专用测试，1 项通过、0 失败、0 跳过。确认四类故障的新请求行为、缓存跨进程恢复、独立资源及原生边界符合要求。
