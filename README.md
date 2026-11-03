@@ -4,7 +4,7 @@
 
 | 模块 | 目录 | 当前状态 |
 | --- | --- | --- |
-| Rule Set Pipeline | [packages/rule-set-pipeline](packages/rule-set-pipeline/README.md) | 固定 V2Fly Release 下载、摘要校验、JSON／SRS 构建、用途投影、原生验证及经 HTTPS 回读的不可变候选发布；显式激活待实现 |
+| Rule Set Pipeline | [packages/rule-set-pipeline](packages/rule-set-pipeline/README.md) | 固定 V2Fly Release 下载、摘要校验、JSON／SRS 构建、用途投影、原生验证及经 HTTPS 回读的不可变候选发布、显式激活及受控客户端自动更新 |
 | Config Compiler | [packages/config-compiler](packages/config-compiler/README.md) | 固定修订 Recipe 解析、配置组合、校验、受限 ECS 修改和本地发布适配器 |
 | Configuration Manager Web App | [apps/web](apps/web/README.md) | 骨架；通过 workspace 依赖调用 Compiler |
 
@@ -65,6 +65,7 @@ pnpm --dir packages/config-compiler build
 
 ## 设计与证据
 
+- [#19 显式激活与客户端自动更新验收](packages/rule-set-pipeline/docs/verification/issue-19.md)
 - [#18 不可变候选发布与远程回读验收](packages/rule-set-pipeline/docs/verification/issue-18.md)
 - [#16 JSON／SRS 原生构建验收](packages/rule-set-pipeline/docs/verification/issue-16.md)
 - [1.14.4 merge 源码审计](packages/config-compiler/docs/architecture/sing-box-merge-analysis.md)

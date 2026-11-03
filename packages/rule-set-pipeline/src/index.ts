@@ -47,3 +47,8 @@ export type { BuildTerm, Usage } from './projection.js';
 
 export { updateRules, readUpdateState } from './update.js';
 export type { UpdateOptions, UpdateState } from './update.js';
+
+export { activateRules, verifyActivationCandidate } from './activation.js';
+export type { ActivationOptions } from './activation.js';
+export { githubActivation, ActivationWriteError } from './activation-transport.js';
+export type { ActivationTransport } from './activation-transport.js';

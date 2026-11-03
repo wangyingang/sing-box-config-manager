@@ -1,6 +1,6 @@
 # Rule Set Pipeline
 
-包名：`@sing-box-config-manager/rule-set-pipeline`。已实现 [#15](https://github.com/wangyingang/sing-box-config-manager/issues/15) 的固定来源转换，以及 [#16](https://github.com/wangyingang/sing-box-config-manager/issues/16) 的确定性 JSON／SRS、本地原生验证和用途投影。另已实现 [#18](https://github.com/wangyingang/sing-box-config-manager/issues/18) 的正常更新、不可变候选发布与 HTTPS 回读。父 [Spec #14](https://github.com/wangyingang/sing-box-config-manager/issues/14) 的激活和客户端自动更新尚未交付。验收记录见 [#15](docs/verification/issue-15.md) 、[#16](docs/verification/issue-16.md) 和 [#18](docs/verification/issue-18.md)。
+包名：`@sing-box-config-manager/rule-set-pipeline`。已实现 [#15](https://github.com/wangyingang/sing-box-config-manager/issues/15) 的固定来源转换，以及 [#16](https://github.com/wangyingang/sing-box-config-manager/issues/16) 的确定性 JSON／SRS、本地原生验证和用途投影。另已实现 [#18](https://github.com/wangyingang/sing-box-config-manager/issues/18) 的正常更新、不可变候选发布与 HTTPS 回读。另已实现 [#19](https://github.com/wangyingang/sing-box-config-manager/issues/19) 的显式激活与受控客户端自动更新。验收记录见 [#15](docs/verification/issue-15.md)、[#16](docs/verification/issue-16.md)、[#18](docs/verification/issue-18.md) 和 [#19](docs/verification/issue-19.md)。回滚与客户端故障／缓存恢复仍由 #20、#21 交付。
 
 ## 本地构建
 
@@ -37,7 +37,7 @@ pnpm --dir packages/rule-set-pipeline status --state /absolute/path/to/rule-stat
 
 每次 `update` 只在开始查询一次官方 latest。发现新 Release 后，固定该响应的 Release ID、tag 和资产身份，解析 tag 的源码 commit，复用本地完整来源校验、转换和原生构建路径。已成功处理的相同 Release 只检查 latest 元数据；资产身份改变时失败，否则跳过 YAML／摘要下载、转换和 binary 执行。跳过时不会重新下载同一资产来探测其内容变化；失败重试取得字节时会核对已保存的来源摘要。
 
-`--state` 必须指向可保留的本地目录。`update-state.json` 用原子 rename 保存来源固定记录、各次候选状态和已成功处理的 Release。三者分别管理；`status` 可在后续进程恢复查看。当前激活状态从独立的 `active-version.json` 读取，缺失表示此状态目录尚无激活记录；update 不写该文件，未来显式激活入口由 #19 交付。不要把隔离验收目录的 `null` 理解成实际设备没有激活版本。
+`--state` 必须指向可保留的本地目录。`update-state.json` 用原子 rename 保存来源固定记录、各次候选状态和已成功处理的 Release。三者分别管理；`status` 可在后续进程恢复查看。最近一次本地激活回执从独立的 `active-version.json` 读取，缺失表示此目录没有回执；update 不写该文件。远端 `stable/activation.json` 才是当前规则版本的权威记录，本地回执可能落后于其他管理会话。不要把隔离验收目录的 `null` 理解成实际设备没有激活版本。
 
 同一状态目录通过 `update.lock/` 拒绝并发更新。正常退出或失败会清理锁；进程被强制终止后，须确认没有存活的更新进程，再删除残留锁目录重试。保留状态目录以继续核对固定来源；不要删除来源记录来绕过来源变化错误。
 
@@ -52,6 +52,31 @@ pnpm --dir packages/rule-set-pipeline status --state /absolute/path/to/rule-stat
 远程文件逐一核对字节数、SHA-256 和逐字节内容。下载的 JSON 重新编译、解码及加载，所得 SRS 必须与下载的 SRS 一致。随后回读元数据，并在第三步提交、回读证据文件后才记为 `verified` 和成功处理。任何失败返回非零，保存失败候选；重试创建新的候选并重新获取、验证，不把残留文件当作通过证据。发布的 `build.json` 仅表示本地验证，只有完整远程证据及成功候选状态才能供后续激活检查。
 
 本命令不写稳定路径、不激活候选、不修改实际客户端配置，也不切换全局 binary。首次创建产物仓库、候选发布属于外部写入，须有覆盖它们的授权；命令不自动创建仓库。
+
+## 显式激活
+
+管理者选择已发布候选的完整 commit `readback.json` URL，提供可信宿主维护的规则订阅契约和预期旧分支 head。`activate` 复用已有候选，不查询 Release、不重做来源转换、不改写成功处理记录。
+
+```sh
+pnpm --dir packages/rule-set-pipeline activate \
+  --state /absolute/path/to/rule-state \
+  --candidate https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/<full-evidence-commit>/candidates/<candidate-id>/readback.json \
+  --subscription /absolute/path/to/trusted-rule-subscription.json \
+  --expected-head <full-old-branch-commit> \
+  --binary /absolute/path/to/sing-box-1.14.4
+```
+
+默认目标为产物仓库 `main`。隔离验收可指定 `--branch acceptance-<name>`，分支须事先建立。创建隔离分支、执行 CLI 均不替代生产切换授权；当前 #19 验收只使用 `acceptance-issue-19`。本入口只覆盖首个 `category-ai-!cn` 纯域名交付切片；拒绝其他系统规则集、目标 IP 投影和未知能力，不猜测兼容。既有 Manifest 的 `v2fly:category-ai-!cn` 映射到订阅契约中的 `v2fly:domain-list-community:category-ai-!cn`。
+
+激活重新下载候选的六份文件并核对回读链、来源、Conversion Report、构建身份、实际摘要／字节数／非空 term 数、用途映射及能力。重新用指定 1.14.4 编译、解码、加载实际 JSON，并逐字节比对 SRS。本地 `verified`、单独的 `passed` 或 `build.json` 不能放行。明确标识 `kind: synthetic`、description 和 revision 的合成候选只可进入 `acceptance-*` 分支。
+
+规则订阅中的全部入口须指向目标分支的 `stable/`，默认 SRS，也可维护契约声明的 JSON。首次激活后，后续激活须保持完整订阅契约及入口不变。每次以预期旧 head 为唯一父提交，在一个 tree／commit 内更新所有稳定文件和 `stable/activation.json`；非强制 PATCH 拒绝并发覆盖。激活记录保存候选证据、来源、契约、原生验证身份和稳定文件摘要。
+
+PATCH 回复丢失时，先读取远端 head 对照已知 attempted commit，不重复写入。远端不可达报告 `ACTIVATION_UNKNOWN`；远端仍是旧 head 报告 `ACTIVATION_NOT_APPLIED`；其他 head 报告冲突或已被后续操作替代。成功提交后，使用完整 commit HTTPS 地址逐字节回读；尚不能完成则报告 `ACTIVATION_APPLIED_READBACK_PENDING` 及 commit，不能称旧规则未变。CLI 本地回执写入失败同样保留已生效 commit。重试须先核对远端 head 和激活记录，再选择正确预期值；不要盲目覆盖。
+
+Git 提交保持文件与记录一起更新，但 GitHub 缓存和客户端轮询存在传播延迟，不保证多文件在客户端同时切换。激活不修改 Recipe、配置发布或客户端设置。运行中的 sing-box 通过原生机制获取稳定 SRS；受控测试的 `1s` 更新周期和临时 CA 只存在于测试进程，不能用于承诺全设备更新时间。
+
+公开 API 为 `activateRules({ candidateEvidenceUrl, subscription, binary, expectedHead, transport? })`；默认使用 `githubActivation()`。API 的成功结果和远端记录可跨进程追溯，CLI 另外保存本地回执。Compiler 仍只消费契约，不导入激活运行时代码。
 
 ## 输入与转换边界
 
@@ -101,3 +126,16 @@ pnpm --dir packages/rule-set-pipeline test:publication
 ```
 
 该验收固定 Release `20261102130044`，状态目录需尚未成功处理此样本，证据输出文件需不存在；此入口不是同一 Release 的显式重建命令。正常 CLI 不接受固定 tag；#22 的重建维护入口仍未交付。受控集成测试不访问真实 GitHub 写接口，自动覆盖上传、远程回读、来源变化和重试边界。
+
+固定官方候选的真实激活验收（候选需已通过 #18 发布，证据文件需不存在）：
+
+```sh
+RULE_ACTIVATION_BRANCH=acceptance-<existing-name> \
+RULE_ACTIVATION_CANDIDATE=https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/<full-commit>/candidates/<id>/readback.json \
+RULE_ACTIVATION_EXPECTED_HEAD=<full-old-head> \
+RULE_ACTIVATION_EVIDENCE=/tmp/fresh-activation-evidence.json \
+SING_BOX_TEST_BINARY=/absolute/path/to/sing-box-1.14.4 \
+pnpm --dir packages/rule-set-pipeline test:activation
+```
+
+该命令真实更新隔离分支，分别回读不可变提交和稳定 HTTPS URL，再通过公开 Recipe／Compiler 接口生成稳定 SRS 配置并执行原生检查。受控 A／B 自动更新测试随 `test:integration` 运行，需本机 `openssl`；通过 loopback HTTPS、临时 CA 和配置内的 HTTP 隧道隔离网络，不改 hosts 或系统信任。它使用内存 Git transport，提交身份不代表真实 GitHub commit；与真实发布证据分别保存。
