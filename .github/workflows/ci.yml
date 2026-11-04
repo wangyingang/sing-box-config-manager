@@ -18,8 +18,29 @@ defaults:
     shell: bash
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      run_tests: ${{ steps.detect.outputs.run_tests }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Decide whether full checks are needed
+        id: detect
+        run: node scripts/ci-changes.mjs
+
   check:
     name: Workspace checks
+    needs: changes
+    # A failed detector or missing output must never silently skip required checks.
+    if: >-
+      ${{ !cancelled() &&
+          (needs.changes.result != 'success' ||
+           needs.changes.outputs.run_tests != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -52,6 +73,12 @@ jobs:
 
   native:
     name: Native sing-box
+    needs: changes
+    # A failed detector or missing output must never silently skip required checks.
+    if: >-
+      ${{ !cancelled() &&
+          (needs.changes.result != 'success' ||
+           needs.changes.outputs.run_tests != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
