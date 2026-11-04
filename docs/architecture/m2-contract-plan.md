@@ -1,10 +1,12 @@
 # M2 契约设计与实施计划
 
-后续设计确认（2026-11-03）：Rule Set Pipeline 的首个完整交付以 V2Fly 官方 Release YAML 为输入，并纳入稳定规则订阅及必要的 Recipe／Compiler 契约演进，见[首个完整交付设计](rule-set-pipeline-first-delivery.md)和 [ADR 0006](../adr/0006-follow-active-rule-subscriptions.md)。下文 Blackmatrix7 优先、原始 V2Fly Parser 及固定规则产物引用的安排保留为历史设计，不构成本次交付的前置要求。此处记录已确认方向，不表示已经实施。
+## 本文的时间与适用范围
 
-设计日期：2026-11-02。本文保留 M2 的设计背景与后续方向。Recipe／共享节点编译路径的实施范围和验收记录见 [Spec #1](https://github.com/wangyingang/sing-box-config-manager/issues/1)；当前公开契约与调用方式见下方实现文档链接。
+本文记录 2026-11-02 的设计背景和当时计划，不作为当前调用说明或待办清单。Recipe／共享节点编译契约已由 [Spec #1](https://github.com/wangyingang/sing-box-config-manager/issues/1) 交付；V2Fly 单列表的规则构建、候选发布、激活、回滚、重建及受控客户端更新已由 [Spec #14](https://github.com/wangyingang/sing-box-config-manager/issues/14) 交付。
 
-本文保留 2026-11-02 的 M2 设计背景，下文基线、实施顺序和阶段记录不表示当前状态。Recipe／共享节点编译契约已由 [Spec #1](https://github.com/wangyingang/sing-box-config-manager/issues/1) 交付；V2Fly 单列表的规则生产、发布、激活、回滚、重建及受控客户端更新已由 [Spec #14](https://github.com/wangyingang/sing-box-config-manager/issues/14) 交付。其他来源与更广泛规则类型、Web 和线上配置交付仍属后续工作。当前公开契约见 [Compiler](../../packages/config-compiler/README.md) 与 [Pipeline](../../packages/rule-set-pipeline/README.md) 使用说明，完成范围及证据以对应 Spec 为准。
+后续 [ADR 0006](../adr/0006-follow-active-rule-subscriptions.md) 将当前 Recipe 的系统规则选择改为跟随已激活版本，现通过 Recipe／Template v2 实现；v1 固定产物路径保留兼容。下文 Blackmatrix7 优先、原始 V2Fly Parser 和固定产物引用的计划保留为历史背景，不是当前交付前置条件。首个规则交付的确认范围见[设计基线](rule-set-pipeline-first-delivery.md)。
+
+当前调用方式查 [Compiler](../../packages/config-compiler/README.md) 和 [Pipeline](../../packages/rule-set-pipeline/README.md)，决策原因查 [ADR](../adr/)，完成范围查对应验收记录。下文除“后续事项与证据边界”外，均保留设计时的时态、建议和实施顺序；其中“当前”“尚未实现”描述的是当时状态。
 
 ## 基线与范围
 
@@ -88,15 +90,18 @@ M2-01 与 M2-02 可独立设计，但跨模块接口冻结要经过 M2-03／04�
 
 回归门禁继续使用 `pnpm check` 与显式指定 1.14.4 binary 的 `pnpm test:integration`。现有 29／12 项测试是迁移基线；M2 需要新增能发现契约错误的测试，不能只生成类型后声明通过。
 
-## 仍需确认或验证
+## 后续事项与证据边界
 
-| 事项 | 当前处理 | 阻塞范围 |
+以下事项尚未因 Spec #1／#14 交付而全部确定，但不阻塞对现有 Compiler 和 Pipeline 行为的解释。已经确认的固定 Profile、共享节点修订、草稿边界和规则自动跟随不重新作为待决问题。
+
+| 事项 | 当前可以准确说明的内容 | 后续需要澄清的范围 |
 | --- | --- | --- |
-| ECS 默认掩码与用户是否可编辑 | 保持显式参数，无默认值；不把样本 /24 当产品设置 | 在线入口／订阅产品配置，不阻塞 M2 基础 Schema |
-| Android／App Store 进程规则替代 | 保持报错；具体改为哪些包名或域名需依据真实用途确认 | 这些 Profile 的实际配置发布，不阻塞契约设计 |
-| 自助编辑与多管理者权限 | 首期统一管理，配置使用者不各自登录编辑；不同使用者的 Recipe 可共享节点 | 首期范围外，未来出现需求再定义 |
-| `no-resolve` 与 V2Fly 带筛选语义的 Include | 不从旧脚本忽略行为推断正确语义；先做固定来源格式探针 | 相关 Parser 转换与发布，不阻塞接口草案 |
-| 在线存储、校验执行器、旧版本服务策略 | 本地发布实现仅作行为参考 | Web／部署设计 |
+| 在线入口的 ECS 默认策略 | Compiler 要求显式地址和前缀，或 `null`，没有默认值；样本 `/24` 不是产品设置 | 在线产品是否提供默认前缀、是否允许编辑，以及谁有权设置 |
+| Compiler 升级后的旧快照服务 | 当前渲染会拒绝版本不兼容的快照 | 上线前重新校验全部当前快照，还是保留旧版本执行器；两者影响发布流程和运维成本 |
+| Web 存储与部署 | Web 当前是骨架；本地发布适配器不提供线上事务 | 存储、凭据保护、授权和原生检查执行器的具体部署方案 |
+| Android／App Store 不支持的进程规则 | 现有行为是明确拒绝，不自动删除或替换 | 先取得实际应用与流量用途，再判断可行替代；缺少用途证据时不能直接选择包名或域名 |
+
+自助编辑与多管理者权限属于首期范围外；当前统一管理模式已有明确决定，不作为未决项。原始 Include、`no-resolve` 等来源语义属于后续技术查证，当前首个规则交付不依赖这些 Parser。生产是否已经启用、实际设备加载哪个版本属于运行事实，不能由设计或验收文档推断，也不应作为产品选择交给管理者。
 
 ## 2026-11-02 设计阶段记录
 
