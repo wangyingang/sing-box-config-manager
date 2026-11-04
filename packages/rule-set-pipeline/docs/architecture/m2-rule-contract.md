@@ -1,6 +1,6 @@
 # M2 Rule IR 与产物契约草案
 
-后续设计确认（2026-11-03）：首个完整交付采用 V2Fly 官方 Release 的 dlc.dat_plain.yml，不自行解析原始 Include、attribute 筛选或 affiliation。规则生产、失败策略、投影、不可变候选及稳定订阅的本次范围，以[首个完整交付设计](../../../../docs/architecture/rule-set-pipeline-first-delivery.md)为准。下文保留更广泛的历史草案，未被该交付明确纳入的字段、Parser 和迁移工作仍属后续方向。
+本文保留 2026-11-02 更广泛的规则生产设计草案，不作为当前调用说明。后续确认的[首个完整交付](../../../../docs/architecture/rule-set-pipeline-first-delivery.md)采用 V2Fly 官方 Release 的 `dlc.dat_plain.yml`，不自行解析原始 Include、attribute 筛选或 affiliation。下文关于更广泛规则类型、Warning 跳过和原始 Include 解析的内容，不适用于当前 Release YAML 流程：当前目标列表含未知、非法或歧义记录时，整个构建失败。首个纯域名切片已实现远程回读、实际摘要验证和激活门禁，范围与证据见 [Pipeline README](../../README.md)；其他来源及更广泛 Parser 能力不能据此视为已实现。
 
 设计日期：2026-11-02。状态更新：2026-11-03，Compiler 消费所需的[最小固定产物 Manifest v1 契约](../../contracts/README.md)及其结构、固定版本、用途和能力校验已实现。2026-11-04，#17 新增 [Rule Subscription v1](../../contracts/rule-subscription.md) 及 Recipe／Compiler v2 消费路径，与不可变 Manifest 分别管理。本文保留更完整的 Rule IR、Parser、产物生产与发布设计草案；这些后续契约尚未全部定稿，旧 Pipeline 尚未迁移。上层计划见 [M2 契约与实施计划](../../../../docs/architecture/m2-contract-plan.md)。
 
@@ -92,7 +92,7 @@ format               ← source | binary
 requiredCapabilities ← 实际产物能力要求
 ```
 
-D06 接收宿主提供的产物元数据，不下载并验证文件。Recipe 入口已在适配器中实现 Manifest 结构、固定修订、用途、消费位置及 Profile 能力校验，并拒绝未知 Manifest 版本、格式或能力词汇。远程内容获取、实际字节摘要、用途内容与能力声明的一致性，以及发布内容门禁仍待后续实现；单靠 `sing-box check` 不能证明远程文件与摘要一致。
+D06 接收宿主提供的产物元数据，不下载并验证文件。Recipe 入口已在适配器中实现 Manifest 结构、固定修订、用途、消费位置及 Profile 能力校验，并拒绝未知 Manifest 版本、格式或能力词汇。在本草案形成时，远程内容获取、实际字节摘要、用途内容与能力声明的一致性，以及发布内容门禁尚未实现。后续 Spec #14 已为首个纯域名切片完成这些检查，不能据此扩展为支持本草案的全部来源和规则类型。单靠 `sing-box check` 仍不能证明远程文件与摘要一致。
 
 ## 验收重点
 
@@ -103,4 +103,4 @@ D06 接收宿主提供的产物元数据，不下载并验证文件。Recipe 入
 - 相同固定输入与构建版本产生相同产物字节；不会因输入枚举次序改变集合语义或摘要。
 - 旧 Pipeline 的有意修复逐项记录差异；不能修改 golden 来掩盖 Compiler 策略顺序变化。
 
-这些是后续验收条件，本轮未执行新 Parser、Projection 或发布流程。
+这些是 2026-11-02 设计阶段提出的验收条件，当时未执行新 Parser、Projection 或发布流程。后续首个纯域名切片的实际交付及验收见 [Pipeline README](../../README.md)，本段不作为当前待办或当前测试结果。

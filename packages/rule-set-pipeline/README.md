@@ -1,8 +1,41 @@
 # Rule Set Pipeline
 
-包名：`@sing-box-config-manager/rule-set-pipeline`。已实现 [#15](https://github.com/wangyingang/sing-box-config-manager/issues/15) 的固定来源转换，以及 [#16](https://github.com/wangyingang/sing-box-config-manager/issues/16) 的确定性 JSON／SRS、本地原生验证和用途投影。另已实现 [#18](https://github.com/wangyingang/sing-box-config-manager/issues/18) 的正常更新、不可变候选发布与 HTTPS 回读。另已实现 [#19](https://github.com/wangyingang/sing-box-config-manager/issues/19) 的显式激活与受控客户端自动更新。验收记录见 [#15](docs/verification/issue-15.md)、[#16](docs/verification/issue-16.md)、[#18](docs/verification/issue-18.md) 和 [#19](docs/verification/issue-19.md)。另已实现 [#20](https://github.com/wangyingang/sing-box-config-manager/issues/20) 的历史激活回滚，验收见 [#20](docs/verification/issue-20.md)。客户端故障保留与缓存离线恢复已由 [#21](docs/verification/issue-21.md) 验证。
+包名：`@sing-box-config-manager/rule-set-pipeline`。管理者需要更新系统维护的规则集合时，本模块从官方来源生成 sing-box 可加载的规则文件，验证并上传为候选，再由管理者显式激活。客户端随后通过稳定地址取得当前规则；构建成功、候选验证成功、稳定入口切换和客户端加载完成是不同的状态。
 
-## 本地构建
+当前生产输入只覆盖 V2Fly `domain-list-community` 官方 Release 中 `dlc.dat_plain.yml` 的 `category-ai-!cn` 列表。输出包括 JSON 源规则文件和 SRS 二进制规则文件，目标版本固定为 sing-box **1.14.4**，JSON Source Format 固定为 **4**。合成 IP／混合输入用于验证构建 API，不表示已经支持其他真实来源或其发布激活。
+
+## 操作分别产生什么结果
+
+管理者通过本地 CLI 操作；本模块不提供生产定时任务或 Web 管理页面。各命令产生的结果如下：
+
+| 操作 | 输入与结果 | 是否改变稳定入口 |
+| --- | --- | --- |
+| `build:release` | 读取指定 Release，在新目录生成经过本地原生验证的规则文件及记录 | 否；不上传 |
+| `update` | 查询一次官方 latest；发现未成功处理的 Release 时构建并发布新候选 | 否；候选仍待显式激活 |
+| `rebuild` | 对本地状态已固定且成功处理过的 Release 重新构建，发布新候选 | 否；保留原候选与成功处理记录 |
+| `activate` | 复验选定候选，更新稳定规则文件及激活记录 | 是；客户端何时加载由其更新机制决定 |
+| `rollback` | 复验保留的历史激活版本，新增提交恢复其规则内容 | 是；同样存在传播与轮询延迟 |
+| `status` | 读取指定状态目录中的处理记录和本地激活回执 | 否；也不查询远端当前版本 |
+
+“规则候选”（Rule Candidate）是一组等待验证或激活的文件；“当前规则版本”是稳定入口当前交付的版本，均不表示所有客户端已经加载该内容。例如客户端正在使用 A 时，`update` 成功只会产生候选 B；`activate` 才将稳定入口切换到 B，客户端随后按自身周期获取它。
+
+规则自动跟随已经激活的版本，是 [ADR 0006](../../docs/adr/0006-follow-active-rule-subscriptions.md) 确认的选择：已有配置不必为每次规则更新重新发布，代价是配置快照不再固定客户端此后加载的规则字节。不可变候选、来源和验证记录仍保留，用于追溯与回滚。代码能力和历史验收结果也不代表生产入口或实际设备的当前状态。
+
+## 本地构建：固定输入并验证规则文件
+
+本地构建适合检查指定 Release 会产生什么规则。它不查询 latest，也不上传文件或记录 Release 已成功处理。
+
+构建先固定 Release、tag 对应源码 commit 和资产身份，核对完整 YAML 的实际字节 SHA-256，再提取目标列表。列表必须唯一、非空，声明 length 与 rules 数量一致。YAML 损坏、目标列表包含未知类型或非法记录时，整个构建失败，不返回部分成功规则。Include 展开、attribute 筛选、affiliation、官方排序与去冗余由 V2Fly 官方构建程序完成，本模块不重新解析原始来源。
+
+转换得到的 Rule IR 是一组不带路由或 DNS 动作的匹配条件，例如“匹配完整域名”与“匹配域名及其子域”。任一条件命中即算集合命中。随后按使用场景选择条件，称为用途投影（Projection）：
+
+| 用途 | 选择的条件 | 用在什么位置 |
+| --- | --- | --- |
+| `route` | 全部适用条件 | Route 路由匹配 |
+| `dns-query` | 域名条件 | DNS 请求域名匹配 |
+| `dns-response` | 目标 `ip_cidr` | 已取得 DNS 响应的 IP 匹配 |
+
+当前官方列表只有域名，因此 Route 和 DNS 请求复用同一组文件，DNS 响应用途为 `unavailable: empty`。无内容的用途不生成空匹配文件，也不能被配置绑定。每组非空内容均编译成 SRS、解码比较匹配语义，并实际加载 JSON 与 SRS；配置 `sing-box check` 成功不能代替这些规则文件检查。具体类型映射、属性与正则限制见[输入与转换边界](#输入与转换边界)。
 
 使用 Node.js ≥24、pnpm 10.33.2。仓库根目录执行：
 
@@ -37,11 +70,13 @@ pnpm --dir packages/rule-set-pipeline status --state /absolute/path/to/rule-stat
 
 每次 `update` 只在开始查询一次官方 latest。发现新 Release 后，固定该响应的 Release ID、tag 和资产身份，解析 tag 的源码 commit，复用本地完整来源校验、转换和原生构建路径。已成功处理的相同 Release 只检查 latest 元数据；资产身份改变时失败，否则跳过 YAML／摘要下载、转换和 binary 执行。跳过时不会重新下载同一资产来探测其内容变化；失败重试取得字节时会核对已保存的来源摘要。
 
-`--state` 必须指向可保留的本地目录。`update-state.json` 用原子 rename 保存来源固定记录、各次候选状态和已成功处理的 Release。三者分别管理；`status` 可在后续进程恢复查看。最近一次本地激活回执从独立的 `active-version.json` 读取，缺失表示此目录没有回执；update 不写该文件。远端 `stable/activation.json` 才是当前规则版本的权威记录，本地回执可能落后于其他管理会话。不要把隔离验收目录的 `null` 理解成实际设备没有激活版本。
+`--state` 必须指向可保留的本地目录。`update-state.json` 用原子 rename 保存来源固定记录、各次候选状态和已成功处理的 Release。三者分别管理，因为“取得输入”“候选验证成功”和“稳定入口切换”不是同一件事。`status` 可在后续进程恢复查看这些本地记录，但不会查询远端。
+
+最近一次本地激活回执从独立的 `active-version.json` 读取，缺失仅表示此目录没有回执；`update` 和 `rebuild` 不写该文件。远端目标分支的 `stable/activation.json` 才是该分支当前规则版本的权威记录，本地回执可能落后于其他管理会话。不要把隔离验收目录的 `null` 理解成实际设备没有激活版本。
 
 同一状态目录通过 `update.lock/` 拒绝并发更新。正常退出或失败会清理锁；进程被强制终止后，须确认没有存活的更新进程，再删除残留锁目录重试。保留状态目录以继续核对固定来源；不要删除来源记录来绕过来源变化错误。
 
-候选在产物仓库的 `candidates` 分支追加，采用三个有序提交：
+Artifact Manifest（产物清单）记录某次不可变规则文件的固定地址、摘要和使用约束。候选在产物仓库的 `candidates` 分支追加，采用三个有序提交，使清单可以引用已经取得完整 commit 地址的文件：
 
 1. `candidates/<candidate-id>/domains.json` 和 `domains.srs`。
 2. 引用第一步完整 commit URL 的 `manifest.json`，以及 `source.json`、`conversion-report.json`、`build.json`。
@@ -49,13 +84,32 @@ pnpm --dir packages/rule-set-pipeline status --state /absolute/path/to/rule-stat
 
 发布只允许追加新的候选路径，保留父 tree，拒绝历史路径覆盖或并发非快进更新。Manifest 使用既有 v1 契约，物理产物 ID 包含候选修订；Route／DNS 请求复用文件，DNS 响应为 `unavailable: empty`。所有文件使用完整 commit 的 HTTPS URL；时间、日志和 Manifest 不进入规则文件，避免摘要循环。
 
-远程文件逐一核对字节数、SHA-256 和逐字节内容。下载的 JSON 重新编译、解码及加载，所得 SRS 必须与下载的 SRS 一致。随后回读元数据，并在第三步提交、回读证据文件后才记为 `verified` 和成功处理。任何失败返回非零，保存失败候选；重试创建新的候选并重新获取、验证，不把残留文件当作通过证据。发布的 `build.json` 仅表示本地验证，只有完整远程证据及成功候选状态才能供后续激活检查。
+远程文件逐一核对字节数、SHA-256 和逐字节内容。下载的 JSON 重新编译、解码及加载，所得 SRS 必须与下载的 SRS 一致。随后回读元数据，并在第三步提交、回读证据文件后才记为 `verified` 和成功处理。失败返回非零，已经创建的候选记为失败；重试创建新的候选并重新获取、验证，不把已上传的残留文件当作通过证据。发布的 `build.json` 仅表示本地验证，只有完整远程证据及成功候选状态才能供后续激活检查。
 
 本命令不写稳定路径、不激活候选、不修改实际客户端配置，也不切换全局 binary。首次创建产物仓库、候选发布属于外部写入，须有覆盖它们的授权；命令不自动创建仓库。
 
+## 显式重建固定 Release
+
+普通 `update` 会跳过已成功处理的 Release。管理者需要用当前转换器或验证流程重新处理相同来源时，使用独立的 `rebuild`，并指定已有状态目录中成功处理过的固定 Release tag：
+
+```sh
+pnpm --dir packages/rule-set-pipeline rebuild \
+  --state /absolute/path/to/rule-state \
+  --release 20261102130044 \
+  --binary /absolute/path/to/sing-box-1.14.4
+```
+
+`rebuildRules({ stateDirectory, release, binary, ... })` 与 CLI 使用同一入口。拒绝 `latest`、未固定或尚未成功处理的 Release；通过持久记录中的 Release ID 获取元数据，并重新核对 tag、源码 commit、资产身份及实际输入摘要。来源变化明确失败，不覆盖固定记录。
+
+重建复用正常更新的转换、原生验证、不可变发布和 HTTPS 回读门禁。每次尝试保存新候选 ID、操作类型、原成功候选 ID 和构建身份。`build.json` 记录输入、转换器实现摘要、Node／yaml 版本、目标 binary 的 SHA-256、契约版本和实际产物摘要。实现摘要覆盖当前运行的来源读取、解析、转换、投影与原生验证代码；TypeScript 源码和编译后 JavaScript 分别记录各自实际运行实现的摘要。
+
+成功和失败均保留原成功处理记录、固定来源及历史候选；失败可按原命令重试。相同输入与工具的规则字节及构建身份保持一致，候选 ID 和验证运行记录独立保存。重建不写稳定入口或激活回执，正常更新仍在无新 Release 时跳过。后续激活使用既有 `activate --candidate <new-readback-url>` 流程；激活验证同时支持历史构建身份和显式记录契约版本的新身份，拒绝不支持的契约版本。
+
 ## 显式激活
 
-管理者选择已发布候选的完整 commit `readback.json` URL，提供可信宿主维护的规则订阅契约和预期旧分支 head。`activate` 复用已有候选，不查询 Release、不重做来源转换、不改写成功处理记录。
+激活把候选文件交给稳定入口，开始影响后续客户端下载。Rule Subscription（规则订阅）描述“哪些稳定地址可用于哪些用途、格式和客户端能力”；它不记录某次规则字节的固定摘要，也不承担面向使用者的配置订阅授权。字段定义见 [Rule Subscription v1](contracts/rule-subscription.md)。
+
+管理者选择已发布候选的完整 commit `readback.json` URL，提供可信宿主维护的规则订阅契约和预期旧分支 head。head 是目标分支当前的完整 commit；提供预期值是为了在其他会话已经更新分支时拒绝覆盖。`activate` 复用已有候选，不查询 Release、不重做来源转换、不改写成功处理记录。
 
 ```sh
 pnpm --dir packages/rule-set-pipeline activate \
@@ -66,17 +120,29 @@ pnpm --dir packages/rule-set-pipeline activate \
   --binary /absolute/path/to/sing-box-1.14.4
 ```
 
-默认目标为产物仓库 `main`。隔离验收可指定 `--branch acceptance-<name>`，分支须事先建立。创建隔离分支、执行 CLI 均不替代生产切换授权；当前 #19 验收只使用 `acceptance-issue-19`。本入口只覆盖首个 `category-ai-!cn` 纯域名交付切片；拒绝其他系统规则集、目标 IP 投影和未知能力，不猜测兼容。既有 Manifest 的 `v2fly:category-ai-!cn` 映射到订阅契约中的 `v2fly:domain-list-community:category-ai-!cn`。
+默认目标为产物仓库 `main`。隔离验收可指定 `--branch acceptance-<name>`，分支须事先建立。创建隔离分支、执行 CLI 均不替代生产切换授权；[#19 历史验收](docs/verification/issue-19.md)只使用 `acceptance-issue-19`。本入口只覆盖首个 `category-ai-!cn` 纯域名交付切片；拒绝其他系统规则集、目标 IP 投影和未知能力，不猜测兼容。既有 Manifest 的 `v2fly:category-ai-!cn` 映射到订阅契约中的 `v2fly:domain-list-community:category-ai-!cn`。
 
 激活重新下载候选的六份文件并核对回读链、来源、Conversion Report、构建身份、实际摘要／字节数／非空 term 数、用途映射及能力。重新用指定 1.14.4 编译、解码、加载实际 JSON，并逐字节比对 SRS。本地 `verified`、单独的 `passed` 或 `build.json` 不能放行。明确标识 `kind: synthetic`、description 和 revision 的合成候选只可进入 `acceptance-*` 分支。
 
 规则订阅中的全部入口须指向目标分支的 `stable/`，默认 SRS，也可维护契约声明的 JSON。首次激活后，后续激活须保持完整订阅契约及入口不变。每次以预期旧 head 为唯一父提交，在一个 tree／commit 内更新所有稳定文件和 `stable/activation.json`；非强制 PATCH 拒绝并发覆盖。激活记录保存候选证据、来源、契约、原生验证身份和稳定文件摘要。旧激活记录通过预期旧 commit 的 Git tree／blob 读取；只有完整 tree 证明缺失才视为首次激活，不能凭 raw CDN 的临时 404 绕过契约保护。API 故障、tree 截断及坏记录均拒绝激活。
 
-PATCH 回复丢失时，先读取远端 head 对照已知 attempted commit，不重复写入。远端不可达报告 `ACTIVATION_UNKNOWN`；远端仍是旧 head 报告 `ACTIVATION_NOT_APPLIED`；其他 head 报告冲突或已被后续操作替代。成功提交后，使用完整 commit HTTPS 地址逐字节回读；尚不能完成则报告 `ACTIVATION_APPLIED_READBACK_PENDING` 及 commit，不能称旧规则未变。CLI 本地回执写入失败同样保留已生效 commit。重试须先核对远端 head 和激活记录，再选择正确预期值；不要盲目覆盖。
-
 Git 提交保持文件与记录一起更新，但 GitHub 缓存和客户端轮询存在传播延迟，不保证多文件在客户端同时切换。激活不修改 Recipe、配置发布或客户端设置。运行中的 sing-box 通过原生机制获取稳定 SRS；受控测试的 `1s` 更新周期和临时 CA 只存在于测试进程，不能用于承诺全设备更新时间。
 
 公开 API 为 `activateRules({ candidateEvidenceUrl, subscription, binary, expectedHead, transport? })`；默认使用 `githubActivation()`。API 的成功结果和远端记录可跨进程追溯，CLI 另外保存本地回执。Compiler 仍只消费契约，不导入激活运行时代码。
+
+## 激活失败后核实远端状态
+
+候选检查失败时，稳定入口未被这次操作修改。提交阶段发生错误时，不能仅凭命令失败就断言旧版本未变。PATCH 回复丢失后，实现先读取远端 head，对照本次已创建的 attempted commit；确认该提交已成为 head 时继续回读，不重复写入。
+
+| 结果 | 已知状态与后续处理 |
+| --- | --- |
+| `ACTIVATION_NOT_APPLIED` | 已核实远端仍为预期旧 head，本次提交未成为当前版本 |
+| `ACTIVATION_UNKNOWN` | 无法读取远端，尚不能确认是否已切换；先核实远端状态 |
+| `ACTIVATION_CONFLICT_OR_SUPERSEDED` | 远端是其他提交；可能发生冲突或本次提交已被后续操作替代，须核对当前激活记录 |
+| `ACTIVATION_APPLIED_READBACK_PENDING` | 提交已生效，但完整 commit HTTPS 地址的逐字节回读尚未完成；错误保留该 commit，不能声称旧规则未变 |
+| `ACTIVATION_APPLIED_LOCAL_RECEIPT_PENDING` | 远端已经激活，本地回执目录创建、写入或 rename 失败；错误保留已生效 commit，不应重复激活 |
+
+重试须先核对远端 head 和激活记录，再选择正确的预期旧值；不要盲目覆盖。本地 `status` 只能辅助查看回执，不能完成远端状态核实。
 
 ## 历史回滚
 
@@ -96,6 +162,16 @@ pnpm --dir packages/rule-set-pipeline rollback \
 回滚读取历史激活记录，核对当前完整订阅契约，重新执行正常激活的所有候选门禁，并比对历史稳定文件的实际字节及记录摘要。缺失、损坏、空内容或不兼容均在写入前拒绝。成功时只新增一次稳定入口提交，记录 `operation: rollback`、`historicalActivationCommit` 和 `historicalActivationId`；候选、Manifest、原验证记录及 `update-state.json` 均不改写。
 
 回滚沿用激活的预期旧 head、并发保护、不确定结果核实和本地回执行为，返回 `status: activated`；操作类型在 `activation.operation` 中区分。客户端按原生更新机制恢复历史规则，允许传播延迟。历史版本选择不支持跨环境迁移或同时修改订阅契约。
+
+## 客户端更新失败与缓存恢复
+
+已经成功加载 A 的 sing-box，在后续下载或加载 B 失败时继续使用原内存规则。仓库的受控测试实际注入断开连接、HTTP 503、截断 SRS 和非法 SRS，通过新的 Route／DNS 请求证明 A 仍有效；解除故障后，再证明 B 生效。这四类注入不代表已经动态验证所有故障。
+
+跨进程恢复是另一件事。只有有效规则已成功写入持久缓存，新进程才可能在离线时恢复它。受控测试在成功持久化 B 后，关闭客户端和规则服务，再用相同配置与缓存路径启动新进程，并通过新请求证明 B 恢复。首次启动无有效缓存、缓存损坏或无法写入缓存时，不具有跨重启旧规则保证。
+
+原生客户端不额外校验 Artifact Manifest 摘要，合法但错误的内容不能依靠客户端摘要检查阻止。合法空 SRS 也可能被接受，必须依靠发布端激活门禁拒绝。缓存写入失败不会回滚已经生效的内存规则，因此“运行中已经更新”不表示“重启后一定恢复”。缓存写入失败的边界来自固定版本源码核对，现有验收未注入真实磁盘写入失败。
+
+更新周期和缓存由实际客户端配置决定，本项目不统一强制设置。受控测试中的临时 CA、`1s` 周期及持久缓存仅是测试条件。具体执行方式见[客户端故障与缓存离线恢复（#21）](#客户端故障与缓存离线恢复21)，原生边界与已执行证据见 [#21 验收记录](docs/verification/issue-21.md)。
 
 ## 输入与转换边界
 
@@ -118,9 +194,11 @@ IP 语义比较使用固定 `ipaddr.js 2.5.0` 解析地址，按 IPv4／IPv6 地
 
 YAML 解析使用固定版本的 [yaml](https://eemeli.org/yaml/)，拒绝语法错误、重复 key、未知 tag、多个文档和 alias。记录级诊断包含文件、列表、从零开始的记录 index，以及从一开始的 line／column。列表级诊断以文件与目标列表定位。
 
-每个非空用途分别生成 JSON／SRS，内容相同的用途复用同一组物理文件。纯域名文件同时供 Route 和 DNS 请求复用。纯 IP 的 Route／DNS 响应同样复用，混合 IR 分别输出三组文件。DNS 响应用途为 `{ status: "unavailable", reason: "empty" }`，不生成空匹配文件。`build.json` 是本地构建记录，不能作为 Compiler 的 Artifact Manifest 使用。[固定产物 Manifest v1](contracts/README.md) 继续保持原有契约，Compiler 不导入 Pipeline 运行时代码。
+每个非空用途分别生成 JSON／SRS，内容相同的用途复用同一组物理文件。纯域名文件同时供 Route 和 DNS 请求复用。纯 IP 的 Route／DNS 响应同样复用，混合 IR 分别输出三组文件。当前官方纯域名列表的 DNS 响应用途为 `{ status: "unavailable", reason: "empty" }`，不生成空匹配文件。`build.json` 是本地构建记录，不能作为 Compiler 的 Artifact Manifest 使用。[固定产物 Manifest v1](contracts/README.md) 继续保持原有契约，Compiler 不导入 Pipeline 运行时代码。
 
 ## 自动化验证
+
+已有交付的执行证据分别见 [#15 固定来源转换](docs/verification/issue-15.md)、[#16 JSON／SRS 与原生验证](docs/verification/issue-16.md)、[#18 候选发布与回读](docs/verification/issue-18.md)、[#19 激活与自动更新](docs/verification/issue-19.md)、[#20 历史回滚](docs/verification/issue-20.md)、[#21 故障与缓存恢复](docs/verification/issue-21.md)及 [#22 固定 Release 重建](docs/verification/issue-22.md)。这些记录说明各次验收的范围与结果，不证明生产当前版本或全部设备状态。
 
 ```sh
 pnpm --dir packages/rule-set-pipeline test
@@ -144,7 +222,7 @@ SING_BOX_TEST_BINARY=/absolute/path/to/sing-box-1.14.4 \
 pnpm --dir packages/rule-set-pipeline test:publication
 ```
 
-该验收固定 Release `20261102130044`，状态目录需尚未成功处理此样本，证据输出文件需不存在；此入口不是同一 Release 的显式重建命令。正常更新 CLI 不接受固定 tag；重建使用下面的独立命令。受控集成测试不访问真实 GitHub 写接口，自动覆盖上传、远程回读、来源变化和重试边界。
+该验收固定 Release `20261102130044`，状态目录需尚未成功处理此样本，证据输出文件需不存在；此入口不是同一 Release 的显式重建命令。正常更新 CLI 不接受固定 tag；重建使用[独立的 rebuild 命令](#显式重建固定-release)。受控集成测试不访问真实 GitHub 写接口，自动覆盖上传、远程回读、来源变化和重试边界。
 
 固定官方候选的真实激活验收（候选需已通过 #18 发布，证据文件需不存在）：
 
@@ -158,7 +236,6 @@ pnpm --dir packages/rule-set-pipeline test:activation
 ```
 
 该命令真实更新隔离分支，分别回读不可变提交和稳定 HTTPS URL，再通过公开 Recipe／Compiler 接口生成稳定 SRS 配置并执行原生检查。受控 A／B 自动更新测试随 `test:integration` 运行，需本机 `openssl`；通过 loopback HTTPS、临时 CA 和配置内的 HTTP 隧道隔离网络，不改 hosts 或系统信任。它使用内存 Git transport，提交身份不代表真实 GitHub commit；与真实发布证据分别保存。
-
 
 ### 客户端故障与缓存离线恢复（#21）
 
@@ -174,24 +251,9 @@ node --import tsx --test test/integration/client-failure-recovery.test.ts
 
 测试通过 A／B 域名的正反 Route／DNS 新请求，分别证明四类更新故障后 A 仍有效、故障解除后 B 生效，以及停止客户端和规则服务后从持久缓存重启恢复 B。运行期间保持同一配置；重启前后的证据分开保存。临时 CA、DNS 缓存禁用、`1s` 更新周期与持久缓存仅属于受控测试，不是实际客户端的统一要求。测试结束清理进程、监听器及临时目录，结果保留在指定证据文件和 CI 日志中。
 
-原生客户端不额外校验 Artifact Manifest 摘要；缓存写入失败不会回滚已生效的内存规则。首次启动无有效缓存、缓存损坏或无法写入缓存时，不具有跨重启旧规则保证。合法空 SRS 可能被客户端接受，必须依靠发布端激活门禁拒绝；本测试不以客户端拒绝空规则为前提。具体证据与未覆盖边界见 [#21 验收记录](docs/verification/issue-21.md)。
+具体执行证据与未覆盖边界见 [#21 验收记录](docs/verification/issue-21.md)；行为限制见[客户端更新失败与缓存恢复](#客户端更新失败与缓存恢复)。
 
-## 显式重建固定 Release
-
-使用已有状态目录中成功处理过的固定 Release tag：
-
-```sh
-pnpm --dir packages/rule-set-pipeline rebuild \
-  --state /absolute/path/to/rule-state \
-  --release 20261102130044 \
-  --binary /absolute/path/to/sing-box-1.14.4
-```
-
-`rebuildRules({ stateDirectory, release, binary, ... })` 与 CLI 使用同一入口。拒绝 `latest`、未固定或尚未成功处理的 Release；通过持久记录中的 Release ID 获取元数据，并重新核对 tag、源码 commit、资产身份及实际输入摘要。来源变化明确失败，不覆盖固定记录。
-
-重建复用正常更新的转换、原生验证、不可变发布和 HTTPS 回读门禁。每次尝试保存新候选 ID、操作类型、原成功候选 ID 和构建身份。`build.json` 记录输入、转换器实现摘要、Node／yaml 版本、目标 binary 的 SHA-256、契约版本和实际产物摘要。实现摘要覆盖当前运行的来源读取、解析、转换、投影与原生验证代码；TypeScript 源码和编译后 JavaScript 分别记录各自实际运行实现的摘要。
-
-成功和失败均保留原成功处理记录、固定来源及历史候选；失败可按原命令重试。相同输入与工具的规则字节及构建身份保持一致，候选 ID 和验证运行记录独立保存。重建不写稳定入口或激活回执，正常更新仍在无新 Release 时跳过。后续激活使用既有 `activate --candidate <new-readback-url>` 流程；激活验证同时支持历史构建身份和显式记录契约版本的新身份，拒绝不支持的契约版本。
+### 固定 Release 重建验收（#22）
 
 真实重建验收固定官方样本，使用专属状态目录与 `acceptance-issue-22-<suffix>` 远程分支。它发布原候选和重建候选、注入原生失败并重试、回读历史文件，并通过固定样本元数据适配器检验正常更新的 latest 跳过路径（不将旧样本声称为真实 latest）：
 
