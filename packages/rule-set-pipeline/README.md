@@ -2,7 +2,7 @@
 
 包名：`@sing-box-config-manager/rule-set-pipeline`。管理者需要更新系统维护的规则集合时，本模块从官方来源生成 sing-box 可加载的规则文件，验证并上传为候选，再由管理者显式激活。客户端随后通过稳定地址取得当前规则；构建成功、候选验证成功、稳定入口切换和客户端加载完成是不同的状态。
 
-当前生产输入只覆盖 V2Fly `domain-list-community` 官方 Release 中 `dlc.dat_plain.yml` 的 `category-ai-!cn` 列表。输出包括 JSON 源规则文件和 SRS 二进制规则文件，目标版本固定为 sing-box **1.14.4**，JSON Source Format 固定为 **4**。合成 IP／混合输入用于验证构建 API，不表示已经支持其他真实来源或其发布激活。
+当前候选发布与激活入口只覆盖 V2Fly `domain-list-community` 官方 Release 中 `dlc.dat_plain.yml` 的 `category-ai-!cn` 列表。本地 `build` 也可按管理者的 YAML 配置从同一固定 Release 构建多个列表。输出包括 JSON 源规则文件和 SRS 二进制规则文件，目标版本固定为 sing-box **1.14.4**，JSON Source Format 固定为 **4**。合成 IP／混合输入用于验证构建 API，不表示已经支持其他真实来源或其发布激活。
 
 ## 操作分别产生什么结果
 
@@ -47,6 +47,15 @@ pnpm --dir packages/rule-set-pipeline build:release --binary /absolute/path/to/s
 `--binary` 必须明确提供绝对路径。构建检查版本恰为 1.14.4，记录完整 version 输出、真实路径及 binary SHA-256；不调用 PATH 中的默认 sing-box，不切换全局版本。缺失、不可执行或版本错误均失败。
 
 `--out` 必须是尚不存在的目录，其父目录必须已存在。已有目录直接拒绝，避免覆盖历史或把失败结果混入旧产物。`--expected-source` 可核对既有来源记录的 Release、commit、资产身份和实际输入摘要；变化时失败。本地 `build` 不查询 latest。公开 API 受 GitHub 限额约束，可通过已有 `GITHUB_TOKEN` 提供只读认证，凭据不进入产物。
+
+多规则集构建使用版本化 YAML。样本见 [`samples/three-ai-rule-sets.yml`](samples/three-ai-rule-sets.yml)，其中逻辑 ID 分别选择上游完整的 `openai`、`anthropic` 和 `google-deepmind` 列表。`target` 只能是可信产物仓库的 `main` 或 `acceptance-*` 分支；每个 `stablePath` 必须是互不重叠的 `stable/` 相对路径。本地构建只记录这些发布意图，不写入目标分支。
+
+```sh
+pnpm --dir packages/rule-set-pipeline build:release --binary /absolute/path/to/sing-box-1.14.4 --release 20261104112839 --config samples/three-ai-rule-sets.yml --out /tmp/three-ai-rules
+pnpm --dir packages/rule-set-pipeline build:release --binary /absolute/path/to/sing-box-1.14.4 --release 20261104112839 --config samples/three-ai-rule-sets.yml --id ai-anthropic --out /tmp/anthropic-only
+```
+
+一次调用只下载并校验一份完整 YAML 和一份摘要文件，解析一次 YAML；随后按所选逻辑 ID 分别转换和原生验证。共同摘要或 YAML 文档错误使整批失败，且不创建输出目录。单个列表缺失、非法或原生验证失败时，其他列表仍可完成，CLI 返回非零。输出根目录的 `source.json` 和 `batch.json` 记录共同来源与逐集结果；每个逻辑 ID 子目录保存其规则文件、转换报告和构建记录。`buildId` 包含规则定义、实际列表、固定来源及工具身份；相同列表内容也不会混同两个逻辑 ID。
 
 构建从指定官方 Release 解析 tag，并递归解引用 annotated tag 至源码 commit。资产通过固定 ID 下载，核对官方摘要记录的文件名及完整 YAML 的实际字节 SHA-256。
 

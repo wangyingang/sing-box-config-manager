@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -27,6 +27,18 @@ test('CLI 缺少固定 Release 或存在未知参数时明确退出', async () =
   for (const args of [['build'], ['build', '--latest'], ['unknown']]) {
     await assert.rejects(exec(process.execPath, ['--import', 'tsx', 'src/cli.ts', ...args]), (error: { code?: number }) => error.code === 1);
   }
+});
+
+test('CLI 在创建输出目录前拒绝不可信的多集配置', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'rule-config-cli-'));
+  try {
+    const config = join(temporary, 'bad.yml'), out = join(temporary, 'out');
+    await writeFile(config, `schemaVersion: 1\nsource: v2fly/domain-list-community\ntarget:\n  repository: other/repository\n  branch: main\nruleSets:\n  - id: ai-openai\n    list: openai\n    stablePath: stable/ai-openai\n`);
+    await assert.rejects(exec(process.execPath, ['--import', 'tsx', 'src/cli.ts', 'build', '--release', '20261104112839',
+      '--config', config, '--out', out, '--binary', '/unused']), (error: { code?: number; stderr?: string }) =>
+      error.code === 1 && !!error.stderr?.includes('trusted publication target'));
+    await assert.rejects(stat(out), { code: 'ENOENT' });
+  } finally { await rm(temporary, { recursive: true, force: true }); }
 });
 
 // Run the real CLI and receipt filesystem operations. Only remote activation is
