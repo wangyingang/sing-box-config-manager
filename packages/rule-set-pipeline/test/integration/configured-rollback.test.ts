@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { activateRules, rollbackRules } from '../../src/activation.js';
+import { parseBuildConfiguration } from '../../src/configured-build.js';
+import { syntheticCandidate } from './activation-client-fixture.js';
 import { readUpdateState } from '../../src/update.js';
 import { configuredEnvironment } from './configured-activation-fixture.js';
 
@@ -89,3 +91,23 @@ for (const fault of ['other-set', 'wrong-identity', 'history-json', 'history-byt
     assert.deepEqual(env.stored, candidates, 'Rollback must not rewrite immutable candidates');
   }));
 }
+
+
+test('同一 v2 订阅换用另一个列表后，按当前配置回滚旧来源并保持稳定 URL', { skip: !binary }, async () => isolated(async (env, directory) => {
+  const first = await env.candidates(), id = env.ids[0];
+  const original = await activateRules(env.options(id, first[id].evidenceUrl!));
+  const configuration = env.configuration.replace('list: openai', 'list: anthropic');
+  const parsed = parseBuildConfiguration(configuration);
+  const candidate = await syntheticCandidate(binary!, 'alternate-list', 'alternate.invalid', files => env.publish(files, 'alternate list fixture'),
+    { definition: parsed.ruleSets[0], target: parsed.target });
+  const options = { ...env.options(id, candidate.candidateEvidenceUrl), configuration };
+  const switched = await activateRules(options);
+  assert.notDeepEqual(switched.activation.files, original.activation.files);
+  await assert.rejects(activateRules({ ...options, expectedHead: env.head(), candidateEvidenceUrl: first[id].evidenceUrl! }), /Configured build identity or target mismatch/);
+  const result = await rollbackRules({ ...options, expectedHead: env.head(), historicalActivationCommit: original.commit });
+  assert.equal(result.activation.candidateId, first[id].id);
+  assert.deepEqual(result.activation.subscription, original.activation.subscription);
+  assert.deepEqual(result.activation.files, original.activation.files);
+  assert.deepEqual(result.activation.source, original.activation.source);
+  assert.equal((await readUpdateState(directory)).activeRuleVersions[id].activation.candidateId, first[id].id);
+}));

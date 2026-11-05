@@ -10,7 +10,7 @@
 
 | 模块 | 接收什么、完成什么 | 当前边界 |
 | --- | --- | --- |
-| [Rule Set Pipeline](packages/rule-set-pipeline/README.md) | 从官方规则来源构建 JSON／SRS，发布候选，经显式激活后更新稳定规则入口 | 已实现 V2Fly 官方 Release 中 `category-ai-!cn` 单列表的完整流程、重建和历史回滚 |
+| [Rule Set Pipeline](packages/rule-set-pipeline/README.md) | 从官方规则来源构建 JSON／SRS，发布候选，经显式激活后更新稳定规则入口 | 已实现 V2Fly 官方 Release 的配置驱动多集构建、候选发布、单集激活／回滚及同进程客户端更新验证 |
 | [Config Compiler](packages/config-compiler/README.md) | 将模板、配置选择、节点修订、规则元数据和客户端能力组合成完整配置，并检查错误 | 已实现纯内存编译、发布快照及 Node 本地发布适配器 |
 | [Configuration Manager Web App](apps/web/README.md) | 计划负责编辑、存储、管理授权、配置交付和订阅服务 | 当前只有工作区骨架及 Compiler 依赖，没有页面、HTTP API 或数据库 |
 

@@ -41,7 +41,8 @@ function candidateLocation(url: string, file: string) {
 }
 
 /** Reads the complete trusted remote record chain and validates actual bytes afresh. */
-export async function verifyActivationCandidate(options: Pick<ActivationOptions, 'candidateEvidenceUrl' | 'binary'>, transport: ActivationTransport, definition?: RuleDefinition) {
+export async function verifyActivationCandidate(options: Pick<ActivationOptions, 'candidateEvidenceUrl' | 'binary'>, transport: ActivationTransport,
+  definition?: RuleDefinition, operation: 'activate' | 'rollback' = 'activate') {
   const location = candidateLocation(options.candidateEvidenceUrl, 'readback.json');
   const evidence = JSON.parse((await transport.download(options.candidateEvidenceUrl)).toString('utf8'));
   requireThat(evidence.schemaVersion === 1 && evidence.status === 'remote-verified' && evidence.candidateId === location.id,
@@ -88,7 +89,12 @@ export async function verifyActivationCandidate(options: Pick<ActivationOptions,
       && build.contracts.sourceFormat === 4 && build.contracts.buildRecord === 1, 'Unsupported build contracts');
   }
   if (definition) {
-    requireThat(equal(build.definition, definition) && build.id === definition.id && build.candidateId === location.id
+    // A rollback retains its original source selection. Validate that definition
+    // and build identity independently, while keeping today's delivery identity.
+    const expectedDefinition = operation === 'rollback' ? parseBuildConfiguration(JSON.stringify({ schemaVersion: 1,
+      source: 'v2fly/domain-list-community', target: build.target, ruleSets: [build.definition] })).ruleSets[0] : definition;
+    requireThat(equal(build.definition, expectedDefinition) && expectedDefinition.id === definition.id
+      && expectedDefinition.stablePath === definition.stablePath && build.id === definition.id && build.candidateId === location.id
       && build.target?.repository === ARTIFACT_REPOSITORY && build.target?.branch === transport.branch
       && build.contracts !== undefined, 'Configured build identity or target mismatch');
   }
@@ -187,7 +193,7 @@ async function performActivation(options: ActivationOptions, historical?: { comm
     }
   }
   requireThat(await transport.head() === options.expectedHead, 'ACTIVATION_CONFLICT: remote head changed');
-  const candidate = await verifyActivationCandidate(options, transport, definition);
+  const candidate = await verifyActivationCandidate(options, transport, definition, historical ? 'rollback' : 'activate');
   // Synthetic origins can never enter the production main branch.
   requireThat(candidate.source.kind !== 'synthetic' || transport.branch.startsWith('acceptance-'), 'Synthetic candidate requires an acceptance branch');
   const files: Record<string, Buffer> = {};

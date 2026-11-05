@@ -120,7 +120,10 @@ test('只发布一次 v2 Recipe，换源 A/B 与回滚 A 后同一进程通过�
     const configured = { definition: parsed.ruleSets[0], target: parsed.target };
     const common = { configuration, logicalId: subscription.systemRuleSetId, subscription, binary, transport };
     const a = await syntheticCandidate(binary, 'upstream-A', 'old.issue19.test', publish, configured);
-    const b = await syntheticCandidate(binary, 'upstream-B', domain, publish, configured);
+    const configurationB = configuration.replace('list: openai', 'list: anthropic');
+    const definitionB = parseBuildConfiguration(configurationB).ruleSets[0];
+    const current = { ...common, configuration: configurationB };
+    const b = await syntheticCandidate(binary, 'upstream-B', domain, publish, { definition: definitionB, target: parsed.target });
     assert.notDeepEqual(a.source, b.source);
     const activeA = await activateRules({ candidateEvidenceUrl: a.candidateEvidenceUrl, ...common, expectedHead: head });
     await writeFile(join(directory, 'openssl.cnf'), '[req]\nprompt=no\ndistinguished_name=dn\nx509_extensions=ext\n[dn]\nCN=raw.githubusercontent.com\n[ext]\nsubjectAltName=DNS:raw.githubusercontent.com\nbasicConstraints=critical,CA:TRUE\nkeyUsage=critical,digitalSignature,keyEncipherment,keyCertSign\n');
@@ -212,9 +215,9 @@ test('只发布一次 v2 Recipe，换源 A/B 与回滚 A 后同一进程通过�
       assert.fail(`No expected new-request behavior: ${JSON.stringify(latest)}\n${log}`);
     }
     const before = await observe('route-fallback-A', '192.0.2.10');
-    const activeB = await activateRules({ candidateEvidenceUrl: b.candidateEvidenceUrl, ...common, expectedHead: head });
+    const activeB = await activateRules({ candidateEvidenceUrl: b.candidateEvidenceUrl, ...current, expectedHead: head });
     const after = await observe('route-matched-B', '192.0.2.20');
-    const rolledBack = await rollbackRules({ historicalActivationCommit: activeA.commit, ...common, expectedHead: head });
+    const rolledBack = await rollbackRules({ historicalActivationCommit: activeA.commit, ...current, expectedHead: head });
     const restored = await observe('route-fallback-A', '192.0.2.10');
     assert.equal(rolledBack.activation.candidateId, a.id);
     assert.equal(rolledBack.activation.historicalActivationCommit, activeA.commit);
@@ -225,13 +228,14 @@ test('只发布一次 v2 Recipe，换源 A/B 与回滚 A 后同一进程通过�
     assert.equal(config.route.rule_set[0].url, url);
     assert.equal(activeA.activation.logicalId, subscription.systemRuleSetId);
     assert.equal(activeB.activation.logicalId, subscription.systemRuleSetId);
+    assert.equal(rolledBack.activation.logicalId, subscription.systemRuleSetId);
     assert.deepEqual(activeA.activation.source, a.source);
     assert.deepEqual(activeB.activation.source, b.source);
     assert.deepEqual(rolledBack.activation.source, a.source);
     assert.ok(downloads.every(entry => entry.url === url));
     const deliveredHashes = downloads.map(entry => entry.sha256).filter((hash, i, all) => i === 0 || hash !== all[i - 1]);
     assert.deepEqual(deliveredHashes, [activeA, activeB, rolledBack].map(result => result.activation.files['stable/ai-openai/domains.srs'].sha256));
-    const evidence = { source: 'synthetic controlled fixture, not an official Release', a, b, activeA, activeB, rolledBack,
+    const evidence = { source: 'synthetic controlled fixture, not an official Release', a, b, definitions: { a: configured.definition, b: definitionB }, activeA, activeB, rolledBack,
       publicationId: publication.value.id, logicalId: subscription.systemRuleSetId, stableUrl: url, client: { pid, binary, configSha256: sha256(configBytes), sameProcess: true, sameConfig: true, updateInterval: '1s' }, before, after, restored, downloads, published };
     console.log(JSON.stringify({ activationClient: evidence }));
     if (process.env.RULE_ACTIVATION_CLIENT_EVIDENCE) await writeFile(process.env.RULE_ACTIVATION_CLIENT_EVIDENCE, JSON.stringify(evidence, null, 2) + '\n');
