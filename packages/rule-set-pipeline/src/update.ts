@@ -7,20 +7,23 @@ import { decodedTerms } from './projection.js';
 import { sha256, type ReleaseOptions } from './release.js';
 import type { SourceRecord } from './types.js';
 import { githubPublication, immutableUrl, type PublicationTransport } from './publication.js';
+import { processConfiguredUpdate, type ConfiguredUpdateOptions } from './configured-update.js';
 
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
 type Pin = Pick<SourceRecord, 'repository' | 'releaseId' | 'tag' | 'commit' | 'yaml' | 'checksum'>;
-interface Candidate {
+export interface Candidate {
   id: string; releaseId: number; tag: string;
   status: 'building' | 'publishing' | 'verified' | 'failed';
   operation?: 'update' | 'rebuild'; previousCandidateId?: string; buildId?: string;
   filesCommit?: string; metadataCommit?: string; evidenceCommit?: string;
   manifestUrl?: string; evidenceUrl?: string; error?: string;
+  logicalId?: string;
 }
 export interface UpdateState {
   schemaVersion: 1;
   pinned: Record<string, { identity?: Pin; source?: SourceRecord }>;
   processed: Record<string, { candidateId: string; tag: string; evidenceUrl: string }>;
+  configuredProcessed?: Record<string, Record<string, { candidateId: string; tag: string; evidenceUrl: string; definitionSha256: string }>>;
   candidates: Record<string, Candidate>;
 }
 async function readJson(path: string): Promise<any> {
@@ -45,7 +48,11 @@ export interface UpdateOptions {
 
 export interface RebuildOptions extends Omit<UpdateOptions, 'sampleTag'> { release: string }
 
-export function updateRules(options: UpdateOptions) { return processRelease(options); }
+export function updateRules(options: ConfiguredUpdateOptions): ReturnType<typeof processConfiguredUpdate>;
+export function updateRules(options: UpdateOptions): ReturnType<typeof processRelease>;
+export function updateRules(options: UpdateOptions | ConfiguredUpdateOptions) {
+  return 'configuration' in options ? processConfiguredUpdate(options) : processRelease(options);
+}
 
 /** Rebuild only a previously pinned, successfully processed Release, never latest. */
 export function rebuildRules(options: RebuildOptions) {

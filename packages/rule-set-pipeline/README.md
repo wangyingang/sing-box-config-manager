@@ -79,7 +79,17 @@ pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-stat
 pnpm --dir packages/rule-set-pipeline status --state /absolute/path/to/rule-state
 ```
 
-每次 `update` 只在开始查询一次官方 latest。发现新 Release 后，固定该响应的 Release ID、tag 和资产身份，解析 tag 的源码 commit，复用本地完整来源校验、转换和原生构建路径。已成功处理的相同 Release 只检查 latest 元数据；资产身份改变时失败，否则跳过 YAML／摘要下载、转换和 binary 执行。跳过时不会重新下载同一资产来探测其内容变化；失败重试取得字节时会核对已保存的来源摘要。
+配置驱动的多集候选发布传入同一份版本化 YAML；`--id` 可只处理指定逻辑 ID。首次发布请使用可持久保存的状态目录，并先在 `acceptance-*` 目标分支验收：
+
+```sh
+pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config samples/three-ai-rule-sets.yml
+pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config samples/three-ai-rule-sets.yml --id ai-anthropic
+pnpm --dir packages/rule-set-pipeline status --state /absolute/path/to/rule-state
+```
+
+一次批量调用仅获取一份共同 YAML 和摘要，随后逐集构建、原生验证、发布不可变候选并回读。共同输入损坏会停止整批，不发布新候选；单集缺表、非法条目或回读失败只使该集失败。命令输出 `results` 中每个逻辑 ID 的 `processed`、`skipped` 或 `failed` 与失败原因；任一集失败时退出码为 1。`status` 的 `configuredProcessed` 按逻辑 ID 和 Release ID 保存成功候选，`candidates` 保存每次尝试及其归属。重试仍会核对原 Release 的来源身份与实际摘要，成功兄弟集在相同定义和 Release 下跳过。候选只写入候选路径；目标为 `main` 时沿用 `candidates` 分支，隔离验收目标则写入配置的 `acceptance-*` 分支。两种情况都不切换 `stable/` 入口。
+
+不传 `--config` 的原有单集 `update` 每次只在开始查询一次官方 latest。发现新 Release 后，固定该响应的 Release ID、tag 和资产身份，解析 tag 的源码 commit，复用本地完整来源校验、转换和原生构建路径。已成功处理的相同 Release 只检查 latest 元数据；资产身份改变时失败，否则跳过 YAML／摘要下载、转换和 binary 执行。跳过时不会重新下载同一资产来探测其内容变化；失败重试取得字节时会核对已保存的来源摘要。
 
 `--state` 必须指向可保留的本地目录。`update-state.json` 用原子 rename 保存来源固定记录、各次候选状态和已成功处理的 Release。三者分别管理，因为“取得输入”“候选验证成功”和“稳定入口切换”不是同一件事。`status` 可在后续进程恢复查看这些本地记录，但不会查询远端。
 
