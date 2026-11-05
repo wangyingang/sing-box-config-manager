@@ -43,6 +43,7 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions) 
     const restored = await readUpdateState(options.stateDirectory);
     const state: UpdateState = restored.state;
     state.configuredProcessed ??= {};
+    const processedFor = (id: string) => Object.hasOwn(state.configuredProcessed!, id) ? state.configuredProcessed![id] : undefined;
     const retryPin = options.retryRelease
       ? Object.values(state.pinned).find(entry => entry.identity?.tag === options.retryRelease && entry.source)
       : undefined;
@@ -77,7 +78,7 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions) 
     }))) throw new Error('SOURCE_CHANGED: processed Release assets changed');
     const results: BatchEntry[] = [];
     const pending = definitions.filter(definition => {
-      const existing = state.configuredProcessed![definition.id]?.[key];
+      const existing = processedFor(definition.id)?.[key];
       const definitionSha256 = sha256(JSON.stringify({ definition, target: configuration.target }));
       if (!existing || existing.definitionSha256 !== definitionSha256 || !pin.source) return true;
       results.push({ id: definition.id, status: 'skipped', candidateId: existing.candidateId, evidenceUrl: existing.evidenceUrl });
@@ -96,8 +97,9 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions) 
       const publication = options.publication ?? githubPublication(undefined,
         configuration.target.branch === 'main' ? 'candidates' : configuration.target.branch);
       for (const result of built.results) {
+        const previousProcessed = processedFor(result.id)?.[key];
         const candidate: Candidate = { id: randomUUID(), logicalId: result.id, releaseId, tag,
-          status: 'building', operation: 'update', previousCandidateId: state.configuredProcessed[result.id]?.[key]?.candidateId };
+          status: 'building', operation: 'update', previousCandidateId: previousProcessed?.candidateId };
         state.candidates[candidate.id] = candidate;
         await save();
         if (result.status === 'failed') {
@@ -110,12 +112,17 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions) 
           candidate.buildId = result.buildId;
           const readback = await publish(result, candidate, built.source, built.tools, configuration.target, publication, options.binary, save);
           candidate.status = 'verified';
-          state.configuredProcessed[result.id] ??= {};
+          if (!processedFor(result.id)) state.configuredProcessed[result.id] = {};
           state.configuredProcessed[result.id][key] = { candidateId: candidate.id, tag,
             evidenceUrl: candidate.evidenceUrl!, definitionSha256: sha256(JSON.stringify({ definition: result.definition, target: configuration.target })) };
           await save();
           results.push({ id: result.id, status: 'processed', candidate, readback });
         } catch (error) {
+          const records = processedFor(result.id);
+          if (records) {
+            if (previousProcessed) records[key] = previousProcessed;
+            else delete records[key];
+          }
           candidate.status = 'failed'; candidate.error = error instanceof Error ? error.message : String(error);
           await save();
           results.push({ id: result.id, status: 'failed', candidateId: candidate.id, error: candidate.error });

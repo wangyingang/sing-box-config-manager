@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
+import fsPromises from 'node:fs/promises';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -196,4 +198,46 @@ test('同一 Release 后续增选只处理新集，来源摘要变化阻止失�
   await assert.rejects(updateRules({ ...options(directory, env), selectedIds: ['ai-anthropic'],
     configuration: configuration.replace('stable/ai-anthropic', 'stable/ai-anthropic-new') }), { code: 'SOURCE_CHANGED' });
   assert.deepEqual((await readUpdateState(directory)).state.configuredProcessed, before.configuredProcessed);
+}));
+
+test('合法逻辑 ID constructor 的成功记录可跨进程持久化并跳过', { skip: !binary }, async () => isolated(async (directory, env) => {
+  const custom = configuration.replaceAll('ai-openai', 'constructor');
+  const selected = { ...options(directory, env), configuration: custom, selectedIds: ['constructor'] };
+  const first = await updateRules(selected);
+  assert.deepEqual(first.results.map(entry => [entry.id, entry.status]), [['constructor', 'processed']]);
+  const state = (await readUpdateState(directory)).state;
+  assert.ok(Object.hasOwn(state.configuredProcessed!, 'constructor'));
+  assert.ok(state.configuredProcessed?.['constructor']?.['42'].candidateId);
+  const second = await updateRules(selected);
+  assert.deepEqual(second.results.map(entry => [entry.id, entry.status]), [['constructor', 'skipped']]);
+}));
+
+test('最终状态落盘暂时失败后不留下错误的成功记录', { skip: !binary }, async () => isolated(async (directory, env) => {
+  const originalRename = fsPromises.rename;
+  let failedOnce = false;
+  fsPromises.rename = async (from, to) => {
+    if (!failedOnce && String(to) === join(directory, 'update-state.json')) {
+      const state = JSON.parse(await readFile(from, 'utf8'));
+      if (state.configuredProcessed?.['ai-anthropic']?.['42'] &&
+          Object.values(state.candidates).some((candidate: any) => candidate.logicalId === 'ai-anthropic' && candidate.status === 'verified')) {
+        failedOnce = true;
+        throw new Error('transient final checkpoint');
+      }
+    }
+    return originalRename(from, to);
+  };
+  syncBuiltinESMExports();
+  try {
+    const first = await updateRules({ ...options(directory, env), selectedIds: ['ai-anthropic'] });
+    assert.equal(failedOnce, true);
+    assert.deepEqual(first.results.map(entry => entry.status), ['failed']);
+    const state = (await readUpdateState(directory)).state;
+    assert.equal(state.configuredProcessed?.['ai-anthropic']?.['42'], undefined);
+    assert.equal(Object.values(state.candidates)[0].status, 'failed');
+    const retry = await updateRules({ ...options(directory, env), selectedIds: ['ai-anthropic'] });
+    assert.deepEqual(retry.results.map(entry => entry.status), ['processed']);
+  } finally {
+    fsPromises.rename = originalRename;
+    syncBuiltinESMExports();
+  }
 }));
