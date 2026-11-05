@@ -7,7 +7,7 @@ import { decodedTerms } from './projection.js';
 import { sha256, type ReleaseOptions } from './release.js';
 import type { SourceRecord } from './types.js';
 import { githubPublication, immutableUrl, type PublicationTransport } from './publication.js';
-import { processConfiguredUpdate, type ConfiguredUpdateOptions } from './configured-update.js';
+import { processConfiguredUpdate, type ConfiguredRebuildOptions, type ConfiguredUpdateOptions } from './configured-update.js';
 import { publishCandidate } from './candidate-publication.js';
 
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
@@ -56,9 +56,11 @@ export function updateRules(options: UpdateOptions | ConfiguredUpdateOptions) {
 }
 
 /** Rebuild only a previously pinned, successfully processed Release, never latest. */
-export function rebuildRules(options: RebuildOptions) {
+export function rebuildRules(options: ConfiguredRebuildOptions): ReturnType<typeof processConfiguredUpdate>;
+export function rebuildRules(options: RebuildOptions): ReturnType<typeof processRelease>;
+export function rebuildRules(options: RebuildOptions | ConfiguredRebuildOptions) {
   if (!options.release || options.release.toLowerCase() === 'latest') throw new Error('rebuild requires a fixed Release tag');
-  return processRelease(options, options.release);
+  return 'configuration' in options ? processConfiguredUpdate(options, options.release) : processRelease(options, options.release);
 }
 
 /** Durable checkpoints and publication gates are shared by update and rebuild. */

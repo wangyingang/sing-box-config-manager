@@ -112,16 +112,25 @@ Artifact Manifest（产物清单）记录某次不可变规则文件的固定地
 
 ## 显式重建固定 Release
 
-原有单集 `update` 会跳过已成功处理的 Release。管理者需要用当前转换器或验证流程重新处理相同来源时，使用独立的单集 `rebuild`，并指定已有状态目录中成功处理过的固定 Release tag：
+`update` 会跳过相同定义下已成功处理的 Release。同一 Release 增选另一集，或修改所选集的列表、稳定路径或发布目标时，会处理对应的新定义。管理者需要用当前转换器或验证流程重新处理已经成功的定义时，使用 `rebuild`，并指定已有状态目录中成功处理过的固定 Release tag：
 
 ```sh
 pnpm --dir packages/rule-set-pipeline rebuild \
   --state /absolute/path/to/rule-state \
   --release 20261102130044 \
   --binary /absolute/path/to/sing-box-1.14.4
+
+# 配置驱动的重建必须同时指定配置和逻辑 ID；可重复 --id 选择多集。
+pnpm --dir packages/rule-set-pipeline rebuild \
+  --state /absolute/path/to/rule-state \
+  --config samples/three-ai-rule-sets.yml --id ai-openai \
+  --release 20261104112839 \
+  --binary /absolute/path/to/sing-box-1.14.4
 ```
 
 `rebuildRules({ stateDirectory, release, binary, ... })` 与 CLI 使用同一入口。拒绝 `latest`、未固定或尚未成功处理的 Release；通过持久记录中的 Release ID 获取元数据，并重新核对 tag、源码 commit、资产身份及实际输入摘要。来源变化明确失败，不覆盖固定记录。
+
+配置驱动的 API 再传入 `configuration` 和非空 `selectedIds`。每个所选集都须在该 Release 下以相同定义及发布目标成功处理过；新增或变更定义先使用 `update`。重建结果使用与批量更新相同的逐集 `results`，任一集失败时 CLI 返回退出码 1。`status` 保留原 `configuredProcessed` 成功记录，并在 `candidates` 中列出带有 `logicalId`、`operation: rebuild` 和 `previousCandidateId` 的新尝试。
 
 重建复用正常更新的转换、原生验证、不可变发布和 HTTPS 回读门禁。每次尝试保存新候选 ID、操作类型、原成功候选 ID 和构建身份。`build.json` 记录输入、转换器实现摘要、Node／yaml 版本、目标 binary 的 SHA-256、契约版本和实际产物摘要。实现摘要覆盖当前运行的来源读取、解析、转换、投影与原生验证代码；TypeScript 源码和编译后 JavaScript 分别记录各自实际运行实现的摘要。
 
@@ -285,4 +294,17 @@ RULE_REBUILD_EVIDENCE=/tmp/issue-22-fresh-evidence.json \
 RULE_REBUILD_BRANCH=acceptance-issue-22-<unique-suffix> \
 SING_BOX_TEST_BINARY=/absolute/path/to/sing-box-1.14.4 \
 pnpm --dir packages/rule-set-pipeline test:rebuild
+```
+
+### 多集增选与单集重建验收（#38）
+
+固定官方 Release `20261104112839`，先仅发布 OpenAI，再增选 Anthropic，随后重建 OpenAI。使用新的本地状态目录及专属隔离分支，回读原候选、兄弟候选及重建候选，并注入缺失 binary 的失败以验证重试。验收不执行激活。执行证据见 [#38 验收记录](docs/verification/issue-38.md)。
+
+```sh
+cd packages/rule-set-pipeline
+RULE_CONFIGURED_REBUILD_STATE=/tmp/issue-38-fresh-state \
+RULE_CONFIGURED_REBUILD_EVIDENCE=/tmp/issue-38-fresh-evidence.json \
+RULE_CONFIGURED_REBUILD_BRANCH=acceptance-issue-38-<unique-suffix> \
+SING_BOX_TEST_BINARY=/absolute/path/to/sing-box-1.14.4 \
+node --import tsx --test test/acceptance/configured-rebuild.test.ts
 ```

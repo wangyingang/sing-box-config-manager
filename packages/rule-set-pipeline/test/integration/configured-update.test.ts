@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import fsPromises from 'node:fs/promises';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { promisify } from 'node:util';
-import { updateRules, readUpdateState } from '../../src/update.js';
+import { rebuildRules, updateRules, readUpdateState } from '../../src/update.js';
 import { sha256 } from '../../src/release.js';
 import type { PublicationTransport } from '../../src/publication.js';
 
@@ -81,6 +81,117 @@ async function isolated(run: (directory: string, env: ReturnType<typeof fixture>
 const options = (directory: string, env: ReturnType<typeof fixture>) => ({
   stateDirectory: directory, binary: binary!, configuration, fetch: env.fetcher, publication: env.publication,
 });
+
+test('单独重建固定 Release 的成功集保留原候选、成功记录与激活回执', { skip: !binary }, async () => isolated(async (directory, env) => {
+  const first = await updateRules({ ...options(directory, env), selectedIds: ['ai-openai'] });
+  const original = first.results[0];
+  assert.ok(original.status === 'processed');
+  const receipt = { logicalId: 'ai-openai', commit: 'b'.repeat(40), candidateId: original.candidate.id };
+  await writeFile(join(directory, 'active-version.json'), JSON.stringify(receipt));
+  const before = await readUpdateState(directory);
+  const requestStart = env.requests.length;
+  env.advanceLatest();
+  const rebuilt = await rebuildRules({ ...options(directory, env), selectedIds: ['ai-openai'], release: tag });
+  assert.equal(rebuilt.status, 'processed');
+  const entry = rebuilt.results[0];
+  assert.ok(entry.status === 'processed');
+  assert.equal(entry.candidate.operation, 'rebuild');
+  assert.equal(entry.candidate.previousCandidateId, original.candidate.id);
+  assert.notEqual(entry.candidate.id, original.candidate.id);
+  assert.equal(entry.candidate.buildId, original.candidate.buildId);
+  assert.ok(env.requests.slice(requestStart).some(url => url.endsWith('/releases/42')));
+  assert.ok(env.requests.slice(requestStart).every(url => !url.endsWith('/latest')));
+  const after = await readUpdateState(directory);
+  assert.deepEqual(after.state.configuredProcessed, before.state.configuredProcessed);
+  assert.deepEqual(after.state.candidates[original.candidate.id], before.state.candidates[original.candidate.id]);
+  assert.deepEqual(after.activeRuleVersion, before.activeRuleVersion);
+  for (const candidate of [original, entry]) {
+    for (const file of candidate.readback) {
+      const actual = await env.publication.download(file.url);
+      assert.equal(sha256(actual), file.sha256);
+      assert.equal(actual.length, file.byteLength);
+    }
+  }
+  assert.ok(env.commits.every(files => Object.keys(files).every(path => path.startsWith('candidates/'))));
+  const { stdout } = await exec(process.execPath, ['--import', 'tsx', 'src/cli.ts', 'status', '--state', directory]);
+  const status = JSON.parse(stdout);
+  assert.equal(status.state.candidates[entry.candidate.id].operation, 'rebuild');
+  assert.deepEqual(status.activeRuleVersion, receipt);
+  const skipped = await updateRules({ ...options(directory, env), selectedIds: ['ai-openai'], retryRelease: tag, binary: '/must-not-run' });
+  assert.ok(skipped.results[0].status === 'skipped');
+  assert.equal(skipped.results[0].candidateId, original.candidate.id);
+}));
+
+test('重建回读失败仍保留原成功记录，修复后可重试且不影响兄弟集', { skip: !binary }, async () => isolated(async (directory, env) => {
+  await updateRules({ ...options(directory, env), selectedIds: ['ai-openai', 'ai-anthropic'] });
+  const before = await readUpdateState(directory);
+  const publication: PublicationTransport = { ...env.publication, async download(url) {
+    const bytes = await env.publication.download(url);
+    return url.endsWith('/domains.srs') ? Buffer.concat([bytes, Buffer.from('bad')]) : bytes;
+  } };
+  const failed = await rebuildRules({ ...options(directory, env), publication, selectedIds: ['ai-openai'], release: tag });
+  assert.equal(failed.status, 'failed');
+  assert.ok(failed.results[0].status === 'failed');
+  assert.match(failed.results[0].error, /Readback content mismatch/);
+  const afterFailure = await readUpdateState(directory);
+  assert.deepEqual(afterFailure.state.configuredProcessed, before.state.configuredProcessed);
+  for (const [id, candidate] of Object.entries(before.state.candidates)) assert.deepEqual(afterFailure.state.candidates[id], candidate);
+  const retried = await rebuildRules({ ...options(directory, env), selectedIds: ['ai-openai'], release: tag });
+  assert.ok(retried.results[0].status === 'processed');
+  assert.notEqual(retried.results[0].candidate.id, failed.results[0].candidateId);
+  assert.deepEqual((await readUpdateState(directory)).state.configuredProcessed, before.state.configuredProcessed);
+  for (const candidate of Object.values(before.state.candidates)) {
+    assert.ok((await env.publication.download(candidate.evidenceUrl!)).length);
+  }
+}));
+
+test('重建要求所选定义已成功处理，update 会处理同一 Release 下变更的定义', { skip: !binary }, async () => isolated(async (directory, env) => {
+  const base = { ...options(directory, env), release: tag };
+  await assert.rejects(rebuildRules({ ...base, selectedIds: ['ai-openai'] }), /previously pinned/);
+  await updateRules({ ...options(directory, env), selectedIds: ['ai-openai'] });
+  const count = env.requests.length, commits = env.commits.length;
+  for (const extra of [
+    { selectedIds: ['ai-anthropic'] }, { selectedIds: [] }, { selectedIds: ['unknown'] },
+    { selectedIds: ['ai-openai', 'ai-openai'] },
+    { selectedIds: ['ai-openai'], configuration: configuration.replace('list: openai', 'list: anthropic') },
+    { selectedIds: ['ai-openai'], configuration: configuration.replace('stable/ai-openai', 'stable/new-openai') },
+  ]) await assert.rejects(rebuildRules({ ...base, ...extra }));
+  for (const release of ['', 'latest', 'LATEST']) assert.throws(() => rebuildRules({ ...base, selectedIds: ['ai-openai'], release }), /fixed Release/);
+  assert.equal(env.requests.length, count);
+  assert.equal(env.commits.length, commits);
+  const changed = { ...options(directory, env), selectedIds: ['ai-openai'],
+    configuration: configuration.replace('list: openai', 'list: anthropic') };
+  const updated = await updateRules(changed);
+  assert.ok(updated.results[0].status === 'processed');
+  const json = updated.results[0].readback.find(file => file.url.endsWith('/domains.json'))!;
+  assert.match((await env.publication.download(json.url)).toString(), /anthropic.com/);
+  assert.equal((await updateRules(changed)).status, 'skipped');
+}));
+
+for (const changed of ['release', 'asset', 'commit', 'bytes']) {
+  test(`重建拒绝固定来源 ${changed} 变化并保留成功记录`, { skip: !binary }, async () => isolated(async (directory, env) => {
+    await updateRules({ ...options(directory, env), selectedIds: ['ai-openai'] });
+    const before = await readUpdateState(directory), commits = env.commits.length;
+    if (changed === 'bytes') env.setLists([{ name: 'openai', length: 1, rules: ['domain:changed.example'] }]);
+    const fetcher: typeof fetch = async (url, init) => {
+      const response = await env.fetcher(url, init), path = String(url);
+      if (path.endsWith('/releases/42') && (changed === 'release' || changed === 'asset')) {
+        const metadata = await response.json();
+        if (changed === 'release') metadata.id = 43;
+        else metadata.assets[0].id = 99;
+        return Response.json(metadata);
+      }
+      if (changed === 'commit' && path.includes('/git/ref/tags/')) return Response.json({ object: { type: 'commit', sha: 'b'.repeat(40) } });
+      return response;
+    };
+    await assert.rejects(rebuildRules({ ...options(directory, env), fetch: fetcher, selectedIds: ['ai-openai'], release: tag }),
+      error => (error as { code?: string }).code === 'SOURCE_CHANGED' || /SOURCE_CHANGED/.test(String(error)));
+    const after = await readUpdateState(directory);
+    assert.deepEqual(after.state.configuredProcessed, before.state.configuredProcessed);
+    assert.deepEqual(after.state.pinned, before.state.pinned);
+    assert.equal(env.commits.length, commits);
+  }));
+}
 
 test('一次 update 共享固定输入，逐集发布独立候选并在新读取中保留结果', { skip: !binary }, async () => isolated(async (directory, env) => {
   const result = await updateRules(options(directory, env));

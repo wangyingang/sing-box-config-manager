@@ -40,12 +40,12 @@ async function main(): Promise<number> {
     return 0;
   }
   if (values.activation || values.candidate || values.subscription || values['expected-head'] || values.branch) throw new Error('Activation options require activate/rollback');
-  if ((values.config || values.id) && !['build', 'update'].includes(positionals[0])) throw new Error('--config and --id require build or update');
+  if ((values.config || values.id) && !['build', 'update', 'rebuild'].includes(positionals[0])) throw new Error('--config and --id require build, update or rebuild');
   if (positionals.length === 1 && ['update', 'status', 'rebuild'].includes(positionals[0])) {
     const rebuild = positionals[0] === 'rebuild';
     if (!values.state || values.out || values['expected-source'] || (rebuild ? !values.release || !values.binary || values.release.toLowerCase() === 'latest' :
           values.release && (positionals[0] !== 'update' || !values.config || !values.id?.length || values.release.toLowerCase() === 'latest')) ||
-        (rebuild && (values.config || values.id)) || (positionals[0] === 'status' && (values.config || values.id)) ||
+        (rebuild && (!!values.config !== !!values.id?.length)) || (positionals[0] === 'status' && (values.config || values.id)) ||
         (positionals[0] === 'update' && (values.id && !values.config || values.config && !values.binary))) {
       throw new Error('update/status requires --state; rebuild requires --state, --release <fixed-tag> and --binary');
     }
@@ -57,7 +57,9 @@ async function main(): Promise<number> {
         try { token = (await promisify(execFile)('gh', ['auth', 'token'])).stdout.trim(); } catch { /* public API may work without auth */ }
       }
       const options = { stateDirectory: resolve(values.state), binary: values.binary ?? '', token };
-      const result = rebuild ? await rebuildRules({ ...options, release: values.release! }) : values.config
+      const result = rebuild ? values.config
+        ? await rebuildRules({ ...options, release: values.release!, configuration: await readFile(values.config, 'utf8'), selectedIds: values.id! })
+        : await rebuildRules({ ...options, release: values.release! }) : values.config
         ? await updateRules({ ...options, configuration: await readFile(values.config, 'utf8'), selectedIds: values.id, retryRelease: values.release })
         : await updateRules(options);
       console.log(JSON.stringify(result));
