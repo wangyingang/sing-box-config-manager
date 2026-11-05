@@ -76,6 +76,10 @@ test('一份固定来源构建三集，单选只构建目标集；同内容定�
   const sameContent = configuration.replace('list: anthropic', 'list: openai');
   const duplicate = await buildConfiguredRelease({ ...options, configuration: sameContent });
   assert.notEqual(ids(duplicate.results)[0], ids(duplicate.results)[1]);
+  const alternateTarget = await buildConfiguredRelease({ ...options,
+    configuration: configuration.replace('branch: main', 'branch: acceptance-issue-36') });
+  assert.equal(alternateTarget.configuration.target.branch, 'acceptance-issue-36');
+  assert.notDeepEqual(ids(built.results), ids(alternateTarget.results));
 });
 
 test('共同摘要错误或 YAML 无法解析时整批失败', async () => {

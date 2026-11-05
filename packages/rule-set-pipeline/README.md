@@ -68,7 +68,7 @@ pnpm --dir packages/rule-set-pipeline build:release --binary /absolute/path/to/s
 pnpm --dir packages/rule-set-pipeline build:release --binary /absolute/path/to/sing-box-1.14.4 --release 20261104112839 --config samples/three-ai-rule-sets.yml --id ai-anthropic --out /tmp/anthropic-only
 ```
 
-一次调用只下载并校验一份完整 YAML 和一份摘要文件，解析一次 YAML；随后按所选逻辑 ID 分别转换和原生验证。共同摘要或 YAML 文档错误使整批失败，且不创建输出目录。单个列表缺失、非法或原生验证失败时，其他列表仍可完成，CLI 返回非零。输出根目录的 `source.json` 和 `batch.json` 记录共同来源与逐集结果；每个逻辑 ID 子目录保存转换报告，成功时还保存规则文件和构建记录，失败时保存 `failure.json`。`buildId` 包含规则定义、实际列表、固定来源及工具身份；相同列表内容也不会混同两个逻辑 ID。
+一次调用只下载并校验一份完整 YAML 和一份摘要文件，解析一次 YAML；随后按所选逻辑 ID 分别转换和原生验证。共同摘要或 YAML 文档错误使整批失败，且不创建输出目录。单个列表缺失、非法或原生验证失败时，其他列表仍可完成，CLI 返回非零。输出根目录的 `source.json` 和 `batch.json` 记录共同来源、规范化配置和逐集结果；每个逻辑 ID 子目录保存转换报告，成功时还保存规则文件及包含目标分支的构建记录，失败时保存 `failure.json`。`buildId` 包含规则定义、目标仓库与分支、实际列表、固定来源及工具身份；相同列表内容也不会混同两个逻辑 ID。
 
 ## 正常更新与候选发布
 

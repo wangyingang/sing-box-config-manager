@@ -88,12 +88,13 @@ async function main(): Promise<number> {
       }
       for (const artifact of result.native.artifacts) await writeFile(join(directory, artifact.file), artifact.content, { flag: 'wx' });
       const { artifacts, buildId: nativeBuildId, ...native } = result.native;
-      await writeJson(join(directory, 'build.json'), { id: result.id, definition: result.definition,
+      await writeJson(join(directory, 'build.json'), { id: result.id, definition: result.definition, target: built.configuration.target,
         source: built.source, tools: built.tools, buildId: result.buildId, nativeBuildId, ...native,
         artifacts: artifacts.map(({ content: _content, ...metadata }) => metadata) });
       summary.push({ id: result.id, status: result.status, buildId: result.buildId });
     }
-    await writeJson(join(out, 'batch.json'), { release: values.release, source: built.source, results: summary });
+    await writeJson(join(out, 'batch.json'), { release: values.release, source: built.source,
+      configuration: built.configuration, results: summary });
     console.log(JSON.stringify({ out, results: summary }));
     return summary.some(result => result.status === 'failed') ? 1 : 0;
   }

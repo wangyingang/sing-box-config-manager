@@ -99,7 +99,7 @@ export async function buildConfiguredRelease(options: {
     }
     try {
       const native = await buildNative(converted.terms, options.binary);
-      const buildId = sha256(JSON.stringify({ definition, source: source.source, tools, nativeBuildId: native.buildId,
+      const buildId = sha256(JSON.stringify({ definition, target: configuration.target, source: source.source, tools, nativeBuildId: native.buildId,
         contracts: { sourceFormat: 4, buildRecord: 1 } }));
       results.push({ id: definition.id, definition, status: 'built-validated', report, native, buildId });
     } catch (error) {
