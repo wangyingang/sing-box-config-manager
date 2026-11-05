@@ -107,7 +107,7 @@ pnpm --dir packages/rule-set-pipeline rebuild \
 
 ## 显式激活
 
-激活把候选文件交给稳定入口，开始影响后续客户端下载。Rule Subscription（规则订阅）描述“哪些稳定地址可用于哪些用途、格式和客户端能力”；它不记录某次规则字节的固定摘要，也不承担面向使用者的配置订阅授权。字段定义见 [Rule Subscription v1](contracts/rule-subscription.md)。
+激活把候选文件交给稳定入口，开始影响后续客户端下载。Rule Subscription（规则订阅）描述“哪些稳定地址可用于哪些用途、格式和客户端能力”；它不记录某次规则字节的固定摘要，也不承担面向使用者的配置订阅授权。当前 Compiler 消费契约见 [Rule Subscription v2](contracts/rule-subscription-v2.md)；Pipeline 现有单集激活实现仍使用 [v1 历史契约](contracts/rule-subscription.md)，多集激活由 #39 交付。
 
 管理者选择已发布候选的完整 commit `readback.json` URL，提供可信宿主维护的规则订阅契约和预期旧分支 head。head 是目标分支当前的完整 commit；提供预期值是为了在其他会话已经更新分支时拒绝覆盖。`activate` 复用已有候选，不查询 Release、不重做来源转换、不改写成功处理记录。
 

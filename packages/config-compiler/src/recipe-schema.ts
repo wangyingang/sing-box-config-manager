@@ -166,7 +166,7 @@ const subscriptionProjection = union(
   object({ formats: object({ binary: subscriptionEndpoint, source: optional(subscriptionEndpoint) }) }),
   object({ unavailable: literal('empty') }),
 );
-export const ruleSubscriptionSchema = object({ schemaVersion: literal(1), systemRuleSetId: string,
+export const ruleSubscriptionSchema = object({ schemaVersion: literal(2), systemRuleSetId: string,
   targetVersion: literal('1.14.4'), sourceFormatVersion: literal(4),
   projections: object({ route: subscriptionProjection, 'dns-query': subscriptionProjection, 'dns-response': subscriptionProjection }),
 });

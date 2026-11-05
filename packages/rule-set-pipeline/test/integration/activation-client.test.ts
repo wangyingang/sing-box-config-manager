@@ -23,11 +23,13 @@ const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const branch = 'acceptance-issue-19';
 const domain = 'updated.issue19.test';
 const url = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${branch}/stable/domains.srs`;
-const subscription: RuleSubscription = { schemaVersion: 1, systemRuleSetId: 'v2fly:domain-list-community:category-ai-!cn',
+const subscription: RuleSubscription = { schemaVersion: 2, systemRuleSetId: 'ai-openai',
   targetVersion: '1.14.4', sourceFormatVersion: 4, projections: {
     route: { formats: { binary: { url, requiredCapabilities: [] } } },
     'dns-query': { formats: { binary: { url, requiredCapabilities: [] } } }, 'dns-response': { unavailable: 'empty' },
   } };
+// The existing single-set Pipeline activation still validates the historical v1 contract.
+const legacySubscription = { ...subscription, schemaVersion: 1, systemRuleSetId: 'v2fly:domain-list-community:category-ai-!cn' };
 
 async function listen(server: Server) {
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -114,7 +116,7 @@ test('正式激活 A/B 并回滚 A 后同一 Compiler 配置及运行实例恢�
   try {
     const a = await syntheticCandidate(binary, 'A', 'old.issue19.test', publish);
     const b = await syntheticCandidate(binary, 'B', domain, publish);
-    const activeA = await activateRules({ candidateEvidenceUrl: a.candidateEvidenceUrl, subscription, binary, expectedHead: head, transport });
+    const activeA = await activateRules({ candidateEvidenceUrl: a.candidateEvidenceUrl, subscription: legacySubscription, binary, expectedHead: head, transport });
     await writeFile(join(directory, 'openssl.cnf'), '[req]\nprompt=no\ndistinguished_name=dn\nx509_extensions=ext\n[dn]\nCN=raw.githubusercontent.com\n[ext]\nsubjectAltName=DNS:raw.githubusercontent.com\nbasicConstraints=critical,CA:TRUE\nkeyUsage=critical,digitalSignature,keyEncipherment,keyCertSign\n');
     await exec('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-config', join(directory, 'openssl.cnf'),
       '-keyout', join(directory, 'key.pem'), '-out', join(directory, 'cert.pem')]);
@@ -186,9 +188,9 @@ test('正式激活 A/B 并回滚 A 后同一 Compiler 配置及运行实例恢�
       assert.fail(`No expected new-request behavior: ${JSON.stringify(latest)}\n${log}`);
     }
     const before = await observe('route-fallback-A', '192.0.2.10');
-    const activeB = await activateRules({ candidateEvidenceUrl: b.candidateEvidenceUrl, subscription, binary, expectedHead: head, transport });
+    const activeB = await activateRules({ candidateEvidenceUrl: b.candidateEvidenceUrl, subscription: legacySubscription, binary, expectedHead: head, transport });
     const after = await observe('route-matched-B', '192.0.2.20');
-    const rolledBack = await rollbackRules({ historicalActivationCommit: activeA.commit, subscription, binary, expectedHead: head, transport });
+    const rolledBack = await rollbackRules({ historicalActivationCommit: activeA.commit, subscription: legacySubscription, binary, expectedHead: head, transport });
     const restored = await observe('route-fallback-A', '192.0.2.10');
     assert.equal(rolledBack.activation.candidateId, a.id);
     assert.equal(rolledBack.activation.historicalActivationCommit, activeA.commit);

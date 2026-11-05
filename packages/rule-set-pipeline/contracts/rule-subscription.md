@@ -1,5 +1,7 @@
 # Rule Subscription v1
 
+**Deprecated（已弃用）。** 当前 Compiler 的编译、配置发布和快照交付入口只接受 [Rule Subscription v2](rule-subscription-v2.md)。本页及其 Schema／示例保留为 #17 的历史契约；不作为新配置的输入。
+
 交付范围：[工单 #17](https://github.com/wangyingang/sing-box-config-manager/issues/17)，承接 [Spec #14](https://github.com/wangyingang/sing-box-config-manager/issues/14) 和 [ADR 0006](../../../docs/adr/0006-follow-active-rule-subscriptions.md)。
 
 本契约由 Pipeline 拥有，Compiler 只消费可信宿主提供的已验证内存数据。

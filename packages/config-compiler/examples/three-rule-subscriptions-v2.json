@@ -1,0 +1,241 @@
+{
+  "recipe": {
+    "schemaVersion": 2,
+    "id": "three-ai-rules",
+    "revision": "1",
+    "profile": "macos-standalone",
+    "templateRef": {
+      "id": "base",
+      "revision": "1"
+    },
+    "resources": {
+      "ruleSets": [
+        {
+          "kind": "subscription",
+          "tag": "ai-openai",
+          "subscriptionRef": {
+            "systemRuleSetId": "ai-openai",
+            "usages": [
+              "route",
+              "dns-query"
+            ]
+          }
+        },
+        {
+          "kind": "subscription",
+          "tag": "ai-anthropic",
+          "subscriptionRef": {
+            "systemRuleSetId": "ai-anthropic",
+            "usages": [
+              "route",
+              "dns-query"
+            ]
+          }
+        },
+        {
+          "kind": "subscription",
+          "tag": "ai-google-deepmind",
+          "subscriptionRef": {
+            "systemRuleSetId": "ai-google-deepmind",
+            "usages": [
+              "route",
+              "dns-query"
+            ]
+          }
+        }
+      ]
+    },
+    "dnsSteps": [
+      {
+        "id": "dns-ai-openai",
+        "rule": {
+          "rule_set": "ai-openai",
+          "server": "local"
+        }
+      },
+      {
+        "id": "dns-ai-anthropic",
+        "rule": {
+          "rule_set": "ai-anthropic",
+          "server": "local"
+        }
+      },
+      {
+        "id": "dns-ai-google-deepmind",
+        "rule": {
+          "rule_set": "ai-google-deepmind",
+          "server": "local"
+        }
+      }
+    ],
+    "routeSteps": [
+      {
+        "id": "route-ai-openai",
+        "rule": {
+          "rule_set": "ai-openai",
+          "outbound": "direct"
+        }
+      },
+      {
+        "id": "route-ai-anthropic",
+        "rule": {
+          "rule_set": "ai-anthropic",
+          "outbound": "direct"
+        }
+      },
+      {
+        "id": "route-ai-google-deepmind",
+        "rule": {
+          "rule_set": "ai-google-deepmind",
+          "outbound": "direct"
+        }
+      }
+    ]
+  },
+  "dependencies": {
+    "templates": [
+      {
+        "schemaVersion": 2,
+        "id": "base",
+        "revision": "1",
+        "targetVersion": "1.14.4",
+        "defaults": {
+          "dns": {
+            "final": "local"
+          },
+          "route": {
+            "final": "direct",
+            "default_domain_resolver": "local"
+          }
+        },
+        "resources": {
+          "outbounds": [
+            {
+              "type": "direct",
+              "tag": "direct"
+            }
+          ]
+        },
+        "platformDnsServers": {
+          "macos-standalone": [
+            {
+              "type": "local",
+              "tag": "local"
+            }
+          ]
+        }
+      }
+    ],
+    "nodes": [],
+    "subscriptions": [
+      {
+        "schemaVersion": 2,
+        "systemRuleSetId": "ai-openai",
+        "targetVersion": "1.14.4",
+        "sourceFormatVersion": 4,
+        "projections": {
+          "route": {
+            "formats": {
+              "binary": {
+                "url": "https://rules.example.invalid/stable/ai-openai/domains.srs",
+                "requiredCapabilities": []
+              },
+              "source": {
+                "url": "https://rules.example.invalid/stable/ai-openai/domains.json",
+                "requiredCapabilities": []
+              }
+            }
+          },
+          "dns-query": {
+            "formats": {
+              "binary": {
+                "url": "https://rules.example.invalid/stable/ai-openai/domains.srs",
+                "requiredCapabilities": []
+              },
+              "source": {
+                "url": "https://rules.example.invalid/stable/ai-openai/domains.json",
+                "requiredCapabilities": []
+              }
+            }
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      {
+        "schemaVersion": 2,
+        "systemRuleSetId": "ai-anthropic",
+        "targetVersion": "1.14.4",
+        "sourceFormatVersion": 4,
+        "projections": {
+          "route": {
+            "formats": {
+              "binary": {
+                "url": "https://rules.example.invalid/stable/ai-anthropic/domains.srs",
+                "requiredCapabilities": []
+              },
+              "source": {
+                "url": "https://rules.example.invalid/stable/ai-anthropic/domains.json",
+                "requiredCapabilities": []
+              }
+            }
+          },
+          "dns-query": {
+            "formats": {
+              "binary": {
+                "url": "https://rules.example.invalid/stable/ai-anthropic/domains.srs",
+                "requiredCapabilities": []
+              },
+              "source": {
+                "url": "https://rules.example.invalid/stable/ai-anthropic/domains.json",
+                "requiredCapabilities": []
+              }
+            }
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      {
+        "schemaVersion": 2,
+        "systemRuleSetId": "ai-google-deepmind",
+        "targetVersion": "1.14.4",
+        "sourceFormatVersion": 4,
+        "projections": {
+          "route": {
+            "formats": {
+              "binary": {
+                "url": "https://rules.example.invalid/stable/ai-google-deepmind/domains.srs",
+                "requiredCapabilities": []
+              },
+              "source": {
+                "url": "https://rules.example.invalid/stable/ai-google-deepmind/domains.json",
+                "requiredCapabilities": []
+              }
+            }
+          },
+          "dns-query": {
+            "formats": {
+              "binary": {
+                "url": "https://rules.example.invalid/stable/ai-google-deepmind/domains.srs",
+                "requiredCapabilities": []
+              },
+              "source": {
+                "url": "https://rules.example.invalid/stable/ai-google-deepmind/domains.json",
+                "requiredCapabilities": []
+              }
+            }
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      }
+    ]
+  },
+  "params": {
+    "ecs": null
+  }
+}

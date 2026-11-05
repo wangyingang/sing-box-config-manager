@@ -1,0 +1,114 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": 2
+    },
+    "systemRuleSetId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "targetVersion": {
+      "const": "1.14.4"
+    },
+    "sourceFormatVersion": {
+      "const": 4
+    },
+    "projections": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "route": {
+          "$ref": "#/definitions/projection"
+        },
+        "dns-query": {
+          "$ref": "#/definitions/projection"
+        },
+        "dns-response": {
+          "$ref": "#/definitions/projection"
+        }
+      },
+      "required": [
+        "route",
+        "dns-query",
+        "dns-response"
+      ]
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "systemRuleSetId",
+    "targetVersion",
+    "sourceFormatVersion",
+    "projections"
+  ],
+  "definitions": {
+    "endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "type": "string",
+          "pattern": "^https://[^/?#@]+/[^?#]*$"
+        },
+        "requiredCapabilities": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "processMatching",
+              "packageMatching",
+              "dhcpDns"
+            ]
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "url",
+        "requiredCapabilities"
+      ]
+    },
+    "projection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formats": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "binary": {
+                  "$ref": "#/definitions/endpoint"
+                },
+                "source": {
+                  "$ref": "#/definitions/endpoint"
+                }
+              },
+              "required": [
+                "binary"
+              ]
+            }
+          },
+          "required": [
+            "formats"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "unavailable": {
+              "const": "empty"
+            }
+          },
+          "required": [
+            "unavailable"
+          ]
+        }
+      ]
+    }
+  }
+}

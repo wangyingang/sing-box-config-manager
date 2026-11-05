@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import Ajv from 'ajv';
-import schema from '../../rule-set-pipeline/contracts/rule-subscription.schema.json' with { type: 'json' };
+import schema from '../../rule-set-pipeline/contracts/rule-subscription-v2.schema.json' with { type: 'json' };
 import { compile, compileRecipe, resolveRecipe, prepareRecipePublication, renderSubscription, ruleSubscriptionSchema, validateRecipeDraft, decideRecipeEdit } from '../src/index.js';
 import { artifactInput } from './artifact-fixtures.js';
 import { subscriptionInput, subscriptionResponseInput } from './subscription-fixtures.js';
@@ -116,7 +116,7 @@ test('Pipeline JSON contract and Compiler closed parser agree on subscription ve
   const original = subscriptionInput().dependencies.subscriptions![0]!;
   const mutations = [
     (_: any) => {},
-    (s: any) => { s.schemaVersion = 2; },
+    (s: any) => { s.schemaVersion = 1; },
     (s: any) => { s.systemRuleSetId = ''; },
     (s: any) => { s.targetVersion = '1.14.5'; },
     (s: any) => { s.sourceFormatVersion = 5; },
