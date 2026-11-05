@@ -1,4 +1,4 @@
-import contract from '../../rule-set-pipeline/contracts/rule-subscription.example.json' with { type: 'json' };
+import contract from '../../rule-set-pipeline/contracts/rule-subscription-v2.example.json' with { type: 'json' };
 import { input } from './recipe-fixtures.js';
 import type { RecipeCompileInput, RuleSubscription } from '../src/index.js';
 

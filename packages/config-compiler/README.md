@@ -168,7 +168,7 @@ ECS 校验参数和订阅时允许的修改见 [ECS 与订阅渲染](#ecs-与订
 不接受固定规则产物版本、任意 URL、摘要、格式或能力覆盖。
 
 可信宿主在 `dependencies.subscriptions` 提供 Pipeline 拥有的
-[Rule Subscription v1](../rule-set-pipeline/contracts/rule-subscription.md)。
+[Rule Subscription v2](../rule-set-pipeline/contracts/rule-subscription-v2.md)。
 导出 `RuleSubscription`、`ruleSubscriptionSchema`；已解析 `CompileInput`
 与编译输出使用独立 `subscriptions` 字段，稳定入口不转换成带伪造摘要的 `RuleArtifact`。
 Compiler 仍为纯函数，默认生成 binary SRS 远程配置，保留用途、响应上下文、
@@ -183,7 +183,7 @@ Node 端 `publishRecipe` 同时支持两版契约。发布继续执行两种 ECS
 旧 `schemaVersion: 1` 继续使用下述固定 Manifest 绑定，保留原验收含义；
 v2 不接受该绑定。迁移需要新 Recipe／Template 修订、显式改绑和重新发布。
 节点、模板和 Client Profile 的固定引用规则不变。
-具体输入样本见 [subscription-fixtures.ts](test/subscription-fixtures.ts)，
+三集可编译输入见 [three-rule-subscriptions-v2.json](examples/three-rule-subscriptions-v2.json)；单集测试输入见 [subscription-fixtures.ts](test/subscription-fixtures.ts)，
 验收与限制见 [#17 验证记录](docs/verification/issue-17.md)。
 
 ### 固定规则产物

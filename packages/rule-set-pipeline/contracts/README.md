@@ -1,9 +1,9 @@
 # 固定产物 Manifest v1
 
 契约演进（2026-11-04）：本页保留 Spec #1 的不可变产物 Manifest v1 契约。
-新增的 [Rule Subscription v1](rule-subscription.md) 描述稳定入口及兼容性约束，
-由 Recipe／Template v2 使用；不能用稳定可变 URL 冒充本页的固定内容地址。
-两者分别管理，不改变 Manifest 字段含义。#17 的范围和证据见
+当前 Recipe／Template v2 使用 [Rule Subscription v2](rule-subscription-v2.md) 描述稳定入口及兼容性约束；
+[Rule Subscription v1](rule-subscription.md) 已弃用，保留历史契约。不能用稳定可变 URL 冒充本页的固定内容地址。
+两者分别管理，不改变 Manifest 字段含义。v1 的 #17 历史范围和证据见
 [验收记录](../../config-compiler/docs/verification/issue-17.md)。
 
 本目录由 Rule Set Pipeline 维护，是 Compiler 接入固定内存产物数据的边界。

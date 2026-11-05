@@ -23,7 +23,7 @@ const branch = 'acceptance-issue-21';
 const domain = 'updated.issue21.test';
 const otherDomain = 'other.issue21.test';
 const url = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${branch}/stable/domains.srs`;
-const subscription: RuleSubscription = { schemaVersion: 1, systemRuleSetId: 'v2fly:domain-list-community:category-ai-!cn',
+const subscription: RuleSubscription = { schemaVersion: 2, systemRuleSetId: 'ai-openai',
   targetVersion: '1.14.4', sourceFormatVersion: 4, projections: {
     route: { formats: { binary: { url, requiredCapabilities: [] } } },
     'dns-query': { formats: { binary: { url, requiredCapabilities: [] } } }, 'dns-response': { unavailable: 'empty' },

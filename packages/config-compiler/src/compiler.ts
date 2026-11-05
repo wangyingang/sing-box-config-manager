@@ -1,5 +1,5 @@
 import { resolveSubscriptionProjection, validateRuleSetUsages, validateSubscriptionEndpoints } from './rule-subscriptions.js';
-import { ruleSubscriptionSchema } from './recipe-schema.js';
+import { ruleSubscriptionSchema, StructureError } from './recipe-schema.js';
 import build from '../schemas/build.json' with { type: 'json' };
 import { applyEcs } from './ecs.js';
 import { isJson, object, objects } from './json.js';
@@ -76,7 +76,14 @@ export function inspectComposition(input: CompileInput): CompositionInspection {
       if (artifactMap.has(artifact.id)) error('ARTIFACT_DUPLICATE', '/artifacts', '规则产物 id 重复');
       artifactMap.set(artifact.id, artifact);
     }
-    const subscriptions = (input.subscriptions ?? []).map((s, i) => ruleSubscriptionSchema.parse(s, `/subscriptions/${i}`));
+    let subscriptions;
+    try {
+      subscriptions = (input.subscriptions ?? []).map((s, i) => ruleSubscriptionSchema.parse(s, `/subscriptions/${i}`));
+    } catch (cause) {
+      if (!(cause instanceof StructureError)) throw cause;
+      error('SUBSCRIPTION_INVALID', cause.path, '只接受 Rule Subscription v2 的有效订阅声明');
+      return fail();
+    }
     diagnostics.push(...validateSubscriptionEndpoints(subscriptions, '/subscriptions'));
     const subscriptionMap = new Map(subscriptions.map(s => [s.systemRuleSetId, s]));
     if (subscriptionMap.size !== subscriptions.length) error('DEPENDENCY_DUPLICATE', '/subscriptions', '系统规则订阅身份重复');

@@ -5,12 +5,29 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { compileRecipe, prepareRecipePublication, renderSubscription } from '../../src/index.js';
 import { createSingBoxChecker, publishRecipe, readPublication } from '../../src/publisher.js';
+import threeRuleExample from '../../examples/three-rule-subscriptions-v2.json' with { type: 'json' };
 import { subscriptionResponseInput } from '../subscription-fixtures.js';
 import { success } from '../helpers.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
 if (!binary) throw new Error('Set SING_BOX_TEST_BINARY to an absolute 1.14.4 binary path');
 const checker = createSingBoxChecker(binary);
+
+test('one Recipe publishes and delivers three v2 logical subscriptions with real sing-box checks', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'three-rule-subscriptions-'));
+  const request = structuredClone(threeRuleExample);
+  try {
+    const published = success(await publishRecipe(request, { binary, directory }));
+    assert.deepEqual(await readPublication(directory), published);
+    const delivered = success(await renderSubscription(published, request.params));
+    const ids = ['ai-openai', 'ai-anthropic', 'ai-google-deepmind'];
+    assert.deepEqual(published.body.recipeSource?.subscriptions?.map(s => s.systemRuleSetId), ids);
+    assert.deepEqual(published.body.compiled.subscriptions?.map(s => s.systemRuleSetId), ids);
+    assert.deepEqual((delivered.route as any).rule_set.map((set: any) => [set.tag, set.url]),
+      ids.map(id => [id, `https://rules.example.invalid/stable/${id}/domains.srs`]));
+    await checker(delivered);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
 
 test('stable SRS Recipe passes real 1.14.4 checks for both ECS variants through existing publication storage', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'subscription-publication-'));

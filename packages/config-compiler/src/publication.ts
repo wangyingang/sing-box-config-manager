@@ -4,7 +4,8 @@ import { CAPABILITY_VERSION } from './profiles.js';
 import build from '../schemas/build.json' with { type: 'json' };
 import { applyEcs } from './ecs.js';
 import { digest, objects } from './json.js';
-import { ruleSubscriptionSchema } from './recipe-schema.js';
+import { ruleSubscriptionSchema, StructureError } from './recipe-schema.js';
+import { validateSubscriptionEndpoints } from './rule-subscriptions.js';
 import { validateConfig } from './validate.js';
 import type { CompileInput, CompiledConfig, Diagnostic, GenerationParams, Obj, Result } from './types.js';
 
@@ -54,9 +55,17 @@ export async function renderSubscription(publication: Publication, params: Gener
     const { config, ecsResponseTags, profile, artifacts, subscriptions } = snapshot.body.compiled;
     const diagnostics: Diagnostic[] = applyEcs(config, ecsResponseTags, params);
     const urls = new Set(objects((config.route as Obj)?.rule_set).map(s => s.url));
-    const endpoints = (subscriptions ?? []).flatMap((s, i) => Object.values(ruleSubscriptionSchema.parse(s, `/subscriptions/${i}`).projections)
+    const validatedSubscriptions = (subscriptions ?? []).map((s, i) => ruleSubscriptionSchema.parse(s, `/subscriptions/${i}`));
+    const sourceSubscriptions = snapshot.body.recipeSource?.subscriptions?.map((s, i) => ruleSubscriptionSchema.parse(s, `/recipeSource/subscriptions/${i}`));
+    if (snapshot.body.recipeSource && JSON.stringify(sourceSubscriptions) !== JSON.stringify(subscriptions === undefined ? undefined : validatedSubscriptions)) return invalid();
+    diagnostics.push(...validateSubscriptionEndpoints(validatedSubscriptions, '/subscriptions'));
+    const endpoints = validatedSubscriptions.flatMap(s => Object.values(s.projections)
       .flatMap(p => 'formats' in p && urls.has(p.formats.binary.url) ? [p.formats.binary] : []));
     diagnostics.push(...validateConfig(config, profile, [...artifacts, ...endpoints]));
     return diagnostics.some(d => d.severity === 'error') ? { ok: false, diagnostics } : { ok: true, value: config, diagnostics };
-  } catch { return invalid(); }
+  } catch (cause) {
+    if (cause instanceof StructureError) return { ok: false, diagnostics: [{ severity: 'error', code: 'SUBSCRIPTION_INVALID', path: cause.path,
+      message: '发布快照只接受 Rule Subscription v2 的有效订阅声明' }] };
+    return invalid();
+  }
 }

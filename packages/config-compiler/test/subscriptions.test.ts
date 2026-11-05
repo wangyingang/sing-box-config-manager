@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import Ajv from 'ajv';
-import schema from '../../rule-set-pipeline/contracts/rule-subscription.schema.json' with { type: 'json' };
+import schema from '../../rule-set-pipeline/contracts/rule-subscription-v2.schema.json' with { type: 'json' };
 import { compile, compileRecipe, resolveRecipe, prepareRecipePublication, renderSubscription, ruleSubscriptionSchema, validateRecipeDraft, decideRecipeEdit } from '../src/index.js';
 import { artifactInput } from './artifact-fixtures.js';
 import { subscriptionInput, subscriptionResponseInput } from './subscription-fixtures.js';
@@ -116,7 +116,7 @@ test('Pipeline JSON contract and Compiler closed parser agree on subscription ve
   const original = subscriptionInput().dependencies.subscriptions![0]!;
   const mutations = [
     (_: any) => {},
-    (s: any) => { s.schemaVersion = 2; },
+    (s: any) => { s.schemaVersion = 1; },
     (s: any) => { s.systemRuleSetId = ''; },
     (s: any) => { s.targetVersion = '1.14.5'; },
     (s: any) => { s.sourceFormatVersion = 5; },
@@ -128,6 +128,7 @@ test('Pipeline JSON contract and Compiler closed parser agree on subscription ve
     (s: any) => { s.projections.route.formats.binary.url = 'http://rules.example.invalid/stable/a.srs'; },
     (s: any) => { s.projections.route.formats.binary.url = 'https://rules.example.invalid/stable/a.srs?version=1'; },
     (s: any) => { s.projections.route.formats.binary.url = 'https://user@rules.example.invalid/stable/a.srs'; },
+    (s: any) => { s.projections.route.formats.binary.url = 'https://rules.example.invalid:99999/stable/a.srs'; },
     (s: any) => { s.projections.route.formats.unknown = s.projections.route.formats.binary; },
     (s: any) => { delete s.projections.route.formats.binary; },
     (s: any) => { delete s.projections['dns-response']; },
@@ -141,6 +142,12 @@ test('Pipeline JSON contract and Compiler closed parser agree on subscription ve
       assert.throws(() => ruleSubscriptionSchema.parse(contract, ''));
       const r = subscriptionInput(); r.dependencies.subscriptions = [contract]; rejects(r, 'STRUCTURE_INVALID');
     }
+  }
+  for (const port of ['65535', '000443']) {
+    const contract = structuredClone(original);
+    (contract.projections.route as any).formats.binary.url = `https://rules.example.invalid:${port}/stable/a.srs`;
+    assert.equal(validate(contract), true, JSON.stringify(validate.errors));
+    ruleSubscriptionSchema.parse(contract, '');
   }
 });
 
