@@ -154,7 +154,8 @@ test('CLI update 报告逐集失败并返回非零，status 在新进程读取�
     const module = join(directory, 'update.mjs'), preload = join(directory, 'preload.mjs');
     await writeFile(config, await readFile(new URL('../samples/three-ai-rule-sets.yml', import.meta.url), 'utf8'));
     await writeFile(module, `export async function updateRules(options) {
-  if (!options.configuration.includes('ai-anthropic') || options.selectedIds?.[0] !== 'ai-anthropic') throw new Error('configuration missing');
+  if (!options.configuration.includes('ai-anthropic') || options.selectedIds?.[0] !== 'ai-anthropic' ||
+      options.retryRelease !== '20261104112839') throw new Error('configuration missing');
   return { status: 'partial', results: [{ id: 'ai-anthropic', status: 'failed', error: 'readback failed' },
     { id: 'ai-openai', status: 'processed' }] };
 }
@@ -169,7 +170,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 } });`);
     const run = (operation: string, extra: string[] = []) => exec(process.execPath, ['--import', 'tsx', '--import', preload,
       'src/cli.ts', operation, '--state', state, ...extra]);
-    await assert.rejects(run('update', ['--config', config, '--id', 'ai-anthropic', '--binary', '/unused']),
+    await assert.rejects(run('update', ['--config', config, '--id', 'ai-anthropic', '--release', '20261104112839', '--binary', '/unused']),
       (error: { code?: number; stdout?: string }) => {
         assert.equal(error.code, 1);
         assert.equal(JSON.parse(error.stdout ?? '{}').results[0].id, 'ai-anthropic');

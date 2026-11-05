@@ -2,8 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { buildConfiguredRelease, parseBuildConfiguration } from './configured-build.js';
-import { buildNative } from './native.js';
-import { decodedTerms } from './projection.js';
+import { publishCandidate } from './candidate-publication.js';
 import { githubPublication, immutableUrl, type PublicationTransport } from './publication.js';
 import { sha256 } from './release.js';
 import type { SourceRecord } from './types.js';
@@ -19,6 +18,8 @@ export interface ConfiguredUpdateOptions {
   token?: string; fetch?: typeof fetch; publication?: PublicationTransport;
   /** Fixed official sample acceptance; normal CLI update never accepts a tag. */
   sampleTag?: string;
+  /** Retry selected sets against a previously pinned and fully checked Release. */
+  retryRelease?: string;
 }
 type BatchEntry = { id: string; status: 'skipped'; candidateId: string; evidenceUrl: string }
   | { id: string; status: 'processed'; candidate: Candidate; readback: { url: string; sha256: string; byteLength: number; exactBytes: true }[] }
@@ -31,6 +32,9 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions) 
       selected.some(id => !configuration.ruleSets.some(rule => rule.id === id)))) {
     throw new Error('Selected logical ID is duplicate or unknown');
   }
+  if (options.retryRelease && (!selected || options.retryRelease.toLowerCase() === 'latest' || options.sampleTag)) {
+    throw new Error('Fixed Release retry requires selected logical IDs and a prior pin');
+  }
   const definitions = selected ? configuration.ruleSets.filter(rule => selected.includes(rule.id)) : configuration.ruleSets;
   await mkdir(options.stateDirectory, { recursive: true });
   const lock = join(options.stateDirectory, 'update.lock');
@@ -39,13 +43,18 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions) 
     const restored = await readUpdateState(options.stateDirectory);
     const state: UpdateState = restored.state;
     state.configuredProcessed ??= {};
+    const retryPin = options.retryRelease
+      ? Object.values(state.pinned).find(entry => entry.identity?.tag === options.retryRelease && entry.source)
+      : undefined;
+    if (options.retryRelease && !retryPin?.identity) throw new Error('Fixed Release retry requires a previously pinned source');
     const save = async () => {
       const temporary = join(options.stateDirectory, `state-${randomUUID()}.tmp`);
       await writeFile(temporary, encode(state));
       await rename(temporary, join(options.stateDirectory, 'update-state.json'));
     };
     const fetcher = options.fetch ?? fetch;
-    const endpoint = options.sampleTag ? `tags/${encodeURIComponent(options.sampleTag)}` : 'latest';
+    const endpoint = retryPin ? String(retryPin.identity!.releaseId)
+      : options.sampleTag ? `tags/${encodeURIComponent(options.sampleTag)}` : 'latest';
     const response = await fetcher(`https://api.github.com/repos/v2fly/domain-list-community/releases/${endpoint}`, {
       headers: { Accept: 'application/vnd.github+json', ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}) },
       signal: AbortSignal.timeout(120_000),
@@ -53,7 +62,10 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions) 
     if (!response.ok) throw new Error(`Release lookup HTTP ${response.status}`);
     const release = await response.json() as Record<string, unknown>;
     if (!Number.isSafeInteger(release.id) || Number(release.id) <= 0 || typeof release.tag_name !== 'string' ||
-        (options.sampleTag && release.tag_name !== options.sampleTag)) throw new Error('Invalid Release identity');
+        (options.sampleTag && release.tag_name !== options.sampleTag) ||
+        (options.retryRelease && (release.id !== retryPin!.identity!.releaseId || release.tag_name !== options.retryRelease))) {
+      throw new Error('SOURCE_CHANGED: fixed Release identity changed');
+    }
     const releaseId = Number(release.id), tag = release.tag_name;
     const key = String(releaseId);
     const previousTag = Object.values(state.pinned).find(entry => entry.identity?.tag === tag && entry.identity.releaseId !== releaseId);
@@ -121,50 +133,25 @@ async function publish(result: Extract<Awaited<ReturnType<typeof buildConfigured
   candidate: Candidate, source: SourceRecord, tools: Record<string, string | number>, target: { repository: string; branch: string },
   publication: PublicationTransport, binary: string, save: () => Promise<void>) {
   const prefix = `candidates/${candidate.id}`;
-  const files = Object.fromEntries(result.native.artifacts.map(artifact => [`${prefix}/${artifact.file}`, artifact.content]));
-  candidate.status = 'publishing'; await save();
-  const filesCommit = candidate.filesCommit = await publication.commit(files, `候选 ${candidate.id}：${result.id} 规则文件`);
-  await save();
-  const artifactId = (file: string) => `${result.id}@${candidate.id}:${file}`;
-  const manifest = { schemaVersion: 1, id: result.id, revision: candidate.id, targetVersion: '1.14.4', sourceFormatVersion: 4,
-    artifacts: result.native.artifacts.map(artifact => ({ id: artifactId(artifact.file), format: artifact.format,
-      url: immutableUrl(filesCommit, `${prefix}/${artifact.file}`), sha256: artifact.sha256, byteLength: artifact.bytes,
-      termCount: artifact.termCount, requiredCapabilities: artifact.requiredCapabilities })),
-    projections: Object.fromEntries(Object.entries(result.native.usages).map(([usage, projection]) => [usage,
-      'artifactFiles' in projection ? { artifactIds: projection.artifactFiles.map(artifactId) } : { unavailable: 'empty' }])),
-  };
-  const { artifacts: _artifacts, buildId: nativeBuildId, ...validation } = result.native;
-  const records = {
-    [`${prefix}/manifest.json`]: encode(manifest),
-    [`${prefix}/source.json`]: encode(source),
-    [`${prefix}/conversion-report.json`]: encode(result.report),
-    [`${prefix}/build.json`]: encode({ id: result.id, definition: result.definition, target, buildId: result.buildId,
-      candidateId: candidate.id, operation: candidate.operation, previousCandidateId: candidate.previousCandidateId,
-      contracts: { artifactManifest: 1, sourceFormat: 4, buildRecord: 1 }, source, tools, nativeBuildId, ...validation,
-      artifacts: result.native.artifacts.map(({ content: _content, ...metadata }) => metadata) }),
-  };
-  const metadataCommit = candidate.metadataCommit = await publication.commit(records, `候选 ${candidate.id}：Manifest 与构建记录`);
-  candidate.manifestUrl = immutableUrl(metadataCommit, `${prefix}/manifest.json`); await save();
-  const readback: { url: string; sha256: string; byteLength: number; exactBytes: true }[] = [];
-  const downloaded = new Map<string, Buffer>();
-  const verify = async (path: string, expected: Buffer, commit: string) => {
-    const url = immutableUrl(commit, path), actual = await publication.download(url);
-    if (actual.length !== expected.length || sha256(actual) !== sha256(expected) || !actual.equals(expected)) {
-      throw new Error(`Readback content mismatch: ${url}`);
-    }
-    readback.push({ url, sha256: sha256(actual), byteLength: actual.length, exactBytes: true });
-    return actual;
-  };
-  for (const [path, bytes] of Object.entries(files)) downloaded.set(path, await verify(path, bytes, filesCommit));
-  const remoteNative = await buildNative(decodedTerms(JSON.parse(downloaded.get(`${prefix}/domains.json`)!.toString('utf8'))), binary);
-  if (remoteNative.artifacts.length !== result.native.artifacts.length || remoteNative.artifacts.some(artifact =>
-    !artifact.content.equals(downloaded.get(`${prefix}/${artifact.file}`)!))) throw new Error('Remote native content mismatch');
-  for (const [path, bytes] of Object.entries(records)) await verify(path, bytes, metadataCommit);
-  const evidence = encode({ schemaVersion: 1, candidateId: candidate.id, status: 'remote-verified',
-    filesCommit, metadataCommit, buildId: result.buildId, readback, native: remoteNative.validation, tool: remoteNative.tool });
-  const evidencePath = `${prefix}/readback.json`;
-  candidate.evidenceCommit = await publication.commit({ [evidencePath]: evidence }, `候选 ${candidate.id}：HTTPS 回读验证`);
-  candidate.evidenceUrl = immutableUrl(candidate.evidenceCommit, evidencePath);
-  await verify(evidencePath, evidence, candidate.evidenceCommit);
-  return readback;
+  return publishCandidate({ candidate, native: result.native, buildId: result.buildId, binary, publication, save,
+    records: filesCommit => {
+      const artifactId = (file: string) => `${result.id}@${candidate.id}:${file}`;
+      const manifest = { schemaVersion: 1, id: result.id, revision: candidate.id, targetVersion: '1.14.4', sourceFormatVersion: 4,
+        artifacts: result.native.artifacts.map(artifact => ({ id: artifactId(artifact.file), format: artifact.format,
+          url: immutableUrl(filesCommit, `${prefix}/${artifact.file}`), sha256: artifact.sha256, byteLength: artifact.bytes,
+          termCount: artifact.termCount, requiredCapabilities: artifact.requiredCapabilities })),
+        projections: Object.fromEntries(Object.entries(result.native.usages).map(([usage, projection]) => [usage,
+          'artifactFiles' in projection ? { artifactIds: projection.artifactFiles.map(artifactId) } : { unavailable: 'empty' }])),
+      };
+      const { artifacts: _artifacts, buildId: nativeBuildId, ...validation } = result.native;
+      return {
+        [`${prefix}/manifest.json`]: encode(manifest),
+        [`${prefix}/source.json`]: encode(source),
+        [`${prefix}/conversion-report.json`]: encode(result.report),
+        [`${prefix}/build.json`]: encode({ id: result.id, definition: result.definition, target, buildId: result.buildId,
+          candidateId: candidate.id, operation: candidate.operation, previousCandidateId: candidate.previousCandidateId,
+          contracts: { artifactManifest: 1, sourceFormat: 4, buildRecord: 1 }, source, tools, nativeBuildId, ...validation,
+          artifacts: result.native.artifacts.map(({ content: _content, ...metadata }) => metadata) }),
+      };
+    } });
 }

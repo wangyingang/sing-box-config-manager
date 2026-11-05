@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { promisify } from 'node:util';
 import { updateRules, readUpdateState } from '../../src/update.js';
 import { sha256 } from '../../src/release.js';
 import type { PublicationTransport } from '../../src/publication.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
+const exec = promisify(execFile);
 const tag = '20261104112839';
 const configuration = `schemaVersion: 1
 source: v2fly/domain-list-community
@@ -32,13 +35,14 @@ function fixture() {
     { name: 'anthropic', length: 1, rules: ['domain:anthropic.com'] },
     { name: 'google-deepmind', length: 1, rules: ['domain:deepmind.google'] },
   ];
-  let corrupt = '', badChecksum = false, rawInput: string | undefined;
+  let corrupt = '', badChecksum = false, rawInput: string | undefined, latestAdvanced = false;
   const requests: string[] = [];
   const remote = new Map<string, Buffer>();
   const commits: Record<string, Buffer>[] = [];
   const fetcher: typeof fetch = async url => {
     const path = String(url); requests.push(path);
-    if (path.endsWith('/latest') || path.endsWith(`/releases/tags/${tag}`)) return Response.json({ id: 42, tag_name: tag,
+    if (path.endsWith('/latest') && latestAdvanced) return Response.json({ id: 43, tag_name: '20261105120000', assets: [] });
+    if (path.endsWith('/latest') || path.endsWith(`/releases/tags/${tag}`) || path.endsWith('/releases/42')) return Response.json({ id: 42, tag_name: tag,
       assets: ['dlc.dat_plain.yml', 'dlc.dat_plain.yml.sha256sum'].map((name, i) => ({ id: 11 + i, name,
         browser_download_url: `https://github.com/v2fly/domain-list-community/releases/download/${tag}/${name}` })) });
     if (path.includes('/git/ref/tags/')) return Response.json({ object: { type: 'commit', sha: 'a'.repeat(40) } });
@@ -64,7 +68,8 @@ function fixture() {
   };
   return { requests, remote, commits, fetcher, publication,
     setLists(value: typeof lists) { lists = value; }, corruptReadback(value: string) { corrupt = value; },
-    badChecksum(value: boolean) { badChecksum = value; }, rawInput(value: string) { rawInput = value; } };
+    badChecksum(value: boolean) { badChecksum = value; }, rawInput(value: string) { rawInput = value; },
+    advanceLatest() { latestAdvanced = true; } };
 }
 
 async function isolated(run: (directory: string, env: ReturnType<typeof fixture>) => Promise<void>) {
@@ -126,6 +131,11 @@ for (const failure of ['missing', 'invalid', 'readback']) {
       failure === 'invalid' ? /Rule conversion failed/ : /unavailable or invalid/);
     const before = (await readUpdateState(directory)).state;
     assert.equal(before.candidates[failed.candidateId].status, 'failed');
+    const { stdout } = await exec(process.execPath, ['--import', 'tsx', 'src/cli.ts', 'status', '--state', directory]);
+    const status = JSON.parse(stdout);
+    assert.equal(status.state.candidates[failed.candidateId].logicalId, 'ai-anthropic');
+    assert.equal(status.state.configuredProcessed['ai-openai']['42'].candidateId,
+      before.configuredProcessed!['ai-openai']['42'].candidateId);
     assert.equal(env.commits.filter(files => Object.keys(files).some(path => path.startsWith('stable/'))).length, 0);
     if (failure === 'readback') {
       env.corruptReadback('');
@@ -147,6 +157,24 @@ test('共同输入摘要损坏时不产生任何候选', { skip: !binary }, asyn
   await assert.rejects(updateRules(options(directory, env)), { code: 'CHECKSUM_MISMATCH' });
   assert.deepEqual((await readUpdateState(directory)).state.candidates, {});
   assert.equal(env.commits.length, 0);
+}));
+
+test('latest 前进后仍可按固定来源单独重试 Anthropic', { skip: !binary }, async () => isolated(async (directory, env) => {
+  env.corruptReadback('/domains.srs');
+  const first = await updateRules(options(directory, env));
+  assert.equal(first.status, 'partial');
+  const before = (await readUpdateState(directory)).state;
+  env.corruptReadback(''); env.advanceLatest();
+  const requestCount = env.requests.length;
+  const retry = await updateRules({ ...options(directory, env), selectedIds: ['ai-anthropic'], retryRelease: tag });
+  assert.deepEqual(retry.results.map(entry => [entry.id, entry.status]), [['ai-anthropic', 'processed']]);
+  assert.equal(retry.releaseId, 42);
+  assert.ok(env.requests.slice(requestCount).some(url => url.endsWith('/releases/42')));
+  assert.ok(!env.requests.slice(requestCount).some(url => url.endsWith('/latest')));
+  const after = (await readUpdateState(directory)).state;
+  for (const id of ['ai-openai', 'ai-google-deepmind']) {
+    assert.deepEqual(after.configuredProcessed?.[id], before.configuredProcessed?.[id]);
+  }
 }));
 
 test('共同 YAML 文档无效时不产生任何候选', { skip: !binary }, async () => isolated(async (directory, env) => {
