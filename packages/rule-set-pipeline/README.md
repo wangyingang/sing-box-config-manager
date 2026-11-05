@@ -326,3 +326,5 @@ RULE_CONFIGURED_REBUILD_BRANCH=acceptance-issue-38-<unique-suffix> \
 SING_BOX_TEST_BINARY=/absolute/path/to/sing-box-1.14.4 \
 node --import tsx --test test/acceptance/configured-rebuild.test.ts
 ```
+
+单集 v2 回滚与同进程客户端换源验收见 [Issue #40](docs/verification/issue-40.md)。
