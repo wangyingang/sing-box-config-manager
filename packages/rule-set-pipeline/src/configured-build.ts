@@ -16,7 +16,7 @@ export interface BuildConfiguration {
   ruleSets: RuleDefinition[];
 }
 
-function fields(value: unknown, expected: string[], label: string): Record<string, unknown> {
+function requireExactFields(value: unknown, expected: string[], label: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be a mapping`);
   const record = value as Record<string, unknown>;
   if (Object.keys(record).sort().join(',') !== expected.sort().join(',')) throw new Error(`${label} fields are invalid`);
@@ -30,9 +30,9 @@ export function parseBuildConfiguration(input: string): BuildConfiguration {
   let alias = false;
   visit(document, { Alias() { alias = true; } });
   if (alias || !isMap(document.contents)) throw new Error('Invalid build configuration YAML');
-  const raw = fields(document.toJS(), ['schemaVersion', 'source', 'target', 'ruleSets'], 'configuration');
+  const raw = requireExactFields(document.toJS(), ['schemaVersion', 'source', 'target', 'ruleSets'], 'configuration');
   if (raw.schemaVersion !== 1 || raw.source !== 'v2fly/domain-list-community') throw new Error('Unsupported configuration version or source');
-  const target = fields(raw.target, ['repository', 'branch'], 'target');
+  const target = requireExactFields(raw.target, ['repository', 'branch'], 'target');
   if (target.repository !== 'wangyingang/sing-box-rule-artifacts' ||
       (target.branch !== 'main' && !(typeof target.branch === 'string' && /^acceptance-[a-zA-Z0-9._-]+$/.test(target.branch)))) {
     throw new Error('Target repository or branch is outside the trusted publication target');
@@ -42,11 +42,12 @@ export function parseBuildConfiguration(input: string): BuildConfiguration {
   }
   const ids = new Set<string>(), paths: string[] = [];
   const ruleSets = raw.ruleSets.map((entry, index) => {
-    const rule = fields(entry, ['id', 'list', 'stablePath'], `ruleSets[${index}]`);
+    const rule = requireExactFields(entry, ['id', 'list', 'stablePath'], `ruleSets[${index}]`);
     if (typeof rule.id !== 'string' || !/^[a-z][a-z0-9-]*$/.test(rule.id) || ids.has(rule.id)) throw new Error(`Duplicate or invalid logical ID: ${String(rule.id)}`);
     if (typeof rule.list !== 'string' || !/^[a-z0-9][a-z0-9!._-]*$/.test(rule.list)) throw new Error(`Invalid V2Fly list: ${String(rule.list)}`);
     if (typeof rule.stablePath !== 'string' || !/^stable\/[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)*$/.test(rule.stablePath) ||
         rule.stablePath.split('/').some(segment => segment === '.' || segment === '..') ||
+        (rule.stablePath as string === 'stable/activation.json') || (rule.stablePath as string).startsWith('stable/activation.json/') ||
         paths.some(path => path === rule.stablePath || path.startsWith(`${rule.stablePath}/`) || (rule.stablePath as string).startsWith(`${path}/`))) {
       throw new Error(`Invalid or conflicting stable path: ${String(rule.stablePath)}`);
     }

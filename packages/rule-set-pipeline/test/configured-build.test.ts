@@ -46,6 +46,7 @@ test('配置在写入前拒绝重复 ID、路径冲突和越界目标', () => {
     configuration.replace('id: ai-anthropic', 'id: ai-openai'),
     configuration.replace('stable/ai-anthropic', 'stable/ai-openai'),
     configuration.replace('stable/ai-anthropic', 'stable/../outside'),
+    configuration.replace('stable/ai-anthropic', 'stable/activation.json'),
     configuration.replace('branch: main', 'branch: other'),
     configuration.replace('wangyingang/sing-box-rule-artifacts', 'other/repository'),
   ]) assert.throws(() => parseBuildConfiguration(invalid));
