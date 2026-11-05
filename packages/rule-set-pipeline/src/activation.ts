@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
+import { saveActivationReceipt } from './activation-receipt.js';
 import { parseBuildConfiguration, type RuleDefinition } from './configured-build.js';
 import { Ajv } from 'ajv';
 import manifestSchema from '../contracts/artifact-manifest.schema.json' with { type: 'json' };
@@ -17,7 +17,7 @@ const validateManifest = ajv.compile(manifestSchema);
 const validateSubscription = ajv.compile(subscriptionSchema);
 const validateSubscriptionV2 = ajv.compile(subscriptionV2Schema);
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
-const equal = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+const equal = isDeepStrictEqual;
 function requireThat(condition: unknown, message: string): asserts condition { if (!condition) throw new Error(message); }
 const RECORD_PATH = 'stable/activation.json';
 export interface ActivationOptions {
@@ -103,6 +103,8 @@ export async function verifyActivationCandidate(options: Pick<ActivationOptions,
     && report.outputTermCount === report.convertedCount - report.duplicateCount, 'Incomplete conversion record');
   // The initial production slice supports the official pure-domain list and matching controlled fixtures.
   requireThat(manifest.artifacts.length === 2 && manifest.projections['dns-response'].unavailable === 'empty', 'Unsupported candidate projections');
+  const artifactIds = manifest.artifacts.map((artifact: any) => artifact.id);
+  requireThat(new Set(artifactIds).size === artifactIds.length, 'Duplicate artifact identity');
   requireThat(build.artifacts?.length === 2, 'Unexpected build artifact set');
   const sourceBytes = await remote('domains.json', evidence.filesCommit);
   const srsBytes = await remote('domains.srs', evidence.filesCommit);
@@ -272,16 +274,7 @@ async function performActivation(options: ActivationOptions, historical?: { comm
   } catch (error) { throw new Error(`ACTIVATION_APPLIED_READBACK_PENDING: commit ${commit}`, { cause: error }); }
   const result = { status: 'activated' as const, commit, activation };
   if (definition && options.stateDirectory) {
-    const directory = join(options.stateDirectory, 'active-rule-versions');
-    const temporary = join(directory, `${definition.id}-${activation.id}.tmp`);
-    try {
-      await mkdir(directory, { recursive: true });
-      await writeFile(temporary, encode(result), { flag: 'wx' });
-      await rename(temporary, join(directory, `${definition.id}.json`));
-    } catch (error) {
-      await rm(temporary, { force: true }).catch(() => {});
-      throw new Error(`ACTIVATION_APPLIED_LOCAL_RECEIPT_PENDING: commit ${commit}`, { cause: error });
-    }
+    await saveActivationReceipt(options.stateDirectory, result, definition.id);
   }
   return result;
 }

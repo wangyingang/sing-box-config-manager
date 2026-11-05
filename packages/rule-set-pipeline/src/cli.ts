@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { saveActivationReceipt } from './activation-receipt.js';
 import { activateRules, rollbackRules } from './activation.js';
 import { githubActivation } from './activation-transport.js';
 import { rebuildRules, updateRules, readUpdateState } from './update.js';
@@ -31,14 +32,7 @@ async function main(): Promise<number> {
     const result = rollback
       ? await rollbackRules({ ...common, historicalActivationCommit: values.activation! })
       : await activateRules({ ...common, candidateEvidenceUrl: values.candidate! });
-    if (!values.config) {
-      const temporary = join(resolve(values.state), `active-${result.activation.id}.tmp`);
-      try {
-        await mkdir(resolve(values.state), { recursive: true });
-        await writeFile(temporary, JSON.stringify(result, null, 2) + '\n', { flag: 'wx' });
-        await rename(temporary, join(resolve(values.state), 'active-version.json'));
-      } catch (error) { throw new Error(`ACTIVATION_APPLIED_LOCAL_RECEIPT_PENDING: commit ${result.commit}`, { cause: error }); }
-    }
+    if (!values.config) await saveActivationReceipt(resolve(values.state), result);
     console.log(JSON.stringify(result));
     return 0;
   }

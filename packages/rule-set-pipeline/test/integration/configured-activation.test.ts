@@ -40,7 +40,7 @@ test('三集依次激活再逐集切换，只改变选中集的稳定字节、�
   assert.deepEqual(Object.keys(JSON.parse(stdout).activeRuleVersions).sort(), [...env.ids].sort());
 }));
 
-for (const fault of ['wrong-set', 'missing', 'extra', 'evidence', 'srs', 'native', 'usage', 'capability', 'reuse', 'path', 'v1', 'old-record', 'old-bytes']) {
+for (const fault of ['wrong-set', 'duplicate-ids', 'missing', 'extra', 'evidence', 'srs', 'native', 'usage', 'capability', 'reuse', 'path', 'v1', 'old-record', 'old-bytes']) {
   test(`${fault} 在切换前拒绝，原稳定 URL 仍交付原字节`, { skip: !binary }, async () => isolated(async (env, directory) => {
     const first = await env.candidates();
     const id = env.ids[0];
@@ -60,6 +60,11 @@ for (const fault of ['wrong-set', 'missing', 'extra', 'evidence', 'srs', 'native
     };
     if (fault === 'wrong-set') options.candidateEvidenceUrl = second[env.ids[1]].evidenceUrl!;
     if (fault === 'missing') env.stored.delete(record('domains.srs').url);
+    if (fault === 'duplicate-ids') alter('manifest.json', m => {
+      for (const artifact of m.artifacts) artifact.id = 'duplicated';
+      m.projections.route.artifactIds = ['duplicated', 'missing-route-artifact'];
+      m.projections['dns-query'].artifactIds = ['duplicated', 'missing-query-artifact'];
+    });
     if (fault === 'extra') alter('manifest.json', m => m.artifacts.push({ ...m.artifacts[0], id: 'extra' }));
     if (fault === 'evidence') { evidence.readback.pop(); env.stored.set(options.candidateEvidenceUrl, Buffer.from(JSON.stringify(evidence))); }
     if (fault === 'srs') {
@@ -115,4 +120,13 @@ test('不同集竞争同一旧 head 至多一个成功，过期操作不能覆�
   const snapshot = env.snapshots.get(env.head());
   await assert.rejects(activateRules(operations[0]), /ACTIVATION_CONFLICT/);
   assert.deepEqual(env.snapshots.get(env.head()), snapshot);
+}));
+
+test('订阅对象字段顺序不改变文件复用关系或既有契约', { skip: !binary }, async () => isolated(async env => {
+  const candidates = await env.candidates(), id = env.ids[0];
+  await activateRules(env.options(id, candidates[id].evidenceUrl!));
+  const options = env.options(id, candidates[id].evidenceUrl!);
+  const formats = options.subscription.projections['dns-query'].formats;
+  options.subscription.projections['dns-query'].formats = { source: formats.source, binary: formats.binary };
+  assert.equal((await activateRules(options)).status, 'activated');
 }));
