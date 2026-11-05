@@ -9,14 +9,15 @@ import { githubActivation } from './activation-transport.js';
 import { rebuildRules, updateRules, readUpdateState } from './update.js';
 import { sha256 } from './release.js';
 import { buildRelease, buildNative, decodedTerms, NativeBuildError, type SourceRecord } from './index.js';
+import { buildConfiguredRelease, parseBuildConfiguration } from './configured-build.js';
 
 async function main(): Promise<number> {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
-    options: { state: { type: 'string' }, release: { type: 'string' }, out: { type: 'string' }, 'expected-source': { type: 'string' }, binary: { type: 'string' }, candidate: { type: 'string' }, activation: { type: 'string' }, subscription: { type: 'string' }, 'expected-head': { type: 'string' }, branch: { type: 'string' }, help: { type: 'boolean' } },
+    options: { state: { type: 'string' }, release: { type: 'string' }, out: { type: 'string' }, config: { type: 'string' }, id: { type: 'string', multiple: true }, 'expected-source': { type: 'string' }, binary: { type: 'string' }, candidate: { type: 'string' }, activation: { type: 'string' }, subscription: { type: 'string' }, 'expected-head': { type: 'string' }, branch: { type: 'string' }, help: { type: 'boolean' } },
   });
   if (values.help) {
-    console.log('Usage: rollback --state <directory> --activation <historical-full-commit> --subscription <trusted-contract.json> --expected-head <full-commit> --binary <absolute-1.14.4-path> [--branch <existing-environment>] | activate --state <directory> --candidate <immutable-readback-url> --subscription <trusted-contract.json> --expected-head <full-commit> --binary <absolute-1.14.4-path> [--branch <existing-environment>] | rebuild --release <processed-fixed-tag> --state <directory> --binary <absolute-1.14.4-path> | update --state <directory> --binary <absolute-1.14.4-path> | status --state <directory> |  build --release <fixed-tag> --out <new-directory> --binary <absolute-1.14.4-path> [--expected-source <source.json>]');
+    console.log('Usage: build --release <fixed-tag> --out <new-directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...]] [--expected-source <source.json>] | update/status/rebuild/activate/rollback (see package README)');
     return 0;
   }
   if (positionals.length === 1 && ['activate', 'rollback'].includes(positionals[0])) {
@@ -39,6 +40,7 @@ async function main(): Promise<number> {
     return 0;
   }
   if (values.activation || values.candidate || values.subscription || values['expected-head'] || values.branch) throw new Error('Activation options require activate/rollback');
+  if ((values.config || values.id) && positionals[0] !== 'build') throw new Error('--config and --id require build');
   if (positionals.length === 1 && ['update', 'status', 'rebuild'].includes(positionals[0])) {
     const rebuild = positionals[0] === 'rebuild';
     if (!values.state || values.out || values['expected-source'] || (rebuild ? !values.release || !values.binary || values.release.toLowerCase() === 'latest' : values.release)) {
@@ -65,6 +67,37 @@ async function main(): Promise<number> {
     throw new Error('expected-source 必须为来源记录 object');
   }
   const out = resolve(values.out);
+  if (values.id && !values.config) throw new Error('--id requires --config');
+  if (values.config) {
+    const configuration = await readFile(values.config, 'utf8');
+    parseBuildConfiguration(configuration);
+    const built = await buildConfiguredRelease({ configuration, selectedIds: values.id,
+      release: { tag: values.release, expectedSource, token: process.env.GITHUB_TOKEN }, binary: values.binary ?? '' });
+    await mkdir(out);
+    const writeJson = (path: string, value: unknown) => writeFile(path, JSON.stringify(value, null, 2) + '\n', { flag: 'wx' });
+    await writeJson(join(out, 'source.json'), built.source);
+    const summary = [];
+    for (const result of built.results) {
+      const directory = join(out, result.id);
+      await mkdir(directory);
+      await writeJson(join(directory, 'conversion-report.json'), result.report);
+      if (result.status === 'failed') {
+        await writeJson(join(directory, 'failure.json'), { id: result.id, error: result.error });
+        summary.push({ id: result.id, status: result.status, error: result.error });
+        continue;
+      }
+      for (const artifact of result.native.artifacts) await writeFile(join(directory, artifact.file), artifact.content, { flag: 'wx' });
+      const { artifacts, buildId: nativeBuildId, ...native } = result.native;
+      await writeJson(join(directory, 'build.json'), { id: result.id, definition: result.definition, target: built.configuration.target,
+        source: built.source, tools: built.tools, buildId: result.buildId, nativeBuildId, ...native,
+        artifacts: artifacts.map(({ content: _content, ...metadata }) => metadata) });
+      summary.push({ id: result.id, status: result.status, buildId: result.buildId });
+    }
+    await writeJson(join(out, 'batch.json'), { release: values.release, source: built.source,
+      configuration: built.configuration, results: summary });
+    console.log(JSON.stringify({ out, results: summary }));
+    return summary.some(result => result.status === 'failed') ? 1 : 0;
+  }
   // Exclusive directory creation prevents overwriting a previous build, including
   // when a later attempt fails. The parent directory must already exist.
   await mkdir(out);

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -27,6 +28,46 @@ test('CLI 缺少固定 Release 或存在未知参数时明确退出', async () =
   for (const args of [['build'], ['build', '--latest'], ['unknown']]) {
     await assert.rejects(exec(process.execPath, ['--import', 'tsx', 'src/cli.ts', ...args]), (error: { code?: number }) => error.code === 1);
   }
+});
+
+test('CLI 在创建输出目录前拒绝不可信的多集配置', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'rule-config-cli-'));
+  try {
+    const config = join(temporary, 'bad.yml'), out = join(temporary, 'out');
+    await writeFile(config, `schemaVersion: 1\nsource: v2fly/domain-list-community\ntarget:\n  repository: other/repository\n  branch: main\nruleSets:\n  - id: ai-openai\n    list: openai\n    stablePath: stable/ai-openai\n`);
+    await assert.rejects(exec(process.execPath, ['--import', 'tsx', 'src/cli.ts', 'build', '--release', '20261104112839',
+      '--config', config, '--out', out, '--binary', '/unused']), (error: { code?: number; stderr?: string }) =>
+      error.code === 1 && !!error.stderr?.includes('trusted publication target'));
+    await assert.rejects(stat(out), { code: 'ENOENT' });
+  } finally { await rm(temporary, { recursive: true, force: true }); }
+});
+
+test('CLI 批次与逐集记录保留已校验目标分支', { skip: !process.env.SING_BOX_TEST_BINARY }, async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'rule-config-target-'));
+  try {
+    const tag = '20261104112839', input = JSON.stringify({ lists: [{ name: 'anthropic', length: 1, rules: ['domain:anthropic.com'] }] });
+    const checksum = createHash('sha256').update(input).digest('hex');
+    const preload = join(temporary, 'source.mjs'), config = join(temporary, 'config.yml'), out = join(temporary, 'out');
+    await writeFile(preload, `globalThis.fetch = async url => {
+  const path = String(url);
+  if (path.endsWith('/releases/tags/${tag}')) return Response.json({ id: 42, tag_name: '${tag}', assets:
+    ['dlc.dat_plain.yml', 'dlc.dat_plain.yml.sha256sum'].map((name, index) => ({ id: index + 11, name,
+      browser_download_url: 'https://github.com/v2fly/domain-list-community/releases/download/${tag}/' + name })) });
+  if (path.includes('/git/ref/tags/')) return Response.json({ object: { type: 'commit', sha: 'a'.repeat(40) } });
+  if (path.endsWith('/assets/11')) return new Response(${JSON.stringify(input)});
+  if (path.endsWith('/assets/12')) return new Response(${JSON.stringify(checksum + '  dlc.dat_plain.yml\n')});
+  throw new Error('unexpected source request ' + path);
+};`);
+    const sample = await readFile(new URL('../samples/three-ai-rule-sets.yml', import.meta.url), 'utf8');
+    await writeFile(config, sample.replace('branch: main', 'branch: acceptance-issue-36'));
+    await exec(process.execPath, ['--import', 'tsx', '--import', preload, 'src/cli.ts', 'build', '--release', tag,
+      '--config', config, '--id', 'ai-anthropic', '--out', out, '--binary', process.env.SING_BOX_TEST_BINARY!]);
+    const batch = JSON.parse(await readFile(join(out, 'batch.json'), 'utf8'));
+    const record = JSON.parse(await readFile(join(out, 'ai-anthropic', 'build.json'), 'utf8'));
+    assert.deepEqual(batch.configuration.target, { repository: 'wangyingang/sing-box-rule-artifacts', branch: 'acceptance-issue-36' });
+    assert.deepEqual(record.target, batch.configuration.target);
+    assert.equal(record.buildId, batch.results[0].buildId);
+  } finally { await rm(temporary, { recursive: true, force: true }); }
 });
 
 // Run the real CLI and receipt filesystem operations. Only remote activation is
