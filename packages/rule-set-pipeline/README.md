@@ -2,7 +2,7 @@
 
 包名：`@sing-box-config-manager/rule-set-pipeline`。管理者需要更新系统维护的规则集合时，本模块从官方来源生成 sing-box 可加载的规则文件，验证并上传为候选，再由管理者显式激活。客户端随后通过稳定地址取得当前规则；构建成功、候选验证成功、稳定入口切换和客户端加载完成是不同的状态。
 
-当前 `update` 可发布 V2Fly `domain-list-community` 官方 Release 中 `dlc.dat_plain.yml` 的 `category-ai-!cn`，也可按管理者的 YAML 配置从同一 Release 发布多个列表。本地 `build` 同样支持配置驱动的多集构建。`activate` 与 `rollback` 仍只支持旧单集契约，多集激活由 #39 交付。输出包括 JSON 源规则文件和 SRS 二进制规则文件，目标版本固定为 sing-box **1.14.4**，JSON Source Format 固定为 **4**。合成 IP／混合输入用于验证构建 API，不表示已经支持其他真实来源或其发布激活。
+当前 `update` 可发布 V2Fly `domain-list-community` 官方 Release 中 `dlc.dat_plain.yml` 的 `category-ai-!cn`，也可按管理者的 YAML 配置从同一 Release 发布多个列表。本地 `build` 同样支持配置驱动的多集构建。`activate --config ... --id ...` 支持按逻辑 ID 独立激活；`rollback` 仍只支持旧单集契约。输出包括 JSON 源规则文件和 SRS 二进制规则文件，目标版本固定为 sing-box **1.14.4**，JSON Source Format 固定为 **4**。合成 IP／混合输入用于验证构建 API，不表示已经支持其他真实来源或其发布激活。
 
 ## 操作分别产生什么结果
 
@@ -69,6 +69,22 @@ pnpm --dir packages/rule-set-pipeline build:release --binary /absolute/path/to/s
 ```
 
 一次调用只下载并校验一份完整 YAML 和一份摘要文件，解析一次 YAML；随后按所选逻辑 ID 分别转换和原生验证。共同摘要或 YAML 文档错误使整批失败，且不创建输出目录。单个列表缺失、非法或原生验证失败时，其他列表仍可完成，CLI 返回非零。输出根目录的 `source.json` 和 `batch.json` 记录共同来源、规范化配置和逐集结果；每个逻辑 ID 子目录保存转换报告，成功时还保存规则文件及包含目标分支的构建记录，失败时保存 `failure.json`。`buildId` 包含规则定义、目标仓库与分支、实际列表、固定来源及工具身份；相同列表内容也不会混同两个逻辑 ID。
+
+## 按逻辑 ID 显式激活
+
+管理者提供与候选一致的可信配置、一个逻辑 ID，以及由可信宿主装配的 Rule Subscription v2 JSON。订阅的 `systemRuleSetId` 必须匹配逻辑 ID；Route 与 DNS 请求复用相同文件，DNS 响应不可用，能力要求为空。稳定 URL 必须指向配置的目标分支及该集的 `stablePath/domains.srs`，可同时提供 `domains.json`。v2 订阅示例见 [`contracts/rule-subscription-v2.example.json`](contracts/rule-subscription-v2.example.json)，使用前将示例域名替换为可信产物仓库的实际地址。
+
+```sh
+pnpm --dir packages/rule-set-pipeline activate --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config samples/three-ai-rule-sets.yml --id ai-openai --subscription /absolute/path/to/openai-subscription-v2.json --candidate https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/FULL_COMMIT/candidates/CANDIDATE_ID/readback.json --expected-head FULL_OLD_HEAD
+```
+
+隔离验收时同时使用目标为 `acceptance-*` 的配置、对应订阅和 `--branch`。一次成功激活只提交选中集的稳定规则文件及 `stablePath/activation.json`。记录包含该集的候选、来源、验证、订阅和历史激活引用；其他集的字节和记录保留。候选发布不会激活规则；多集回滚由后续工单交付。
+
+激活先复验候选的固定 HTTPS 字节、Manifest、来源、构建身份和原生结果，再核对预期旧 head 中的该集契约和实际稳定文件。单次 Git 提交使用旧 head 作为唯一 parent，非强制更新分支；并发变化导致冲突，不自动覆盖。Git API 的完整 tree/blob 用于判定旧激活记录是否存在，CDN 的 404 不作为首次激活依据。
+
+`status` 中的 `activeRuleVersions` 按逻辑 ID 返回本地激活回执及历史，`state.candidates`／`state.configuredProcessed` 保存候选状态。回执写入独立文件，更新一集不会覆盖其他集。`status` 不查询远端，本地回执可能落后；远端 `stablePath/activation.json` 是该集当前激活记录。
+
+提交回复丢失后不重复写入：远端仍是旧 head 时报告 `ACTIVATION_NOT_APPLIED`；远端是目标 commit，或后续 head 仍保留本次唯一记录时，回读目标 commit 并确认成功。无法读取 head 时报告 `ACTIVATION_UNKNOWN`，其他无法判定的 head 报告 `ACTIVATION_CONFLICT_OR_SUPERSEDED`。已提交但回读或本地回执失败，分别报告 `ACTIVATION_APPLIED_READBACK_PENDING` 或 `ACTIVATION_APPLIED_LOCAL_RECEIPT_PENDING`。这些结果均携带已知提交身份，恢复时应先核对远端，不把错误当成旧入口未改变。
 
 ## 正常更新与候选发布
 
@@ -138,7 +154,7 @@ pnpm --dir packages/rule-set-pipeline rebuild \
 
 ## 显式激活
 
-激活把候选文件交给稳定入口，开始影响后续客户端下载。Rule Subscription（规则订阅）描述“哪些稳定地址可用于哪些用途、格式和客户端能力”；它不记录某次规则字节的固定摘要，也不承担面向使用者的配置订阅授权。当前 Compiler 消费契约见 [Rule Subscription v2](contracts/rule-subscription-v2.md)；Pipeline 现有单集激活实现仍使用 [v1 历史契约](contracts/rule-subscription.md)，多集激活由 #39 交付。
+激活把候选文件交给稳定入口，开始影响后续客户端下载。Rule Subscription（规则订阅）描述“哪些稳定地址可用于哪些用途、格式和客户端能力”；它不记录某次规则字节的固定摘要，也不承担面向使用者的配置订阅授权。当前 Compiler 消费契约见 [Rule Subscription v2](contracts/rule-subscription-v2.md)；按逻辑 ID 的激活使用 v2；不带配置的旧单集激活仍使用 [v1 历史契约](contracts/rule-subscription.md)。
 
 管理者选择已发布候选的完整 commit `readback.json` URL，提供可信宿主维护的规则订阅契约和预期旧分支 head。head 是目标分支当前的完整 commit；提供预期值是为了在其他会话已经更新分支时拒绝覆盖。`activate` 复用已有候选，不查询 Release、不重做来源转换、不改写成功处理记录。
 
@@ -159,7 +175,7 @@ pnpm --dir packages/rule-set-pipeline activate \
 
 Git 提交保持文件与记录一起更新，但 GitHub 缓存和客户端轮询存在传播延迟，不保证多文件在客户端同时切换。激活不修改 Recipe、配置发布或客户端设置。运行中的 sing-box 通过原生机制获取稳定 SRS；受控测试的 `1s` 更新周期和临时 CA 只存在于测试进程，不能用于承诺全设备更新时间。
 
-公开 API 为 `activateRules({ candidateEvidenceUrl, subscription, binary, expectedHead, transport? })`；默认使用 `githubActivation()`。API 的成功结果和远端记录可跨进程追溯，CLI 另外保存本地回执。Compiler 仍只消费契约，不导入激活运行时代码。
+公开 API 为 `activateRules({ candidateEvidenceUrl, subscription, binary, expectedHead, transport?, configuration?, logicalId?, stateDirectory? })`；默认使用 `githubActivation()`。配置化激活同时传入 `configuration` 与 `logicalId`；提供 `stateDirectory` 时，由 API 保存该集本地回执。旧单集由 CLI 保存回执。API 的成功结果和远端记录可跨进程追溯。Compiler 仍只消费契约，不导入激活运行时代码。
 
 ## 激活失败后核实远端状态
 

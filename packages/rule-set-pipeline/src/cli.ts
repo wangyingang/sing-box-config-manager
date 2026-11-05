@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { saveActivationReceipt } from './activation-receipt.js';
 import { activateRules, rollbackRules } from './activation.js';
 import { githubActivation } from './activation-transport.js';
 import { rebuildRules, updateRules, readUpdateState } from './update.js';
@@ -24,18 +25,14 @@ async function main(): Promise<number> {
     const rollback = positionals[0] === 'rollback';
     if (!values.state || !values.subscription || !values['expected-head'] || !values.binary
       || (rollback ? !values.activation || !!values.candidate : !values.candidate || !!values.activation)
-      || values.release || values.out || values['expected-source']) throw new Error(`${positionals[0]} requires --state, ${rollback ? '--activation' : '--candidate'}, --subscription, --expected-head and --binary`);
-    const common = { subscription: JSON.parse(await readFile(values.subscription, 'utf8')), binary: values.binary,
+      || values.release || values.out || values['expected-source']
+      || (values.config ? values.id?.length !== 1 || rollback : !!values.id)) throw new Error(`${positionals[0]} requires --state, ${rollback ? '--activation' : '--candidate'}, --subscription, --expected-head and --binary`);
+    const common = { ...(values.config ? { configuration: await readFile(values.config, 'utf8'), logicalId: values.id![0], stateDirectory: resolve(values.state) } : {}), subscription: JSON.parse(await readFile(values.subscription, 'utf8')), binary: values.binary,
       expectedHead: values['expected-head'], transport: githubActivation(values.branch) };
     const result = rollback
       ? await rollbackRules({ ...common, historicalActivationCommit: values.activation! })
       : await activateRules({ ...common, candidateEvidenceUrl: values.candidate! });
-    const temporary = join(resolve(values.state), `active-${result.activation.id}.tmp`);
-    try {
-      await mkdir(resolve(values.state), { recursive: true });
-      await writeFile(temporary, JSON.stringify(result, null, 2) + '\n', { flag: 'wx' });
-      await rename(temporary, join(resolve(values.state), 'active-version.json'));
-    } catch (error) { throw new Error(`ACTIVATION_APPLIED_LOCAL_RECEIPT_PENDING: commit ${result.commit}`, { cause: error }); }
+    if (!values.config) await saveActivationReceipt(resolve(values.state), result);
     console.log(JSON.stringify(result));
     return 0;
   }

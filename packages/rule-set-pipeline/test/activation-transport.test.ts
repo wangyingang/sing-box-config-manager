@@ -99,7 +99,7 @@ test('非法 expectedHead 在访问远端前拒绝；候选分支和路径型分
 });
 
 const recordUrl = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${oldHead}/stable/activation.json`;
-function activationRecord(options: { absent?: boolean; truncated?: boolean; pathType?: string; pathMode?: string; blobEncoding?: string; blobContent?: unknown; blobSize?: number; failureAt?: 'commit' | 'tree' | 'blob' } = {}) {
+function activationRecord(options: { absent?: boolean; truncated?: boolean; pathType?: string; pathMode?: string; blobEncoding?: string; blobContent?: unknown; blobSize?: number; recordPath?: string; failureAt?: 'commit' | 'tree' | 'blob' } = {}) {
   const paths: string[] = [];
   const content = Buffer.from('{"subscription":{"schemaVersion":1},"note":"已激活"}\n');
   const request: typeof ghJson = async (args, input) => {
@@ -112,7 +112,7 @@ function activationRecord(options: { absent?: boolean; truncated?: boolean; path
     if (path === `git/commits/${oldHead}`) return { tree: { sha: 'b'.repeat(40) } };
     if (path === `git/trees/${'b'.repeat(40)}?recursive=1`) return { truncated: options.truncated ?? false,
       tree: options.absent ? [{ path: 'README.md', type: 'blob', sha: 'd'.repeat(40) }]
-        : [{ path: 'stable/activation.json', type: options.pathType ?? 'blob', mode: options.pathMode ?? '100644', sha: 'c'.repeat(40) }] };
+        : [{ path: options.recordPath ?? 'stable/activation.json', type: options.pathType ?? 'blob', mode: options.pathMode ?? '100644', sha: 'c'.repeat(40) }] };
     if (path === `git/blobs/${'c'.repeat(40)}`) return { encoding: options.blobEncoding ?? 'base64', size: options.blobSize ?? content.length, content: options.blobContent ?? content.toString('base64').replace(/.{24}/g, '$&\n') };
     throw new Error(`Unexpected record API ${path}`);
   };
@@ -158,5 +158,13 @@ for (const options of [{ pathMode: '120000' }, { blobEncoding: 'utf-8' }, { blob
     await assert.rejects(remote.transport.download(recordUrl), error => {
       assert.ok(error instanceof Error); assert.doesNotMatch(error.message, /Readback HTTP 404:/); return true;
     });
+  });
+}
+
+for (const recordPath of ['stable/ai-openai/activation.json', 'stable/providers/ai_openai.v2/activation.json']) {
+  test(`多集旧记录 ${recordPath} 从完整 Git tree/blob 读取，不依赖 CDN 404`, async () => {
+    const remote = activationRecord({ recordPath });
+    assert.deepEqual(await remote.transport.download(recordUrl.replace('stable/activation.json', recordPath)), remote.content);
+    assert.equal(remote.paths.length, 3);
   });
 }
