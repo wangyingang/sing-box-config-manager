@@ -50,7 +50,7 @@ test('固定官方 Release 增选与单集重建保留历史候选，稳定入�
   const after = await readUpdateState(directory!);
   assert.deepEqual(after.state.configuredProcessed, before.state.configuredProcessed);
   assert.equal(after.activeRuleVersion, null);
-  for (const entry of [original, anthropic]) assert.deepEqual(after.state.candidates[entry.candidate.id], entry.candidate);
+  for (const entry of [original, anthropic]) assert.deepEqual(after.state.candidates[entry.candidate.id], before.state.candidates[entry.candidate.id]);
   const { stdout } = await exec(process.execPath, ['--import', 'tsx', 'src/cli.ts', 'status', '--state', directory!]);
   assert.deepEqual(JSON.parse(stdout), after);
   const evidence = [];
