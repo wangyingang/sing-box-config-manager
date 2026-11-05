@@ -64,6 +64,10 @@ test('compile, publication and delivery reject v1 subscriptions; unavailable DNS
   oldSnapshot.body.compiled.subscriptions![0]!.schemaVersion = 1;
   oldSnapshot.id = await digest(oldSnapshot.body);
   assert.ok((await renderSubscription(oldSnapshot, request.params)).diagnostics.some(d => d.code === 'SUBSCRIPTION_INVALID' && d.path === '/subscriptions/0/schemaVersion'));
+  const oldSourceSnapshot: any = structuredClone(published);
+  oldSourceSnapshot.body.recipeSource.subscriptions[0].schemaVersion = 1;
+  oldSourceSnapshot.id = await digest(oldSourceSnapshot.body);
+  assert.ok((await renderSubscription(oldSourceSnapshot, request.params)).diagnostics.some(d => d.code === 'SUBSCRIPTION_INVALID'));
 
   const response = threeSubscriptions();
   response.recipe.resources.ruleSets[0].subscriptionRef.usages = ['dns-response'];
@@ -76,4 +80,13 @@ test('compile, publication and delivery reject v1 subscriptions; unavailable DNS
   assert.ok(compileRecipe(conflict).diagnostics.some(d => d.code === 'SUBSCRIPTION_ENDPOINT_CONFLICT'));
   assert.equal((await prepareRecipePublication(conflict, async () => { checks++; })).ok, false);
   assert.equal(checks, 0);
+
+  const conflictingSnapshot: any = structuredClone(published);
+  conflictingSnapshot.body.compiled.subscriptions[1].projections.route.formats.binary.url = url(ids[0]);
+  conflictingSnapshot.body.compiled.subscriptions[1].projections.route.formats.binary.requiredCapabilities = ['processMatching'];
+  conflictingSnapshot.id = await digest(conflictingSnapshot.body);
+  assert.ok((await renderSubscription(conflictingSnapshot, request.params)).diagnostics.some(d => d.code === 'PUBLICATION_INVALID'));
+  conflictingSnapshot.body.recipeSource.subscriptions = structuredClone(conflictingSnapshot.body.compiled.subscriptions);
+  conflictingSnapshot.id = await digest(conflictingSnapshot.body);
+  assert.ok((await renderSubscription(conflictingSnapshot, request.params)).diagnostics.some(d => d.code === 'SUBSCRIPTION_ENDPOINT_CONFLICT'));
 });

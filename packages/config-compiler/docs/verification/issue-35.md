@@ -7,7 +7,7 @@
 | 检查 | 结果 |
 | --- | --- |
 | `test/issue-35.test.ts` | 五种 Client Profile 各自使用合法本地 DNS 配置编译同一三集 Recipe；三个逻辑 ID 对应各自稳定 SRS URL，Route 与 DNS 请求复用该集 SRS，DNS 响应不可用。JSON Schema 校验三份 v2 声明。 |
-| `test/issue-35.test.ts` | 一份 Recipe 发布快照保留三个订阅及 URL，交付配置保持相同绑定；v1、不可用 DNS 响应用途和共享 URL 的冲突声明在编译或发布前失败。直接已解析编译、直接配置发布和完整性有效的交付快照均拒绝 v1。 |
+| `test/issue-35.test.ts` | 一份 Recipe 发布快照保留三个订阅及 URL，交付配置保持相同绑定；v1、不可用 DNS 响应用途和共享 URL 的冲突声明在编译或发布前失败。直接已解析编译、直接配置发布和完整性有效的交付快照均拒绝 v1；交付也拒绝来源记录不一致及入口声明冲突。 |
 | `test/integration/subscriptions.test.ts` | `publishRecipe` 使用真实 `sing-box check` 发布三集配置并读回本地发布文件，`renderSubscription` 交付三个正确 URL；该文件两个测试均通过。 |
 | 单元测试 | 工具脚本 21、Compiler 99、Pipeline 91 个测试通过。 |
 | 真实 binary 集成测试 | Compiler 28 个测试通过；受本次改动影响的 Pipeline 客户端激活及故障恢复 2 个测试通过。 |

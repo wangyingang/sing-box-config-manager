@@ -5,6 +5,7 @@ import build from '../schemas/build.json' with { type: 'json' };
 import { applyEcs } from './ecs.js';
 import { digest, objects } from './json.js';
 import { ruleSubscriptionSchema, StructureError } from './recipe-schema.js';
+import { validateSubscriptionEndpoints } from './rule-subscriptions.js';
 import { validateConfig } from './validate.js';
 import type { CompileInput, CompiledConfig, Diagnostic, GenerationParams, Obj, Result } from './types.js';
 
@@ -55,6 +56,9 @@ export async function renderSubscription(publication: Publication, params: Gener
     const diagnostics: Diagnostic[] = applyEcs(config, ecsResponseTags, params);
     const urls = new Set(objects((config.route as Obj)?.rule_set).map(s => s.url));
     const validatedSubscriptions = (subscriptions ?? []).map((s, i) => ruleSubscriptionSchema.parse(s, `/subscriptions/${i}`));
+    const sourceSubscriptions = snapshot.body.recipeSource?.subscriptions?.map((s, i) => ruleSubscriptionSchema.parse(s, `/recipeSource/subscriptions/${i}`));
+    if (snapshot.body.recipeSource && JSON.stringify(sourceSubscriptions) !== JSON.stringify(subscriptions === undefined ? undefined : validatedSubscriptions)) return invalid();
+    diagnostics.push(...validateSubscriptionEndpoints(validatedSubscriptions, '/subscriptions'));
     const endpoints = validatedSubscriptions.flatMap(s => Object.values(s.projections)
       .flatMap(p => 'formats' in p && urls.has(p.formats.binary.url) ? [p.formats.binary] : []));
     diagnostics.push(...validateConfig(config, profile, [...artifacts, ...endpoints]));
