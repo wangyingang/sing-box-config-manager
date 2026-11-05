@@ -7,20 +7,24 @@ import { decodedTerms } from './projection.js';
 import { sha256, type ReleaseOptions } from './release.js';
 import type { SourceRecord } from './types.js';
 import { githubPublication, immutableUrl, type PublicationTransport } from './publication.js';
+import { processConfiguredUpdate, type ConfiguredUpdateOptions } from './configured-update.js';
+import { publishCandidate } from './candidate-publication.js';
 
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
 type Pin = Pick<SourceRecord, 'repository' | 'releaseId' | 'tag' | 'commit' | 'yaml' | 'checksum'>;
-interface Candidate {
+export interface Candidate {
   id: string; releaseId: number; tag: string;
   status: 'building' | 'publishing' | 'verified' | 'failed';
   operation?: 'update' | 'rebuild'; previousCandidateId?: string; buildId?: string;
   filesCommit?: string; metadataCommit?: string; evidenceCommit?: string;
   manifestUrl?: string; evidenceUrl?: string; error?: string;
+  logicalId?: string;
 }
 export interface UpdateState {
   schemaVersion: 1;
   pinned: Record<string, { identity?: Pin; source?: SourceRecord }>;
   processed: Record<string, { candidateId: string; tag: string; evidenceUrl: string }>;
+  configuredProcessed?: Record<string, Record<string, { candidateId: string; tag: string; evidenceUrl: string; definitionSha256: string }>>;
   candidates: Record<string, Candidate>;
 }
 async function readJson(path: string): Promise<any> {
@@ -45,7 +49,11 @@ export interface UpdateOptions {
 
 export interface RebuildOptions extends Omit<UpdateOptions, 'sampleTag'> { release: string }
 
-export function updateRules(options: UpdateOptions) { return processRelease(options); }
+export function updateRules(options: ConfiguredUpdateOptions): ReturnType<typeof processConfiguredUpdate>;
+export function updateRules(options: UpdateOptions): ReturnType<typeof processRelease>;
+export function updateRules(options: UpdateOptions | ConfiguredUpdateOptions) {
+  return 'configuration' in options ? processConfiguredUpdate(options) : processRelease(options);
+}
 
 /** Rebuild only a previously pinned, successfully processed Release, never latest. */
 export function rebuildRules(options: RebuildOptions) {
@@ -121,55 +129,29 @@ async function processRelease(options: UpdateOptions, rebuildTag?: string) {
     const buildId = candidate.buildId = sha256(JSON.stringify({ source: built.source, tools: built.tools, nativeBuildId: native.buildId, contracts }));
     const publication = options.publication ?? githubPublication();
     const prefix = `candidates/${candidate.id}`;
-    const files = Object.fromEntries(native.artifacts.map(artifact => [`${prefix}/${artifact.file}`, artifact.content]));
-    candidate.status = 'publishing';
-    await save();
-    const filesCommit = candidate.filesCommit = await publication.commit(files, `候选 ${candidate.id}：规则文件`);
-    await save();
-    const artifactId = (file: string) => `v2fly:category-ai-!cn@${candidate!.id}:${file}`;
-    const manifest = {
-      schemaVersion: 1, id: 'v2fly:category-ai-!cn', revision: candidate.id, targetVersion: '1.14.4', sourceFormatVersion: 4,
-      artifacts: native.artifacts.map(artifact => ({ id: artifactId(artifact.file), format: artifact.format,
-        url: immutableUrl(filesCommit, `${prefix}/${artifact.file}`), sha256: artifact.sha256,
-        byteLength: artifact.bytes, termCount: artifact.termCount, requiredCapabilities: artifact.requiredCapabilities })),
-      projections: Object.fromEntries(Object.entries(native.usages).map(([usage, projection]) => [usage,
-        'artifactFiles' in projection ? { artifactIds: projection.artifactFiles.map(artifactId) } : { unavailable: 'empty' }])),
-    };
-    const { artifacts: _artifacts, buildId: nativeBuildId, ...validation } = native;
-    const records = {
-      [`${prefix}/manifest.json`]: encode(manifest),
-      [`${prefix}/source.json`]: encode(built.source),
-      [`${prefix}/conversion-report.json`]: encode(built.report),
-      [`${prefix}/build.json`]: encode({ buildId, candidateId: candidate.id, operation: candidate.operation, previousCandidateId: candidate.previousCandidateId, contracts, source: built.source, tools: built.tools, nativeBuildId, ...validation,
-        artifacts: native.artifacts.map(({ content: _content, ...metadata }) => metadata) }),
-    };
-    const metadataCommit = candidate.metadataCommit = await publication.commit(records, `候选 ${candidate.id}：Manifest 与构建记录`);
-    candidate.manifestUrl = immutableUrl(metadataCommit, `${prefix}/manifest.json`);
-    await save();
-    const readback: { url: string; sha256: string; byteLength: number; exactBytes: true }[] = [];
-    const verify = async (path: string, expected: Buffer, commit: string) => {
-      const url = immutableUrl(commit, path);
-      const actual = await publication.download(url);
-      if (actual.length !== expected.length || sha256(actual) !== sha256(expected) || !actual.equals(expected)) throw new Error(`Readback content mismatch: ${url}`);
-      readback.push({ url, sha256: sha256(actual), byteLength: actual.length, exactBytes: true });
-      return actual;
-    };
-    const downloaded = new Map<string, Buffer>();
-    for (const [path, bytes] of Object.entries(files)) downloaded.set(path, await verify(path, bytes, filesCommit));
-    // Recompile, decompile and load actual HTTPS bytes, then compare downloaded SRS.
-    const remoteNative = await buildNative(decodedTerms(JSON.parse(downloaded.get(`${prefix}/domains.json`)!.toString('utf8'))), options.binary);
-    for (const artifact of remoteNative.artifacts) {
-      if (!artifact.content.equals(downloaded.get(`${prefix}/${artifact.file}`)!)) throw new Error('Remote native content mismatch');
-    }
-    for (const [path, bytes] of Object.entries(records)) await verify(path, bytes, metadataCommit);
-    const evidence = encode({ schemaVersion: 1, candidateId: candidate.id, status: 'remote-verified',
-      filesCommit, metadataCommit, buildId, readback, native: remoteNative.validation, tool: remoteNative.tool });
-    const evidencePath = `${prefix}/readback.json`;
-    candidate.evidenceCommit = await publication.commit({ [evidencePath]: evidence }, `候选 ${candidate.id}：HTTPS 回读验证`);
-    candidate.evidenceUrl = immutableUrl(candidate.evidenceCommit, evidencePath);
-    await verify(evidencePath, evidence, candidate.evidenceCommit);
+    const readback = await publishCandidate({ candidate, native, buildId, binary: options.binary, publication, save,
+      records: filesCommit => {
+        const artifactId = (file: string) => `v2fly:category-ai-!cn@${candidate!.id}:${file}`;
+        const manifest = {
+          schemaVersion: 1, id: 'v2fly:category-ai-!cn', revision: candidate!.id, targetVersion: '1.14.4', sourceFormatVersion: 4,
+          artifacts: native.artifacts.map(artifact => ({ id: artifactId(artifact.file), format: artifact.format,
+            url: immutableUrl(filesCommit, `${prefix}/${artifact.file}`), sha256: artifact.sha256,
+            byteLength: artifact.bytes, termCount: artifact.termCount, requiredCapabilities: artifact.requiredCapabilities })),
+          projections: Object.fromEntries(Object.entries(native.usages).map(([usage, projection]) => [usage,
+            'artifactFiles' in projection ? { artifactIds: projection.artifactFiles.map(artifactId) } : { unavailable: 'empty' }])),
+        };
+        const { artifacts: _artifacts, buildId: nativeBuildId, ...validation } = native;
+        return {
+          [`${prefix}/manifest.json`]: encode(manifest),
+          [`${prefix}/source.json`]: encode(built.source),
+          [`${prefix}/conversion-report.json`]: encode(built.report),
+          [`${prefix}/build.json`]: encode({ buildId, candidateId: candidate!.id, operation: candidate!.operation,
+            previousCandidateId: candidate!.previousCandidateId, contracts, source: built.source, tools: built.tools,
+            nativeBuildId, ...validation, artifacts: native.artifacts.map(({ content: _content, ...metadata }) => metadata) }),
+        };
+      } });
     candidate.status = 'verified';
-    if (!rebuildTag) state.processed[key] = { candidateId: candidate.id, tag, evidenceUrl: candidate.evidenceUrl };
+    if (!rebuildTag) state.processed[key] = { candidateId: candidate.id, tag, evidenceUrl: candidate.evidenceUrl! };
     await save();
     return { status: 'processed' as const, candidate, activeRuleVersion: restored.activeRuleVersion, readback };
   } catch (error) {

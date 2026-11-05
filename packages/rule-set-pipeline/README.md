@@ -2,7 +2,7 @@
 
 包名：`@sing-box-config-manager/rule-set-pipeline`。管理者需要更新系统维护的规则集合时，本模块从官方来源生成 sing-box 可加载的规则文件，验证并上传为候选，再由管理者显式激活。客户端随后通过稳定地址取得当前规则；构建成功、候选验证成功、稳定入口切换和客户端加载完成是不同的状态。
 
-当前候选发布与激活入口只覆盖 V2Fly `domain-list-community` 官方 Release 中 `dlc.dat_plain.yml` 的 `category-ai-!cn` 列表。本地 `build` 也可按管理者的 YAML 配置从同一固定 Release 构建多个列表。输出包括 JSON 源规则文件和 SRS 二进制规则文件，目标版本固定为 sing-box **1.14.4**，JSON Source Format 固定为 **4**。合成 IP／混合输入用于验证构建 API，不表示已经支持其他真实来源或其发布激活。
+当前 `update` 可发布 V2Fly `domain-list-community` 官方 Release 中 `dlc.dat_plain.yml` 的 `category-ai-!cn`，也可按管理者的 YAML 配置从同一 Release 发布多个列表。本地 `build` 同样支持配置驱动的多集构建。`activate` 与 `rollback` 仍只支持旧单集契约，多集激活由 #39 交付。输出包括 JSON 源规则文件和 SRS 二进制规则文件，目标版本固定为 sing-box **1.14.4**，JSON Source Format 固定为 **4**。合成 IP／混合输入用于验证构建 API，不表示已经支持其他真实来源或其发布激活。
 
 ## 操作分别产生什么结果
 
@@ -11,7 +11,7 @@
 | 操作 | 输入与结果 | 是否改变稳定入口 |
 | --- | --- | --- |
 | `build:release` | 读取指定 Release，在新目录生成经过本地原生验证的规则文件及记录 | 否；不上传 |
-| `update` | 查询一次官方 latest；发现未成功处理的 Release 时构建并发布新候选 | 否；候选仍待显式激活 |
+| `update` | 查询一次官方 latest；单集或按配置逐集构建并发布未成功处理的候选 | 否；候选仍待显式激活 |
 | `rebuild` | 对本地状态已固定且成功处理过的 Release 重新构建，发布新候选 | 否；保留原候选与成功处理记录 |
 | `activate` | 复验选定候选，更新稳定规则文件及激活记录 | 是；客户端何时加载由其更新机制决定 |
 | `rollback` | 复验保留的历史激活版本，新增提交恢复其规则内容 | 是；同样存在传播与轮询延迟 |
@@ -79,7 +79,18 @@ pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-stat
 pnpm --dir packages/rule-set-pipeline status --state /absolute/path/to/rule-state
 ```
 
-每次 `update` 只在开始查询一次官方 latest。发现新 Release 后，固定该响应的 Release ID、tag 和资产身份，解析 tag 的源码 commit，复用本地完整来源校验、转换和原生构建路径。已成功处理的相同 Release 只检查 latest 元数据；资产身份改变时失败，否则跳过 YAML／摘要下载、转换和 binary 执行。跳过时不会重新下载同一资产来探测其内容变化；失败重试取得字节时会核对已保存的来源摘要。
+配置驱动的多集候选发布传入同一份版本化 YAML；`--id` 可只处理指定逻辑 ID。首次发布请使用可持久保存的状态目录，并先在 `acceptance-*` 目标分支验收：
+
+```sh
+pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config samples/three-ai-rule-sets.yml
+pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config samples/three-ai-rule-sets.yml --id ai-anthropic
+pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config samples/three-ai-rule-sets.yml --id ai-anthropic --release 20261104112839
+pnpm --dir packages/rule-set-pipeline status --state /absolute/path/to/rule-state
+```
+
+一次批量调用仅获取一份共同 YAML 和摘要，随后逐集构建、原生验证、发布不可变候选并回读。共同输入损坏会停止整批，不发布新候选；单集缺表、非法条目或回读失败只使该集失败。命令输出 `results` 中每个逻辑 ID 的 `processed`、`skipped` 或 `failed` 与失败原因；任一集失败时退出码为 1。`status` 的 `configuredProcessed` 按逻辑 ID 和 Release ID 保存成功候选，`candidates` 保存每次尝试及其归属。若失败后 `latest` 已前进，使用最后一个示例中的 `--release` 指定状态目录里已固定且完整校验的来源，并配合 `--id` 只重试受影响的集；命令重新核对该 Release 的身份与实际摘要。成功兄弟集在相同定义和 Release 下跳过。候选只写入候选路径；目标为 `main` 时沿用 `candidates` 分支，隔离验收目标则写入配置的 `acceptance-*` 分支。两种情况都不切换 `stable/` 入口。
+
+不传 `--config` 的原有单集 `update` 每次只在开始查询一次官方 latest。发现新 Release 后，固定该响应的 Release ID、tag 和资产身份，解析 tag 的源码 commit，复用本地完整来源校验、转换和原生构建路径。已成功处理的相同 Release 只检查 latest 元数据；资产身份改变时失败，否则跳过 YAML／摘要下载、转换和 binary 执行。跳过时不会重新下载同一资产来探测其内容变化；失败重试取得字节时会核对已保存的来源摘要。
 
 `--state` 必须指向可保留的本地目录。`update-state.json` 用原子 rename 保存来源固定记录、各次候选状态和已成功处理的 Release。三者分别管理，因为“取得输入”“候选验证成功”和“稳定入口切换”不是同一件事。`status` 可在后续进程恢复查看这些本地记录，但不会查询远端。
 
@@ -87,7 +98,7 @@ pnpm --dir packages/rule-set-pipeline status --state /absolute/path/to/rule-stat
 
 同一状态目录通过 `update.lock/` 拒绝并发更新。正常退出或失败会清理锁；进程被强制终止后，须确认没有存活的更新进程，再删除残留锁目录重试。保留状态目录以继续核对固定来源；不要删除来源记录来绕过来源变化错误。
 
-Artifact Manifest（产物清单）记录某次不可变规则文件的固定地址、摘要和使用约束。候选在产物仓库的 `candidates` 分支追加，采用三个有序提交，使清单可以引用已经取得完整 commit 地址的文件：
+Artifact Manifest（产物清单）记录某次不可变规则文件的固定地址、摘要和使用约束。原有单集及目标为 `main` 的配置驱动更新在产物仓库的 `candidates` 分支追加候选；配置目标为 `acceptance-*` 时在该隔离分支追加候选。两者均采用三个有序提交，使清单可以引用已经取得完整 commit 地址的文件：
 
 1. `candidates/<candidate-id>/domains.json` 和 `domains.srs`。
 2. 引用第一步完整 commit URL 的 `manifest.json`，以及 `source.json`、`conversion-report.json`、`build.json`。
@@ -101,7 +112,7 @@ Artifact Manifest（产物清单）记录某次不可变规则文件的固定地
 
 ## 显式重建固定 Release
 
-普通 `update` 会跳过已成功处理的 Release。管理者需要用当前转换器或验证流程重新处理相同来源时，使用独立的 `rebuild`，并指定已有状态目录中成功处理过的固定 Release tag：
+原有单集 `update` 会跳过已成功处理的 Release。管理者需要用当前转换器或验证流程重新处理相同来源时，使用独立的单集 `rebuild`，并指定已有状态目录中成功处理过的固定 Release tag：
 
 ```sh
 pnpm --dir packages/rule-set-pipeline rebuild \

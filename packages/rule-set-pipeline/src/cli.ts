@@ -17,7 +17,7 @@ async function main(): Promise<number> {
     options: { state: { type: 'string' }, release: { type: 'string' }, out: { type: 'string' }, config: { type: 'string' }, id: { type: 'string', multiple: true }, 'expected-source': { type: 'string' }, binary: { type: 'string' }, candidate: { type: 'string' }, activation: { type: 'string' }, subscription: { type: 'string' }, 'expected-head': { type: 'string' }, branch: { type: 'string' }, help: { type: 'boolean' } },
   });
   if (values.help) {
-    console.log('Usage: build --release <fixed-tag> --out <new-directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...]] [--expected-source <source.json>] | update/status/rebuild/activate/rollback (see package README)');
+    console.log('Usage: build --release <fixed-tag> --out <new-directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...]] [--expected-source <source.json>] | update --state <directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...] [--release <pinned-tag>]] | status/rebuild/activate/rollback (see package README)');
     return 0;
   }
   if (positionals.length === 1 && ['activate', 'rollback'].includes(positionals[0])) {
@@ -40,10 +40,13 @@ async function main(): Promise<number> {
     return 0;
   }
   if (values.activation || values.candidate || values.subscription || values['expected-head'] || values.branch) throw new Error('Activation options require activate/rollback');
-  if ((values.config || values.id) && positionals[0] !== 'build') throw new Error('--config and --id require build');
+  if ((values.config || values.id) && !['build', 'update'].includes(positionals[0])) throw new Error('--config and --id require build or update');
   if (positionals.length === 1 && ['update', 'status', 'rebuild'].includes(positionals[0])) {
     const rebuild = positionals[0] === 'rebuild';
-    if (!values.state || values.out || values['expected-source'] || (rebuild ? !values.release || !values.binary || values.release.toLowerCase() === 'latest' : values.release)) {
+    if (!values.state || values.out || values['expected-source'] || (rebuild ? !values.release || !values.binary || values.release.toLowerCase() === 'latest' :
+          values.release && (positionals[0] !== 'update' || !values.config || !values.id?.length || values.release.toLowerCase() === 'latest')) ||
+        (rebuild && (values.config || values.id)) || (positionals[0] === 'status' && (values.config || values.id)) ||
+        (positionals[0] === 'update' && (values.id && !values.config || values.config && !values.binary))) {
       throw new Error('update/status requires --state; rebuild requires --state, --release <fixed-tag> and --binary');
     }
     if (positionals[0] === 'status') {
@@ -54,7 +57,11 @@ async function main(): Promise<number> {
         try { token = (await promisify(execFile)('gh', ['auth', 'token'])).stdout.trim(); } catch { /* public API may work without auth */ }
       }
       const options = { stateDirectory: resolve(values.state), binary: values.binary ?? '', token };
-      console.log(JSON.stringify(await (rebuild ? rebuildRules({ ...options, release: values.release! }) : updateRules(options))));
+      const result = rebuild ? await rebuildRules({ ...options, release: values.release! }) : values.config
+        ? await updateRules({ ...options, configuration: await readFile(values.config, 'utf8'), selectedIds: values.id, retryRelease: values.release })
+        : await updateRules(options);
+      console.log(JSON.stringify(result));
+      if ('results' in result && result.results.some(entry => entry.status === 'failed')) return 1;
     }
     return 0;
   }

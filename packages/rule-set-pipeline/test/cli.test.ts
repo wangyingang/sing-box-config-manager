@@ -146,3 +146,37 @@ test('CLI 回滚拒绝缺失目标、candidate 混用和非回滚命令上的历
     await assert.rejects(exec(process.execPath, ['--import', 'tsx', 'src/cli.ts', ...args]), (error: { code?: number }) => error.code === 1);
   }
 });
+
+test('CLI update 报告逐集失败并返回非零，status 在新进程读取逐集状态', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'rule-update-cli-'));
+  try {
+    const config = join(directory, 'config.yml'), state = join(directory, 'state');
+    const module = join(directory, 'update.mjs'), preload = join(directory, 'preload.mjs');
+    await writeFile(config, await readFile(new URL('../samples/three-ai-rule-sets.yml', import.meta.url), 'utf8'));
+    await writeFile(module, `export async function updateRules(options) {
+  if (!options.configuration.includes('ai-anthropic') || options.selectedIds?.[0] !== 'ai-anthropic' ||
+      options.retryRelease !== '20261104112839') throw new Error('configuration missing');
+  return { status: 'partial', results: [{ id: 'ai-anthropic', status: 'failed', error: 'readback failed' },
+    { id: 'ai-openai', status: 'processed' }] };
+}
+export async function readUpdateState() { return { state: { configuredProcessed: { 'ai-openai': { '42': { candidateId: 'fixed' } } } } }; }
+export async function rebuildRules() { throw new Error('unexpected rebuild'); }`);
+    await writeFile(preload, `import { registerHooks } from 'node:module';
+import { pathToFileURL } from 'node:url';
+registerHooks({ resolve(specifier, context, nextResolve) {
+  if (context.parentURL?.endsWith('/src/cli.ts') && specifier === './update.js')
+    return { url: pathToFileURL(${JSON.stringify(module)}).href, shortCircuit: true };
+  return nextResolve(specifier, context);
+} });`);
+    const run = (operation: string, extra: string[] = []) => exec(process.execPath, ['--import', 'tsx', '--import', preload,
+      'src/cli.ts', operation, '--state', state, ...extra]);
+    await assert.rejects(run('update', ['--config', config, '--id', 'ai-anthropic', '--release', '20261104112839', '--binary', '/unused']),
+      (error: { code?: number; stdout?: string }) => {
+        assert.equal(error.code, 1);
+        assert.equal(JSON.parse(error.stdout ?? '{}').results[0].id, 'ai-anthropic');
+        return true;
+      });
+    const { stdout } = await run('status');
+    assert.equal(JSON.parse(stdout).state.configuredProcessed['ai-openai']['42'].candidateId, 'fixed');
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
