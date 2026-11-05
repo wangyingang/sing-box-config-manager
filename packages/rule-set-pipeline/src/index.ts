@@ -52,6 +52,7 @@ export type { BuildTerm, Usage } from './projection.js';
 
 export { updateRules, rebuildRules, readUpdateState } from './update.js';
 export type { UpdateOptions, RebuildOptions, UpdateState } from './update.js';
+export type { ConfiguredUpdateOptions, ConfiguredRebuildOptions } from './configured-update.js';
 export { buildConfiguredRelease, parseBuildConfiguration } from './configured-build.js';
 export type { BuildConfiguration, RuleDefinition, ConfiguredResult } from './configured-build.js';
 

@@ -21,11 +21,15 @@ export interface ConfiguredUpdateOptions {
   /** Retry selected sets against a previously pinned and fully checked Release. */
   retryRelease?: string;
 }
+export interface ConfiguredRebuildOptions extends Omit<ConfiguredUpdateOptions, 'sampleTag' | 'retryRelease'> {
+  release: string;
+  selectedIds: string[];
+}
 type BatchEntry = { id: string; status: 'skipped'; candidateId: string; evidenceUrl: string }
   | { id: string; status: 'processed'; candidate: Candidate; readback: { url: string; sha256: string; byteLength: number; exactBytes: true }[] }
   | { id: string; status: 'failed'; candidateId: string; error: string };
 
-export async function processConfiguredUpdate(options: ConfiguredUpdateOptions) {
+export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, rebuildTag?: string) {
   const configuration = parseBuildConfiguration(options.configuration);
   const selected = options.selectedIds;
   if (selected && (selected.length === 0 || new Set(selected).size !== selected.length ||
@@ -34,6 +38,9 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions) 
   }
   if (options.retryRelease && (!selected || options.retryRelease.toLowerCase() === 'latest' || options.sampleTag)) {
     throw new Error('Fixed Release retry requires selected logical IDs and a prior pin');
+  }
+  if (rebuildTag && (!selected?.length || options.retryRelease || options.sampleTag)) {
+    throw new Error('Configured rebuild requires selected logical IDs and a fixed Release');
   }
   const definitions = selected ? configuration.ruleSets.filter(rule => selected.includes(rule.id)) : configuration.ruleSets;
   await mkdir(options.stateDirectory, { recursive: true });
@@ -44,10 +51,16 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions) 
     const state: UpdateState = restored.state;
     state.configuredProcessed ??= {};
     const processedFor = (id: string) => Object.hasOwn(state.configuredProcessed!, id) ? state.configuredProcessed![id] : undefined;
-    const retryPin = options.retryRelease
-      ? Object.values(state.pinned).find(entry => entry.identity?.tag === options.retryRelease && entry.source)
+    const fixedTag = rebuildTag ?? options.retryRelease;
+    const retryPin = fixedTag
+      ? Object.values(state.pinned).find(entry => entry.identity?.tag === fixedTag && entry.source)
       : undefined;
-    if (options.retryRelease && !retryPin?.identity) throw new Error('Fixed Release retry requires a previously pinned source');
+    if (fixedTag && !retryPin?.identity) throw new Error('Fixed Release requires a previously pinned source');
+    const definitionHash = (definition: typeof definitions[number]) => sha256(JSON.stringify({ definition, target: configuration.target }));
+    if (rebuildTag && definitions.some(definition => {
+      const previous = processedFor(definition.id)?.[String(retryPin!.identity!.releaseId)];
+      return !previous || previous.definitionSha256 !== definitionHash(definition);
+    })) throw new Error('Configured rebuild requires a successfully processed rule definition at the fixed Release');
     const save = async () => {
       const temporary = join(options.stateDirectory, `state-${randomUUID()}.tmp`);
       await writeFile(temporary, encode(state));
@@ -64,7 +77,7 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions) 
     const release = await response.json() as Record<string, unknown>;
     if (!Number.isSafeInteger(release.id) || Number(release.id) <= 0 || typeof release.tag_name !== 'string' ||
         (options.sampleTag && release.tag_name !== options.sampleTag) ||
-        (options.retryRelease && (release.id !== retryPin!.identity!.releaseId || release.tag_name !== options.retryRelease))) {
+        (fixedTag && (release.id !== retryPin!.identity!.releaseId || release.tag_name !== fixedTag))) {
       throw new Error('SOURCE_CHANGED: fixed Release identity changed');
     }
     const releaseId = Number(release.id), tag = release.tag_name;
@@ -78,8 +91,9 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions) 
     }))) throw new Error('SOURCE_CHANGED: processed Release assets changed');
     const results: BatchEntry[] = [];
     const pending = definitions.filter(definition => {
+      if (rebuildTag) return true;
       const existing = processedFor(definition.id)?.[key];
-      const definitionSha256 = sha256(JSON.stringify({ definition, target: configuration.target }));
+      const definitionSha256 = definitionHash(definition);
       if (!existing || existing.definitionSha256 !== definitionSha256 || !pin.source) return true;
       results.push({ id: definition.id, status: 'skipped', candidateId: existing.candidateId, evidenceUrl: existing.evidenceUrl });
       return false;
@@ -99,7 +113,7 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions) 
       for (const result of built.results) {
         const previousProcessed = processedFor(result.id)?.[key];
         const candidate: Candidate = { id: randomUUID(), logicalId: result.id, releaseId, tag,
-          status: 'building', operation: 'update', previousCandidateId: previousProcessed?.candidateId };
+          status: 'building', operation: rebuildTag ? 'rebuild' : 'update', previousCandidateId: previousProcessed?.candidateId };
         state.candidates[candidate.id] = candidate;
         await save();
         if (result.status === 'failed') {
@@ -112,9 +126,11 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions) 
           candidate.buildId = result.buildId;
           const readback = await publish(result, candidate, built.source, built.tools, configuration.target, publication, options.binary, save);
           candidate.status = 'verified';
-          if (!processedFor(result.id)) state.configuredProcessed[result.id] = {};
-          state.configuredProcessed[result.id][key] = { candidateId: candidate.id, tag,
-            evidenceUrl: candidate.evidenceUrl!, definitionSha256: sha256(JSON.stringify({ definition: result.definition, target: configuration.target })) };
+          if (!rebuildTag) {
+            if (!processedFor(result.id)) state.configuredProcessed[result.id] = {};
+            state.configuredProcessed[result.id][key] = { candidateId: candidate.id, tag,
+              evidenceUrl: candidate.evidenceUrl!, definitionSha256: definitionHash(result.definition) };
+          }
           await save();
           results.push({ id: result.id, status: 'processed', candidate, readback });
         } catch (error) {
