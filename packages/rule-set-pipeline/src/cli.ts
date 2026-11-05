@@ -26,7 +26,7 @@ async function main(): Promise<number> {
     if (!values.state || !values.subscription || !values['expected-head'] || !values.binary
       || (rollback ? !values.activation || !!values.candidate : !values.candidate || !!values.activation)
       || values.release || values.out || values['expected-source']
-      || (values.config ? values.id?.length !== 1 || rollback : !!values.id)) throw new Error(`${positionals[0]} requires --state, ${rollback ? '--activation' : '--candidate'}, --subscription, --expected-head and --binary`);
+      || (values.config ? values.id?.length !== 1 : !!values.id)) throw new Error(`${positionals[0]} requires --state, ${rollback ? '--activation' : '--candidate'}, --subscription, --expected-head and --binary`);
     const common = { ...(values.config ? { configuration: await readFile(values.config, 'utf8'), logicalId: values.id![0], stateDirectory: resolve(values.state) } : {}), subscription: JSON.parse(await readFile(values.subscription, 'utf8')), binary: values.binary,
       expectedHead: values['expected-head'], transport: githubActivation(values.branch) };
     const result = rollback

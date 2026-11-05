@@ -143,15 +143,24 @@ export interface RollbackOptions extends Omit<ActivationOptions, 'candidateEvide
   historicalActivationCommit: string;
 }
 
+function activationContext(options: Pick<ActivationOptions, 'configuration' | 'logicalId'>, transport: ActivationTransport) {
+  const configured = options.configuration !== undefined || options.logicalId !== undefined;
+  const configuration = configured ? parseBuildConfiguration(options.configuration ?? '') : undefined;
+  const definition = configuration?.ruleSets.find(rule => rule.id === options.logicalId);
+  if (configured) requireThat(definition && configuration?.target.branch === transport.branch, 'Unknown logical ID or activation target mismatch');
+  return { configured, definition, recordPath: definition ? `${definition.stablePath}/activation.json` : RECORD_PATH };
+}
+
 /** Revalidate a retained activation against today's contract, without rewriting history. */
 export async function rollbackRules(options: RollbackOptions) {
-  requireThat(options.configuration === undefined && options.logicalId === undefined, 'Configured rollback is not supported');
   requireThat(/^[a-f0-9]{40}$/.test(options.historicalActivationCommit), 'Expected full historical activation commit');
   const transport = options.transport ?? githubActivation();
-  const historical = JSON.parse((await transport.download(immutableUrl(options.historicalActivationCommit, RECORD_PATH))).toString());
+  const { definition, recordPath } = activationContext(options, transport);
+  const historical = JSON.parse((await transport.download(immutableUrl(options.historicalActivationCommit, recordPath))).toString());
   requireThat(historical.schemaVersion === 1 && typeof historical.id === 'string' && historical.id.length > 0
     && typeof historical.candidateId === 'string' && typeof historical.candidateEvidenceUrl === 'string'
-    && historical.files && equal(historical.subscription, options.subscription), 'Invalid or incompatible historical activation');
+    && historical.files && equal(historical.subscription, options.subscription)
+    && (!definition || (historical.logicalId === definition.id && Array.isArray(historical.history))), 'Invalid or incompatible historical activation');
   return performActivation({ ...options, transport, candidateEvidenceUrl: historical.candidateEvidenceUrl },
     { commit: options.historicalActivationCommit, record: historical });
 }
@@ -163,11 +172,7 @@ export async function activateRules(options: ActivationOptions) {
 async function performActivation(options: ActivationOptions, historical?: { commit: string; record: any }) {
   const transport = options.transport ?? githubActivation();
   requireThat(/^[a-f0-9]{40}$/.test(options.expectedHead), 'Expected full old remote head is required');
-  const configured = options.configuration !== undefined || options.logicalId !== undefined;
-  const configuration = configured ? parseBuildConfiguration(options.configuration ?? '') : undefined;
-  const definition = configuration?.ruleSets.find(rule => rule.id === options.logicalId);
-  if (configured) requireThat(definition && configuration?.target.branch === transport.branch, 'Unknown logical ID or activation target mismatch');
-  const recordPath = definition ? `${definition.stablePath}/activation.json` : RECORD_PATH;
+  const { configured, definition, recordPath } = activationContext(options, transport);
   requireThat((configured ? validateSubscriptionV2 : validateSubscription)(options.subscription) as boolean, 'Invalid Rule Subscription');
   const subscription = options.subscription as any;
   requireThat(subscription.systemRuleSetId === (definition?.id ?? 'v2fly:domain-list-community:category-ai-!cn'), 'System rule set identity mismatch');
