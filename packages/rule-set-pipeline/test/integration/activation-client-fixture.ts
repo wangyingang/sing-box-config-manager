@@ -12,7 +12,7 @@ export async function syntheticCandidate(binary: string, revision: string, domai
   configured?: { definition: RuleDefinition; target: { repository: string; branch: string } }) {
   const id = randomUUID(), prefix = `candidates/${id}`;
   const native = await buildNative([{ type: 'domain', value: domain }], binary);
-  const source = { kind: 'synthetic', description: 'issue-19 A/B controlled fixture', revision };
+  const source = { kind: 'synthetic', description: `Controlled synthetic origin ${revision}`, revision };
   const tools = { conversionPolicy: 'synthetic-issue-19' };
   const contracts = { artifactManifest: 1, sourceFormat: 4, buildRecord: 1 };
   const buildId = sha256(JSON.stringify(configured ? { ...configured, source, tools, nativeBuildId: native.buildId,

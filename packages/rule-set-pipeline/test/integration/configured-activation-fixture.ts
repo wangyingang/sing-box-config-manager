@@ -71,7 +71,7 @@ export async function configuredEnvironment(binary: string, directory: string) {
     return { schemaVersion: 2, systemRuleSetId: id, targetVersion: '1.14.4', sourceFormatVersion: 4,
       projections: { route: { formats }, 'dns-query': { formats: structuredClone(formats) }, 'dns-response': { unavailable: 'empty' } } };
   };
-  return { ids, candidates, subscription, transport, stored, snapshots, configuration, head: () => head,
+  return { ids, candidates, subscription, transport, stored, snapshots, configuration, publish, head: () => head,
     writes: () => writes, fail(value: string) { mode = value; },
     options: (id: string, evidenceUrl: string) => ({ logicalId: id, configuration, stateDirectory: directory,
       subscription: subscription(id), binary, expectedHead: head, candidateEvidenceUrl: evidenceUrl, transport }) };

@@ -2,7 +2,7 @@
 
 包名：`@sing-box-config-manager/rule-set-pipeline`。管理者需要更新系统维护的规则集合时，本模块从官方来源生成 sing-box 可加载的规则文件，验证并上传为候选，再由管理者显式激活。客户端随后通过稳定地址取得当前规则；构建成功、候选验证成功、稳定入口切换和客户端加载完成是不同的状态。
 
-当前 `update` 可发布 V2Fly `domain-list-community` 官方 Release 中 `dlc.dat_plain.yml` 的 `category-ai-!cn`，也可按管理者的 YAML 配置从同一 Release 发布多个列表。本地 `build` 同样支持配置驱动的多集构建。`activate --config ... --id ...` 支持按逻辑 ID 独立激活；`rollback` 仍只支持旧单集契约。输出包括 JSON 源规则文件和 SRS 二进制规则文件，目标版本固定为 sing-box **1.14.4**，JSON Source Format 固定为 **4**。合成 IP／混合输入用于验证构建 API，不表示已经支持其他真实来源或其发布激活。
+当前 `update` 可发布 V2Fly `domain-list-community` 官方 Release 中 `dlc.dat_plain.yml` 的 `category-ai-!cn`，也可按管理者的 YAML 配置从同一 Release 发布多个列表。本地 `build` 同样支持配置驱动的多集构建。`activate` 与 `rollback` 均可通过 `--config ... --id ...` 按逻辑 ID 独立操作。输出包括 JSON 源规则文件和 SRS 二进制规则文件，目标版本固定为 sing-box **1.14.4**，JSON Source Format 固定为 **4**。合成 IP／混合输入用于验证构建 API，不表示已经支持其他真实来源或其发布激活。
 
 ## 操作分别产生什么结果
 
@@ -78,7 +78,7 @@ pnpm --dir packages/rule-set-pipeline build:release --binary /absolute/path/to/s
 pnpm --dir packages/rule-set-pipeline activate --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config samples/three-ai-rule-sets.yml --id ai-openai --subscription /absolute/path/to/openai-subscription-v2.json --candidate https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/FULL_COMMIT/candidates/CANDIDATE_ID/readback.json --expected-head FULL_OLD_HEAD
 ```
 
-隔离验收时同时使用目标为 `acceptance-*` 的配置、对应订阅和 `--branch`。一次成功激活只提交选中集的稳定规则文件及 `stablePath/activation.json`。记录包含该集的候选、来源、验证、订阅和历史激活引用；其他集的字节和记录保留。候选发布不会激活规则；多集回滚由后续工单交付。
+隔离验收时同时使用目标为 `acceptance-*` 的配置、对应订阅和 `--branch`。一次成功激活只提交选中集的稳定规则文件及 `stablePath/activation.json`。记录包含该集的候选、来源、验证、订阅和历史激活引用；其他集的字节和记录保留。候选发布不会激活规则。[配置化回滚](#历史回滚)一次操作一个逻辑 ID。
 
 激活先复验候选的固定 HTTPS 字节、Manifest、来源、构建身份和原生结果，再核对预期旧 head 中的该集契约和实际稳定文件。单次 Git 提交使用旧 head 作为唯一 parent，非强制更新分支；并发变化导致冲突，不自动覆盖。Git API 的完整 tree/blob 用于判定旧激活记录是否存在，CDN 的 404 不作为首次激活依据。
 
@@ -193,7 +193,7 @@ Git 提交保持文件与记录一起更新，但 GitHub 缓存和客户端轮�
 
 ## 历史回滚
 
-从目标环境的历史 `stable/activation.json` 所在完整 commit 选择已激活版本。历史记录及其候选必须仍然保留；本命令不查询 Release、不重新转换来源，也不重新发布配置。
+配置化回滚从所选集历史 `<stablePath>/activation.json` 所在完整 commit 选择已激活版本；旧单集使用 `stable/activation.json`。历史记录及其候选必须仍然保留；本命令不查询 Release、不重新转换来源，也不重新发布配置。
 
 ```sh
 pnpm --dir packages/rule-set-pipeline rollback \
@@ -204,7 +204,9 @@ pnpm --dir packages/rule-set-pipeline rollback \
   --binary /absolute/path/to/sing-box
 ```
 
-隔离环境显式添加 `--branch acceptance-<name>`，契约入口须属于该分支。公开 API 为 `rollbackRules({ historicalActivationCommit, subscription, binary, expectedHead, transport? })`。
+配置化回滚同时添加 `--config /absolute/path/to/rule-sets.yml --id ai-openai`，一次只回滚一集。历史记录的逻辑 ID、候选归属及 v2 订阅必须与所选集一致。来源列表可以与当前配置不同；历史构建按原定义复核，稳定路径与目标分支仍须匹配当前配置。该集恢复历史规则字节并追加回滚记录，其他集的稳定文件、当前版本及历史保持不变。
+
+隔离环境显式添加 `--branch acceptance-<name>`，契约入口须属于该分支。公开 API 为 `rollbackRules({ historicalActivationCommit, subscription, binary, expectedHead, transport?, configuration?, logicalId?, stateDirectory? })`。配置化回滚同时提供 `configuration` 与 `logicalId`；提供 `stateDirectory` 时保存该集本地回执。
 
 回滚读取历史激活记录，核对当前完整订阅契约，重新执行正常激活的所有候选门禁，并比对历史稳定文件的实际字节及记录摘要。缺失、损坏、空内容或不兼容均在写入前拒绝。成功时只新增一次稳定入口提交，记录 `operation: rollback`、`historicalActivationCommit` 和 `historicalActivationId`；候选、Manifest、原验证记录及 `update-state.json` 均不改写。
 
@@ -324,3 +326,5 @@ RULE_CONFIGURED_REBUILD_BRANCH=acceptance-issue-38-<unique-suffix> \
 SING_BOX_TEST_BINARY=/absolute/path/to/sing-box-1.14.4 \
 node --import tsx --test test/acceptance/configured-rebuild.test.ts
 ```
+
+单集 v2 回滚与同进程客户端换源验收见 [Issue #40](docs/verification/issue-40.md)。
