@@ -1,7 +1,11 @@
 import { randomUUID } from 'node:crypto';
+import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { parseBuildConfiguration, type RuleDefinition } from './configured-build.js';
 import { Ajv } from 'ajv';
 import manifestSchema from '../contracts/artifact-manifest.schema.json' with { type: 'json' };
 import subscriptionSchema from '../contracts/rule-subscription.schema.json' with { type: 'json' };
+import subscriptionV2Schema from '../contracts/rule-subscription-v2.schema.json' with { type: 'json' };
 import { buildNative } from './native.js';
 import { decodedTerms, USAGES } from './projection.js';
 import { sha256 } from './release.js';
@@ -11,12 +15,17 @@ import { ActivationWriteError, githubActivation, type ActivationTransport } from
 const ajv = new Ajv({ strict: true });
 const validateManifest = ajv.compile(manifestSchema);
 const validateSubscription = ajv.compile(subscriptionSchema);
+const validateSubscriptionV2 = ajv.compile(subscriptionV2Schema);
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
 const equal = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 function requireThat(condition: unknown, message: string): asserts condition { if (!condition) throw new Error(message); }
 const RECORD_PATH = 'stable/activation.json';
 export interface ActivationOptions {
   candidateEvidenceUrl: string;
+  /** Trusted versioned configuration and exactly one selected logical ID. */
+  configuration?: string;
+  logicalId?: string;
+  stateDirectory?: string;
   /** Trusted host-owned contract, never a client-supplied URL override. */
   subscription: unknown;
   binary: string;
@@ -32,7 +41,7 @@ function candidateLocation(url: string, file: string) {
 }
 
 /** Reads the complete trusted remote record chain and validates actual bytes afresh. */
-export async function verifyActivationCandidate(options: Pick<ActivationOptions, 'candidateEvidenceUrl' | 'binary'>, transport: ActivationTransport) {
+export async function verifyActivationCandidate(options: Pick<ActivationOptions, 'candidateEvidenceUrl' | 'binary'>, transport: ActivationTransport, definition?: RuleDefinition) {
   const location = candidateLocation(options.candidateEvidenceUrl, 'readback.json');
   const evidence = JSON.parse((await transport.download(options.candidateEvidenceUrl)).toString('utf8'));
   requireThat(evidence.schemaVersion === 1 && evidence.status === 'remote-verified' && evidence.candidateId === location.id,
@@ -50,7 +59,7 @@ export async function verifyActivationCandidate(options: Pick<ActivationOptions,
   };
   const manifest = JSON.parse((await remote('manifest.json', evidence.metadataCommit)).toString());
   requireThat(validateManifest(manifest) as boolean, 'Invalid Artifact Manifest');
-  requireThat(manifest.id === 'v2fly:category-ai-!cn' && manifest.revision === location.id, 'Candidate identity mismatch');
+  requireThat(manifest.id === (definition?.id ?? 'v2fly:category-ai-!cn') && manifest.revision === location.id, 'Candidate identity mismatch');
   const source = JSON.parse((await remote('source.json', evidence.metadataCommit)).toString());
   const report = JSON.parse((await remote('conversion-report.json', evidence.metadataCommit)).toString());
   const build = JSON.parse((await remote('build.json', evidence.metadataCommit)).toString());
@@ -78,8 +87,15 @@ export async function verifyActivationCandidate(options: Pick<ActivationOptions,
       && Object.keys(build.contracts).length === 3 && build.contracts.artifactManifest === 1
       && build.contracts.sourceFormat === 4 && build.contracts.buildRecord === 1, 'Unsupported build contracts');
   }
+  if (definition) {
+    requireThat(equal(build.definition, definition) && build.id === definition.id && build.candidateId === location.id
+      && build.target?.repository === ARTIFACT_REPOSITORY && build.target?.branch === transport.branch
+      && build.contracts !== undefined, 'Configured build identity or target mismatch');
+  }
+  const configuredIdentity = { definition: build.definition, target: build.target, source, tools: build.tools, nativeBuildId: build.nativeBuildId,
+    contracts: { sourceFormat: 4, buildRecord: 1 } };
   requireThat(build.buildId === evidence.buildId && build.buildId === sha256(JSON.stringify(
-    build.contracts === undefined ? identity : { ...identity, contracts: build.contracts })), 'Build identity mismatch');
+    definition ? configuredIdentity : build.contracts === undefined ? identity : { ...identity, contracts: build.contracts })), 'Build identity mismatch');
   requireThat(['inputCount', 'convertedCount', 'invalidCount', 'unsupportedCount', 'duplicateCount', 'outputTermCount']
     .every(key => Number.isSafeInteger(report[key]) && report[key] >= 0), 'Invalid conversion counts');
   requireThat(report.status === 'converted' && report.inputCount > 0 && report.inputCount === report.convertedCount
@@ -87,6 +103,7 @@ export async function verifyActivationCandidate(options: Pick<ActivationOptions,
     && report.outputTermCount === report.convertedCount - report.duplicateCount, 'Incomplete conversion record');
   // The initial production slice supports the official pure-domain list and matching controlled fixtures.
   requireThat(manifest.artifacts.length === 2 && manifest.projections['dns-response'].unavailable === 'empty', 'Unsupported candidate projections');
+  requireThat(build.artifacts?.length === 2, 'Unexpected build artifact set');
   const sourceBytes = await remote('domains.json', evidence.filesCommit);
   const srsBytes = await remote('domains.srs', evidence.filesCommit);
   const json = JSON.parse(sourceBytes.toString());
@@ -113,7 +130,7 @@ export async function verifyActivationCandidate(options: Pick<ActivationOptions,
   }
   for (const usage of ['route', 'dns-query'] as const) {
     const ids = manifest.projections[usage].artifactIds;
-    requireThat(Array.isArray(ids) && ids.length === 2 && manifest.artifacts.every((entry: any) => ids.includes(entry.id)), 'Projection mapping mismatch');
+    requireThat(Array.isArray(ids) && ids.length === 2 && new Set(ids).size === 2 && manifest.artifacts.every((entry: any) => ids.includes(entry.id)), 'Projection mapping mismatch');
   }
   return { candidateId: location.id, evidenceUrl: options.candidateEvidenceUrl, manifest, source, bytesByFormat,
     validation: { tool: native.tool, buildId: build.buildId, nativeBuildId: native.buildId } };
@@ -126,6 +143,7 @@ export interface RollbackOptions extends Omit<ActivationOptions, 'candidateEvide
 
 /** Revalidate a retained activation against today's contract, without rewriting history. */
 export async function rollbackRules(options: RollbackOptions) {
+  requireThat(options.configuration === undefined && options.logicalId === undefined, 'Configured rollback is not supported');
   requireThat(/^[a-f0-9]{40}$/.test(options.historicalActivationCommit), 'Expected full historical activation commit');
   const transport = options.transport ?? githubActivation();
   const historical = JSON.parse((await transport.download(immutableUrl(options.historicalActivationCommit, RECORD_PATH))).toString());
@@ -143,11 +161,26 @@ export async function activateRules(options: ActivationOptions) {
 async function performActivation(options: ActivationOptions, historical?: { commit: string; record: any }) {
   const transport = options.transport ?? githubActivation();
   requireThat(/^[a-f0-9]{40}$/.test(options.expectedHead), 'Expected full old remote head is required');
-  requireThat(validateSubscription(options.subscription) as boolean, 'Invalid Rule Subscription');
+  const configured = options.configuration !== undefined || options.logicalId !== undefined;
+  const configuration = configured ? parseBuildConfiguration(options.configuration ?? '') : undefined;
+  const definition = configuration?.ruleSets.find(rule => rule.id === options.logicalId);
+  if (configured) requireThat(definition && configuration?.target.branch === transport.branch, 'Unknown logical ID or activation target mismatch');
+  const recordPath = definition ? `${definition.stablePath}/activation.json` : RECORD_PATH;
+  requireThat((configured ? validateSubscriptionV2 : validateSubscription)(options.subscription) as boolean, 'Invalid Rule Subscription');
   const subscription = options.subscription as any;
-  requireThat(subscription.systemRuleSetId === 'v2fly:domain-list-community:category-ai-!cn', 'System rule set identity mismatch');
+  requireThat(subscription.systemRuleSetId === (definition?.id ?? 'v2fly:domain-list-community:category-ai-!cn'), 'System rule set identity mismatch');
+  if (definition) {
+    requireThat(subscription.projections['dns-response'].unavailable === 'empty', 'Subscription usage availability mismatch');
+    const expectedFormats = subscription.projections.route.formats;
+    requireThat(expectedFormats && equal(expectedFormats, subscription.projections['dns-query'].formats), 'Subscription file reuse mismatch');
+    for (const [format, endpoint] of Object.entries(expectedFormats) as [string, any][]) {
+      const file = format === 'binary' ? 'domains.srs' : 'domains.json';
+      requireThat(endpoint.url === `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${transport.branch}/${definition.stablePath}/${file}`
+        && equal(endpoint.requiredCapabilities, []), 'Subscription stable path or capability mismatch');
+    }
+  }
   requireThat(await transport.head() === options.expectedHead, 'ACTIVATION_CONFLICT: remote head changed');
-  const candidate = await verifyActivationCandidate(options, transport);
+  const candidate = await verifyActivationCandidate(options, transport, definition);
   // Synthetic origins can never enter the production main branch.
   requireThat(candidate.source.kind !== 'synthetic' || transport.branch.startsWith('acceptance-'), 'Synthetic candidate requires an acceptance branch');
   const files: Record<string, Buffer> = {};
@@ -165,7 +198,7 @@ async function performActivation(options: ActivationOptions, historical?: { comm
       requireThat(artifact && artifact.requiredCapabilities.every((capability: string) => endpoint.requiredCapabilities.includes(capability)), 'Subscription format or capability mismatch');
       requireThat(endpoint.url.startsWith(urlPrefix), 'Unapproved stable subscription host or branch');
       const path = endpoint.url.slice(urlPrefix.length);
-      requireThat(/^stable\/[a-z0-9/-]+\.(srs|json)$/.test(path) && !path.split('/').includes('..') && path !== RECORD_PATH, 'Invalid stable rule path');
+      requireThat(/^stable\/[a-z0-9/_.-]+\.(srs|json)$/.test(path) && !path.split('/').includes('..') && path !== recordPath, 'Invalid stable rule path');
       const signature = JSON.stringify([format, [...endpoint.requiredCapabilities].sort()]);
       requireThat(!endpointSignatures.has(path) || endpointSignatures.get(path) === signature, 'Conflicting stable endpoint declarations');
       endpointSignatures.set(path, signature);
@@ -187,20 +220,30 @@ async function performActivation(options: ActivationOptions, historical?: { comm
   const root = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${options.expectedHead}/`;
   // Transport must distinguish an absent record (404) from an unavailable server.
   let previousBytes: Buffer | undefined;
-  try { previousBytes = await transport.download(root + RECORD_PATH); }
+  let previous: any;
+  try { previousBytes = await transport.download(root + recordPath); }
   catch (error) {
     if (!(error instanceof Error) || !error.message.startsWith('Readback HTTP 404: ')) throw error;
   }
   if (previousBytes) {
-    const previous = JSON.parse(previousBytes.toString());
+    previous = JSON.parse(previousBytes.toString());
+    requireThat(previous.schemaVersion === 1 && typeof previous.id === 'string' && typeof previous.candidateId === 'string'
+      && previous.files && (!definition || (previous.logicalId === definition.id && Array.isArray(previous.history))), 'Invalid previous activation record');
     requireThat(equal(previous.subscription, subscription), 'Existing subscription contract cannot change during activation');
+    requireThat(equal(Object.keys(previous.files).sort(), Object.keys(files).sort()), 'Previous stable file set mismatch');
+    for (const [path, metadata] of Object.entries(previous.files) as [string, any][]) {
+      const bytes = await transport.download(root + path);
+      requireThat(bytes.length === metadata.byteLength && sha256(bytes) === metadata.sha256, 'Previous stable file integrity mismatch');
+    }
   }
   const activation = { schemaVersion: 1, id: randomUUID(),
+    ...(definition ? { logicalId: definition.id, history: previous ? [...previous.history,
+      { commit: options.expectedHead, id: previous.id, candidateId: previous.candidateId }] : [] } : {}),
     ...(historical ? { operation: 'rollback' as const, historicalActivationCommit: historical.commit, historicalActivationId: historical.record.id } : {}), candidateId: candidate.candidateId,
     candidateEvidenceUrl: candidate.evidenceUrl, source: candidate.source, validation: candidate.validation,
     expectedHead: options.expectedHead, subscription,
     files: Object.fromEntries(Object.entries(files).map(([path, bytes]) => [path, { sha256: sha256(bytes), byteLength: bytes.length }])) };
-  files[RECORD_PATH] = encode(activation);
+  files[recordPath] = encode(activation);
   let commit: string;
   try { commit = await transport.commit(options.expectedHead, files, `${historical ? '回滚到历史规则候选' : '激活规则候选'} ${candidate.candidateId}`); }
   catch (error) {
@@ -210,8 +253,15 @@ async function performActivation(options: ActivationOptions, historical?: { comm
     try { head = await transport.head(); }
     catch { throw new Error(`ACTIVATION_UNKNOWN: cannot reconcile ${error.attemptedCommit}`, { cause: error }); }
     if (head === error.attemptedCommit) commit = head;
-    else if (head === options.expectedHead) throw new Error('ACTIVATION_NOT_APPLIED: remote still at expected old state', { cause: error });
-    else throw new Error(`ACTIVATION_CONFLICT_OR_SUPERSEDED: remote ${head}, attempted ${error.attemptedCommit}`, { cause: error });
+    else if (head === options.expectedHead) throw new Error(`ACTIVATION_NOT_APPLIED: attempted ${error.attemptedCommit}, remote still at expected old state`, { cause: error });
+    else {
+      // A later commit may retain this set unchanged. Its unique record proves application.
+      try {
+        const current = await transport.download(immutableUrl(head, recordPath));
+        requireThat(current.equals(files[recordPath]), 'Activation was superseded or not applied');
+        commit = error.attemptedCommit;
+      } catch { throw new Error(`ACTIVATION_CONFLICT_OR_SUPERSEDED: remote ${head}, attempted ${error.attemptedCommit}`, { cause: error }); }
+    }
   }
   // Confirm committed bytes via immutable HTTPS; branch CDN caches may still lag.
   try {
@@ -220,5 +270,18 @@ async function performActivation(options: ActivationOptions, historical?: { comm
       requireThat(actual.equals(bytes), `Committed activation mismatch: ${path}`);
     }
   } catch (error) { throw new Error(`ACTIVATION_APPLIED_READBACK_PENDING: commit ${commit}`, { cause: error }); }
-  return { status: 'activated' as const, commit, activation };
+  const result = { status: 'activated' as const, commit, activation };
+  if (definition && options.stateDirectory) {
+    const directory = join(options.stateDirectory, 'active-rule-versions');
+    const temporary = join(directory, `${definition.id}-${activation.id}.tmp`);
+    try {
+      await mkdir(directory, { recursive: true });
+      await writeFile(temporary, encode(result), { flag: 'wx' });
+      await rename(temporary, join(directory, `${definition.id}.json`));
+    } catch (error) {
+      await rm(temporary, { force: true }).catch(() => {});
+      throw new Error(`ACTIVATION_APPLIED_LOCAL_RECEIPT_PENDING: commit ${commit}`, { cause: error });
+    }
+  }
+  return result;
 }

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { buildRelease } from './index.js';
 import { buildNative } from './native.js';
@@ -38,7 +38,16 @@ export async function readUpdateState(directory: string) {
   if (state.schemaVersion !== 1 || !state.pinned || !state.processed || !state.candidates) throw new Error('Invalid update state');
   // Owned by explicit activation (#19), never written by update.
   const activeRuleVersion = await readJson(join(directory, 'active-version.json')) ?? null;
-  return { state, activeRuleVersion };
+  const activeRuleVersions: Record<string, any> = {};
+  let receipts: string[];
+  try { receipts = await readdir(join(directory, 'active-rule-versions')); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; receipts = []; }
+  for (const file of receipts.filter(file => /^[a-z][a-z0-9-]*\.json$/.test(file))) {
+    const receipt = await readJson(join(directory, 'active-rule-versions', file));
+    if (receipt?.status !== 'activated' || receipt.activation?.logicalId !== file.slice(0, -5)) throw new Error('Invalid activation receipt');
+    activeRuleVersions[file.slice(0, -5)] = receipt;
+  }
+  return { state, activeRuleVersion, activeRuleVersions };
 }
 export interface UpdateOptions {
   stateDirectory: string; binary: string; token?: string; fetch?: typeof fetch;

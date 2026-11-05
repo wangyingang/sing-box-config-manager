@@ -10,7 +10,7 @@ export interface ActivationTransport {
 
 /** Branch must already exist. Creating a production or acceptance environment is separate. */
 export function githubActivation(branch = 'main', request: typeof ghJson = ghJson): ActivationTransport {
-  if (!/^[a-zA-Z0-9-]+$/.test(branch) || branch === 'candidates') throw new Error('Invalid activation branch');
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(branch) || branch === 'candidates') throw new Error('Invalid activation branch');
   const api = (path: string, input?: unknown) => request(['api', `repos/${ARTIFACT_REPOSITORY}/${path}`,
     ...(input === undefined ? [] : ['--method', 'POST', '--input', '-'])], input);
   return {
@@ -24,14 +24,14 @@ export function githubActivation(branch = 'main', request: typeof ghJson = ghJso
     },
     async download(url) {
       const prefix = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/`;
-      const match = url.startsWith(prefix) ? /^([a-f0-9]{40})\/stable\/activation\.json$/.exec(url.slice(prefix.length)) : null;
+      const match = url.startsWith(prefix) ? /^([a-f0-9]{40})\/(stable\/(?:[a-z0-9._-]+\/)*activation\.json)$/.exec(url.slice(prefix.length)) : null;
       if (!match) return githubPublication(request).download(url);
       // A fresh raw/CDN 404 cannot prove the old record is absent. Read the
       // immutable Git tree/blob for concurrency state, failing closed on errors.
       const parent = await api(`git/commits/${match[1]}`);
       const tree = await api(`git/trees/${parent.tree.sha}?recursive=1`);
       if (tree.truncated) throw new Error('Cannot establish previous activation: truncated tree');
-      const entry = tree.tree.find((item: { path: string }) => item.path === 'stable/activation.json');
+      const entry = tree.tree.find((item: { path: string }) => item.path === match[2]);
       if (!entry) throw new Error(`Readback HTTP 404: ${url}`);
       if (entry.type !== 'blob' || entry.mode !== '100644') throw new Error('Invalid previous activation entry');
       const blob = await api(`git/blobs/${entry.sha}`);
