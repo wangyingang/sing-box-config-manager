@@ -135,6 +135,24 @@ test('after merge accepts a manually completed historical issue without an autom
   assert.equal(result.report.issues[0].stateReason, 'COMPLETED');
 });
 
+for (const phase of ['before-merge', 'after-merge']) {
+  test(`${phase} accepts an explicit empty issue set and rejects unintended closures`, t => {
+    const f = fixture(t);
+    if (phase === 'after-merge') merged(f);
+    const pr = f.data.pages[0].data.repository.pullRequest;
+    pr.closingIssuesReferences.nodes = [];
+    const args = ['--pr', '56', '--no-issues', '--phase', phase];
+    const result = f.run(args);
+    assert.equal(result.code, 0, result.stdout);
+    assert.deepEqual(result.report.issues, []);
+    assert.ok(result.calls.every(args => args[0] !== 'issue'));
+    pr.closingIssuesReferences.nodes.push(reference());
+    const unexpected = f.run(args);
+    assert.equal(unexpected.code, 1);
+    assert.match(unexpected.report.errors.join('\n'), /意外.*48/);
+  });
+}
+
 for (const [name, mutate] of [
   ['open issue', data => { data.issues[48].state = 'OPEN'; data.issues[48].stateReason = null; }],
   ['not planned', data => { data.issues[48].stateReason = 'NOT_PLANNED'; }],
@@ -157,6 +175,8 @@ test('help and invalid arguments never contact GitHub', t => {
   for (const args of [[], ['--pr', '56', '--issue', '48'],
     ['--pr', '56', '--issue', '48', '--phase', 'unknown'],
     ['--pr', '56', '--issue', '48', '--issue', '48', '--phase', 'before-merge'],
+    ['--pr', '56', '--issue', '48', '--no-issues', '--phase', 'before-merge'],
+    ['--pr', '56', '--phase', 'before-merge'],
     ['--pr', '56', '--issue', '0', '--phase', 'before-merge'],
     ['--pr', '56', '--issue', '48', '--phase', 'before-merge', '--repo', 'owner/repo/extra'],
   ]) {
