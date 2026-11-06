@@ -60,3 +60,8 @@ export { activateRules, rollbackRules, verifyActivationCandidate } from './activ
 export type { ActivationOptions, RollbackOptions } from './activation.js';
 export { githubActivation, ActivationWriteError } from './activation-transport.js';
 export type { ActivationTransport } from './activation-transport.js';
+
+export { initializeRemoteState, readRemoteState } from './remote-state.js';
+export { readRemoteStatus } from './remote-status.js';
+export { githubPublicationRepository, PublicationWriteError } from './publication-repository.js';
+export type { PublicationRepository, PublicationSnapshot } from './publication-repository.js';

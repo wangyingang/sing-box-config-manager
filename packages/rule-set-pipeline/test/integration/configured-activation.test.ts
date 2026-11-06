@@ -1,10 +1,8 @@
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { promisify } from 'node:util';
 import { activateRules } from '../../src/activation.js';
 import { readUpdateState } from '../../src/update.js';
 import { sha256 } from '../../src/release.js';
@@ -36,8 +34,7 @@ test('三集依次激活再逐集切换，只改变选中集的稳定字节、�
       assert.deepEqual(await env.transport.download(endpoint), before[`stable/${sibling}/domains.srs`]);
     }
   }
-  const { stdout } = await promisify(execFile)(process.execPath, ['--import', 'tsx', 'src/cli.ts', 'status', '--state', directory]);
-  assert.deepEqual(Object.keys(JSON.parse(stdout).activeRuleVersions).sort(), [...env.ids].sort());
+  assert.deepEqual(Object.keys((await readUpdateState(directory)).activeRuleVersions).sort(), [...env.ids].sort());
 }));
 
 for (const fault of ['wrong-set', 'duplicate-ids', 'missing', 'extra', 'evidence', 'srs', 'native', 'usage', 'capability', 'reuse', 'path', 'v1', 'old-record', 'old-bytes']) {

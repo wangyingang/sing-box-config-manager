@@ -1,18 +1,15 @@
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
 import fsPromises from 'node:fs/promises';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { promisify } from 'node:util';
 import { rebuildRules, updateRules, readUpdateState } from '../../src/update.js';
 import { sha256 } from '../../src/release.js';
 import type { PublicationTransport } from '../../src/publication.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
-const exec = promisify(execFile);
 const tag = '20261104112839';
 const configuration = `schemaVersion: 1
 source: v2fly/domain-list-community
@@ -113,8 +110,7 @@ test('单独重建固定 Release 的成功集保留原候选、成功记录与�
     }
   }
   assert.ok(env.commits.every(files => Object.keys(files).every(path => path.startsWith('candidates/'))));
-  const { stdout } = await exec(process.execPath, ['--import', 'tsx', 'src/cli.ts', 'status', '--state', directory]);
-  const status = JSON.parse(stdout);
+  const status = await readUpdateState(directory);
   assert.equal(status.state.candidates[entry.candidate.id].operation, 'rebuild');
   assert.deepEqual(status.activeRuleVersion, receipt);
   const skipped = await updateRules({ ...options(directory, env), selectedIds: ['ai-openai'], retryRelease: tag, binary: '/must-not-run' });
@@ -244,10 +240,9 @@ for (const failure of ['missing', 'invalid', 'readback']) {
       failure === 'invalid' ? /Rule conversion failed/ : /unavailable or invalid/);
     const before = (await readUpdateState(directory)).state;
     assert.equal(before.candidates[failed.candidateId].status, 'failed');
-    const { stdout } = await exec(process.execPath, ['--import', 'tsx', 'src/cli.ts', 'status', '--state', directory]);
-    const status = JSON.parse(stdout);
+    const status = await readUpdateState(directory);
     assert.equal(status.state.candidates[failed.candidateId].logicalId, 'ai-anthropic');
-    assert.equal(status.state.configuredProcessed['ai-openai']['42'].candidateId,
+    assert.equal(status.state.configuredProcessed!['ai-openai']['42'].candidateId,
       before.configuredProcessed!['ai-openai']['42'].candidateId);
     assert.equal(env.commits.filter(files => Object.keys(files).some(path => path.startsWith('stable/'))).length, 0);
     if (failure === 'readback') {

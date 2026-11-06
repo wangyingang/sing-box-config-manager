@@ -1,12 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { buildConfiguredRelease, parseBuildConfiguration } from './configured-build.js';
 import { publishCandidate } from './candidate-publication.js';
 import { githubPublication, immutableUrl, type PublicationTransport } from './publication.js';
 import { sha256 } from './release.js';
 import type { SourceRecord } from './types.js';
 import { readUpdateState, type Candidate, type UpdateState } from './update.js';
+import { openRemoteSession } from './remote-state.js';
+import { verifyActivationCandidate } from './activation.js';
 
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
 type Pin = Pick<SourceRecord, 'repository' | 'releaseId' | 'tag' | 'commit' | 'yaml' | 'checksum'>;
@@ -27,7 +30,7 @@ export interface ConfiguredRebuildOptions extends Omit<ConfiguredUpdateOptions, 
 }
 type BatchEntry = { id: string; status: 'skipped'; candidateId: string; evidenceUrl: string }
   | { id: string; status: 'processed'; candidate: Candidate; readback: { url: string; sha256: string; byteLength: number; exactBytes: true }[] }
-  | { id: string; status: 'failed'; candidateId: string; error: string };
+  | { id: string; status: 'failed'; candidateId: string; candidate?: Candidate; error: string };
 
 export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, rebuildTag?: string) {
   const configuration = parseBuildConfiguration(options.configuration);
@@ -47,25 +50,88 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, 
   const lock = join(options.stateDirectory, 'update.lock');
   await mkdir(lock);
   try {
-    const restored = await readUpdateState(options.stateDirectory);
+    const transport = options.publication ?? githubPublication(undefined,
+      configuration.target.branch === 'main' ? 'candidates' : configuration.target.branch);
+    const session = transport.repository ? await openRemoteSession(transport, options.stateDirectory, configuration.target.branch) : undefined;
+    const publication = session?.publication ?? transport;
+    const restored = session ? { state: session.state, activeRuleVersion: undefined } : await readUpdateState(options.stateDirectory);
     const state: UpdateState = restored.state;
+    const recovery = session && state.pendingOperation?.status === 'pending' ? state.pendingOperation : undefined;
+    if (recovery && (recovery.kind !== (rebuildTag ? 'rebuild' : 'update') || !recovery.configuration
+      || JSON.stringify(parseBuildConfiguration(recovery.configuration)) !== JSON.stringify(configuration)
+      || definitions.some(rule => recovery.selectedIds && !recovery.selectedIds.includes(rule.id))
+      || (rebuildTag ?? options.retryRelease) && (rebuildTag ?? options.retryRelease) !== recovery.tag)) {
+      throw new Error('RECOVERY_REQUEST_MISMATCH: resume the registered operation with its original configuration and selection');
+    }
     state.configuredProcessed ??= {};
     const processedFor = (id: string) => Object.hasOwn(state.configuredProcessed!, id) ? state.configuredProcessed![id] : undefined;
-    const fixedTag = rebuildTag ?? options.retryRelease;
+    const fixedTag = recovery?.tag ?? rebuildTag ?? options.retryRelease;
     const retryPin = fixedTag
-      ? Object.values(state.pinned).find(entry => entry.identity?.tag === fixedTag && entry.source)
+      ? Object.values(state.pinned).find(entry => entry.identity?.tag === fixedTag && (recovery || entry.source))
       : undefined;
     if (fixedTag && !retryPin?.identity) throw new Error('Fixed Release requires a previously pinned source');
     const definitionHash = (definition: typeof definitions[number]) => sha256(JSON.stringify({ definition, target: configuration.target }));
+    const operationFinished = () => {
+      const operation = state.pendingOperation!;
+      return configuration.ruleSets.filter(rule => !operation.selectedIds || operation.selectedIds.includes(rule.id)).every(rule => {
+        const completed = Object.values(state.candidates).some(candidate => candidate.operationId === operation.id
+          && candidate.logicalId === rule.id && candidate.retained && candidate.phase === 'complete' && candidate.status === 'verified');
+        const previous = processedFor(rule.id)?.[String(operation.releaseId)];
+        return completed || operation.kind === 'update' && previous?.definitionSha256 === definitionHash(rule)
+          && state.candidates[previous.candidateId]?.retained === true && state.candidates[previous.candidateId]?.phase === 'complete';
+      });
+    };
     if (rebuildTag && definitions.some(definition => {
       const previous = processedFor(definition.id)?.[String(retryPin!.identity!.releaseId)];
       return !previous || previous.definitionSha256 !== definitionHash(definition);
     })) throw new Error('Configured rebuild requires a successfully processed rule definition at the fixed Release');
-    const save = async () => {
+    const save = session?.save ?? (async () => {
       const temporary = join(options.stateDirectory, `state-${randomUUID()}.tmp`);
       await writeFile(temporary, encode(state));
       await rename(temporary, join(options.stateDirectory, 'update-state.json'));
+    });
+    const recoveredResults: BatchEntry[] = [];
+    const verify = async (candidate: Candidate, definition: typeof definitions[number]) => {
+      if (!candidate.retained || !candidate.evidenceUrl || ['domains.json', 'domains.srs', 'manifest.json', 'source.json',
+        'conversion-report.json', 'build.json', 'readback.json'].some(file => !session!.snapshot.paths.includes(`candidates/${candidate.id}/${file}`))) {
+        throw new Error('CANDIDATE_UNAVAILABLE: processed Release no longer has a retained candidate');
+      }
+      const verified = await verifyActivationCandidate({ candidateEvidenceUrl: candidate.evidenceUrl, binary: options.binary }, {
+        branch: configuration.target.branch, download: publication.download.bind(publication),
+        head: async () => session!.snapshot.head, commit: async () => { throw new Error('Candidate verification is read-only'); },
+      }, definition);
+      if (!isDeepStrictEqual(verified.source, state.pinned[String(candidate.releaseId)]?.source)
+        || verified.validation.buildId !== candidate.buildId) throw new Error('RECOVERY_BUILD_CHANGED: registered source or build differs');
     };
+    if (session && rebuildTag && !recovery) {
+      for (const definition of definitions) {
+        const previous = processedFor(definition.id)![String(retryPin!.identity!.releaseId)];
+        const candidate = state.candidates[previous.candidateId];
+        if (!candidate || candidate.phase !== 'complete') throw new Error('CANDIDATE_UNAVAILABLE: rebuild history is no longer retained');
+        await verify(candidate, definition);
+      }
+    }
+    if (session && recovery) {
+      for (const definition of definitions) {
+        const candidate = Object.values(state.candidates).find(value => value.operationId === recovery.id && value.logicalId === definition.id);
+        if (!candidate || !['evidence', 'complete'].includes(candidate.phase!)) continue;
+        await verify(candidate, definition);
+        const evidence = JSON.parse((await publication.download(candidate.evidenceUrl!)).toString());
+        candidate.status = 'verified'; candidate.phase = 'complete'; delete candidate.error;
+        if (!rebuildTag) {
+          if (!processedFor(definition.id)) state.configuredProcessed[definition.id] = {};
+          state.configuredProcessed[definition.id][String(recovery.releaseId)] = { candidateId: candidate.id, tag: recovery.tag,
+            evidenceUrl: candidate.evidenceUrl!, definitionSha256: definitionHash(definition) };
+        }
+        recoveredResults.push({ id: definition.id, status: 'processed', candidate, readback: evidence.readback });
+      }
+      if (recoveredResults.length) {
+        if (operationFinished()) recovery.status = 'complete';
+        await save();
+        if (recoveredResults.length === definitions.length) return { status: 'processed', releaseId: recovery.releaseId, tag: recovery.tag,
+          results: recoveredResults, activeRuleVersion: undefined, ...(session.cacheWarning ? { cacheWarning: session.cacheWarning } : {}) };
+      }
+    }
     const fetcher = options.fetch ?? fetch;
     const endpoint = retryPin ? String(retryPin.identity!.releaseId)
       : options.sampleTag ? `tags/${encodeURIComponent(options.sampleTag)}` : 'latest';
@@ -89,15 +155,23 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, 
       const matches = (release.assets as Record<string, unknown>[]).filter(entry => entry.name === asset.name);
       return matches.length !== 1 || matches[0].id !== asset.id || matches[0].browser_download_url !== asset.url;
     }))) throw new Error('SOURCE_CHANGED: processed Release assets changed');
-    const results: BatchEntry[] = [];
-    const pending = definitions.filter(definition => {
-      if (rebuildTag) return true;
+    if (session && !recovery) state.pendingOperation = { id: randomUUID(), kind: rebuildTag ? 'rebuild' : 'update',
+      generation: session.generation, expectedHead: session.snapshot.head, releaseId, tag, status: 'pending', configuration: options.configuration, selectedIds: selected };
+    const results: BatchEntry[] = [...recoveredResults];
+    const pending = [] as typeof definitions;
+    for (const definition of definitions) {
+      if (recoveredResults.some(result => result.id === definition.id)) continue;
+      if (rebuildTag) { pending.push(definition); continue; }
       const existing = processedFor(definition.id)?.[key];
       const definitionSha256 = definitionHash(definition);
-      if (!existing || existing.definitionSha256 !== definitionSha256 || !pin.source) return true;
+      if (!existing || existing.definitionSha256 !== definitionSha256 || !pin.source) { pending.push(definition); continue; }
+      if (session) {
+        const candidate = state.candidates[existing.candidateId];
+        if (!candidate || candidate.phase !== 'complete') throw new Error('CANDIDATE_UNAVAILABLE: processed candidate is incomplete');
+        await verify(candidate, definition);
+      }
       results.push({ id: definition.id, status: 'skipped', candidateId: existing.candidateId, evidenceUrl: existing.evidenceUrl });
-      return false;
-    });
+    }
     if (pending.length) {
       const built = await buildConfiguredRelease({ configuration: options.configuration,
         selectedIds: pending.map(rule => rule.id), binary: options.binary,
@@ -108,24 +182,28 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, 
           },
           onSource: async source => { pin.source ??= source; await save(); },
         } });
-      const publication = options.publication ?? githubPublication(undefined,
-        configuration.target.branch === 'main' ? 'candidates' : configuration.target.branch);
       for (const result of built.results) {
         const previousProcessed = processedFor(result.id)?.[key];
-        const candidate: Candidate = { id: randomUUID(), logicalId: result.id, releaseId, tag,
-          status: 'building', operation: rebuildTag ? 'rebuild' : 'update', previousCandidateId: previousProcessed?.candidateId };
+        const recovering = session && Object.values(state.candidates).find(candidate => candidate.operationId === state.pendingOperation!.id && candidate.logicalId === result.id);
+        const candidate: Candidate = recovering || { id: randomUUID(), logicalId: result.id, releaseId, tag,
+          status: 'building', operation: rebuildTag ? 'rebuild' : 'update', previousCandidateId: previousProcessed?.candidateId,
+          ...(session ? { generation: session.generation, phase: 'registered' as const, retained: true,
+            definition: result.definition, targetBranch: configuration.target.branch, operationId: state.pendingOperation!.id } : {}) };
+        if (session && !candidate.retained) throw new Error('CANDIDATE_UNAVAILABLE: registered candidate has been removed');
         state.candidates[candidate.id] = candidate;
         await save();
         if (result.status === 'failed') {
           candidate.status = 'failed'; candidate.error = `${result.error}: ${JSON.stringify(result.report.diagnostics)}`;
           await save();
-          results.push({ id: result.id, status: 'failed', candidateId: candidate.id, error: candidate.error });
+          results.push({ id: result.id, status: 'failed', candidateId: candidate.id, candidate, error: candidate.error });
           continue;
         }
         try {
+          if (candidate.buildId && candidate.buildId !== result.buildId) throw new Error('RECOVERY_BUILD_CHANGED: original tool and build identity required');
           candidate.buildId = result.buildId;
           const readback = await publish(result, candidate, built.source, built.tools, configuration.target, publication, options.binary, save);
-          candidate.status = 'verified';
+          candidate.status = 'verified'; delete candidate.error;
+          if (session) candidate.phase = 'complete';
           if (!rebuildTag) {
             if (!processedFor(result.id)) state.configuredProcessed[result.id] = {};
             state.configuredProcessed[result.id][key] = { candidateId: candidate.id, tag,
@@ -134,6 +212,7 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, 
           await save();
           results.push({ id: result.id, status: 'processed', candidate, readback });
         } catch (error) {
+          if (session && /PUBLICATION_(CONFLICT|PENDING)/.test(String(error))) throw error;
           const records = processedFor(result.id);
           if (records) {
             if (previousProcessed) records[key] = previousProcessed;
@@ -141,14 +220,15 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, 
           }
           candidate.status = 'failed'; candidate.error = error instanceof Error ? error.message : String(error);
           await save();
-          results.push({ id: result.id, status: 'failed', candidateId: candidate.id, error: candidate.error });
+          results.push({ id: result.id, status: 'failed', candidateId: candidate.id, candidate, error: candidate.error });
         }
       }
     }
     results.sort((a, b) => definitions.findIndex(rule => rule.id === a.id) - definitions.findIndex(rule => rule.id === b.id));
     const failed = results.filter(entry => entry.status === 'failed').length;
+    if (session && !failed) { state.pendingOperation!.status = operationFinished() ? 'complete' : 'pending'; await save(); }
     return { status: failed ? (failed === results.length ? 'failed' : 'partial') : pending.length ? 'processed' : 'skipped',
-      releaseId, tag, results, activeRuleVersion: restored.activeRuleVersion };
+      releaseId, tag, results, activeRuleVersion: restored.activeRuleVersion, ...(session?.cacheWarning ? { cacheWarning: session.cacheWarning } : {}) };
   } finally { await rm(lock, { recursive: true, force: true }); }
 }
 

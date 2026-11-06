@@ -20,10 +20,10 @@ export async function publishCandidate(options: {
   const prefix = `candidates/${candidate.id}`;
   const files = Object.fromEntries(native.artifacts.map(artifact => [`${prefix}/${artifact.file}`, artifact.content]));
   candidate.status = 'publishing'; await save();
-  const filesCommit = candidate.filesCommit = await publication.commit(files, `候选 ${candidate.id}：规则文件`);
+  const filesCommit = candidate.filesCommit ??= await publication.commit(files, `候选 ${candidate.id}：规则文件`);
   await save();
   const records = options.records(filesCommit);
-  const metadataCommit = candidate.metadataCommit = await publication.commit(records, `候选 ${candidate.id}：Manifest 与构建记录`);
+  const metadataCommit = candidate.metadataCommit ??= await publication.commit(records, `候选 ${candidate.id}：Manifest 与构建记录`);
   candidate.manifestUrl = immutableUrl(metadataCommit, `${prefix}/manifest.json`);
   await save();
   const readback: { url: string; sha256: string; byteLength: number; exactBytes: true }[] = [];
@@ -48,7 +48,7 @@ export async function publishCandidate(options: {
   const evidence = Buffer.from(JSON.stringify({ schemaVersion: 1, candidateId: candidate.id, status: 'remote-verified',
     filesCommit, metadataCommit, buildId, readback, native: remoteNative.validation, tool: remoteNative.tool }, null, 2) + '\n');
   const evidencePath = `${prefix}/readback.json`;
-  candidate.evidenceCommit = await publication.commit({ [evidencePath]: evidence }, `候选 ${candidate.id}：HTTPS 回读验证`);
+  candidate.evidenceCommit ??= await publication.commit({ [evidencePath]: evidence }, `候选 ${candidate.id}：HTTPS 回读验证`);
   candidate.evidenceUrl = immutableUrl(candidate.evidenceCommit, evidencePath);
   await verify(evidencePath, evidence, candidate.evidenceCommit);
   return readback;

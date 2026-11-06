@@ -7,7 +7,10 @@ import { promisify } from 'node:util';
 import { saveActivationReceipt } from './activation-receipt.js';
 import { activateRules, rollbackRules } from './activation.js';
 import { githubActivation } from './activation-transport.js';
-import { rebuildRules, updateRules, readUpdateState } from './update.js';
+import { rebuildRules, updateRules } from './update.js';
+import { githubPublication } from './publication.js';
+import { initializeRemoteState } from './remote-state.js';
+import { readRemoteStatus } from './remote-status.js';
 import { sha256 } from './release.js';
 import { buildRelease, buildNative, decodedTerms, NativeBuildError, type SourceRecord } from './index.js';
 import { buildConfiguredRelease, parseBuildConfiguration } from './configured-build.js';
@@ -18,7 +21,7 @@ async function main(): Promise<number> {
     options: { state: { type: 'string' }, release: { type: 'string' }, out: { type: 'string' }, config: { type: 'string' }, id: { type: 'string', multiple: true }, 'expected-source': { type: 'string' }, binary: { type: 'string' }, candidate: { type: 'string' }, activation: { type: 'string' }, subscription: { type: 'string' }, 'expected-head': { type: 'string' }, branch: { type: 'string' }, help: { type: 'boolean' } },
   });
   if (values.help) {
-    console.log('Usage: build --release <fixed-tag> --out <new-directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...]] [--expected-source <source.json>] | update --state <directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...] [--release <pinned-tag>]] | status/rebuild/activate/rollback (see package README)');
+    console.log('Usage: build --release <fixed-tag> --out <new-directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...]] [--expected-source <source.json>] | update --state <directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...] [--release <pinned-tag>]] | initialize/status [--config <yaml> | --branch <target>] | rebuild/activate/rollback (see package README)');
     return 0;
   }
   if (positionals.length === 1 && ['activate', 'rollback'].includes(positionals[0])) {
@@ -36,9 +39,21 @@ async function main(): Promise<number> {
     console.log(JSON.stringify(result));
     return 0;
   }
+  if (positionals.length === 1 && ['initialize', 'status'].includes(positionals[0])) {
+    if (values.release || values.out || values['expected-source'] || values.activation || values.candidate || values.subscription
+      || values['expected-head'] || values.id || (positionals[0] === 'initialize' && values.binary)) throw new Error('Invalid remote state options');
+    const target = values.config ? parseBuildConfiguration(await readFile(values.config, 'utf8')).target.branch : values.branch ?? 'main';
+    if (values.config && values.branch && target !== values.branch) throw new Error('Configuration and branch disagree');
+    const publication = githubPublication(undefined, target === 'main' ? 'candidates' : target);
+    const result = positionals[0] === 'initialize'
+      ? await initializeRemoteState(publication.repository!, target)
+      : await readRemoteStatus({ repository: publication.repository!, publication, binary: values.binary });
+    console.log(JSON.stringify(result));
+    return 0;
+  }
   if (values.activation || values.candidate || values.subscription || values['expected-head'] || values.branch) throw new Error('Activation options require activate/rollback');
   if ((values.config || values.id) && !['build', 'update', 'rebuild'].includes(positionals[0])) throw new Error('--config and --id require build, update or rebuild');
-  if (positionals.length === 1 && ['update', 'status', 'rebuild'].includes(positionals[0])) {
+  if (positionals.length === 1 && ['update', 'rebuild'].includes(positionals[0])) {
     const rebuild = positionals[0] === 'rebuild';
     if (!values.state || values.out || values['expected-source'] || (rebuild ? !values.release || !values.binary || values.release.toLowerCase() === 'latest' :
           values.release && (positionals[0] !== 'update' || !values.config || !values.id?.length || values.release.toLowerCase() === 'latest')) ||
@@ -46,9 +61,7 @@ async function main(): Promise<number> {
         (positionals[0] === 'update' && (values.id && !values.config || values.config && !values.binary))) {
       throw new Error('update/status requires --state; rebuild requires --state, --release <fixed-tag> and --binary');
     }
-    if (positionals[0] === 'status') {
-      console.log(JSON.stringify(await readUpdateState(resolve(values.state))));
-    } else {
+    {
       let token = process.env.GITHUB_TOKEN;
       if (!token) {
         try { token = (await promisify(execFile)('gh', ['auth', 'token'])).stdout.trim(); } catch { /* public API may work without auth */ }

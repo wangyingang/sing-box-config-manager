@@ -15,6 +15,7 @@
     "test:rebuild": "node --import tsx --test test/acceptance/rebuild.test.ts",
     "update": "node --import tsx src/cli.ts update",
     "status": "node --import tsx src/cli.ts status",
+    "initialize": "node --import tsx src/cli.ts initialize",
     "test:publication": "node --import tsx --test test/acceptance/publication.test.ts",
     "rollback": "node --import tsx src/cli.ts rollback",
     "activate": "node --import tsx src/cli.ts activate",

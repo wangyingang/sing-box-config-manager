@@ -38,6 +38,10 @@ test('GitHub 发布只追加候选文件，通过非强制 candidates 引用更�
   assert.equal(mutation.input.force, false);
   assert.ok(!remote.calls.some(call => call.args.includes('PATCH') && !call.args[1].endsWith('/heads/candidates')));
 });
+test('已登记的发布分支禁止旧 transport 绕过远端操作门禁', async () => {
+  const remote = github({ existing: 'pipeline/state.json' });
+  await assert.rejects(remote.transport.commit({ 'candidates/abc/domains.json': Buffer.from('content') }, 'candidate'), /registered|登记/i);
+});
 for (const [name, options, path] of [
   ['历史路径', { existing: 'candidates/abc/domains.json' }, 'candidates/abc/domains.json'],
   ['tree 截断', { truncated: true }, 'candidates/abc/domains.json'],
