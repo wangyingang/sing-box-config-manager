@@ -11,11 +11,12 @@
 | 操作 | 输入与结果 | 是否改变稳定入口 |
 | --- | --- | --- |
 | `build:release` | 读取指定 Release，在新目录生成经过本地原生验证的规则文件及记录 | 否；不上传 |
-| `update` | 查询一次官方 latest；单集或按配置逐集构建并发布未成功处理的候选 | 否；候选仍待显式激活 |
-| `rebuild` | 对本地状态已固定且成功处理过的 Release 重新构建，发布新候选 | 否；保留原候选与成功处理记录 |
+| `update` | 先恢复远端未完成操作；无待恢复操作时查询一次 latest，逐集发布候选 | 否；候选仍待显式激活 |
+| `rebuild` | 对远端已固定且成功处理、必要证据仍保留的 Release 重建候选 | 否；保留原候选与成功处理记录 |
 | `activate` | 复验选定候选，更新稳定规则文件及激活记录 | 是；客户端何时加载由其更新机制决定 |
 | `rollback` | 复验保留的历史激活版本，新增提交恢复其规则内容 | 是；同样存在传播与轮询延迟 |
-| `status` | 读取指定状态目录中的处理记录和本地激活回执 | 否；也不查询远端当前版本 |
+| `initialize` | 在已存在的发布分支显式创建远端恢复状态；拒绝覆盖已有状态 | 否 |
+| `status` | 读取远端当前版本、候选进度、待核实操作和仍可用的回滚目标 | 否；忽略本地回执 |
 
 “规则候选”（Rule Candidate）是一组等待验证或激活的文件；“当前规则版本”是稳定入口当前交付的版本，均不表示所有客户端已经加载该内容。例如客户端正在使用 A 时，`update` 成功只会产生候选 B；`activate` 才将稳定入口切换到 B，客户端随后按自身周期获取它。
 
@@ -82,39 +83,52 @@ pnpm --dir packages/rule-set-pipeline activate --state /absolute/path/to/rule-st
 
 激活先复验候选的固定 HTTPS 字节、Manifest、来源、构建身份和原生结果，再核对预期旧 head 中的该集契约和实际稳定文件。单次 Git 提交使用旧 head 作为唯一 parent，非强制更新分支；并发变化导致冲突，不自动覆盖。Git API 的完整 tree/blob 用于判定旧激活记录是否存在，CDN 的 404 不作为首次激活依据。
 
-`status` 中的 `activeRuleVersions` 按逻辑 ID 返回本地激活回执及历史，`state.candidates`／`state.configuredProcessed` 保存候选状态。回执写入独立文件，更新一集不会覆盖其他集。`status` 不查询远端，本地回执可能落后；远端 `stablePath/activation.json` 是该集当前激活记录。
+`status` 中的 `activeRuleVersions` 按逻辑 ID 返回远端 `stablePath/activation.json` 及其当前字节核验结果，`state.candidates`／`state.configuredProcessed` 来自远端候选记录。`rollbackTargets` 仅列出必要证据仍保留且与当前订阅兼容的目标；不可用原因单独列在 `unavailableRollbackTargets`。本地激活回执仍独立保存，供诊断使用，不能覆盖远端事实。
 
 提交回复丢失后不重复写入：远端仍是旧 head 时报告 `ACTIVATION_NOT_APPLIED`；远端是目标 commit，或后续 head 仍保留本次唯一记录时，回读目标 commit 并确认成功。无法读取 head 时报告 `ACTIVATION_UNKNOWN`，其他无法判定的 head 报告 `ACTIVATION_CONFLICT_OR_SUPERSEDED`。已提交但回读或本地回执失败，分别报告 `ACTIVATION_APPLIED_READBACK_PENDING` 或 `ACTIVATION_APPLIED_LOCAL_RECEIPT_PENDING`。这些结果均携带已知提交身份，恢复时应先核对远端，不把错误当成旧入口未改变。
 
 ## 正常更新与候选发布
 
-先通过 `gh auth login` 配置有产物仓库写权限的现有 GitHub 身份。产物仓库固定为公开的 `wangyingang/sing-box-rule-artifacts`，需要已存在且至少有一次初始提交。CLI 复用 `gh` 登录；来源读取优先使用 `GITHUB_TOKEN`，否则读取现有 `gh auth token`，凭据只在进程内使用。
+先通过 `gh auth login` 配置有产物仓库写权限的现有 GitHub 身份。产物仓库固定为公开的 `wangyingang/sing-box-rule-artifacts`，需要已存在的目标分支和至少一次初始提交。CLI 复用 `gh` 登录；来源读取优先使用 `GITHUB_TOKEN`，否则读取现有 `gh auth token`，凭据只在进程内使用。
+
+首次使用先显式初始化对应环境。默认目标 `main` 的恢复状态和候选保存在 `candidates`；隔离环境的恢复状态、候选和稳定入口位于同一 `acceptance-*` 分支。初始化不创建分支、不导入旧本地状态、不启用定时更新。已有阶段 A 候选和稳定文件保留；旧本地操作不会自动变为远端成功记录。
 
 ```sh
+pnpm --dir packages/rule-set-pipeline initialize --branch acceptance-issue-48
+pnpm --dir packages/rule-set-pipeline status --branch acceptance-issue-48
+# 默认环境需事先初始化 candidates 分支；以下为已初始化环境的调用方式。
 pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4
-pnpm --dir packages/rule-set-pipeline status --state /absolute/path/to/rule-state
+pnpm --dir packages/rule-set-pipeline status
 ```
 
-配置驱动的多集候选发布传入同一份版本化 YAML；`--id` 可只处理指定逻辑 ID。首次发布请使用可持久保存的状态目录，并先在 `acceptance-*` 目标分支验收：
+配置驱动的多集候选发布传入同一份版本化 YAML；`--id` 可只处理指定逻辑 ID。首次发布先使用目标为 `acceptance-*` 的配置初始化并验收。`--state` 是可重建的本地缓存目录：
 
 ```sh
 pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config samples/three-ai-rule-sets.yml
 pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config samples/three-ai-rule-sets.yml --id ai-anthropic
 pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config samples/three-ai-rule-sets.yml --id ai-anthropic --release 20261104112839
-pnpm --dir packages/rule-set-pipeline status --state /absolute/path/to/rule-state
+pnpm --dir packages/rule-set-pipeline status --config samples/three-ai-rule-sets.yml --binary /absolute/path/to/sing-box-1.14.4
 ```
 
-一次批量调用仅获取一份共同 YAML 和摘要，随后逐集构建、原生验证、发布不可变候选并回读。共同输入损坏会停止整批，不发布新候选；单集缺表、非法条目或回读失败只使该集失败。命令输出 `results` 中每个逻辑 ID 的 `processed`、`skipped` 或 `failed` 与失败原因；任一集失败时退出码为 1。`status` 的 `configuredProcessed` 按逻辑 ID 和 Release ID 保存成功候选，`candidates` 保存每次尝试及其归属。若失败后 `latest` 已前进，使用最后一个示例中的 `--release` 指定状态目录里已固定且完整校验的来源，并配合 `--id` 只重试受影响的集；命令重新核对该 Release 的身份与实际摘要。成功兄弟集在相同定义和 Release 下跳过。候选只写入候选路径；目标为 `main` 时沿用 `candidates` 分支，隔离验收目标则写入配置的 `acceptance-*` 分支。两种情况都不切换 `stable/` 入口。
+一次批量调用共享一份已固定、校验的 YAML 和摘要，随后逐集构建、原生验证并发布。共同输入损坏停止整批；单集缺表、非法条目或回读失败保留兄弟集结果。`results` 分别报告 `processed`、`skipped`、`failed`，失败项携带候选进度和已知 commit；任一集失败时 CLI 退出码为 1。`update`／`rebuild` 只写候选和恢复记录，不修改 `stable/`。
 
-不传 `--config` 的原有单集 `update` 每次只在开始查询一次官方 latest。发现新 Release 后，固定该响应的 Release ID、tag 和资产身份，解析 tag 的源码 commit，复用本地完整来源校验、转换和原生构建路径。已成功处理的相同 Release 只检查 latest 元数据；资产身份改变时失败，否则跳过 YAML／摘要下载、转换和 binary 执行。跳过时不会重新下载同一资产来探测其内容变化；失败重试取得字节时会核对已保存的来源摘要。
+远端 `pipeline/identity.json` 标识初始化，`pipeline/state.json` 保存固定来源、操作 ID、原配置和选择、维护代次 `generation`、预期起始 head、目标分支、各阶段进度及成功处理索引。操作在候选写入前登记。每个阶段把候选文件和进度放在同一 Git 提交中，使用捕获的旧 head 作为唯一 parent。维护状态关闭、代次变化或 head 冲突均停止旧操作，不换用新 head 重放。
 
-`--state` 必须指向可保留的本地目录。`update-state.json` 用原子 rename 保存来源固定记录、各次候选状态和已成功处理的 Release。三者分别管理，因为“取得输入”“候选验证成功”和“稳定入口切换”不是同一件事。`status` 可在后续进程恢复查看这些本地记录，但不会查询远端。
+重新运行时先恢复远端未完成操作。`latest` 前进不改变旧操作的 Release；使用原配置和原命令恢复，也可用 `--id`／`--release` 只重试原批次中的失败集。尚未完成的文件或元数据阶段重取固定来源并核对原构建身份，工具变化报告 `RECOVERY_BUILD_CHANGED`。已经具备完整证据的候选直接核验原 HTTPS 字节和原生结果，无须重新访问上游。所有阶段复用同一候选 ID，已提交文件不会再次发布。
 
-最近一次本地激活回执从独立的 `active-version.json` 读取，缺失仅表示此目录没有回执；`update` 和 `rebuild` 不写该文件。远端目标分支的 `stable/activation.json` 才是该分支当前规则版本的权威记录，本地回执可能落后于其他管理会话。不要把隔离验收目录的 `null` 理解成实际设备没有激活版本。
+无待恢复操作时，`update` 查询一次官方 latest。相同定义和 Release 的成功记录只有在候选仍被保留、七份必要文件仍存在且复验通过后，才能返回 `skipped` 及证据 URL。成功处理索引与候选可用性分别判断；已清理或缺失的候选报告 `CANDIDATE_UNAVAILABLE`，不会因旧 commit 暂时还能下载而返回失效的成功地址。
 
-同一状态目录通过 `update.lock/` 拒绝并发更新。正常退出或失败会清理锁；进程被强制终止后，须确认没有存活的更新进程，再删除残留锁目录重试。保留状态目录以继续核对固定来源；不要删除来源记录来绕过来源变化错误。
+`--state` 中的 `update-state.json` 只是缓存。删除它、更换运行机器或保留旧缓存，都不会改变远端来源固定和成功记录。本地保存失败返回 `cacheWarning: REMOTE_STATE_SAVED_LOCAL_CACHE_PENDING`，远端成功仍有效。`readUpdateState(directory)` API 仅供本地缓存诊断；CLI `status` 始终查询远端，兼容接收旧 `--state` 参数但不读取该目录。
 
-Artifact Manifest（产物清单）记录某次不可变规则文件的固定地址、摘要和使用约束。原有单集及目标为 `main` 的配置驱动更新在产物仓库的 `candidates` 分支追加候选；配置目标为 `acceptance-*` 时在该隔离分支追加候选。两者均采用三个有序提交，使清单可以引用已经取得完整 commit 地址的文件：
+未初始化报告 `REMOTE_NOT_INITIALIZED`；已有初始化标识但缺少状态报告 `REMOTE_STATE_MISSING`；坏记录报告 `REMOTE_STATE_CORRUPT`。网络读取失败也会停止操作，均不会隐式初始化。普通更新不会修复或覆盖这些状态。
+
+提交回复丢失时先核实远端。已确认提交的阶段复用其文件；确认未提交的阶段可在原保护条件仍成立时重试。无法核实，或提交之后 head 又发生变化，报告 `PUBLICATION_PENDING` 并停止后续写入；已知 attempted commit 保留在错误中。再次运行从远端进度恢复，不能把本地异常解释成远端未提交。
+
+`status` 返回 `authority: remote`、维护状态、`candidateAvailability` 和 `pendingOperations`。默认执行证据结构、地址和字节摘要核验，标注 `verification: structural`；提供 `--binary` 时额外执行真实原生复验，标注 `native`。已提交的当前版本即使候选回读失败也仍报告为已激活，并单独标记待核实。旧单集的历史通过 `expectedHead` 追溯，在结果映射中使用 `v2fly:category-ai-!cn`；历史读取失败通过 `historyComplete`／`historyErrors` 报告，不能将空列表视为完整历史。初始化和查询 API 分别为 `initializeRemoteState(repository, targetBranch)`、`readRemoteStatus({ repository, publication?, binary? })`。
+
+同一缓存目录的 `update.lock/` 仍拒绝本机并发；远端预期 head 保护跨机器写入。进程被强制终止后，可换新目录恢复；要复用旧目录，先确认没有存活进程再移除残留锁。不要删除远端来源记录来绕过来源变化错误。人工固定、恢复更新、调度及历史清理属于父 Spec 的后续工单，#48 仅接入候选写入的维护门禁。
+
+Artifact Manifest（产物清单）记录某次不可变规则文件的固定地址、摘要和使用约束。原有单集及目标为 `main` 的配置驱动更新在产物仓库的 `candidates` 分支追加候选；配置目标为 `acceptance-*` 时在该隔离分支追加候选。两者均采用三个有序的候选提交阶段，并穿插远端操作检查点，使清单可以引用已固定的 commit 地址：
 
 1. `candidates/<candidate-id>/domains.json` 和 `domains.srs`。
 2. 引用第一步完整 commit URL 的 `manifest.json`，以及 `source.json`、`conversion-report.json`、`build.json`。
@@ -122,13 +136,13 @@ Artifact Manifest（产物清单）记录某次不可变规则文件的固定地
 
 发布只允许追加新的候选路径，保留父 tree，拒绝历史路径覆盖或并发非快进更新。Manifest 使用既有 v1 契约，物理产物 ID 包含候选修订；Route／DNS 请求复用文件，DNS 响应为 `unavailable: empty`。所有文件使用完整 commit 的 HTTPS URL；时间、日志和 Manifest 不进入规则文件，避免摘要循环。
 
-远程文件逐一核对字节数、SHA-256 和逐字节内容。下载的 JSON 重新编译、解码及加载，所得 SRS 必须与下载的 SRS 一致。随后回读元数据，并在第三步提交、回读证据文件后才记为 `verified` 和成功处理。失败返回非零，已经创建的候选记为失败；重试创建新的候选并重新获取、验证，不把已上传的残留文件当作通过证据。发布的 `build.json` 仅表示本地验证，只有完整远程证据及成功候选状态才能供后续激活检查。
+远程文件逐一核对字节数、SHA-256 和逐字节内容。下载的 JSON 重新编译、解码及加载，所得 SRS 必须与下载的 SRS 一致。随后回读元数据，并在第三步提交、回读证据文件后才记为 `verified` 和成功处理。失败返回非零并保留远端阶段；重试复用原候选，补齐未完成阶段并重新核验，残缺文件不能作为通过证据。发布的 `build.json` 仅表示本地验证，只有完整远程证据及成功候选状态才能供后续激活检查。
 
 本命令不写稳定路径、不激活候选、不修改实际客户端配置，也不切换全局 binary。首次创建产物仓库、候选发布属于外部写入，须有覆盖它们的授权；命令不自动创建仓库。
 
 ## 显式重建固定 Release
 
-`update` 会跳过相同定义下已成功处理的 Release。同一 Release 增选另一集，或修改所选集的列表、稳定路径或发布目标时，会处理对应的新定义。管理者需要用当前转换器或验证流程重新处理已经成功的定义时，使用 `rebuild`，并指定已有状态目录中成功处理过的固定 Release tag：
+`update` 会跳过相同定义下已成功处理的 Release。同一 Release 增选另一集，或修改所选集的列表、稳定路径或发布目标时，会处理对应的新定义。管理者需要用当前转换器或验证流程重新处理已经成功的定义时，使用 `rebuild`，并指定远端已成功处理、必要来源与候选证据仍保留的固定 Release tag：
 
 ```sh
 pnpm --dir packages/rule-set-pipeline rebuild \
@@ -148,7 +162,7 @@ pnpm --dir packages/rule-set-pipeline rebuild \
 
 配置驱动的 API 再传入 `configuration` 和非空 `selectedIds`。每个所选集都须在该 Release 下以相同定义及发布目标成功处理过；新增或变更定义先使用 `update`。重建结果使用与批量更新相同的逐集 `results`，任一集失败时 CLI 返回退出码 1。`status` 保留原 `configuredProcessed` 成功记录，并在 `candidates` 中列出带有 `logicalId`、`operation: rebuild` 和 `previousCandidateId` 的新尝试。
 
-重建复用正常更新的转换、原生验证、不可变发布和 HTTPS 回读门禁。每次尝试保存新候选 ID、操作类型、原成功候选 ID 和构建身份。`build.json` 记录输入、转换器实现摘要、Node／yaml 版本、目标 binary 的 SHA-256、契约版本和实际产物摘要。实现摘要覆盖当前运行的来源读取、解析、转换、投影与原生验证代码；TypeScript 源码和编译后 JavaScript 分别记录各自实际运行实现的摘要。
+重建复用正常更新的转换、原生验证、不可变发布和 HTTPS 回读门禁。每个新重建操作保存新候选 ID、操作类型、原成功候选 ID 和构建身份；中断后恢复同一个重建操作时复用其候选 ID。`build.json` 记录输入、转换器实现摘要、Node／yaml 版本、目标 binary 的 SHA-256、契约版本和实际产物摘要。实现摘要覆盖当前运行的来源读取、解析、转换、投影与原生验证代码；TypeScript 源码和编译后 JavaScript 分别记录各自实际运行实现的摘要。
 
 成功和失败均保留原成功处理记录、固定来源及历史候选；失败可按原命令重试。相同输入与工具的规则字节及构建身份保持一致，候选 ID 和验证运行记录独立保存。重建不写稳定入口或激活回执，正常更新仍在无新 Release 时跳过。后续激活使用既有 `activate --candidate <new-readback-url>` 流程；激活验证同时支持历史构建身份和显式记录契约版本的新身份，拒绝不支持的契约版本。
 
@@ -189,7 +203,7 @@ Git 提交保持文件与记录一起更新，但 GitHub 缓存和客户端轮�
 | `ACTIVATION_APPLIED_READBACK_PENDING` | 提交已生效，但完整 commit HTTPS 地址的逐字节回读尚未完成；错误保留该 commit，不能声称旧规则未变 |
 | `ACTIVATION_APPLIED_LOCAL_RECEIPT_PENDING` | 远端已经激活，本地回执目录创建、写入或 rename 失败；错误保留已生效 commit，不应重复激活 |
 
-重试须先核对远端 head 和激活记录，再选择正确的预期旧值；不要盲目覆盖。本地 `status` 只能辅助查看回执，不能完成远端状态核实。
+重试须先核对远端 head 和激活记录，再选择正确的预期旧值；不要盲目覆盖。`status` 从远端稳定记录和字节报告当前版本及待核实状态；仍须核对本次 attempted commit，不能只凭本地回执重试。
 
 ## 历史回滚
 

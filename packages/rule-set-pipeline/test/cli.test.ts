@@ -83,6 +83,7 @@ export async function activateRules() {
   await writeFile(${JSON.stringify(applied)}, JSON.stringify(result));
   return result;
 }
+
 export const rollbackRules = activateRules;`);
   await writeFile(preload, `import { registerHooks } from 'node:module';
 import { pathToFileURL } from 'node:url';
@@ -148,7 +149,7 @@ test('CLI 回滚拒绝缺失目标、candidate 混用和非回滚命令上的历
 });
 
 for (const operation of ['update', 'rebuild']) {
-test(`CLI ${operation} 报告逐集失败并返回非零，status 在新进程读取逐集状态`, async () => {
+test(`CLI ${operation} 报告逐集失败并返回非零`, async () => {
   const directory = await mkdtemp(join(tmpdir(), 'rule-update-cli-'));
   try {
     const config = join(directory, 'config.yml'), state = join(directory, 'state');
@@ -160,7 +161,6 @@ test(`CLI ${operation} 报告逐集失败并返回非零，status 在新进程�
   return { status: 'partial', results: [{ id: 'ai-anthropic', status: 'failed', error: 'readback failed' },
     { id: 'ai-openai', status: 'processed' }] };
 }
-export async function readUpdateState() { return { state: { configuredProcessed: { 'ai-openai': { '42': { candidateId: 'fixed' } } } } }; }
 export const updateRules = process;
 export const rebuildRules = process;`);
     await writeFile(preload, `import { registerHooks } from 'node:module';
@@ -178,8 +178,110 @@ registerHooks({ resolve(specifier, context, nextResolve) {
         assert.equal(JSON.parse(error.stdout ?? '{}').results[0].id, 'ai-anthropic');
         return true;
       });
-    const { stdout } = await run('status');
-    assert.equal(JSON.parse(stdout).state.configuredProcessed['ai-openai']['42'].candidateId, 'fixed');
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+}
+
+
+async function remoteStateCli(directory: string, failure?: string) {
+  const module = join(directory, 'remote-state-fixture.mjs'), preload = join(directory, 'remote-preload.mjs');
+  const calls = join(directory, 'remote-call.json');
+  await writeFile(module, `import { writeFile } from 'node:fs/promises';
+export function githubPublication(_request, branch) {
+  return { repository: { branch }, async commit() { throw new Error('External writes are disabled'); },
+    async download() { throw new Error('External reads are disabled'); } };
+}
+export async function readRemoteStatus(options) {
+  await writeFile(${JSON.stringify(calls)}, JSON.stringify({ operation: 'status', branch: options.repository.branch, binary: options.binary }));
+  ${failure ? `throw new Error(${JSON.stringify(failure)});` : ''}
+  return { authority: 'remote', head: 'a'.repeat(40), generation: 7, maintenance: 'open',
+    activeRuleVersions: { 'ai-openai': { candidateId: 'remote-version' } }, pendingOperations: [] };
+}
+export async function initializeRemoteState(repository, targetBranch) {
+  await writeFile(${JSON.stringify(calls)}, JSON.stringify({ operation: 'initialize', branch: repository.branch, targetBranch }));
+  ${failure ? `throw new Error(${JSON.stringify(failure)});` : ''}
+  return { head: 'b'.repeat(40), journal: { generation: 1, targetBranch } };
+}`);
+  await writeFile(preload, `import { registerHooks } from 'node:module';
+import { pathToFileURL } from 'node:url';
+globalThis.fetch = async () => { throw new Error('External network is disabled'); };
+registerHooks({ resolve(specifier, context, nextResolve) {
+  if (context.parentURL?.endsWith('/src/cli.ts') && ['./remote-status.js', './remote-state.js', './publication.js'].includes(specifier))
+    return { url: pathToFileURL(${JSON.stringify(module)}).href, shortCircuit: true };
+  return nextResolve(specifier, context);
+} });`);
+  return { calls, run: (...args: string[]) => exec(process.execPath, ['--import', 'tsx', '--import', preload, 'src/cli.ts', ...args]) };
+}
+
+test('CLI status 默认查询远端 candidates，忽略过期本地状态且无需本地目录', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'rule-remote-status-cli-'));
+  try {
+    const fixture = await remoteStateCli(directory), stale = join(directory, 'update-state.json');
+    await writeFile(stale, 'invalid local state');
+    for (const extra of [[], ['--state', stale], ['--state', join(directory, 'missing')]]) {
+      const { stdout } = await fixture.run('status', ...extra), result = JSON.parse(stdout);
+      assert.equal(result.authority, 'remote');
+      assert.equal(result.generation, 7);
+      assert.equal(result.activeRuleVersions['ai-openai'].candidateId, 'remote-version');
+      assert.deepEqual(JSON.parse(await readFile(fixture.calls, 'utf8')), { operation: 'status', branch: 'candidates' });
+    }
+    await assert.rejects(stat(join(directory, 'missing')), { code: 'ENOENT' });
+    assert.equal(await readFile(stale, 'utf8'), 'invalid local state');
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+for (const operation of ['initialize', 'status']) {
+  test(`CLI ${operation} 按显式 branch 或配置目标选择候选状态仓库`, async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'rule-remote-routing-cli-'));
+    try {
+      const fixture = await remoteStateCli(directory), config = join(directory, 'config.yml');
+      const branch = 'acceptance-issue-48-cli';
+      await writeFile(config, (await readFile(new URL('../samples/three-ai-rule-sets.yml', import.meta.url), 'utf8')).replace('branch: main', `branch: ${branch}`));
+      for (const args of [[], ['--branch', 'main'], ['--branch', branch], ['--config', config], ['--config', config, '--branch', branch]]) {
+        const target = args.length && !args.includes('main') ? branch : 'main';
+        const { stdout } = await fixture.run(operation, ...args);
+        const expected = operation === 'initialize' ? { operation, branch: target === 'main' ? 'candidates' : target, targetBranch: target }
+          : { operation, branch: target === 'main' ? 'candidates' : target };
+        assert.deepEqual(JSON.parse(await readFile(fixture.calls, 'utf8')), expected);
+        if (operation === 'initialize') assert.equal(JSON.parse(stdout).journal.targetBranch, target);
+        else assert.equal(JSON.parse(stdout).authority, 'remote');
+      }
+    } finally { await rm(directory, { recursive: true, force: true }); }
+  });
+}
+
+test('CLI status 显式 binary 交给远端验证入口', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'rule-remote-native-cli-'));
+  try {
+    const fixture = await remoteStateCli(directory);
+    await fixture.run('status', '--binary', '/controlled/sing-box-1.14.4');
+    assert.deepEqual(JSON.parse(await readFile(fixture.calls, 'utf8')),
+      { operation: 'status', branch: 'candidates', binary: '/controlled/sing-box-1.14.4' });
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+for (const operation of ['initialize', 'status']) {
+  test(`CLI ${operation} 拒绝冲突目标与无关参数，未调用远端入口`, async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'rule-remote-options-cli-'));
+    try {
+      const fixture = await remoteStateCli(directory), config = join(directory, 'config.yml');
+      await writeFile(config, await readFile(new URL('../samples/three-ai-rule-sets.yml', import.meta.url), 'utf8'));
+      const invalid = [['--config', config, '--branch', 'acceptance-other'], ['--id', 'ai-openai'], ['--release', '20261104112839'], ['--expected-head', 'a'.repeat(40)],
+        ...(operation === 'initialize' ? [['--binary', '/unused']] : [])];
+      for (const args of invalid) await assert.rejects(fixture.run(operation, ...args), (error: { code?: number }) => error.code === 1);
+      await assert.rejects(stat(fixture.calls), { code: 'ENOENT' });
+    } finally { await rm(directory, { recursive: true, force: true }); }
+  });
+  test(`CLI ${operation} 远端状态异常退出非零并保留明确错误`, async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'rule-remote-failure-cli-'));
+    try {
+      const fixture = await remoteStateCli(directory, operation === 'initialize' ? 'REMOTE_ALREADY_INITIALIZED' : 'REMOTE_STATE_CORRUPT');
+      await assert.rejects(fixture.run(operation), (error: { code?: number; stderr?: string; stdout?: string }) => {
+        assert.equal(error.code, 1);
+        assert.match(error.stderr ?? '', operation === 'initialize' ? /REMOTE_ALREADY_INITIALIZED/ : /REMOTE_STATE_CORRUPT/);
+        assert.equal(error.stdout, '');
+        return true;
+      });
+    } finally { await rm(directory, { recursive: true, force: true }); }
+  });
 }

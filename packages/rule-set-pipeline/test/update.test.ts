@@ -26,14 +26,15 @@ test('恢复成功处理与激活状态，无新 Release 只请求 latest，不�
 
 test('lookup 失败不产生成功记录；并发锁拒绝覆盖；状态损坏不会当作空状态', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'update-failure-'));
+  const publication = { async commit() { throw new Error('must not publish'); }, async download() { throw new Error('must not read'); } };
   try {
-    await assert.rejects(updateRules({ stateDirectory: directory, binary: '', fetch: async () => new Response('', { status: 503 }) }), /503/);
+    await assert.rejects(updateRules({ stateDirectory: directory, binary: '', publication, fetch: async () => new Response('', { status: 503 }) }), /503/);
     assert.deepEqual((await readUpdateState(directory)).state.processed, {});
     await mkdir(join(directory, 'update.lock'));
     await assert.rejects(updateRules({ stateDirectory: directory, binary: '', fetch: async () => { throw new Error('must not request'); } }), { code: 'EEXIST' });
     await rm(join(directory, 'update.lock'), { recursive: true });
     await writeFile(join(directory, 'update-state.json'), '{broken');
-    await assert.rejects(updateRules({ stateDirectory: directory, binary: '' }));
+    await assert.rejects(updateRules({ stateDirectory: directory, binary: '', publication }));
     assert.equal(await readFile(join(directory, 'update-state.json'), 'utf8'), '{broken');
   } finally { await rm(directory, { recursive: true, force: true }); }
 });

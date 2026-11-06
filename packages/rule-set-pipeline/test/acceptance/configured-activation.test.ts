@@ -62,7 +62,9 @@ test('隔离分支依次激活官方三集，再分别切换可区分候选并�
     const before = await readUpdateState(directory!);
     const beforeHead = await transport.head();
     const candidate = await syntheticCandidate(binary!, 'issue-39-switch', `${definition.id}-switched.invalid`,
-      files => publication.commit(files, 'Issue #39 隔离候选'), { definition, target: config.target });
+      // Controlled synthetic fixtures are not official-source update operations.
+      async files => publication.repository!.commit((await publication.repository!.snapshot()).head, files,
+        'Issue #39 隔离合成候选'), { definition, target: config.target });
     const result = await activateRules({ configuration, logicalId: definition.id, stateDirectory: directory!, binary: binary!,
       subscription: subscription(definition.id), candidateEvidenceUrl: candidate.candidateEvidenceUrl, expectedHead: await transport.head(), transport });
     const after = await readUpdateState(directory!);

@@ -53,7 +53,7 @@ test('固定官方 Release 真实重建、HTTPS 回读、历史保留与正常�
   }
   const start = requests.length;
   // Exercise normal update/latest while fixing its response to the sample identity.
-  const skipped = await updateRules({ ...options, binary: '/must-not-run', fetch: async (url, init) => {
+  const skipped = await updateRules({ ...options, fetch: async (url, init) => {
     requests.push(String(url));
     assert.ok(String(url).endsWith('/latest'), 'skip must not download assets');
     return fetch(`https://api.github.com/repos/v2fly/domain-list-community/releases/${source.releaseId}`, init);

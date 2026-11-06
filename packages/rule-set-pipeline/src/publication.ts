@@ -1,8 +1,10 @@
 import { execFile } from 'node:child_process';
+import { githubPublicationRepository, type PublicationRepository } from './publication-repository.js';
 
 export const ARTIFACT_REPOSITORY = 'wangyingang/sing-box-rule-artifacts';
 export const PUBLICATION_BRANCH = 'candidates';
 export interface PublicationTransport {
+  repository?: PublicationRepository;
   commit(files: Record<string, Buffer>, message: string): Promise<string>;
   download(url: string): Promise<Buffer>;
 }
@@ -27,6 +29,7 @@ export function githubPublication(request: typeof ghJson = ghJson, branch = PUBL
   const api = (path: string, input?: unknown) => request(['api', `repos/${ARTIFACT_REPOSITORY}${path ? `/${path}` : ''}`,
     ...(input === undefined ? [] : ['--method', 'POST', '--input', '-'])], input);
   return {
+    repository: githubPublicationRepository(branch, request),
     async commit(files, message) {
       const repository = await api('');
       if (repository.private) throw new Error('Artifact repository must be public');
@@ -42,6 +45,11 @@ export function githubPublication(request: typeof ghJson = ghJson, branch = PUBL
       const existing = await api(`git/trees/${parent.tree.sha}?recursive=1`);
       if (existing.truncated) throw new Error('Cannot prove candidate paths are new: truncated tree');
       const paths = new Set(existing.tree.map((entry: { path: string }) => entry.path));
+      // Legacy isolated fixtures may append to an unmanaged branch. Once a
+      // branch is initialized, every candidate write must carry its journal.
+      if (paths.has('pipeline/state.json') || paths.has('pipeline/identity.json')) {
+        throw new Error('Unregistered candidate write: use the remote update/rebuild session');
+      }
       const tree = [];
       for (const [path, content] of Object.entries(files)) {
         // This transport can only append unique candidate paths, never stable files.
