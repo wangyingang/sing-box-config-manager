@@ -17,7 +17,7 @@
 | 检查 | 结果 |
 | --- | --- |
 | `SING_BOX_TEST_BINARY=... pnpm check` | 通过：工具测试 21、Compiler 测试 99、Pipeline 测试 160，共 280 项通过、0 跳过；typecheck、build 与 workspace smoke 通过 |
-| `SING_BOX_TEST_BINARY=... pnpm test:integration` | `35fc708` 上 186 项通过，0 跳过；包含既有客户端同进程更新、回滚与缓存恢复 |
+| `SING_BOX_TEST_BINARY=... pnpm test:integration` | 最终实现 `9be9f6f` 的 Linux CI：191 项通过，0 跳过；包含既有客户端同进程更新、回滚与缓存恢复 |
 | `node --import tsx --test test/integration/remote-*.test.ts test/integration/activation-client.test.ts` | 最终恢复、binary-only 状态查询及客户端回归 37 项通过，0 跳过 |
 | `node --import tsx --test test/acceptance/configured-release.test.ts` | 固定官方 Release `20261104112839` 的三集构建、重复字节一致性及原生验证通过 |
 | `git diff --check` | 通过 |
@@ -39,6 +39,8 @@
 本地双轴审查发现的 2 项 Spec 问题已修复：元数据阶段跨 binary 安装路径恢复保留原构建记录；缺失、改写操作 ID 或候选索引时停止恢复，不另发候选。Standards 轴的 1 项判断性重复代码问题也已处理，完整候选复验共用实现并统一返回七份回读证据。新增隔离回归验证了这些行为，以及旧单集在 `acceptance-*` 目标上的更新与重建。
 
 [PR #56 首轮云端审查](https://github.com/wangyingang/sing-box-config-manager/pull/56#discussion_r4498127822) 发现的 binary-only 状态查询问题已修复：根据已验证的订阅推导实际文件集合，不再固定要求同时激活 JSON 与 SRS。v1/v2 当前版本和历史目标均覆盖；损坏订阅、错误仓库／分支／路径及冲突映射继续被拒绝。独立复核无新增问题，状态单测 35 项与新增原生回归 1 项均通过。
+
+最终实现提交 `9be9f6f` 的 [CI](https://github.com/wangyingang/sing-box-config-manager/actions/runs/42303117199) 三项检查全部通过；[第二轮云端审查](https://github.com/wangyingang/sing-box-config-manager/pull/56#issuecomment-6697221532) 覆盖同一提交，无新增或未解决 finding。此后的变更仅补充本验证记录，未再请求云端审查。
 
 ## 尚未执行及范围边界
 
