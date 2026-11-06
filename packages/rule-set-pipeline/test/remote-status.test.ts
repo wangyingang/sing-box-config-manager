@@ -10,6 +10,21 @@ import type { RemoteJournal } from '../src/remote-state.js';
 const head = 'a'.repeat(40);
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value));
 
+function subscription(configured = true, source = true, path = configured ? 'stable/ai-openai' : 'stable') {
+  const endpoint = (file: string) => ({ url: `https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/main/${path}/${file}`, requiredCapabilities: [] as string[] });
+  const formats: Record<string, ReturnType<typeof endpoint>> = { binary: endpoint('domains.srs') };
+  if (source) formats.source = endpoint('domains.json');
+  return { schemaVersion: configured ? 2 : 1,
+    systemRuleSetId: configured ? 'ai-openai' : 'v2fly:domain-list-community:category-ai-!cn', targetVersion: '1.14.4', sourceFormatVersion: 4,
+    projections: { route: { formats }, 'dns-query': { formats: structuredClone(formats) }, 'dns-response': { unavailable: 'empty' } } };
+}
+
+function binaryOnly(record: { subscription: ReturnType<typeof subscription>; files: Record<string, unknown> }) {
+  delete record.subscription.projections.route.formats.source;
+  delete record.subscription.projections['dns-query'].formats.source;
+  for (const path of Object.keys(record.files)) if (path.endsWith('/domains.json')) delete record.files[path];
+}
+
 function remote() {
   const journal: RemoteJournal = { schemaVersion: 1, id: '11111111-1111-4111-8111-111111111111', generation: 1,
     maintenance: 'open', targetBranch: 'main',
@@ -69,6 +84,7 @@ function addCandidate(env: ReturnType<typeof remote>, id: string, configured = t
     env.history.set(immutableUrl(commit, `${prefix}/${file}`), bytes);
   }
   const activation = { schemaVersion: 1, id: `activation-${id}`, logicalId: 'ai-openai', candidateId: id,
+    subscription: subscription(),
     candidateEvidenceUrl: immutableUrl(evidenceCommit, `${prefix}/readback.json`), history: [] as { commit: string; id: string; candidateId: string }[],
     files: { 'stable/ai-openai/domains.json': { sha256: sha256(sourceBytes), byteLength: sourceBytes.length },
       'stable/ai-openai/domains.srs': { sha256: sha256(binaryBytes), byteLength: binaryBytes.length } } };
@@ -99,11 +115,92 @@ function register(env: ReturnType<typeof remote>, id: string, phase: 'registered
   env.saveJournal();
 }
 
-function legacyActivation(candidate: ReturnType<typeof addCandidate>, expectedHead: string) {
+function legacyActivation(candidate: ReturnType<typeof addCandidate>, expectedHead: string, stablePath = 'stable') {
   const { logicalId: _logicalId, history: _history, files, ...record } = candidate.activation;
-  return { ...record, expectedHead, files: Object.fromEntries(Object.entries(files).map(([path, metadata]) =>
-    [path.replace('stable/ai-openai/', 'stable/'), metadata])) };
+  return { ...record, subscription: subscription(false, !!record.subscription.projections.route.formats.source, stablePath),
+    expectedHead, files: Object.fromEntries(Object.entries(files).map(([path, metadata]) =>
+      [path.replace('stable/ai-openai/', `${stablePath}/`), metadata])) };
 }
+
+for (const configured of [false, true]) {
+  test(`仅binary的v${configured ? 2 : 1}订阅可查询当前版本及仍有效的回滚目标`, async () => {
+    const env = remote(), old = addCandidate(env, 'a1', configured), current = addCandidate(env, 'b2', configured);
+    binaryOnly(old.activation); binaryOnly(current.activation);
+    const oldCommit = 'f'.repeat(40), genesis = '0'.repeat(40);
+    const stablePath = configured ? 'stable/ai-openai' : 'stable/v2fly/category-ai-not-cn';
+    const recordPath = configured ? `${stablePath}/activation.json` : 'stable/activation.json';
+    const oldRecord = configured ? old.activation : legacyActivation(old, genesis, stablePath);
+    const currentRecord = configured ? current.activation : legacyActivation(current, oldCommit, stablePath);
+    if (configured) current.activation.history.push({ commit: oldCommit, id: old.activation.id, candidateId: 'a1' });
+    env.stable.set(recordPath, encode(currentRecord));
+    env.stable.set(`${stablePath}/domains.srs`, current.contents['domains.srs']);
+    env.history.set(immutableUrl(oldCommit, recordPath), encode(oldRecord));
+    env.history.set(immutableUrl(oldCommit, `${stablePath}/domains.srs`), old.contents['domains.srs']);
+    const activation = { async download(url: string) {
+      if (url === immutableUrl(genesis, recordPath)) throw new Error(`Readback HTTP 404: ${url}`);
+      return env.publication.download(url);
+    } };
+    const result = await readRemoteStatus({ repository: env.repository, publication: env.publication, activation });
+    const id = configured ? 'ai-openai' : 'v2fly:category-ai-!cn';
+    assert.equal((configured ? result.activeRuleVersions[id] : result.activeRuleVersion)?.activation.candidateId, 'b2');
+    assert.deepEqual(result.rollbackTargets[id].map(target => target.candidateId), ['a1']);
+    assert.equal(result.historyComplete[id], true);
+    assert.deepEqual(result.historyErrors[id], []);
+    assert.deepEqual(result.pendingOperations, []);
+    assert.equal(env.stable.has(`${stablePath}/domains.json`), false);
+  });
+}
+
+for (const configured of [false, true]) {
+  for (const fault of ['missing', 'schema', 'identity', 'repository', 'branch', 'path', 'file-set', 'mapping']) {
+    test(`v${configured ? 2 : 1}状态拒绝${fault}订阅或文件记录`, async () => {
+      const env = remote(), current = addCandidate(env, 'a1', configured), genesis = '0'.repeat(40);
+      const record: Record<string, any> = configured ? current.activation : legacyActivation(current, genesis);
+      const recordPath = configured ? 'stable/ai-openai/activation.json' : 'stable/activation.json';
+      const projection = record.subscription.projections;
+      if (fault === 'missing') delete record.subscription;
+      if (fault === 'schema') record.subscription.schemaVersion = configured ? 1 : 2;
+      if (fault === 'identity') record.subscription.systemRuleSetId = 'another-rule-set';
+      if (fault === 'repository') projection.route.formats.binary.url = projection.route.formats.binary.url.replace('sing-box-rule-artifacts', 'untrusted-artifacts');
+      if (fault === 'branch') projection.route.formats.binary.url = projection.route.formats.binary.url.replace('/main/', '/other/');
+      if (fault === 'path') projection.route.formats.binary.url = projection.route.formats.binary.url.replace('/stable/', '/stable/../');
+      if (fault === 'file-set') delete record.files[Object.keys(record.files).find(path => path.endsWith('domains.srs'))!];
+      if (fault === 'mapping') {
+        if (configured) delete projection['dns-query'].formats.source;
+        else projection['dns-query'].formats.binary.requiredCapabilities.push('processMatching');
+      }
+      env.stable.set(recordPath, encode(record));
+      await assert.rejects(readRemoteStatus({ repository: env.repository, publication: env.publication, activation: env.publication }),
+        /subscription|Subscription|activation file set/);
+    });
+  }
+}
+
+test('v1状态保留已支持的route与dns-query不同格式集合', async () => {
+  const env = remote(), current = addCandidate(env, 'a1', false), genesis = '0'.repeat(40);
+  const record = legacyActivation(current, genesis, 'stable/v2fly/category-ai-not-cn');
+  delete record.subscription.projections.route.formats.source;
+  env.stable.set('stable/activation.json', encode(record));
+  for (const file of ['domains.json', 'domains.srs']) env.stable.set(`stable/v2fly/category-ai-not-cn/${file}`, current.contents[file]);
+  const activation = { async download(url: string): Promise<Buffer> { throw new Error(`Readback HTTP 404: ${url}`); } };
+  const result = await readRemoteStatus({ repository: env.repository, publication: env.publication, activation });
+  assert.equal(result.activeRuleVersion?.activation.candidateId, 'a1');
+  assert.equal(result.candidateAvailability.a1.status, 'available');
+  assert.deepEqual(result.pendingOperations, []);
+});
+
+test('历史订阅缺失时保留当前交付但不返回该回滚目标', async () => {
+  const env = remote(), old = addCandidate(env, 'a1'), current = addCandidate(env, 'b2');
+  const oldCommit = 'f'.repeat(40);
+  current.activation.history.push({ commit: oldCommit, id: old.activation.id, candidateId: 'a1' }); activate(env, current);
+  const broken: Record<string, unknown> = { ...old.activation }; delete broken.subscription;
+  env.history.set(immutableUrl(oldCommit, 'stable/ai-openai/activation.json'), encode(broken));
+  const result = await readRemoteStatus({ repository: env.repository, publication: env.publication, activation: env.publication });
+  assert.equal(result.activeRuleVersions['ai-openai'].activation.candidateId, 'b2');
+  assert.deepEqual(result.rollbackTargets['ai-openai'], []);
+  assert.equal(result.historyComplete['ai-openai'], false);
+  assert.match(result.unavailableRollbackTargets['ai-openai'][0].reason, /Rule Subscription/);
+});
 
 test('legacy status 沿远端 expectedHead 链列出仍保留且已核验的历史版本', async () => {
   const env = remote(), oldest = addCandidate(env, 'a1', false), previous = addCandidate(env, 'b2', false), current = addCandidate(env, 'c3', false);
@@ -209,8 +306,7 @@ test('status 从当前稳定记录与仍保留的历史证据报告可回滚版�
 test('历史订阅契约不兼容时不列为有效回滚目标', async () => {
   const env = remote(), old = addCandidate(env, 'a1'), current = addCandidate(env, 'b2');
   const oldCommit = 'f'.repeat(40);
-  Object.assign(old.activation, { subscription: { revision: 'old' } });
-  Object.assign(current.activation, { subscription: { revision: 'current' } });
+  binaryOnly(current.activation);
   current.activation.history.push({ commit: oldCommit, id: old.activation.id, candidateId: 'a1' }); activate(env, current);
   env.history.set(immutableUrl(oldCommit, 'stable/ai-openai/activation.json'), encode(old.activation));
   for (const file of ['domains.json', 'domains.srs']) env.history.set(immutableUrl(oldCommit, `stable/ai-openai/${file}`), old.contents[file]);

@@ -1,6 +1,8 @@
 import { isDeepStrictEqual } from 'node:util';
 import { Ajv } from 'ajv';
 import manifestSchema from '../contracts/artifact-manifest.schema.json' with { type: 'json' };
+import subscriptionSchema from '../contracts/rule-subscription.schema.json' with { type: 'json' };
+import subscriptionV2Schema from '../contracts/rule-subscription-v2.schema.json' with { type: 'json' };
 import { verifyActivationCandidate } from './activation.js';
 import { githubActivation, type ActivationTransport } from './activation-transport.js';
 import { parseBuildConfiguration, type RuleDefinition } from './configured-build.js';
@@ -9,7 +11,10 @@ import { ARTIFACT_REPOSITORY, githubPublication, immutableUrl, type PublicationT
 import { readRemoteState } from './remote-state.js';
 import { sha256 } from './release.js';
 
-const validateManifest = new Ajv({ strict: true }).compile(manifestSchema);
+const ajv = new Ajv({ strict: true });
+const validateManifest = ajv.compile(manifestSchema);
+const validateSubscription = ajv.compile(subscriptionSchema);
+const validateSubscriptionV2 = ajv.compile(subscriptionV2Schema);
 const requiredFiles = ['domains.json', 'domains.srs', 'manifest.json', 'source.json', 'conversion-report.json', 'build.json', 'readback.json'];
 const commitId = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
 const object = (value: unknown): value is Record<string, any> => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -25,20 +30,43 @@ interface UnavailableTarget extends HistoryTarget { reason: string }
 interface ActiveVersion { status: 'activated'; commit: string; activation: Record<string, any>; candidate: CandidateAvailability }
 interface PendingOperation { id: string; candidateId?: string; logicalId?: string; phase?: string; status: string; error?: string }
 
-function activationRecord(value: unknown, path: string) {
+function activationRecord(value: unknown, path: string, targetBranch: string) {
   requireThat(object(value) && value.schemaVersion === 1 && typeof value.id === 'string' && value.id.length
     && typeof value.candidateId === 'string' && /^[a-f0-9-]+$/.test(value.candidateId)
     && typeof value.candidateEvidenceUrl === 'string' && object(value.files), 'Invalid remote activation record');
+  const configured = path !== 'stable/activation.json';
+  if (configured) {
+    requireThat(typeof value.logicalId === 'string' && /^[a-z][a-z0-9-]*$/.test(value.logicalId)
+      && Array.isArray(value.history), 'Invalid configured activation history');
+  } else requireThat(value.logicalId === undefined, 'Invalid legacy activation identity');
+  requireThat((configured ? validateSubscriptionV2 : validateSubscription)(value.subscription), 'Invalid remote Rule Subscription');
+  const subscription: any = value.subscription;
+  requireThat(subscription.systemRuleSetId === (configured ? value.logicalId : 'v2fly:domain-list-community:category-ai-!cn'),
+    'Remote subscription identity mismatch');
+  requireThat(subscription.projections['dns-response'].unavailable === 'empty'
+    && subscription.projections.route.formats && subscription.projections['dns-query'].formats, 'Remote subscription usage mismatch');
+  if (configured) requireThat(isDeepStrictEqual(subscription.projections.route.formats, subscription.projections['dns-query'].formats),
+    'Remote subscription file reuse mismatch');
   const directory = path.slice(0, -'/activation.json'.length);
-  const expected = [`${directory}/domains.json`, `${directory}/domains.srs`];
-  requireThat(isDeepStrictEqual(Object.keys(value.files).sort(), expected.sort()), 'Invalid remote activation file set');
+  const prefix = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${targetBranch}/`;
+  const expected = new Map<string, string>();
+  for (const usage of ['route', 'dns-query']) {
+    for (const [format, endpoint] of Object.entries(subscription.projections[usage].formats) as [string, any][]) {
+      requireThat(endpoint.url.startsWith(prefix), 'Unapproved remote subscription host or branch');
+      const file = endpoint.url.slice(prefix.length);
+      requireThat(/^stable\/[a-z0-9/_.-]+\.(srs|json)$/.test(file) && file !== path
+        && !file.split('/').some((part: string) => !part || part === '.' || part === '..'), 'Invalid remote subscription stable path');
+      if (configured) requireThat(file === `${directory}/${format === 'binary' ? 'domains.srs' : 'domains.json'}`
+        && endpoint.requiredCapabilities.length === 0, 'Remote subscription stable path or capability mismatch');
+      const signature = JSON.stringify([format, [...endpoint.requiredCapabilities].sort()]);
+      requireThat(!expected.has(file) || expected.get(file) === signature, 'Conflicting remote subscription endpoint declarations');
+      expected.set(file, signature);
+    }
+  }
+  requireThat(isDeepStrictEqual(Object.keys(value.files).sort(), [...expected.keys()].sort()), 'Invalid remote activation file set');
   for (const metadata of Object.values(value.files)) {
     requireThat(object(metadata) && /^[a-f0-9]{64}$/.test(metadata.sha256) && Number.isSafeInteger(metadata.byteLength)
       && metadata.byteLength > 0, 'Invalid remote activation file metadata');
-  }
-  if (path !== 'stable/activation.json') {
-    requireThat(typeof value.logicalId === 'string' && /^[a-z][a-z0-9-]*$/.test(value.logicalId)
-      && Array.isArray(value.history), 'Invalid configured activation history');
   }
   const history: HistoryTarget[] = value.history ?? [];
   requireThat(Array.isArray(history), 'Invalid activation history');
@@ -135,7 +163,7 @@ export async function readRemoteStatus(options: {
   for (const path of paths) {
     const bytes = await stable.read(path);
     requireThat(bytes, `Missing activation record: ${path}`);
-    const { record, history } = activationRecord(JSON.parse(bytes.toString()), path);
+    const { record, history } = activationRecord(JSON.parse(bytes.toString()), path, journal.targetBranch);
     await verifyStableFiles(record, file => stable.read(file));
     const candidate = await inspectCandidate(record.candidateId, record.candidateEvidenceUrl);
     const current: ActiveVersion = { status: 'activated', commit: stable.head, activation: record, candidate };
@@ -189,7 +217,7 @@ export async function readRemoteStatus(options: {
         }
         let historical: Record<string, any>;
         try {
-          historical = activationRecord(JSON.parse(bytes.toString()), path).record;
+          historical = activationRecord(JSON.parse(bytes.toString()), path, journal.targetBranch).record;
           requireThat(historical.logicalId === undefined && !seenIds.has(historical.id), 'Invalid or cyclic legacy activation identity');
           seenIds.add(historical.id);
         } catch (error) { historyError(previous, error); break; }
@@ -198,7 +226,7 @@ export async function readRemoteStatus(options: {
       }
     } else for (const target of history) {
       try {
-        const historical = activationRecord(JSON.parse((await activation.download(immutableUrl(target.commit, path))).toString()), path).record;
+        const historical = activationRecord(JSON.parse((await activation.download(immutableUrl(target.commit, path))).toString()), path, journal.targetBranch).record;
         await inspectHistorical(target, historical);
       } catch (error) {
         unavailableRollbackTargets[id].push({ ...target, reason: error instanceof Error ? error.message : String(error) });
