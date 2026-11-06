@@ -28,6 +28,21 @@ function source() {
   return { fetcher, requests, advance() { advanced = true; }, current() { advanced = false; } };
 }
 
+test('旧单集仍可使用独立验收分支进行远端更新与重建', { skip: !binary }, async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'legacy-isolated-target-'));
+  try {
+    const remote = memoryRepository('acceptance-legacy'), upstream = source();
+    await initializeRemoteState(remote.repository, 'acceptance-legacy');
+    const common = { binary: binary!, publication: remote.publication, fetch: upstream.fetcher, stateDirectory: directory };
+    const first = await updateRules(common);
+    assert.equal(first.status, 'processed');
+    const rebuilt = await rebuildRules({ ...common, release: tag });
+    assert.equal(rebuilt.status, 'processed');
+    assert.equal((await readRemoteState(remote.repository)).journal.targetBranch, 'acceptance-legacy');
+    assert.ok(remote.writes.every(files => Object.keys(files).every(path => !path.startsWith('stable/'))));
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
 test('旧单集规则文件提交后中断，全新目录使用原 Release 和同一候选继续', { skip: !binary }, async () => {
   const directory = await mkdtemp(join(tmpdir(), 'legacy-remote-recovery-'));
   try {

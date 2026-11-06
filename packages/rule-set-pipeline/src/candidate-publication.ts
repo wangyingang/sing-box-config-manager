@@ -2,6 +2,7 @@ import { buildNative, type NativeBuild } from './native.js';
 import { decodedTerms } from './projection.js';
 import { immutableUrl, type PublicationTransport } from './publication.js';
 import { sha256 } from './release.js';
+import { isDeepStrictEqual } from 'node:util';
 
 export interface PublicationCandidate {
   id: string;
@@ -23,6 +24,17 @@ export async function publishCandidate(options: {
   const filesCommit = candidate.filesCommit ??= await publication.commit(files, `候选 ${candidate.id}：规则文件`);
   await save();
   const records = options.records(filesCommit);
+  if (candidate.metadataCommit) {
+    // The executable location is diagnostic, not part of the build identity.
+    // Preserve the original immutable record when an identical tool is installed
+    // at a different path on the recovery machine.
+    const path = `${prefix}/build.json`;
+    const original = await publication.download(immutableUrl(candidate.metadataCommit, path));
+    const expectedBuild = JSON.parse(records[path].toString()), originalBuild = JSON.parse(original.toString());
+    const withoutLocation = (record: Record<string, any>) => ({ ...record, tool: { ...record.tool, path: undefined } });
+    if (!isDeepStrictEqual(withoutLocation(expectedBuild), withoutLocation(originalBuild))) throw new Error('Remote build record mismatch');
+    records[path] = original;
+  }
   const metadataCommit = candidate.metadataCommit ??= await publication.commit(records, `候选 ${candidate.id}：Manifest 与构建记录`);
   candidate.manifestUrl = immutableUrl(metadataCommit, `${prefix}/manifest.json`);
   await save();

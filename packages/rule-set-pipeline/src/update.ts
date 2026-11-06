@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { isDeepStrictEqual } from 'node:util';
 import { buildRelease } from './index.js';
 import { buildNative } from './native.js';
 import { decodedTerms } from './projection.js';
@@ -12,7 +11,7 @@ import { processConfiguredUpdate, type ConfiguredRebuildOptions, type Configured
 import { publishCandidate } from './candidate-publication.js';
 import type { RuleDefinition } from './configured-build.js';
 import { openRemoteSession } from './remote-state.js';
-import { verifyActivationCandidate } from './activation.js';
+import { verifyRetainedCandidate } from './candidate-recovery.js';
 
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
 type Pin = Pick<SourceRecord, 'repository' | 'releaseId' | 'tag' | 'commit' | 'yaml' | 'checksum'>;
@@ -33,7 +32,7 @@ export interface UpdateState {
   configuredProcessed?: Record<string, Record<string, { candidateId: string; tag: string; evidenceUrl: string; definitionSha256: string }>>;
   candidates: Record<string, Candidate>;
   pendingOperation?: { id: string; kind: 'update' | 'rebuild'; generation: number; releaseId: number; tag: string;
-    status: 'pending' | 'complete'; expectedHead?: string; configuration?: string; selectedIds?: string[] };
+    status: 'pending' | 'complete'; expectedHead: string; candidateIds: string[]; configuration?: string; selectedIds?: string[] };
 }
 async function readJson(path: string): Promise<any> {
   try { return JSON.parse(await readFile(path, 'utf8')); }
@@ -97,7 +96,8 @@ async function processRelease(options: UpdateOptions, rebuildTag?: string) {
   };
   try {
     const transport = options.publication ?? githubPublication();
-    session = transport.repository ? await openRemoteSession(transport, options.stateDirectory, 'main') : undefined;
+    const targetBranch = transport.repository?.branch === 'candidates' ? 'main' : transport.repository?.branch ?? 'main';
+    session = transport.repository ? await openRemoteSession(transport, options.stateDirectory, targetBranch) : undefined;
     const publication = session?.publication ?? transport;
     const restored = session ? { state: session.state, activeRuleVersion: undefined } : await readUpdateState(options.stateDirectory);
     state = restored.state;
@@ -109,29 +109,13 @@ async function processRelease(options: UpdateOptions, rebuildTag?: string) {
     const verifyRetained = async (id: string, allowEvidence = false) => {
       if (!session) return;
       const retained = state!.candidates[id];
-      if (!retained?.retained || (retained.phase !== 'complete' && !(allowEvidence && retained.phase === 'evidence')) || !retained.evidenceUrl
-        || ['domains.json', 'domains.srs', 'manifest.json', 'source.json', 'conversion-report.json', 'build.json', 'readback.json']
-          .some(file => !session!.snapshot.paths.includes(`candidates/${id}/${file}`))) {
-        throw new Error('CANDIDATE_UNAVAILABLE: processed Release no longer has a retained candidate');
-      }
-      const verified = await verifyActivationCandidate({ candidateEvidenceUrl: retained.evidenceUrl, binary: options.binary }, {
-        branch: 'main', download: publication.download.bind(publication), head: async () => session!.snapshot.head,
-        commit: async () => { throw new Error('Candidate verification is read-only'); },
-      });
-      if (!isDeepStrictEqual(verified.source, state!.pinned[String(retained.releaseId)]?.source)
-        || verified.validation.buildId !== retained.buildId) throw new Error('RECOVERY_BUILD_CHANGED: registered source or build differs');
-      return verified;
+      return verifyRetainedCandidate({ candidate: retained, source: retained && state!.pinned[String(retained.releaseId)]?.source,
+        snapshot: session.snapshot, publication, binary: options.binary, targetBranch, allowEvidence });
     };
     const recoverable = recovery && Object.values(state.candidates).find(entry => entry.operationId === recovery.id
       && (entry.phase === 'evidence' || entry.phase === 'complete'));
     if (session && recovery && recoverable) {
-      const verified = await verifyRetained(recoverable.id, true);
-      if (verified!.source.releaseId !== recovery.releaseId || verified!.source.tag !== recovery.tag
-        || verified!.validation.buildId !== recoverable.buildId) throw new Error('RECOVERY_BUILD_CHANGED: registered source or build differs');
-      const evidenceBytes = await publication.download(recoverable.evidenceUrl!);
-      const evidence = JSON.parse(evidenceBytes.toString());
-      const readback = [...evidence.readback, { url: recoverable.evidenceUrl!, sha256: sha256(evidenceBytes),
-        byteLength: evidenceBytes.length, exactBytes: true as const }] as { url: string; sha256: string; byteLength: number; exactBytes: true }[];
+      const { readback } = (await verifyRetained(recoverable.id, true))!;
       recoverable.status = 'verified'; recoverable.phase = 'complete'; delete recoverable.error;
       if (!rebuildTag) state.processed[String(recovery.releaseId)] = {
         candidateId: recoverable.id, tag: recovery.tag, evidenceUrl: recoverable.evidenceUrl!,
@@ -174,12 +158,12 @@ async function processRelease(options: UpdateOptions, rebuildTag?: string) {
         ...(session?.cacheWarning ? { cacheWarning: session.cacheWarning } : {}) };
     }
     if (session && !recovery) state.pendingOperation = { id: randomUUID(), kind: rebuildTag ? 'rebuild' : 'update',
-      generation: session.generation, expectedHead: session.snapshot.head, releaseId: Number(release.id), tag, status: 'pending' };
+      generation: session.generation, expectedHead: session.snapshot.head, candidateIds: [], releaseId: Number(release.id), tag, status: 'pending' };
     const recovering = session && Object.values(state.candidates).find(entry => entry.operationId === state!.pendingOperation!.id);
     candidate = recovering || { id: randomUUID(), releaseId: Number(release.id), tag, status: 'building',
       operation: rebuildTag ? 'rebuild' : 'update', previousCandidateId: previousProcessed?.candidateId,
       ...(session ? { generation: session.generation, retained: true, phase: 'registered' as const,
-        targetBranch: 'main', operationId: state.pendingOperation!.id } : {}) };
+        targetBranch, operationId: state.pendingOperation!.id } : {}) };
     if (session && !candidate.retained) throw new Error('CANDIDATE_UNAVAILABLE: registered candidate has been removed');
     if (!session) { state.candidates[candidate.id] = candidate; await save(); }
     const previousTag = Object.values(state.pinned).find(entry => entry.identity?.tag === tag && entry.identity.releaseId !== Number(release.id));
@@ -192,7 +176,10 @@ async function processRelease(options: UpdateOptions, rebuildTag?: string) {
       onPinned: async identity => {
         if (pin.identity && canonicalPin(pin.identity) !== canonicalPin(identity)) throw new Error('SOURCE_CHANGED: pinned Release identity changed');
         pin.identity ??= identity;
-        if (session) state!.candidates[candidate!.id] = candidate!;
+        if (session) {
+          state!.candidates[candidate!.id] = candidate!;
+          if (!state!.pendingOperation!.candidateIds.includes(candidate!.id)) state!.pendingOperation!.candidateIds.push(candidate!.id);
+        }
         await save();
       },
       onSource: async source => { pin.source ??= source; await save(); },

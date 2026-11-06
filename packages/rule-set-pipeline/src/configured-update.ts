@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { isDeepStrictEqual } from 'node:util';
 import { buildConfiguredRelease, parseBuildConfiguration } from './configured-build.js';
 import { publishCandidate } from './candidate-publication.js';
 import { githubPublication, immutableUrl, type PublicationTransport } from './publication.js';
@@ -9,7 +8,7 @@ import { sha256 } from './release.js';
 import type { SourceRecord } from './types.js';
 import { readUpdateState, type Candidate, type UpdateState } from './update.js';
 import { openRemoteSession } from './remote-state.js';
-import { verifyActivationCandidate } from './activation.js';
+import { verifyRetainedCandidate } from './candidate-recovery.js';
 
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
 type Pin = Pick<SourceRecord, 'repository' | 'releaseId' | 'tag' | 'commit' | 'yaml' | 'checksum'>;
@@ -91,18 +90,9 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, 
       await rename(temporary, join(options.stateDirectory, 'update-state.json'));
     });
     const recoveredResults: BatchEntry[] = [];
-    const verify = async (candidate: Candidate, definition: typeof definitions[number]) => {
-      if (!candidate.retained || !candidate.evidenceUrl || ['domains.json', 'domains.srs', 'manifest.json', 'source.json',
-        'conversion-report.json', 'build.json', 'readback.json'].some(file => !session!.snapshot.paths.includes(`candidates/${candidate.id}/${file}`))) {
-        throw new Error('CANDIDATE_UNAVAILABLE: processed Release no longer has a retained candidate');
-      }
-      const verified = await verifyActivationCandidate({ candidateEvidenceUrl: candidate.evidenceUrl, binary: options.binary }, {
-        branch: configuration.target.branch, download: publication.download.bind(publication),
-        head: async () => session!.snapshot.head, commit: async () => { throw new Error('Candidate verification is read-only'); },
-      }, definition);
-      if (!isDeepStrictEqual(verified.source, state.pinned[String(candidate.releaseId)]?.source)
-        || verified.validation.buildId !== candidate.buildId) throw new Error('RECOVERY_BUILD_CHANGED: registered source or build differs');
-    };
+    const verify = (candidate: Candidate, definition: typeof definitions[number], allowEvidence = false) =>
+      verifyRetainedCandidate({ candidate, source: state.pinned[String(candidate.releaseId)]?.source, snapshot: session!.snapshot,
+        publication, binary: options.binary, targetBranch: configuration.target.branch, definition, allowEvidence });
     if (session && rebuildTag && !recovery) {
       for (const definition of definitions) {
         const previous = processedFor(definition.id)![String(retryPin!.identity!.releaseId)];
@@ -115,15 +105,14 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, 
       for (const definition of definitions) {
         const candidate = Object.values(state.candidates).find(value => value.operationId === recovery.id && value.logicalId === definition.id);
         if (!candidate || !['evidence', 'complete'].includes(candidate.phase!)) continue;
-        await verify(candidate, definition);
-        const evidence = JSON.parse((await publication.download(candidate.evidenceUrl!)).toString());
+        const { readback } = await verify(candidate, definition, true);
         candidate.status = 'verified'; candidate.phase = 'complete'; delete candidate.error;
         if (!rebuildTag) {
           if (!processedFor(definition.id)) state.configuredProcessed[definition.id] = {};
           state.configuredProcessed[definition.id][String(recovery.releaseId)] = { candidateId: candidate.id, tag: recovery.tag,
             evidenceUrl: candidate.evidenceUrl!, definitionSha256: definitionHash(definition) };
         }
-        recoveredResults.push({ id: definition.id, status: 'processed', candidate, readback: evidence.readback });
+        recoveredResults.push({ id: definition.id, status: 'processed', candidate, readback });
       }
       if (recoveredResults.length) {
         if (operationFinished()) recovery.status = 'complete';
@@ -156,7 +145,7 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, 
       return matches.length !== 1 || matches[0].id !== asset.id || matches[0].browser_download_url !== asset.url;
     }))) throw new Error('SOURCE_CHANGED: processed Release assets changed');
     if (session && !recovery) state.pendingOperation = { id: randomUUID(), kind: rebuildTag ? 'rebuild' : 'update',
-      generation: session.generation, expectedHead: session.snapshot.head, releaseId, tag, status: 'pending', configuration: options.configuration, selectedIds: selected };
+      generation: session.generation, expectedHead: session.snapshot.head, candidateIds: [], releaseId, tag, status: 'pending', configuration: options.configuration, selectedIds: selected };
     const results: BatchEntry[] = [...recoveredResults];
     const pending = [] as typeof definitions;
     for (const definition of definitions) {
@@ -191,6 +180,7 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, 
             definition: result.definition, targetBranch: configuration.target.branch, operationId: state.pendingOperation!.id } : {}) };
         if (session && !candidate.retained) throw new Error('CANDIDATE_UNAVAILABLE: registered candidate has been removed');
         state.candidates[candidate.id] = candidate;
+        if (session && !state.pendingOperation!.candidateIds.includes(candidate.id)) state.pendingOperation!.candidateIds.push(candidate.id);
         await save();
         if (result.status === 'failed') {
           candidate.status = 'failed'; candidate.error = `${result.error}: ${JSON.stringify(result.report.diagnostics)}`;

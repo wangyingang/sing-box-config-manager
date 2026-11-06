@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { chmod, copyFile, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -47,12 +47,38 @@ test('规则文件提交后中断，全新目录恢复同一候选和固定 Rele
     remote.fault(undefined); upstream.advance();
     const recovered = await updateRules({ ...common, stateDirectory: join(directory, 'new-machine') });
     assert.equal(recovered.status, 'processed');
+    if (recovered.results[0].status === 'processed') assert.equal(recovered.results[0].readback.length, 7);
     assert.equal(recovered.results[0].status, 'processed');
     if (recovered.results[0].status === 'processed') assert.equal(recovered.results[0].candidate.id, id);
     assert.equal(remote.writes.filter(files => Object.keys(files).some(path => path.endsWith('/domains.json'))).length, 1);
     assert.equal(Object.keys((await readRemoteState(remote.repository)).journal.state.candidates).length, 1);
     const status = await readRemoteStatus({ repository: remote.repository, publication: remote.publication, binary });
     assert.equal(status.candidateAvailability[id].verification, 'native');
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('元数据提交后换机器，binary 字节相同但路径变化仍复用原构建记录', { skip: !binary }, async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'remote-binary-location-'));
+  try {
+    const remote = memoryRepository(), upstream = source();
+    await initializeRemoteState(remote.repository, 'acceptance-recovery');
+    remote.fault((files, applied) => {
+      if (!applied && Object.keys(files).some(path => path.endsWith('/readback.json'))) throw new Error('evidence interrupted');
+    });
+    const common = { binary: binary!, configuration, publication: remote.publication, fetch: upstream.fetcher };
+    assert.equal((await updateRules({ ...common, stateDirectory: join(directory, 'first') })).status, 'failed');
+    const prior = Object.values((await readRemoteState(remote.repository)).journal.state.candidates)[0];
+    assert.equal(prior.phase, 'metadata');
+    const originalBuild = await remote.publication.download(prior.manifestUrl!.replace('/manifest.json', '/build.json'));
+    const movedBinary = join(directory, 'sing-box');
+    await copyFile(binary!, movedBinary); await chmod(movedBinary, 0o700);
+    remote.fault(undefined);
+    const recovered = await updateRules({ ...common, binary: movedBinary, stateDirectory: join(directory, 'new') });
+    assert.equal(recovered.status, 'processed');
+    if (recovered.results[0].status !== 'processed') assert.fail('Expected recovered candidate');
+    assert.equal(recovered.results[0].candidate.id, prior.id);
+    assert.deepEqual(await remote.publication.download(prior.manifestUrl!.replace('/manifest.json', '/build.json')), originalBuild);
+    assert.equal(remote.writes.filter(files => Object.keys(files).some(path => path.endsWith('/manifest.json'))).length, 1);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
@@ -104,7 +130,36 @@ test('完整证据提交后未完成回读，新机器不依赖上游重新构�
       throw new Error('Complete candidate recovery must not redownload upstream');
     } });
     assert.equal(recovered.status, 'processed');
+    if (recovered.results[0].status === 'processed') assert.equal(recovered.results[0].readback.length, 7);
     assert.equal(remote.writes.filter(files => Object.keys(files).some(path => path.endsWith('/readback.json'))).length, 1);
     assert.equal(Object.keys((await readRemoteState(remote.repository)).journal.state.candidates).length, 1);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('远端操作关联缺失或被改写时停止恢复，不另建候选', { skip: !binary }, async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'remote-operation-identity-'));
+  try {
+    const remote = memoryRepository(), upstream = source();
+    await initializeRemoteState(remote.repository, 'acceptance-recovery');
+    remote.fault((files, applied) => {
+      if (!applied && Object.keys(files).some(path => path.endsWith('/readback.json'))) throw new Error('evidence interrupted');
+    });
+    const common = { binary: binary!, configuration, publication: remote.publication, fetch: upstream.fetcher };
+    assert.equal((await updateRules({ ...common, stateDirectory: join(directory, 'first') })).status, 'failed');
+    remote.fault(undefined);
+    const original = (await readRemoteState(remote.repository)).journal;
+    const id = Object.keys(original.state.candidates)[0];
+    for (const corruption of ['missing-id', 'changed-id', 'missing-operation', 'missing-index']) {
+      const damaged = structuredClone(original);
+      if (corruption === 'missing-id') delete damaged.state.candidates[id].operationId;
+      if (corruption === 'changed-id') damaged.state.candidates[id].operationId = 'f'.repeat(32);
+      if (corruption === 'missing-operation') delete damaged.state.pendingOperation;
+      if (corruption === 'missing-index') (damaged.state.pendingOperation as any).candidateIds = [];
+      remote.replace('pipeline/state.json', Buffer.from(JSON.stringify(damaged)));
+      const writes = remote.writes.length, requests = upstream.requests.length;
+      await assert.rejects(updateRules({ ...common, stateDirectory: join(directory, corruption) }), /REMOTE_STATE_CORRUPT/);
+      assert.equal(remote.writes.length, writes);
+      assert.equal(upstream.requests.length, requests);
+    }
   } finally { await rm(directory, { recursive: true, force: true }); }
 });

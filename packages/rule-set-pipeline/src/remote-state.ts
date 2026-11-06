@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { immutableUrl, type PublicationTransport } from './publication.js';
 import type { PublicationRepository } from './publication-repository.js';
 import { PublicationWriteError } from './publication-repository.js';
@@ -60,10 +61,26 @@ function validate(value: unknown): asserts value is RemoteJournal {
       || candidate.tag !== state.pinned[String(candidate.releaseId)].identity.tag
       || !['building', 'publishing', 'verified', 'failed'].includes(candidate.status)
       || candidate.generation !== value.generation || typeof candidate.retained !== 'boolean'
+      || typeof candidate.operationId !== 'string' || !/^[a-f0-9-]+$/.test(candidate.operationId)
+      || !['update', 'rebuild'].includes(candidate.operation)
       || !['registered', 'files', 'metadata', 'evidence', 'complete'].includes(candidate.phase)
       || candidate.targetBranch !== value.targetBranch
       || ['filesCommit', 'metadataCommit', 'evidenceCommit'].some(key => candidate[key] !== undefined && !sha(candidate[key]))) {
       throw new Error('REMOTE_STATE_CORRUPT: candidate');
+    }
+    if (candidate.phase !== 'registered' && !digest(candidate.buildId)
+      || ['metadata', 'evidence', 'complete'].includes(candidate.phase) && !sha(candidate.filesCommit)
+      || ['evidence', 'complete'].includes(candidate.phase) && !sha(candidate.metadataCommit)
+      || candidate.phase === 'complete' && !sha(candidate.evidenceCommit)
+      || candidate.logicalId !== undefined && (typeof candidate.logicalId !== 'string' || !/^[a-z][a-z0-9-]*$/.test(candidate.logicalId) || !candidate.definition)
+      || candidate.phase !== 'complete' && candidate.retained && candidate.operationId !== state.pendingOperation?.id) {
+      throw new Error('REMOTE_STATE_CORRUPT: candidate progress or operation');
+    }
+    if (candidate.manifestUrl !== undefined && (!candidate.metadataCommit
+        || candidate.manifestUrl !== immutableUrl(candidate.metadataCommit, `candidates/${id}/manifest.json`))
+      || candidate.evidenceUrl !== undefined && (!candidate.evidenceCommit
+        || candidate.evidenceUrl !== immutableUrl(candidate.evidenceCommit, `candidates/${id}/readback.json`))) {
+      throw new Error('REMOTE_STATE_CORRUPT: candidate address');
     }
     if (candidate.definition !== undefined) {
       const definition = parseBuildConfiguration(JSON.stringify({ schemaVersion: 1, source: 'v2fly/domain-list-community',
@@ -84,9 +101,9 @@ function validate(value: unknown): asserts value is RemoteJournal {
   for (const records of Object.values(state.configuredProcessed ?? {})) processed(records);
   if (state.pendingOperation !== undefined) {
     const op = state.pendingOperation;
-    if (!object(op) || typeof op.id !== 'string' || !['update', 'rebuild'].includes(op.kind)
+    if (!object(op) || typeof op.id !== 'string' || !/^[a-f0-9-]+$/.test(op.id) || !['update', 'rebuild'].includes(op.kind)
       || op.generation !== value.generation || !Number.isSafeInteger(op.releaseId) || !/^[0-9]{14}$/.test(op.tag)
-      || op.expectedHead !== undefined && !sha(op.expectedHead)
+      || !sha(op.expectedHead) || !Array.isArray(op.candidateIds) || new Set(op.candidateIds).size !== op.candidateIds.length
       || !state.pinned[String(op.releaseId)] || op.tag !== state.pinned[String(op.releaseId)].identity.tag
       || !['pending', 'complete'].includes(op.status)) throw new Error('REMOTE_STATE_CORRUPT: operation');
     if (op.configuration !== undefined) {
@@ -96,6 +113,20 @@ function validate(value: unknown): asserts value is RemoteJournal {
         || !op.selectedIds.length || new Set(op.selectedIds).size !== op.selectedIds.length
         || op.selectedIds.some((id: unknown) => !configuration.ruleSets.some(rule => rule.id === id)))) throw new Error('REMOTE_STATE_CORRUPT: operation selection');
     } else if (op.selectedIds !== undefined) throw new Error('REMOTE_STATE_CORRUPT: operation selection');
+    const configuration = op.configuration === undefined ? undefined : parseBuildConfiguration(op.configuration);
+    for (const id of op.candidateIds) {
+      const candidate = state.candidates[id];
+      const definition = configuration?.ruleSets.find(rule => rule.id === candidate?.logicalId);
+      if (typeof id !== 'string' || !object(candidate) || candidate.operationId !== op.id || candidate.operation !== op.kind
+        || candidate.releaseId !== op.releaseId || candidate.tag !== op.tag
+        || (configuration ? !definition || op.selectedIds && !op.selectedIds.includes(definition.id)
+          || !isDeepStrictEqual(candidate.definition, definition) : candidate.logicalId !== undefined || candidate.definition !== undefined)) {
+        throw new Error('REMOTE_STATE_CORRUPT: operation candidate index');
+      }
+    }
+    if (Object.values(state.candidates).some(candidate => candidate.operationId === op.id && !op.candidateIds.includes(candidate.id))) {
+      throw new Error('REMOTE_STATE_CORRUPT: unindexed operation candidate');
+    }
   }
 }
 

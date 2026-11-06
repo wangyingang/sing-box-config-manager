@@ -134,7 +134,7 @@ for (const stageFile of ['domains.json', 'manifest.json', 'readback.json']) {
   }
 }
 
-for (const missing of ['retained', 'domains.srs', 'build.json', 'readback.json']) {
+for (const missing of ['retained', 'domains.srs', 'build.json', 'readback.json', 'changed-current-bytes']) {
   test(`成功处理后 ${missing} 不再保留，不返回旧候选成功地址`, { skip: !binary }, async () => isolated(async (directory, remote, source) => {
     const common = { binary: binary!, configuration, publication: remote.publication, fetch: source.fetcher };
     await updateRules({ ...common, stateDirectory: join(directory, 'first') });
@@ -143,7 +143,8 @@ for (const missing of ['retained', 'domains.srs', 'build.json', 'readback.json']
     if (missing === 'retained') {
       journal.state.candidates[candidateId].retained = false;
       remote.replace(STATE_PATH, encode(journal));
-    } else remote.remove(`candidates/${candidateId}/${missing}`);
+    } else if (missing === 'changed-current-bytes') remote.replace(`candidates/${candidateId}/domains.srs`, Buffer.from('different retained baseline'));
+    else remote.remove(`candidates/${candidateId}/${missing}`);
     const writesBefore = remote.writes.length;
     await assert.rejects(updateRules({ ...common, stateDirectory: join(directory, 'fresh') }), /CANDIDATE_UNAVAILABLE/);
     assert.equal(remote.writes.length, writesBefore);

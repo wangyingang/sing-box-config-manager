@@ -41,7 +41,9 @@ test('隔离分支通过 CLI 逐集回滚真实三集，恢复历史字节且兄
   const switches = [];
   for (const definition of config.ruleSets) {
     const candidate = await syntheticCandidate(binary!, 'issue-40-switch', `${definition.id}-switched.invalid`,
-      files => publication.commit(files, 'Issue #40 隔离候选'), { definition, target: config.target });
+      // Controlled synthetic fixtures are not official-source update operations.
+      async files => publication.repository!.commit((await publication.repository!.snapshot()).head, files,
+        'Issue #40 隔离合成候选'), { definition, target: config.target });
     const result = await activateRules({ configuration, logicalId: definition.id, stateDirectory: directory!, binary: binary!,
       subscription: subscription(definition.id), candidateEvidenceUrl: candidate.candidateEvidenceUrl, expectedHead: await transport.head(), transport });
     switches.push({ candidate, result });

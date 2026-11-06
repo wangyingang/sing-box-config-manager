@@ -16,9 +16,9 @@
 
 | 检查 | 结果 |
 | --- | --- |
-| `pnpm check` | 通过：工具测试 21、Compiler 测试 99、Pipeline 测试 132（后续新增的 8 项发布门禁和历史查询测试单独复验通过）；typecheck、build 与 workspace smoke 通过 |
+| `pnpm check` | 通过：工具测试 21、Compiler 测试 99、Pipeline 测试 140；typecheck、build 与 workspace smoke 通过 |
 | `SING_BOX_TEST_BINARY=... pnpm test:integration` | 186 项通过，0 跳过；包含既有客户端同进程更新、回滚与缓存恢复 |
-| `node --import tsx --test test/integration/remote-*.test.ts` | 最终恢复路径定向回归 31 项通过，0 跳过 |
+| `node --import tsx --test test/integration/remote-*.test.ts` | 最终恢复路径定向回归 35 项通过，0 跳过 |
 | `node --import tsx --test test/acceptance/configured-release.test.ts` | 固定官方 Release `20261104112839` 的三集构建、重复字节一致性及原生验证通过 |
 | `git diff --check` | 通过 |
 
@@ -34,6 +34,8 @@
 - [`cli.test.ts`](../../test/cli.test.ts)：初始化与状态查询的分支/config 路由、错误退出和远端权威标识。
 
 测试先复现了原实现换目录后读取 latest、完整候选恢复仍重取上游、批次不能单独重试，以及来源资产身份校验不完整的问题；修复后相关测试通过。
+
+本地双轴审查发现的 2 项 Spec 问题已修复：元数据阶段跨 binary 安装路径恢复保留原构建记录；缺失、改写操作 ID 或候选索引时停止恢复，不另发候选。Standards 轴的 1 项判断性重复代码问题也已处理，完整候选复验共用实现并统一返回七份回读证据。新增隔离回归验证了这些行为，以及旧单集在 `acceptance-*` 目标上的更新与重建。
 
 ## 尚未执行及范围边界
 

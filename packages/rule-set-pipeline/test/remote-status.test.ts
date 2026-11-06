@@ -87,7 +87,15 @@ function register(env: ReturnType<typeof remote>, id: string, phase: 'registered
     checksum: { id: 12, name: 'dlc.dat_plain.yml.sha256sum', url: 'https://github.com/v2fly/domain-list-community/releases/download/20261104112839/dlc.dat_plain.yml.sha256sum' } } };
   env.journal.state.candidates[id] = { id, releaseId: 42, tag: '20261104112839', status: phase === 'complete' ? 'verified' : 'publishing',
     phase, logicalId: 'ai-openai', generation: 1, retained: true, targetBranch: 'main',
+    definition: { id: 'ai-openai', list: 'openai', stablePath: 'stable/ai-openai' }, operationId: 'ee', operation: 'update',
+    buildId: 'e'.repeat(64), filesCommit: 'b'.repeat(40), metadataCommit: 'c'.repeat(40), evidenceCommit: 'd'.repeat(40),
     evidenceUrl: immutableUrl('d'.repeat(40), `candidates/${id}/readback.json`) };
+  env.journal.state.pendingOperation ??= { id: 'ee', kind: 'update', generation: 1, releaseId: 42, tag: '20261104112839',
+    status: phase === 'complete' ? 'complete' : 'pending', expectedHead: head, candidateIds: [],
+    configuration: JSON.stringify({ schemaVersion: 1, source: 'v2fly/domain-list-community',
+      target: { repository: 'wangyingang/sing-box-rule-artifacts', branch: 'main' },
+      ruleSets: [{ id: 'ai-openai', list: 'openai', stablePath: 'stable/ai-openai' }] }) };
+  env.journal.state.pendingOperation.candidateIds.push(id);
   env.saveJournal();
 }
 
@@ -223,7 +231,7 @@ test('各候选发布阶段的残缺文件与已提交待核实结果分别报�
   assert.deepEqual(['a1', 'b2', 'c3'].map(id => result.candidateAvailability[id].missingFiles!.length), [7, 5, 1]);
   assert.equal(result.candidateAvailability.d4.status, 'available');
   assert.equal(result.pendingOperations.find(operation => operation.id === 'd4')?.status, 'verification-pending');
-  assert.equal(result.pendingOperations.length, 4);
+  assert.equal(result.pendingOperations.length, 5);
 });
 
 test('候选已从远端保留集合移除时，即使旧对象仍可下载也不列为有效回滚目标', async () => {
