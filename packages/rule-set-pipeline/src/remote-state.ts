@@ -19,6 +19,16 @@ export interface RemoteJournal {
   lastCleanupAt?: string;
   manualOperations?: Record<string, ManualOperation>;
   automaticOperations?: Record<string, ActivationOperation>;
+  resumes?: Record<string, ResumeDecision>;
+  parkedOperations?: RemoteOperation[];
+}
+
+export type RemoteOperation = NonNullable<UpdateState['pendingOperation']>;
+
+export interface ResumeDecision {
+  revision: string;
+  activationId: string;
+  checkPending: boolean;
 }
 
 export interface ManualOperation extends ActivationOperation {
@@ -79,7 +89,7 @@ function validMaintenancePlan(value: unknown) {
     object(entry) && typeof entry.recordPath === 'string' && object(entry.record) && strings(entry.candidatePaths))
     && strings(retain.progress.pinnedReleaseIds) && strings(retain.progress.processedReleaseIds)
     && object(retain.progress.configuredProcessedReleaseIds) && Object.values(retain.progress.configuredProcessedReleaseIds).every(strings)
-    && object(retain.progress.latestChecks) && strings(discard.candidateIds) && strings(discard.completedOperationIds)
+    && object(retain.progress.latestChecks) && object(retain.progress.resumes) && strings(discard.candidateIds) && strings(discard.completedOperationIds)
     && object(discard.activations) && Object.values(discard.activations).every(entries => Array.isArray(entries) && entries.every(entry =>
       object(entry) && typeof entry.id === 'string' && typeof entry.candidateId === 'string' && sha(entry.commit)))
     && Array.isArray(otherRefs) && otherRefs.every(ref => object(ref) && typeof ref.ref === 'string' && ref.ref.startsWith('refs/') && sha(ref.head));
@@ -119,12 +129,28 @@ function validate(value: unknown): asserts value is RemoteJournal {
         || op.notCommitted !== undefined && op.notCommitted !== true) throw new Error('REMOTE_STATE_CORRUPT: activation operation');
     }
   }
+  if (value.resumes !== undefined) {
+    if (!object(value.resumes)) throw new Error('REMOTE_STATE_CORRUPT: resume decisions');
+    for (const [id, decision] of Object.entries(value.resumes)) {
+      if (!/^[a-z][a-z0-9-]*$/.test(id) || !object(decision) || !operationId(decision.revision)
+        || typeof decision.activationId !== 'string' || !decision.activationId || typeof decision.checkPending !== 'boolean') {
+        throw new Error('REMOTE_STATE_CORRUPT: resume decision');
+      }
+    }
+  }
   const state = value.state;
   if (state.schemaVersion !== 1 || !object(state.pinned) || !object(state.processed) || !object(state.candidates)
     || state.configuredProcessed !== undefined && !object(state.configuredProcessed)) throw new Error('REMOTE_STATE_CORRUPT');
   for (const [id, pin] of Object.entries(state.pinned)) {
     validatePin(pin, id);
   }
+  const parked = value.parkedOperations === undefined ? [] : value.parkedOperations;
+  if (!Array.isArray(parked) || parked.some(op => !object(op) || op.status !== 'pending')) {
+    throw new Error('REMOTE_STATE_CORRUPT: parked operations');
+  }
+  const operations = [...parked, ...(state.pendingOperation === undefined ? [] : [state.pendingOperation])];
+  const operationIds = new Set(operations.map(op => op?.id));
+  if (operationIds.size !== operations.length) throw new Error('REMOTE_STATE_CORRUPT: duplicate operation');
   for (const [id, candidate] of Object.entries(state.candidates)) {
     if (!object(candidate) || candidate.id !== id || !/^[a-f0-9-]+$/.test(id)
       || !Number.isSafeInteger(candidate.releaseId) || !state.pinned[String(candidate.releaseId)]
@@ -143,7 +169,7 @@ function validate(value: unknown): asserts value is RemoteJournal {
       || ['evidence', 'complete'].includes(candidate.phase) && !sha(candidate.metadataCommit)
       || candidate.phase === 'complete' && !sha(candidate.evidenceCommit)
       || candidate.logicalId !== undefined && (typeof candidate.logicalId !== 'string' || !/^[a-z][a-z0-9-]*$/.test(candidate.logicalId) || !candidate.definition)
-      || candidate.phase !== 'complete' && candidate.retained && (candidate.generation !== value.generation || candidate.operationId !== state.pendingOperation?.id)) {
+      || candidate.phase !== 'complete' && candidate.retained && (candidate.generation !== value.generation || !operationIds.has(candidate.operationId))) {
       throw new Error('REMOTE_STATE_CORRUPT: candidate progress or operation');
     }
     if (candidate.manifestUrl !== undefined && (!candidate.metadataCommit
@@ -183,8 +209,7 @@ function validate(value: unknown): asserts value is RemoteJournal {
       }
     }
   }
-  if (state.pendingOperation !== undefined) {
-    const op = state.pendingOperation;
+  for (const op of operations) {
     if (!object(op) || typeof op.id !== 'string' || !/^[a-f0-9-]+$/.test(op.id) || !['update', 'rebuild', 'check'].includes(op.kind)
       || !Number.isSafeInteger(op.generation) || op.generation < 1 || op.generation > value.generation
       || op.status === 'pending' && op.generation !== value.generation || !Number.isSafeInteger(op.releaseId) || !/^[0-9]{14}$/.test(op.tag)
@@ -221,6 +246,18 @@ function validate(value: unknown): asserts value is RemoteJournal {
       throw new Error('REMOTE_STATE_CORRUPT: unindexed operation candidate');
     }
   }
+}
+
+/** Resume matching work without replacing a different operation's checkpoint. */
+export function selectRemoteOperation(journal: RemoteJournal, matches: (operation: RemoteOperation) => unknown) {
+  const { state, parkedOperations } = journal;
+  const active = state.pendingOperation?.status === 'pending' ? state.pendingOperation : undefined;
+  if (active && matches(active)) return active;
+  const index = parkedOperations?.findIndex(matches) ?? -1;
+  if (index < 0) return active;
+  const [selected] = parkedOperations!.splice(index, 1);
+  if (active) parkedOperations!.push(active);
+  return state.pendingOperation = selected;
 }
 
 export async function readRemoteState(repository: PublicationRepository) {

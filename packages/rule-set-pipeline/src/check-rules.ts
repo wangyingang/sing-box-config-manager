@@ -7,14 +7,14 @@ import { githubActivation, type ActivationTransport } from './activation-transpo
 import { verifyRetainedCandidate } from './candidate-recovery.js';
 import { buildConfiguredRelease, configuredBuildTools, parseBuildConfiguration, type RuleDefinition } from './configured-build.js';
 import { publishConfiguredCandidate, type ConfiguredUpdateOptions } from './configured-update.js';
-import { readActivationOperationResults, type ObservedActivation } from './manual-activation.js';
+import { applicableResume, effectiveControl, readActivationOperationResults, type ObservedActivation } from './manual-activation.js';
 import { inspectBinary } from './native.js';
 import { githubPublication } from './publication.js';
 import { retainedCandidateDownload, type PublicationSnapshot } from './publication-repository.js';
 import { sha256 } from './release.js';
-import { openRemoteSession } from './remote-state.js';
+import { openRemoteSession, selectRemoteOperation, type RemoteOperation } from './remote-state.js';
 import { activationRecord, readRemoteStatus, verifyStableFiles } from './remote-status.js';
-import type { Candidate, UpdateState } from './update.js';
+import type { Candidate } from './update.js';
 
 export interface CheckOptions extends Omit<ConfiguredUpdateOptions, 'sampleTag' | 'retryRelease'> {
   /** Trusted, complete v2 Rule Subscription for each selected logical ID. */
@@ -29,7 +29,6 @@ export interface CheckRecord {
 }
 type Active = ObservedActivation & {
   subscription: unknown;
-  control?: { revision: string; reason: string; pauseAutomaticActivation: boolean; pauseAutomaticRetry: boolean };
   source: { releaseId?: number; tag?: string };
   validation: { buildId: string; tool: { sha256: string } };
   operation?: string;
@@ -37,11 +36,10 @@ type Active = ObservedActivation & {
 };
 type Delivery = { id: string; candidateId: string; releaseId?: number; tag?: string; commit?: string; containingCommit?: string };
 type CheckResult = CheckRecord & { id: string; current?: Delivery; lastObserved?: Delivery;
-  control?: Active['control']; pendingOperation?: { id: string; status: string; commit?: string; containingCommit?: string };
+  control?: ReturnType<typeof effectiveControl>; pendingOperation?: { id: string; status: string; commit?: string; containingCommit?: string };
   rollbackTargets?: { commit: string; id: string; candidateId: string }[] };
 type Built = Awaited<ReturnType<typeof buildConfiguredRelease>>;
 type SuccessfulBuild = Extract<Built['results'][number], { status: 'built-validated' }>;
-type CheckOperation = NonNullable<UpdateState['pendingOperation']>;
 const recordPath = (definition: RuleDefinition) => `${definition.stablePath}/activation.json`;
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 const uncertain = (error: unknown) => /PUBLICATION_PENDING|ACTIVATION_(UNKNOWN|APPLIED_READBACK_PENDING|CONFLICT_OR_SUPERSEDED)/.test(message(error));
@@ -100,7 +98,20 @@ async function sameDelivery(result: SuccessfulBuild, built: Built, active: Activ
 }
 
 /** Check the configured sets against one official Release and activate verified changes. */
-export async function checkRules(options: CheckOptions) {
+export function checkRules(options: CheckOptions) {
+  return runRulesCheck(options);
+}
+
+export interface ResumeOptions extends Omit<CheckOptions, 'selectedIds'> {
+  logicalId: string;
+}
+
+/** Persist a single rule set's decision before checking the latest source. */
+export function resumeRules({ logicalId, ...options }: ResumeOptions) {
+  return runRulesCheck({ ...options, selectedIds: [logicalId] }, logicalId);
+}
+
+async function runRulesCheck(options: CheckOptions, resumeId?: string) {
   const configuration = parseBuildConfiguration(options.configuration);
   const ids = options.selectedIds ?? configuration.ruleSets.map(rule => rule.id);
   const definitions = configuration.ruleSets.filter(rule => ids.includes(rule.id));
@@ -136,6 +147,7 @@ export async function checkRules(options: CheckOptions) {
     const expectedStableHead = () => shared ? session.head : stableHead;
     const activeById = new Map<string, Active>();
     const errors = new Map<string, string>();
+    const controlFor = (id: string) => effectiveControl(journal, id, activeById.get(id));
     const paths = new Set(definitions.map(recordPath));
     const stableIdentities = new Map<string, string>();
     for (const path of stable.paths.filter(path => path.endsWith('/activation.json'))) {
@@ -154,7 +166,7 @@ export async function checkRules(options: CheckOptions) {
         const active = await readActive(stable, rule, branch);
         if (active) activeById.set(rule.id, active);
         else if (stableIdentities.has(rule.id)) throw new Error('Existing stable path cannot change during check');
-        if (active?.control?.pauseAutomaticRetry) continue;
+        if (!resumeId && controlFor(rule.id)?.pauseAutomaticRetry) continue;
         const subscription = activationSubscription(options.subscriptions[rule.id], branch, rule);
         if (active && !isDeepStrictEqual(active.subscription, subscription)) throw new Error('Existing subscription contract cannot change during check');
       } catch (error) {
@@ -163,21 +175,56 @@ export async function checkRules(options: CheckOptions) {
       }
     }
 
+    const parked = journal.parkedOperations ?? [];
     let operation = state.pendingOperation?.status === 'pending' ? state.pendingOperation : undefined;
-    if (operation && (operation.kind !== 'check' || !operation.configuration
-      || !isDeepStrictEqual(parseBuildConfiguration(operation.configuration), configuration)
-      || !isDeepStrictEqual(operation.selectedIds, definitions.map(rule => rule.id))
-      || !isDeepStrictEqual(operation.subscriptionHashes, subscriptionHashes))) {
-      throw new Error('RECOVERY_REQUEST_MISMATCH: resume the registered operation with its original configuration, subscriptions and selection');
+    const selectedIds = definitions.map(rule => rule.id);
+    const sameConfiguration = (entry: RemoteOperation | undefined) => entry?.kind === 'check' && entry.configuration
+      && isDeepStrictEqual(parseBuildConfiguration(entry.configuration), configuration);
+    const matchesRequest = (entry: RemoteOperation | undefined) => sameConfiguration(entry)
+      && isDeepStrictEqual(entry?.selectedIds, selectedIds)
+      && isDeepStrictEqual(entry?.subscriptionHashes, subscriptionHashes);
+    const hasParkedCheck = (exceptId?: string) => parked.some(entry => entry.kind === 'check'
+      && entry.selectedIds?.some(id => id !== exceptId && selectedIds.includes(id)
+        && entry.controlRevisions?.[id] === (controlFor(id)?.revision ?? null)));
+    const requestMismatch = 'RECOVERY_REQUEST_MISMATCH: resume the registered operation with its original configuration, subscriptions and selection';
+    const hasNewerSiblingSource = (id: string, tag: string) => selectedIds.some(sibling => sibling !== id
+      && [activeById.get(sibling)?.source?.tag, state.latestChecks?.[sibling]?.tag].some(observed => observed && observed > tag));
+    const canExtendResumeCheck = (entry: RemoteOperation) => {
+      const id = entry.selectedIds?.[0];
+      return sameConfiguration(entry) && entry.selectedIds?.length === 1 && id && selectedIds.includes(id)
+        && entry.subscriptionHashes?.[id] === subscriptionHashes[id]
+        && Object.hasOwn(journal.resumes ?? {}, id)
+        && entry.controlRevisions?.[id] === journal.resumes![id].revision
+        && !hasParkedCheck(id) && !hasNewerSiblingSource(id, entry.tag);
+    };
+    let extendResumeCheck = false;
+    if (!resumeId) {
+      operation = selectRemoteOperation(journal, matchesRequest);
+      if (operation && !matchesRequest(operation)) {
+        if (!canExtendResumeCheck(operation)) {
+          throw new Error(requestMismatch);
+        }
+        extendResumeCheck = true;
+      } else if (!operation && hasParkedCheck()) throw new Error(requestMismatch);
     }
-    const operationId = operation?.id ?? randomUUID();
+    // Return the journal to interrupted work when this check has settled.
+    const finishCheck = () => {
+      if (!state.pendingOperation || state.pendingOperation.status === 'complete') {
+        if (parked.length) state.pendingOperation = parked.pop();
+      }
+      return session.save();
+    };
+    let operationId = operation?.id ?? randomUUID();
     const checkedAt = new Date().toISOString();
     const results = new Map<string, CheckRecord>();
     const latestChecks = state.latestChecks ??= {};
-    const record = (id: string, status: CheckStatus, fields: Partial<CheckRecord> = {}) => {
+    const recordCheckOutcome = (id: string, status: CheckStatus, fields: Partial<CheckRecord> = {}) => {
       const value = { operationId, checkedAt, status, ...fields };
       latestChecks[id] = value;
       results.set(id, value);
+      const resume = applicableResume(journal, id, activeById.get(id));
+      if (resume?.checkPending && status !== 'verification-pending' && !errors.has(id)
+        && (!operation || operation.controlRevisions?.[id] === resume.revision)) resume.checkPending = false;
     };
     const knownApplied = new Map<string, string>();
     const report = async (failure?: unknown) => {
@@ -205,7 +252,7 @@ export async function checkRules(options: CheckOptions) {
         if (current) {
           result.current = { ...delivery(current), commit: automatic?.commit ?? knownApplied.get(id),
             containingCommit: automatic?.containingCommit ?? remote?.commit };
-          result.control = current.control;
+          result.control = remote ? remote.control : controlFor(id);
         } else if (statusError && observed) result.lastObserved = delivery(observed);
         if (pending) {
           result.pendingOperation = { id: pending.id, status: pending.status, commit: pendingSwitch?.commit,
@@ -221,6 +268,8 @@ export async function checkRules(options: CheckOptions) {
           delete result.error;
           reconciledSwitch = true;
         }
+        const resumePending = remoteStatus?.pendingOperations.find(value => value.logicalId === id && value.status === 'resume-check-pending');
+        if (!result.pendingOperation && resumePending) result.pendingOperation = { id: resumePending.id, status: resumePending.status };
         if (remoteStatus && paths.has(recordPath(rule))) result.rollbackTargets = remoteStatus.rollbackTargets[id] ?? [];
         return result;
       });
@@ -245,15 +294,69 @@ export async function checkRules(options: CheckOptions) {
       return report(new Error('ACTIVATION_UNKNOWN: a registered switch must be reconciled before this check can write'));
     }
 
+    if (resumeId) {
+      const active = activeById.get(resumeId);
+      if (errors.has(resumeId) || !active) return report(new Error(errors.get(resumeId) ?? 'Resume requires a current rule version'));
+      const existing = applicableResume(journal, resumeId, active);
+      const mismatchedCheck = existing && [operation, ...parked].some(entry =>
+        entry?.controlRevisions?.[resumeId] === existing.revision && !matchesRequest(entry));
+      const decision = existing?.checkPending && !mismatchedCheck ? existing
+        : { revision: randomUUID(), activationId: active.id, checkPending: true };
+      const isResumeCheck = (entry: RemoteOperation | undefined) => matchesRequest(entry)
+        && entry?.controlRevisions?.[resumeId] === decision.revision;
+      const superseded = (entry: RemoteOperation) => entry.kind === 'check' && entry.selectedIds?.length === 1
+        && entry.selectedIds[0] === resumeId && entry.controlRevisions?.[resumeId] !== decision.revision;
+      const abandon = (entry: RemoteOperation) => {
+        for (const id of entry.candidateIds) {
+          const candidate = state.candidates[id];
+          if (candidate.phase !== 'complete') candidate.retained = false;
+        }
+      };
+      const rearrange = !isResumeCheck(operation) && (operation || parked.some(entry => superseded(entry) || isResumeCheck(entry)));
+      if (rearrange) {
+        // Preserve the fixed Release, candidates and outcomes of other work.
+        // The checkpoint fences its old writer before this check can start.
+        if (operation) {
+          if (superseded(operation)) abandon(operation);
+          else {
+            parked.push(operation);
+            journal.parkedOperations = parked;
+          }
+          state.pendingOperation = operation = undefined;
+        }
+        for (let index = parked.length - 1; index >= 0; index--) {
+          if (superseded(parked[index])) abandon(parked.splice(index, 1)[0]);
+        }
+        operation = selectRemoteOperation(journal, isResumeCheck);
+        operationId = operation?.id ?? randomUUID();
+      }
+      if (decision !== existing || rearrange) {
+        (journal.resumes ??= {})[resumeId] = decision;
+        try { await session.save(); }
+        catch (error) { return report(error); }
+      }
+    }
+
+    if (extendResumeCheck && operation) {
+      // The normal batch recovers the selected set and uses its already fixed
+      // Release for newly included sets. Keep the original control revision.
+      operation.selectedIds = selectedIds;
+      operation.controlRevisions = { ...Object.fromEntries(selectedIds.map(id => [id, controlFor(id)?.revision ?? null])),
+        ...operation.controlRevisions };
+      operation.subscriptionHashes = subscriptionHashes;
+      try { await session.save(); }
+      catch (error) { return report(error); }
+    }
+
     for (const rule of definitions) {
       const { id } = rule;
-      const active = activeById.get(id);
-      const currentRevision = active?.control?.revision ?? null;
-      if (errors.has(id)) record(id, 'failed', { error: errors.get(id) });
-      else if (active?.control?.pauseAutomaticRetry) record(id, 'paused');
+      const control = controlFor(id);
+      const currentRevision = control?.revision ?? null;
+      if (errors.has(id)) recordCheckOutcome(id, 'failed', { error: errors.get(id) });
+      else if (control?.pauseAutomaticRetry) recordCheckOutcome(id, 'paused');
       else if (operation && operation.controlRevisions![id] !== currentRevision) {
-        if (active?.control?.pauseAutomaticActivation) record(id, 'paused');
-        else record(id, 'failed', { error: 'PUBLICATION_CONFLICT: control revision changed since registration' });
+        if (control?.pauseAutomaticActivation) recordCheckOutcome(id, 'paused');
+        else results.set(id, { operationId, checkedAt, status: 'failed', error: 'PUBLICATION_CONFLICT: control revision changed since registration' });
       } else if (operation && latestChecks[id]?.operationId === operationId && latestChecks[id].status !== 'verification-pending') {
         results.set(id, latestChecks[id]);
       }
@@ -266,7 +369,7 @@ export async function checkRules(options: CheckOptions) {
         if (!active || !pendingSwitch) continue;
         const [outcome] = await readActivationOperationResults(repo, journal, stable,
           new Map([[recordPath(rule), active]]), url => activation.download(url), [pendingSwitch]);
-        record(rule.id, outcome.status === 'committed' ? 'activated' : 'verification-pending', {
+        recordCheckOutcome(rule.id, outcome.status === 'committed' ? 'activated' : 'verification-pending', {
           releaseId: recovery.releaseId, tag: recovery.tag, candidateId: active.candidateId,
           ...(outcome.error ? { error: outcome.error } : {}),
         });
@@ -283,7 +386,7 @@ export async function checkRules(options: CheckOptions) {
         for (const rule of definitions) abandonIncomplete(rule.id);
         if (![...results.values()].some(entry => entry.status === 'verification-pending')) operation.status = 'complete';
       }
-      try { await session.save(); }
+      try { await finishCheck(); }
       catch (error) { results.clear(); return report(error); }
       return report();
     }
@@ -299,12 +402,12 @@ export async function checkRules(options: CheckOptions) {
     } catch (error) {
       if (/PUBLICATION_(PENDING|CONFLICT)/.test(message(error))) return report(error);
       const fields = operation ? { releaseId: operation.releaseId, tag: operation.tag } : {};
-      for (const { id } of remaining) record(id, 'failed', { ...fields, error: message(error) });
+      for (const { id } of remaining) recordCheckOutcome(id, 'failed', { ...fields, error: message(error) });
       if (operation) {
         for (const rule of definitions) abandonIncomplete(rule.id);
         if (![...results.values()].some(entry => entry.status === 'verification-pending')) operation.status = 'complete';
       }
-      try { await session.save(); }
+      try { await finishCheck(); }
       catch (checkpoint) { return report(checkpoint); }
       return report();
     }
@@ -333,10 +436,10 @@ export async function checkRules(options: CheckOptions) {
             pin.identity = identity;
             state.pinned[String(releaseId)] = pin;
             if (!operation) {
-              const controlRevisions = Object.fromEntries(definitions.map(({ id }) => [id, activeById.get(id)?.control?.revision ?? null]));
+              const controlRevisions = Object.fromEntries(definitions.map(({ id }) => [id, controlFor(id)?.revision ?? null]));
               state.pendingOperation = operation = { id: operationId, kind: 'check', generation: session.generation,
                 releaseId, tag, status: 'pending', expectedHead: session.head, candidateIds: [], configuration: options.configuration,
-                selectedIds: definitions.map(rule => rule.id), controlRevisions, subscriptionHashes };
+                selectedIds, controlRevisions, subscriptionHashes };
             }
             await session.save();
           },
@@ -366,7 +469,7 @@ export async function checkRules(options: CheckOptions) {
           if (result.status === 'failed') throw new Error(`${result.error}: ${JSON.stringify(result.report.diagnostics)}`);
           if (active && await sameDelivery(result, built!, active, session.snapshot, publication, options.binary)) {
             abandonIncomplete(id);
-            record(id, active.control?.pauseAutomaticActivation ? 'paused' : 'unchanged', release);
+            recordCheckOutcome(id, controlFor(id)?.pauseAutomaticActivation ? 'paused' : 'unchanged', release);
             await session.save();
             continue;
           }
@@ -393,8 +496,8 @@ export async function checkRules(options: CheckOptions) {
         processed[id][String(release.releaseId)] = { candidateId: candidate.id, tag: release.tag, evidenceUrl: candidate.evidenceUrl!,
           definitionSha256: sha256(JSON.stringify({ definition, target: configuration.target })) };
         await session.save();
-        if (active?.control?.pauseAutomaticActivation) {
-          record(id, 'paused', { ...release, candidateId: candidate.id });
+        if (controlFor(id)?.pauseAutomaticActivation) {
+          recordCheckOutcome(id, 'paused', { ...release, candidateId: candidate.id });
         } else {
           await activateAutomatically({ configuration: options.configuration, logicalId: id, subscription: options.subscriptions[id],
             candidateEvidenceUrl: candidate.evidenceUrl!, binary: options.binary, expectedHead: expectedStableHead(), transport: activation }, {
@@ -413,7 +516,7 @@ export async function checkRules(options: CheckOptions) {
               activeById.set(id, activationRecord(current, recordPath(definition), branch).record as Active);
             },
           });
-          record(id, 'activated', { ...release, candidateId: candidate.id });
+          recordCheckOutcome(id, 'activated', { ...release, candidateId: candidate.id });
         }
         await session.save();
       } catch (error) {
@@ -425,7 +528,7 @@ export async function checkRules(options: CheckOptions) {
           continue;
         }
         const pending = uncertain(error) || candidate?.phase === 'evidence' && !/^(RECOVERY_BUILD_CHANGED|CANDIDATE_UNAVAILABLE)/.test(message(error));
-        record(id, pending ? 'verification-pending' : 'failed', { ...release, error: message(error),
+        recordCheckOutcome(id, pending ? 'verification-pending' : 'failed', { ...release, error: message(error),
           ...(candidate ? { candidateId: candidate.id } : {}) });
         if (coordinationStopped) return report(error);
         if (!pending) abandonIncomplete(id);
@@ -435,7 +538,7 @@ export async function checkRules(options: CheckOptions) {
     }
     for (const { id } of definitions) if (results.get(id)?.status === 'failed' || results.get(id)?.status === 'paused') abandonIncomplete(id);
     if (![...results.values()].some(result => result.status === 'verification-pending')) operation!.status = 'complete';
-    try { await session.save(); }
+    try { await finishCheck(); }
     catch (error) {
       return report(error);
     }

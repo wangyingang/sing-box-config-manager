@@ -9,7 +9,7 @@ import { parseBuildConfiguration, type RuleDefinition } from './configured-build
 import type { PublicationRepository } from './publication-repository.js';
 import { ARTIFACT_REPOSITORY, githubPublication, immutableUrl, type PublicationTransport } from './publication.js';
 import { readRemoteState } from './remote-state.js';
-import { manualControl, readActivationOperationResults, type ObservedActivation } from './manual-activation.js';
+import { applicableResume, effectiveControl, manualControl, readActivationOperationResults, type ObservedActivation } from './manual-activation.js';
 import { sha256 } from './release.js';
 
 const ajv = new Ajv({ strict: true });
@@ -28,7 +28,7 @@ interface CandidateAvailability {
 export interface HistoryTarget { commit: string; id: string; candidateId: string }
 interface RollbackTarget extends HistoryTarget { candidateEvidenceUrl: string; verification: 'structural' | 'native' }
 interface UnavailableTarget extends HistoryTarget { reason: string }
-interface ActiveVersion { status: 'activated'; commit: string; activation: Record<string, any>; candidate: CandidateAvailability }
+interface ActiveVersion { status: 'activated'; commit: string; activation: Record<string, any>; candidate: CandidateAvailability; control?: ReturnType<typeof effectiveControl> }
 export interface PendingOperation { id: string; candidateId?: string; logicalId?: string; phase?: string; status: string; error?: string }
 
 export function activationRecord(value: unknown, path: string, targetBranch: string) {
@@ -195,7 +195,12 @@ export async function readRemoteStatus(options: {
       logicalId: record.logicalId, status: 'activated-verification-pending', error: candidate.error ?? 'Current candidate dependencies are incomplete' });
     requireThat(!Object.hasOwn(activeRuleVersions, id), 'Duplicate active logical ID');
     if (path === 'stable/activation.json') activeRuleVersion = current;
-    else activeRuleVersions[id] = current;
+    else {
+      current.control = effectiveControl(journal, id, record);
+      const resume = applicableResume(journal, id, record);
+      if (resume?.checkPending) pendingOperations.push({ id: resume.revision, logicalId: id, status: 'resume-check-pending' });
+      activeRuleVersions[id] = current;
+    }
     rollbackTargets[id] = []; unavailableRollbackTargets[id] = [];
     historicalActivations[path] = [];
     historyComplete[id] = true; historyErrors[id] = [];
@@ -285,6 +290,7 @@ export async function readRemoteStatus(options: {
   }
   const operation = journal.state.pendingOperation;
   if (operation?.status === 'pending') pendingOperations.unshift({ id: operation.id, status: 'pending' });
+  for (const parked of journal.parkedOperations ?? []) pendingOperations.push({ id: parked.id, status: 'parked' });
   const operations = await readActivationOperationResults(options.repository, journal, stable, currentByPath,
     url => activation.download(url), [...Object.values(journal.manualOperations ?? {}), ...Object.values(journal.automaticOperations ?? {})]
       .filter(operation => !options.recordPaths || options.recordPaths.has(operation.recordPath)));
@@ -299,5 +305,5 @@ export async function readRemoteStatus(options: {
     maintenance: journal.maintenance, state: journal.state, activeRuleVersion,
     activeRuleVersions, rollbackTargets, unavailableRollbackTargets, candidateAvailability, manualOperations, automaticOperations, pendingOperations,
     historyComplete, historyErrors,
-    ...(options.maintenanceInventory ? { inventory: { targetBranch: journal.targetBranch, snapshot, stable, currentByPath, historicalActivations } } : {}) };
+    ...(options.maintenanceInventory ? { inventory: { targetBranch: journal.targetBranch, snapshot, stable, currentByPath, historicalActivations, resumes: journal.resumes ?? {} } } : {}) };
 }

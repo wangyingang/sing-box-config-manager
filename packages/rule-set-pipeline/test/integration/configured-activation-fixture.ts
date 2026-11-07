@@ -124,3 +124,22 @@ export async function configuredEnvironment(binary: string, directory: string, b
     options: (id: string, evidenceUrl: string) => ({ logicalId: id, configuration, stateDirectory: directory,
       subscription: subscription(id), binary, expectedHead: head, candidateEvidenceUrl: evidenceUrl, transport }) };
 }
+
+export function upstream(revision: number, rules: Record<string, string> = {}) {
+  const requests: string[] = [];
+  const tag = `2026110411283${revision}`;
+  const input = JSON.stringify({ lists: ['openai', 'anthropic', 'google-deepmind', 'openai-alt'].map(name =>
+    ({ name, length: 1, rules: [rules[name] ?? `domain:${name}.example`] })) });
+  const fetcher: typeof fetch = async url => {
+    const path = String(url);
+    requests.push(path);
+    if (path.endsWith('/latest') || path.endsWith(`/releases/${revision}`)) return Response.json({ id: revision, tag_name: tag,
+      assets: ['dlc.dat_plain.yml', 'dlc.dat_plain.yml.sha256sum'].map((name, i) => ({ id: 11 + i, name,
+        browser_download_url: `https://github.com/v2fly/domain-list-community/releases/download/${tag}/${name}` })) });
+    if (path.includes('/git/ref/tags/')) return Response.json({ object: { type: 'commit', sha: 'a'.repeat(40) } });
+    if (path.endsWith('/assets/11')) return new Response(input);
+    if (path.endsWith('/assets/12')) return new Response(`${sha256(input)}  dlc.dat_plain.yml\n`);
+    throw new Error(`Unexpected source: ${path}`);
+  };
+  return { fetcher, requests };
+}

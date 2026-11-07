@@ -59,11 +59,12 @@ async function listRemoteRefs(): Promise<Ref[]> {
 
 async function scan(options: MaintenanceOptions) {
   const status = await readRemoteStatus({ ...options, maintenanceInventory: true });
-  const { targetBranch, snapshot, stable, currentByPath, historicalActivations } = status.inventory!;
+  const { targetBranch, snapshot, stable, currentByPath, historicalActivations, resumes } = status.inventory!;
   const blockers = [...status.pendingOperations];
   const active = [...currentByPath].map(([recordPath, record]) => {
     const candidatePaths = candidateEvidenceFiles.map(file => `candidates/${record.candidateId}/${file}`);
-    return { recordPath, record, candidatePaths };
+    const control = record.logicalId ? status.activeRuleVersions[record.logicalId].control : undefined;
+    return { recordPath, record, candidatePaths, ...(control ? { control } : {}) };
   });
   const currentIds = new Set(active.map(({ record }) => record.candidateId));
   const candidateIds = new Set(snapshot.paths.flatMap(path => /^candidates\/([a-f0-9-]+)\//.exec(path)?.[1] ?? []));
@@ -101,6 +102,7 @@ async function scan(options: MaintenanceOptions) {
         configuredProcessedReleaseIds: Object.fromEntries(Object.entries(journal.configuredProcessed ?? {})
           .map(([id, records]) => [id, Object.keys(records)])),
         latestChecks: journal.latestChecks ?? {},
+        resumes,
       },
     },
     discard: {

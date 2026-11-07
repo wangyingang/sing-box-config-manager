@@ -11,16 +11,14 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import test from 'node:test';
 import { renderSubscription, type RuleSubscription } from '../../../config-compiler/src/index.js';
-import { activateRules, rollbackRules } from '../../src/activation.js';
-import { authorizeActivationWrite } from '../../src/manual-activation.js';
-import { initializeRemoteState } from '../../src/remote-state.js';
-import type { PublicationRepository } from '../../src/publication-repository.js';
+import { activateRules, checkRules, resumeRules, rollbackRules } from '../../src/index.js';
 import type { ActivationTransport } from '../../src/activation-transport.js';
 import { ARTIFACT_REPOSITORY } from '../../src/publication.js';
 import { sha256 } from '../../src/release.js';
 import { parseBuildConfiguration } from '../../src/configured-build.js';
 import { publishRecipe, readPublication } from '../../../config-compiler/src/publisher.js';
 import { syntheticCandidate } from './activation-client-fixture.js';
+import { configuredEnvironment, upstream } from './configured-activation-fixture.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
 if (!binary) throw new Error('Set SING_BOX_TEST_BINARY to an absolute 1.14.4 binary path');
@@ -85,75 +83,42 @@ async function proxyDns(port: number) {
 
 // All network redirection, trust material and accelerated timing belong only to
 // this isolated process. No hosts, production endpoint or actual client is changed.
-test('只发布一次 v2 Recipe，换源 A/B 与回滚 A 后同一进程通过原 URL 更新 DNS 和 Route', { timeout: 60_000 }, async () => {
+test('只发布一次 v2 Recipe，同一进程通过原 URL 观察换源、固定与恢复后的 DNS 和 Route', { timeout: 60_000 }, async () => {
   const directory = await mkdtemp(join(tmpdir(), 'activation-client-'));
   const servers: Server[] = [], sockets = new Set<Duplex>();
   const dns = createSocket('udp4');
   let child: ChildProcess | undefined, log = '', failed = false, dnsBound = false;
-  const immutable = new Map<string, Buffer>(), stable = new Map<string, Buffer>();
-  let count = 0, head = 'a'.repeat(40);
   const downloads: { url: string; sha256: string; observedAt: string }[] = [];
   const published: { path: string; sha256: string; commit: string }[] = [];
-  const repository: PublicationRepository = {
-    branch,
-    async snapshot() {
-      const tree = new Map(stable);
-      return { head, paths: [...tree.keys()], async read(path) { return tree.get(path); } };
-    },
-    async commit(expected, files) {
-      assert.equal(expected, head);
-      head = (++count).toString(16).padStart(40, '0');
-      for (const [path, content] of Object.entries(files)) stable.set(path, content);
-      return head;
-    },
-  };
-  await initializeRemoteState(repository, branch);
-  const transport: ActivationTransport = {
-    branch, repository,
-    async head() { return head; },
-    async download(address: string) {
-      const path = new URL(address).pathname.split('/').slice(3).join('/');
-      const content = immutable.get(path) ?? (path.startsWith(`${branch}/`) ? stable.get(path.slice(branch.length + 1)) : undefined);
-      if (!content) throw new Error(`Readback HTTP 404: ${address}`);
-      return content;
-    },
-    async commit(expectedHead, files, _message, reservation) {
-      if (reservation) await authorizeActivationWrite(repository, branch, expectedHead, files, reservation);
-      assert.equal(expectedHead, head, 'CAS must reject stale activations');
-      head = (++count).toString(16).padStart(40, '0');
-      for (const [path, content] of Object.entries(files)) {
-        stable.set(path, content); immutable.set(`${head}/${path}`, content);
-        published.push({ path, sha256: sha256(content), commit: head });
-      }
-      return head;
-    },
-  };
-  const publish = async (files: Record<string, Buffer>) => {
-    const commit = (++count).toString(16).padStart(40, '0');
-    for (const [path, content] of Object.entries(files)) {
-      immutable.set(`${commit}/${path}`, content);
-      stable.set(path, content);
-    }
-    return commit;
-  };
   try {
-    const configuration = (await readFile(new URL('../../samples/three-ai-rule-sets.yml', import.meta.url), 'utf8')).replace('branch: main', `branch: ${branch}`);
+    const env = await configuredEnvironment(binary, directory, branch);
+    const { configuration, repository, publish } = env;
+    const publishSynthetic = (files: Record<string, Buffer>) => publish(files, 'Publish synthetic candidate fixture');
+    const transport: ActivationTransport = {
+      ...env.transport,
+      async commit(expected, files, message, reservation) {
+        const commit = await env.transport.commit(expected, files, message, reservation);
+        for (const [path, content] of Object.entries(files)) published.push({ path, sha256: sha256(content), commit });
+        return commit;
+      },
+    };
     const parsed = parseBuildConfiguration(configuration);
     const configured = { definition: parsed.ruleSets[0], target: parsed.target };
     const common = { configuration, logicalId: subscription.systemRuleSetId, subscription, binary, transport };
-    const a = await syntheticCandidate(binary, 'upstream-A', 'old.issue19.test', publish, configured);
+    const a = await syntheticCandidate(binary, 'upstream-A', 'old.issue19.test', publishSynthetic, configured);
     const configurationB = configuration.replace('list: openai', 'list: anthropic');
     const definitionB = parseBuildConfiguration(configurationB).ruleSets[0];
     const current = { ...common, configuration: configurationB };
-    const b = await syntheticCandidate(binary, 'upstream-B', domain, publish, { definition: definitionB, target: parsed.target });
+    const b = await syntheticCandidate(binary, 'upstream-B', domain, publishSynthetic, { definition: definitionB, target: parsed.target });
     assert.notDeepEqual(a.source, b.source);
-    const activeA = await activateRules({ candidateEvidenceUrl: a.candidateEvidenceUrl, ...common, expectedHead: head });
+    const activeA = await activateRules({ candidateEvidenceUrl: a.candidateEvidenceUrl, ...common, expectedHead: env.head() });
     await writeFile(join(directory, 'openssl.cnf'), '[req]\nprompt=no\ndistinguished_name=dn\nx509_extensions=ext\n[dn]\nCN=raw.githubusercontent.com\n[ext]\nsubjectAltName=DNS:raw.githubusercontent.com\nbasicConstraints=critical,CA:TRUE\nkeyUsage=critical,digitalSignature,keyEncipherment,keyCertSign\n');
     await exec('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-config', join(directory, 'openssl.cnf'),
       '-keyout', join(directory, 'key.pem'), '-out', join(directory, 'cert.pem')]);
-    const tlsServer = createHttpsServer({ key: await readFile(join(directory, 'key.pem')), cert: await readFile(join(directory, 'cert.pem')) }, (req, res) => {
+    const tlsServer = createHttpsServer({ key: await readFile(join(directory, 'key.pem')), cert: await readFile(join(directory, 'cert.pem')) }, async (req, res) => {
       const prefix = `/${ARTIFACT_REPOSITORY}/${branch}/`;
-      const bytes = req.url?.startsWith(prefix) ? stable.get(req.url.slice(prefix.length)) : undefined;
+      const address = `https://raw.githubusercontent.com${req.url}`;
+      const bytes = req.url?.startsWith(prefix) ? await transport.download(address).catch(() => undefined) : undefined;
       if (bytes) downloads.push({ url: `https://raw.githubusercontent.com${req.url}`, sha256: sha256(bytes), observedAt: new Date().toISOString() });
       res.writeHead(bytes ? 200 : 404, { 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store' }); res.end(bytes);
     });
@@ -237,10 +202,21 @@ test('只发布一次 v2 Recipe，换源 A/B 与回滚 A 后同一进程通过�
       assert.fail(`No expected new-request behavior: ${JSON.stringify(latest)}\n${log}`);
     }
     const before = await observe('route-fallback-A', '192.0.2.10');
-    const activeB = await activateRules({ candidateEvidenceUrl: b.candidateEvidenceUrl, ...current, expectedHead: head });
+    const activeB = await activateRules({ candidateEvidenceUrl: b.candidateEvidenceUrl, ...current, expectedHead: env.head() });
     const after = await observe('route-matched-B', '192.0.2.20');
-    const rolledBack = await rollbackRules({ historicalActivationCommit: activeA.commit, ...current, expectedHead: head });
+    const rolledBack = await rollbackRules({ historicalActivationCommit: activeA.commit, ...current, expectedHead: env.head() });
     const restored = await observe('route-fallback-A', '192.0.2.10');
+    const source = upstream(3, { anthropic: `domain:${domain}` });
+    const check = { configuration: configurationB, subscriptions: { 'ai-openai': subscription }, binary,
+      activation: transport, publication: { repository, commit: publish, download: transport.download }, fetch: source.fetcher };
+    const paused = await checkRules({ ...check, stateDirectory: join(directory, 'paused'), selectedIds: ['ai-openai'] });
+    assert.equal(paused.results[0].status, 'paused');
+    assert.deepEqual(source.requests, []);
+    const stillPinned = await observe('route-fallback-A', '192.0.2.10');
+    const resumed = await resumeRules({ ...check, stateDirectory: join(directory, 'resume'), logicalId: 'ai-openai' });
+    assert.equal(resumed.results[0].status, 'activated', JSON.stringify(resumed));
+    assert.equal(resumed.results[0].control?.pauseAutomaticActivation, false);
+    const following = await observe('route-matched-B', '192.0.2.20');
     assert.equal(rolledBack.activation.candidateId, a.id);
     assert.equal(rolledBack.activation.historicalActivationCommit, activeA.commit);
     assert.equal(child.pid, pid); assert.equal(child.exitCode, null);
@@ -256,9 +232,13 @@ test('只发布一次 v2 Recipe，换源 A/B 与回滚 A 后同一进程通过�
     assert.deepEqual(rolledBack.activation.source, a.source);
     assert.ok(downloads.every(entry => entry.url === url));
     const deliveredHashes = downloads.map(entry => entry.sha256).filter((hash, i, all) => i === 0 || hash !== all[i - 1]);
-    assert.deepEqual(deliveredHashes, [activeA, activeB, rolledBack].map(result => result.activation.files['stable/ai-openai/domains.srs'].sha256));
+    const binaryPath = 'stable/ai-openai/domains.srs';
+    assert.deepEqual(deliveredHashes.slice(0, 3), [activeA, activeB, rolledBack].map(result => result.activation.files[binaryPath].sha256));
+    const resumedWrite = published.find(entry => entry.path === binaryPath && entry.commit === resumed.results[0].current?.commit);
+    assert.ok(resumedWrite);
+    assert.deepEqual(deliveredHashes.slice(3), [resumedWrite.sha256]);
     const evidence = { source: 'synthetic controlled fixture, not an official Release', a, b, definitions: { a: configured.definition, b: definitionB }, activeA, activeB, rolledBack,
-      publicationId: publication.value.id, logicalId: subscription.systemRuleSetId, stableUrl: url, client: { pid, binary, configSha256: sha256(configBytes), sameProcess: true, sameConfig: true, updateInterval: '1s' }, before, after, restored, downloads, published };
+      publicationId: publication.value.id, logicalId: subscription.systemRuleSetId, stableUrl: url, client: { pid, binary, configSha256: sha256(configBytes), sameProcess: true, sameConfig: true, updateInterval: '1s' }, before, after, restored, stillPinned, resumed, following, downloads, published };
     console.log(JSON.stringify({ activationClient: evidence }));
     if (process.env.RULE_ACTIVATION_CLIENT_EVIDENCE) await writeFile(process.env.RULE_ACTIVATION_CLIENT_EVIDENCE, JSON.stringify(evidence, null, 2) + '\n');
   } catch (error) {
