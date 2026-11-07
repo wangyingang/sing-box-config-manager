@@ -1,10 +1,30 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ActivationWriteError, githubActivation } from '../src/activation-transport.js';
-import { ARTIFACT_REPOSITORY, type ghJson } from '../src/publication.js';
+import { ARTIFACT_REPOSITORY, GitHubHttpError, immutableUrl, type ghJson } from '../src/publication.js';
+
+import { sha256 } from '../src/release.js';
 
 const oldHead = 'a'.repeat(40), newCommit = 'e'.repeat(40);
-function github(options: { branch?: string; head?: string; private?: boolean; missing?: boolean; patchError?: Error } = {}) {
+const journalHead = 'f'.repeat(40), operationId = 'b53efb87-d1ab-4661-a689-e65a4b327fea';
+const recordPath = 'stable/ai-openai/activation.json', rulePath = 'stable/ai-openai/domains.srs';
+const candidateId = '1234', candidateEvidenceUrl = immutableUrl('d'.repeat(40), `candidates/${candidateId}/readback.json`);
+const statePath = 'pipeline/state.json';
+const rule = Buffer.from('rule');
+const activation = { schemaVersion: 1, id: operationId, logicalId: 'ai-openai', candidateId, candidateEvidenceUrl,
+  history: [], subscription: { schemaVersion: 2, systemRuleSetId: 'ai-openai' },
+  files: { [rulePath]: { byteLength: rule.length, sha256: sha256(rule) } },
+  control: { revision: operationId, reason: 'manual-activation', pauseAutomaticActivation: true, pauseAutomaticRetry: false } };
+const operation = { id: operationId, kind: 'activate', logicalId: 'ai-openai', recordPath, generation: 1,
+  expectedHead: oldHead, candidateId, candidateEvidenceUrl, activationDigest: sha256(JSON.stringify(activation)) };
+const identity = { schemaVersion: 1, id: 'test', targetBranch: 'main' };
+const journal = { ...identity, generation: 1, maintenance: 'open',
+  state: { schemaVersion: 1, pinned: {}, processed: {}, candidates: {} }, manualOperations: { [operationId]: operation } };
+const stableFiles = { [rulePath]: rule, [recordPath]: Buffer.from(JSON.stringify({ ...activation, expectedHead: oldHead })) };
+const reservation = { operationId, journalHead };
+
+function github(options: { branch?: string; head?: string; private?: boolean; missing?: boolean; patchError?: Error;
+  managedRecord?: string; maintenance?: boolean; onPatch?: () => Promise<void> } = {}) {
   const branch = options.branch ?? 'main';
   const calls: { args: string[]; input: any }[] = [];
   const root = `repos/${ARTIFACT_REPOSITORY}`;
@@ -17,10 +37,25 @@ function github(options: { branch?: string; head?: string; private?: boolean; mi
       return { object: { sha: options.head ?? oldHead } };
     }
     if (path === `${root}/git/commits/${oldHead}`) return { tree: { sha: 'b'.repeat(40) } };
+    if (path === `${root}/git/trees/${'b'.repeat(40)}?recursive=1`) {
+      return { tree: options.managedRecord ? [{ path: options.managedRecord, type: 'blob', mode: '100644' }] : [] };
+    }
+    if (path === `${root}/git/ref/heads/candidates`) return { object: { sha: journalHead } };
+    if (path === `${root}/git/commits/${journalHead}`) return { tree: { sha: '2'.repeat(40) } };
+    if (path === `${root}/git/trees/${'2'.repeat(40)}?recursive=1`) {
+      return { tree: [statePath, 'pipeline/identity.json'].map((path, index) => ({ path, sha: String(index + 3).repeat(40),
+        type: 'blob', mode: '100644' })) };
+    }
+    if ([`${root}/git/blobs/${'3'.repeat(40)}`, `${root}/git/blobs/${'4'.repeat(40)}`].includes(path)) {
+      const data = path.endsWith('3'.repeat(40)) ? { ...journal, ...(options.maintenance ? { maintenance: 'maintenance' } : {}) } : identity;
+      const bytes = Buffer.from(JSON.stringify(data));
+      return { content: bytes.toString('base64'), encoding: 'base64', size: bytes.length };
+    }
     if (path === `${root}/git/blobs`) return { sha: 'c'.repeat(40) };
     if (path === `${root}/git/trees`) return { sha: 'd'.repeat(40) };
     if (path === `${root}/git/commits`) return { sha: newCommit };
     if (path === `${root}/git/refs/heads/${branch}` && args.includes('PATCH')) {
+      await options.onPatch?.();
       if (options.patchError) throw options.patchError;
       return { object: { sha: newCommit } };
     }
@@ -166,5 +201,71 @@ for (const recordPath of ['stable/ai-openai/activation.json', 'stable/providers/
     const remote = activationRecord({ recordPath });
     assert.deepEqual(await remote.transport.download(recordUrl.replace('stable/activation.json', recordPath)), remote.content);
     assert.equal(remote.paths.length, 3);
+  });
+}
+
+
+test('低层激活 transport 拒绝直接修改配置化稳定文件，也拒绝伪造登记', async () => {
+  const remote = github();
+  await assert.rejects(remote.transport.commit(oldHead, { [rulePath]: rule }, '绕过登记'), /requires a registered write/);
+  assert.equal(remote.calls.length, 0);
+  await assert.rejects(remote.transport.commit(oldHead, stableFiles, '伪造登记', { ...reservation, operationId: 'unregistered' }),
+    /PUBLICATION_CONFLICT/);
+  assert.ok(!remote.calls.some(call => call.args.includes('PATCH')));
+});
+
+test('允许旧 v1 入口更新既有格式，拒绝它覆盖配置化规则集的稳定文件', async () => {
+  const legacy = github();
+  await legacy.transport.commit(oldHead, { 'stable/v2fly/category-ai-not-cn/domains.srs': rule, 'stable/activation.json': Buffer.from('{}') }, '旧单集');
+  assert.ok(legacy.calls.some(call => call.args.includes('PATCH')));
+  const managed = github({ managedRecord: recordPath });
+  await assert.rejects(managed.transport.commit(oldHead, { [rulePath]: rule, 'stable/activation.json': Buffer.from('{}') }, '覆盖固定版本'),
+    /owned by another rule set/);
+  assert.ok(!managed.calls.some(call => call.args.includes('PATCH')));
+});
+
+test('配置化提交准备完毕后，维护门禁拒绝就不会发送 ref PATCH', async () => {
+  const remote = github({ maintenance: true });
+  await assert.rejects(remote.transport.commit(oldHead, stableFiles, '激活候选', reservation), /PUBLICATION_CONFLICT/);
+  assert.ok(remote.calls.some(call => call.args[1].endsWith('/git/commits') && call.input));
+  assert.ok(!remote.calls.some(call => call.args.includes('PATCH')));
+});
+
+test('真实双分支 transport 已通过登记检查后，维护仍须等在途稳定写入完成或失效', async () => {
+  const remote = github({ async onPatch() {
+    const next = Buffer.from(JSON.stringify({ ...journal, maintenance: 'maintenance', generation: 2 }));
+    await assert.rejects(remote.transport.repository!.commit(journalHead, { [statePath]: next }, '尝试开始维护'), /MANUAL_OPERATION_PENDING/);
+  } });
+  assert.equal(await remote.transport.commit(oldHead, stableFiles, '激活候选', reservation), newCommit);
+  assert.equal(remote.calls.filter(call => call.args.includes('PATCH')).length, 1);
+});
+
+test('配置化 PATCH 的明确服务端拒绝和超时分别处理', async () => {
+  const rejected = new GitHubHttpError(422, 'Update rejected');
+  const remote = github({ patchError: rejected });
+  await assert.rejects(remote.transport.commit(oldHead, stableFiles, '激活候选', reservation), error => error === rejected);
+  const ambiguous = github({ patchError: new GitHubHttpError(504, 'Gateway timeout') });
+  await assert.rejects(ambiguous.transport.commit(oldHead, stableFiles, '激活候选', reservation), ActivationWriteError);
+});
+
+
+test('登记绑定验证过的规则摘要与激活记录，拒绝同一候选名下提交其他字节', async () => {
+  const remote = github();
+  const other = Buffer.from('different rule');
+  const substituted = { ...activation, expectedHead: oldHead,
+    files: { [rulePath]: { byteLength: other.length, sha256: sha256(other) } } };
+  await assert.rejects(remote.transport.commit(oldHead, { [rulePath]: other, [recordPath]: Buffer.from(JSON.stringify(substituted)) },
+    '替换已验证载荷', reservation), /Invalid registered activation write set/);
+  assert.ok(!remote.calls.some(call => call.args.includes('PATCH')));
+});
+
+for (const managedRecord of ['stable/ai-openai/nested/activation.json', 'stable/ai-openai/activation.json']) {
+  test(`拒绝配置化规则集目录与 ${managedRecord} 上下重叠`, async () => {
+    const remote = github({ managedRecord });
+    const files = managedRecord === recordPath
+      ? { 'stable/ai-openai/nested/activation.json': stableFiles[recordPath], 'stable/ai-openai/nested/domains.srs': rule }
+      : stableFiles;
+    await assert.rejects(remote.transport.commit(oldHead, files, '重叠目录', reservation), /overlaps another rule set/);
+    assert.ok(!remote.calls.some(call => call.args.includes('PATCH')));
   });
 }

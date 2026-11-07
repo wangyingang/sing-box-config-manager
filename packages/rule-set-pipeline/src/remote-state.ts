@@ -14,6 +14,22 @@ const encode = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2) + 
 export interface RemoteJournal {
   schemaVersion: 1; id: string; generation: number; maintenance: 'open' | 'maintenance'; targetBranch: string;
   state: UpdateState;
+  manualOperations?: Record<string, ManualOperation>;
+}
+
+export interface ManualOperation {
+  id: string;
+  kind: 'activate' | 'rollback';
+  logicalId: string;
+  recordPath: string;
+  generation: number;
+  expectedHead: string;
+  previousActivationId?: string;
+  candidateId: string;
+  candidateEvidenceUrl: string;
+  activationDigest: string;
+  historicalActivationCommit?: string;
+  notCommitted?: true;
 }
 const object = (value: unknown): value is Record<string, any> => !!value && typeof value === 'object' && !Array.isArray(value);
 const sha = (value: unknown) => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
@@ -49,6 +65,22 @@ function validate(value: unknown): asserts value is RemoteJournal {
   if (!object(value) || value.schemaVersion !== 1 || typeof value.id !== 'string' || !value.id
     || !Number.isSafeInteger(value.generation) || value.generation < 1 || !['open', 'maintenance'].includes(value.maintenance)
     || !branch(value.targetBranch) || !object(value.state)) throw new Error('REMOTE_STATE_CORRUPT');
+  if (value.manualOperations !== undefined) {
+    if (!object(value.manualOperations)) throw new Error('REMOTE_STATE_CORRUPT: manual operations');
+    for (const [id, op] of Object.entries(value.manualOperations)) {
+      if (!object(op) || !/^[a-f0-9-]{36}$/.test(id) || op.id !== id || !['activate', 'rollback'].includes(op.kind)
+        || typeof op.logicalId !== 'string' || !/^[a-z][a-z0-9-]*$/.test(op.logicalId)
+        || typeof op.recordPath !== 'string' || !/^stable\/(?:[a-z0-9][a-z0-9._-]*\/)+activation\.json$/.test(op.recordPath)
+        || !Number.isSafeInteger(op.generation) || op.generation < 1 || op.generation > value.generation
+        || !sha(op.expectedHead) || op.previousActivationId !== undefined && typeof op.previousActivationId !== 'string'
+        || typeof op.candidateId !== 'string' || !/^[a-f0-9-]+$/.test(op.candidateId)
+        || !digest(op.activationDigest) || typeof op.candidateEvidenceUrl !== 'string'
+        || !sha(op.candidateEvidenceUrl.split('/')[5])
+        || op.candidateEvidenceUrl !== immutableUrl(op.candidateEvidenceUrl.split('/')[5], `candidates/${op.candidateId}/readback.json`)
+        || (op.kind === 'rollback' ? !sha(op.historicalActivationCommit) : op.historicalActivationCommit !== undefined)
+        || op.notCommitted !== undefined && op.notCommitted !== true) throw new Error('REMOTE_STATE_CORRUPT: manual operation');
+    }
+  }
   const state = value.state;
   if (state.schemaVersion !== 1 || !object(state.pinned) || !object(state.processed) || !object(state.candidates)
     || state.configuredProcessed !== undefined && !object(state.configuredProcessed)) throw new Error('REMOTE_STATE_CORRUPT');
@@ -156,6 +188,20 @@ export async function initializeRemoteState(repository: PublicationRepository, t
   return { head, journal };
 }
 
+export async function guardRemoteState(repository: PublicationRepository, expectedHead: string, journal: RemoteJournal) {
+  const current = await readRemoteState(repository);
+  if (current.snapshot.head !== expectedHead || current.journal.id !== journal.id
+    || current.journal.generation !== journal.generation || current.journal.maintenance !== 'open') {
+    throw new Error('PUBLICATION_CONFLICT: head, generation or maintenance changed');
+  }
+}
+
+export function commitRemoteState(repository: PublicationRepository, expectedHead: string, journal: RemoteJournal,
+  files: Record<string, Buffer>, message: string) {
+  validate(journal);
+  return repository.commit(expectedHead, { ...files, [STATE_PATH]: encode(journal) }, message);
+}
+
 /** The captured head and generation are never refreshed to make an old write succeed. */
 export async function openRemoteSession(publication: PublicationTransport, directory: string, targetBranch: string) {
   const repository = publication.repository!;
@@ -191,9 +237,10 @@ export async function openRemoteSession(publication: PublicationTransport, direc
     validate(journal);
     const next = encode(journal);
     try {
-      const current = await readRemoteState(repository);
-      if (current.snapshot.head !== expected || current.journal.generation !== journal.generation || current.journal.maintenance !== 'open') {
-        stopped = true; throw new Error('PUBLICATION_CONFLICT: head, generation or maintenance changed');
+      try { await guardRemoteState(repository, expected, journal); }
+      catch (error) {
+        if (error instanceof Error && error.message.startsWith('PUBLICATION_CONFLICT')) stopped = true;
+        throw error;
       }
       const head = await repository.commit(expected, { ...files, [STATE_PATH]: next }, message);
       expectedHead = head;

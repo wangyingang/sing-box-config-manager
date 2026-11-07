@@ -79,13 +79,24 @@ pnpm --dir packages/rule-set-pipeline build:release --binary /absolute/path/to/s
 pnpm --dir packages/rule-set-pipeline activate --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config samples/three-ai-rule-sets.yml --id ai-openai --subscription /absolute/path/to/openai-subscription-v2.json --candidate https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/FULL_COMMIT/candidates/CANDIDATE_ID/readback.json --expected-head FULL_OLD_HEAD
 ```
 
-隔离验收时同时使用目标为 `acceptance-*` 的配置、对应订阅和 `--branch`。一次成功激活只提交选中集的稳定规则文件及 `stablePath/activation.json`。记录包含该集的候选、来源、验证、订阅和历史激活引用；其他集的字节和记录保留。候选发布不会激活规则。[配置化回滚](#历史回滚)一次操作一个逻辑 ID。
+隔离验收时同时使用目标为 `acceptance-*` 的配置、对应订阅和 `--branch`。配置化激活和回滚要求[显式初始化远端状态](#正常更新与候选发布)。`--expected-head` 使用 `status` 返回的 `stableHead`。一次成功切换只提交选中集的稳定规则文件及 `stablePath/activation.json`。该记录保存候选、来源、验证、订阅、历史激活引用和人工控制。其他集的字节、控制和历史保留。
 
-激活先复验候选的固定 HTTPS 字节、Manifest、来源、构建身份和原生结果，再核对预期旧 head 中的该集契约和实际稳定文件。单次 Git 提交使用旧 head 作为唯一 parent，非强制更新分支；并发变化导致冲突，不自动覆盖。Git API 的完整 tree/blob 用于判定旧激活记录是否存在，CDN 的 404 不作为首次激活依据。
+`activation.control` 保存 `revision`、`reason`、`pauseAutomaticActivation` 和 `pauseAutomaticRetry`。人工指定的原因是 `manual-activation`，暂停自动激活。人工回滚的原因是 `manual-rollback`，同时暂停自动重试和自动激活。每次成功的人工操作都会生成新修订，即使所选候选已经是当前版本。候选发布和重建不会解除固定。旧激活记录仍可查询，其中没有 `control` 时表示尚未记录人工固定。
+
+激活先复验候选的固定 HTTPS 字节、Manifest、来源、构建身份和原生结果，再核对预期旧 head 中的该集契约和实际稳定文件。候选的不可变 HTTPS 字节还须与当前保留的 Git 文件一致。检查通过后，先在远端 journal 登记操作 ID、所选候选、原稳定 head 和维护代次，登记同时绑定已验证的规则摘要和激活记录，再提交选中集的稳定文件。生产布局在 `candidates` 登记，在 `main` 切换。隔离分支同时承担这两种用途，切换提交以登记提交为 parent。切换前复查已捕获的 journal head、代次和维护状态，以预期 parent 非强制更新稳定分支。Git API 的完整 tree/blob 用于判定旧激活记录是否存在，CDN 的 404 不作为首次激活依据。
 
 `status` 中的 `activeRuleVersions` 按逻辑 ID 返回远端 `stablePath/activation.json` 及其当前字节核验结果，`state.candidates`／`state.configuredProcessed` 来自远端候选记录。`rollbackTargets` 仅列出必要证据仍保留且与当前订阅兼容的目标；不可用原因单独列在 `unavailableRollbackTargets`。本地激活回执仍独立保存，供诊断使用，不能覆盖远端事实。
 
-提交回复丢失后不重复写入：远端仍是旧 head 时报告 `ACTIVATION_NOT_APPLIED`；远端是目标 commit，或后续 head 仍保留本次唯一记录时，回读目标 commit 并确认成功。无法读取 head 时报告 `ACTIVATION_UNKNOWN`，其他无法判定的 head 报告 `ACTIVATION_CONFLICT_OR_SUPERSEDED`。已提交但回读或本地回执失败，分别报告 `ACTIVATION_APPLIED_READBACK_PENDING` 或 `ACTIVATION_APPLIED_LOCAL_RECEIPT_PENDING`。这些结果均携带已知提交身份，恢复时应先核对远端，不把错误当成旧入口未改变。
+提交回复丢失、回读失败或本地回执保存失败时，可在新目录执行同一目标的 `status`，按错误里的 operation ID 查找 `manualOperations`。这个查询不会再次写入或切换：
+
+| 状态 | 远端依据 |
+| --- | --- |
+| `committed` | 当前激活记录匹配本次操作，且稳定文件的固定 commit HTTPS 地址回读通过 |
+| `not-committed` | 切换请求从未发出、被明确拒绝，或稳定分支已前进且仍保留原激活记录 |
+| `pending` | 分支仍可能接受在途请求，或已知提交的回读尚未完成。有 `commit` 或 `containingCommit` 时，`activeRuleVersions` 仍显示 Git 记录的当前版本 |
+| `superseded` | 后续人工操作或维护已替代本次操作。历史中仍有本次激活时，附上包含该记录的 commit |
+
+登记和切换之间中断时，预期父提交仍为当前 head 只能说明结果待核实。该分支尚未隔离在途请求时，维护须延期。在生产双分支布局下，登记仍可能写入 `main` 时，协调仓库会拒绝改变维护状态或代次。维护流程可在旧请求结束或其稳定 head 失效后重试。
 
 ## 正常更新与候选发布
 
@@ -126,7 +137,7 @@ pnpm --dir packages/rule-set-pipeline status --config samples/three-ai-rule-sets
 
 `status` 返回 `authority: remote`、维护状态、`candidateAvailability` 和 `pendingOperations`。默认执行证据结构、地址和字节摘要核验，标注 `verification: structural`；提供 `--binary` 时额外执行真实原生复验，标注 `native`。已提交的当前版本即使候选回读失败也仍报告为已激活，并单独标记待核实。旧单集的历史通过 `expectedHead` 追溯，在结果映射中使用 `v2fly:category-ai-!cn`；历史读取失败通过 `historyComplete`／`historyErrors` 报告，不能将空列表视为完整历史。初始化和查询 API 分别为 `initializeRemoteState(repository, targetBranch)`、`readRemoteStatus({ repository, publication?, binary? })`。
 
-同一缓存目录的 `update.lock/` 仍拒绝本机并发；远端预期 head 保护跨机器写入。进程被强制终止后，可换新目录恢复；要复用旧目录，先确认没有存活进程再移除残留锁。不要删除远端来源记录来绕过来源变化错误。人工固定、恢复更新、调度及历史清理属于父 Spec 的后续工单，#48 仅接入候选写入的维护门禁。
+同一缓存目录的 `update.lock/` 仍拒绝本机并发；远端预期 head 保护跨机器写入。进程被强制终止后，可换新目录恢复；要复用旧目录，先确认没有存活进程再移除残留锁。不要删除远端来源记录来绕过来源变化错误。人工固定已接入同一远端 journal。自动检查、主动恢复、调度及历史清理由父 Spec 的后续工单交付。
 
 Artifact Manifest（产物清单）记录某次不可变规则文件的固定地址、摘要和使用约束。原有单集及目标为 `main` 的配置驱动更新在产物仓库的 `candidates` 分支追加候选；配置目标为 `acceptance-*` 时在该隔离分支追加候选。两者均采用三个有序的候选提交阶段，并穿插远端操作检查点，使清单可以引用已固定的 commit 地址：
 
@@ -181,7 +192,7 @@ pnpm --dir packages/rule-set-pipeline activate \
   --binary /absolute/path/to/sing-box-1.14.4
 ```
 
-默认目标为产物仓库 `main`。隔离验收可指定 `--branch acceptance-<name>`，分支须事先建立。创建隔离分支、执行 CLI 均不替代生产切换授权；[#19 历史验收](docs/verification/issue-19.md)只使用 `acceptance-issue-19`。本入口只覆盖首个 `category-ai-!cn` 纯域名交付切片；拒绝其他系统规则集、目标 IP 投影和未知能力，不猜测兼容。既有 Manifest 的 `v2fly:category-ai-!cn` 映射到订阅契约中的 `v2fly:domain-list-community:category-ai-!cn`。
+默认目标为产物仓库 `main`。隔离验收可指定 `--branch acceptance-<name>`，分支须事先建立。创建隔离分支、执行 CLI 均不替代生产切换授权；[#19 历史验收](docs/verification/issue-19.md)只使用 `acceptance-issue-19`。本入口保留首个 `category-ai-!cn` 纯域名交付切片，受配置化规则集占用的稳定路径由对应逻辑 ID 管理；拒绝其他系统规则集、目标 IP 投影和未知能力，不猜测兼容。既有 Manifest 的 `v2fly:category-ai-!cn` 映射到订阅契约中的 `v2fly:domain-list-community:category-ai-!cn`。
 
 激活重新下载候选的六份文件并核对回读链、来源、Conversion Report、构建身份、实际摘要／字节数／非空 term 数、用途映射及能力。重新用指定 1.14.4 编译、解码、加载实际 JSON，并逐字节比对 SRS。本地 `verified`、单独的 `passed` 或 `build.json` 不能放行。明确标识 `kind: synthetic`、description 和 revision 的合成候选只可进入 `acceptance-*` 分支。
 
@@ -197,13 +208,13 @@ Git 提交保持文件与记录一起更新，但 GitHub 缓存和客户端轮�
 
 | 结果 | 已知状态与后续处理 |
 | --- | --- |
-| `ACTIVATION_NOT_APPLIED` | 已核实远端仍为预期旧 head，本次提交未成为当前版本 |
-| `ACTIVATION_UNKNOWN` | 无法读取远端，尚不能确认是否已切换；先核实远端状态 |
+| `ACTIVATION_NOT_APPLIED` | 配置化切换在发出 ref 更新前终止，或 GitHub 明确拒绝了更新。对旧单集，远端仍为预期旧 head |
+| `ACTIVATION_UNKNOWN` | 无法确认是否已切换，先用 `status` 核实远端状态 |
 | `ACTIVATION_CONFLICT_OR_SUPERSEDED` | 远端是其他提交；可能发生冲突或本次提交已被后续操作替代，须核对当前激活记录 |
 | `ACTIVATION_APPLIED_READBACK_PENDING` | 提交已生效，但完整 commit HTTPS 地址的逐字节回读尚未完成；错误保留该 commit，不能声称旧规则未变 |
 | `ACTIVATION_APPLIED_LOCAL_RECEIPT_PENDING` | 远端已经激活，本地回执目录创建、写入或 rename 失败；错误保留已生效 commit，不应重复激活 |
 
-重试须先核对远端 head 和激活记录，再选择正确的预期旧值；不要盲目覆盖。`status` 从远端稳定记录和字节报告当前版本及待核实状态；仍须核对本次 attempted commit，不能只凭本地回执重试。
+需要重试时，先核实本次操作的结果。确认未提交后，用最新的 `stableHead` 发起新的人工操作。`status` 从远端稳定记录和字节报告当前版本及待核实状态；仍须核对本次 attempted commit，不能只凭本地回执重试。
 
 ## 历史回滚
 
@@ -218,7 +229,7 @@ pnpm --dir packages/rule-set-pipeline rollback \
   --binary /absolute/path/to/sing-box
 ```
 
-配置化回滚同时添加 `--config /absolute/path/to/rule-sets.yml --id ai-openai`，一次只回滚一集。历史记录的逻辑 ID、候选归属及 v2 订阅必须与所选集一致。来源列表可以与当前配置不同；历史构建按原定义复核，稳定路径与目标分支仍须匹配当前配置。该集恢复历史规则字节并追加回滚记录，其他集的稳定文件、当前版本及历史保持不变。
+配置化回滚同时添加 `--config /absolute/path/to/rule-sets.yml --id ai-openai`，一次只回滚一集。历史记录的逻辑 ID、候选归属及 v2 订阅必须与所选集一致。来源列表可以与当前配置不同；历史构建按原定义复核，稳定路径与目标分支仍须匹配当前配置。该集恢复历史规则字节、追加回滚记录并暂停自动重试和自动激活。其他集的稳定文件、控制、当前版本及历史保持不变。
 
 隔离环境显式添加 `--branch acceptance-<name>`，契约入口须属于该分支。公开 API 为 `rollbackRules({ historicalActivationCommit, subscription, binary, expectedHead, transport?, configuration?, logicalId?, stateDirectory? })`。配置化回滚同时提供 `configuration` 与 `logicalId`；提供 `stateDirectory` 时保存该集本地回执。
 

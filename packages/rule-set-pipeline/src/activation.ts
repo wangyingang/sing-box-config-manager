@@ -10,6 +10,8 @@ import { buildNative } from './native.js';
 import { decodedTerms, USAGES } from './projection.js';
 import { sha256 } from './release.js';
 import { ARTIFACT_REPOSITORY, immutableUrl } from './publication.js';
+import { retainedCandidateDownload } from './publication-repository.js';
+import { manualActivationDigest, manualControl, openManualActivation, registerManualActivation } from './manual-activation.js';
 import { ActivationWriteError, githubActivation, type ActivationTransport } from './activation-transport.js';
 
 const ajv = new Ajv({ strict: true });
@@ -41,7 +43,7 @@ function candidateLocation(url: string, file: string) {
 }
 
 /** Reads the complete trusted remote record chain and validates actual bytes afresh. */
-export async function verifyActivationCandidate(options: Pick<ActivationOptions, 'candidateEvidenceUrl' | 'binary'>, transport: ActivationTransport,
+export async function verifyActivationCandidate(options: Pick<ActivationOptions, 'candidateEvidenceUrl' | 'binary'>, transport: Pick<ActivationTransport, 'branch' | 'download'>,
   definition?: RuleDefinition, operation: 'activate' | 'rollback' = 'activate') {
   const location = candidateLocation(options.candidateEvidenceUrl, 'readback.json');
   const evidence = JSON.parse((await transport.download(options.candidateEvidenceUrl)).toString('utf8'));
@@ -159,23 +161,15 @@ function activationContext(options: Pick<ActivationOptions, 'configuration' | 'l
 
 /** Revalidate a retained activation against today's contract, without rewriting history. */
 export async function rollbackRules(options: RollbackOptions) {
-  requireThat(/^[a-f0-9]{40}$/.test(options.historicalActivationCommit), 'Expected full historical activation commit');
-  const transport = options.transport ?? githubActivation();
-  const { definition, recordPath } = activationContext(options, transport);
-  const historical = JSON.parse((await transport.download(immutableUrl(options.historicalActivationCommit, recordPath))).toString());
-  requireThat(historical.schemaVersion === 1 && typeof historical.id === 'string' && historical.id.length > 0
-    && typeof historical.candidateId === 'string' && typeof historical.candidateEvidenceUrl === 'string'
-    && historical.files && equal(historical.subscription, options.subscription)
-    && (!definition || (historical.logicalId === definition.id && Array.isArray(historical.history))), 'Invalid or incompatible historical activation');
-  return performActivation({ ...options, transport, candidateEvidenceUrl: historical.candidateEvidenceUrl },
-    { commit: options.historicalActivationCommit, record: historical });
+  return performActivation(options);
 }
 
 /** Explicit, retryable activation; never mutates Release processing state. */
 export async function activateRules(options: ActivationOptions) {
   return performActivation(options);
 }
-async function performActivation(options: ActivationOptions, historical?: { commit: string; record: any }) {
+
+async function performActivation(options: ActivationOptions | RollbackOptions) {
   const transport = options.transport ?? githubActivation();
   requireThat(/^[a-f0-9]{40}$/.test(options.expectedHead), 'Expected full old remote head is required');
   const { configured, definition, recordPath } = activationContext(options, transport);
@@ -193,7 +187,28 @@ async function performActivation(options: ActivationOptions, historical?: { comm
     }
   }
   requireThat(await transport.head() === options.expectedHead, 'ACTIVATION_CONFLICT: remote head changed');
-  const candidate = await verifyActivationCandidate(options, transport, definition, historical ? 'rollback' : 'activate');
+  const session = definition ? await openManualActivation(transport, options.expectedHead) : undefined;
+  let historical: { commit: string; record: any } | undefined;
+  let candidateEvidenceUrl: string;
+  if ('historicalActivationCommit' in options) {
+    const commit = options.historicalActivationCommit;
+    requireThat(/^[a-f0-9]{40}$/.test(commit), 'Expected full historical activation commit');
+    const record = JSON.parse((await transport.download(immutableUrl(commit, recordPath))).toString());
+    requireThat(record.schemaVersion === 1 && typeof record.id === 'string' && record.id.length > 0
+      && typeof record.candidateId === 'string' && typeof record.candidateEvidenceUrl === 'string'
+      && record.files && equal(record.subscription, options.subscription)
+      && (!definition || (record.logicalId === definition.id && Array.isArray(record.history))), 'Invalid or incompatible historical activation');
+    historical = { commit, record };
+    candidateEvidenceUrl = record.candidateEvidenceUrl;
+  } else candidateEvidenceUrl = options.candidateEvidenceUrl;
+  const location = candidateLocation(candidateEvidenceUrl, 'readback.json');
+  const retained = session?.journal.state.candidates[location.id];
+  requireThat(!retained || retained.retained && retained.phase === 'complete', 'CANDIDATE_UNAVAILABLE: candidate publication is incomplete or no longer retained');
+  const download = session
+    ? retainedCandidateDownload(session.snapshot, location.id, url => transport.download(url))
+    : (url: string) => transport.download(url);
+  const candidate = await verifyActivationCandidate({ candidateEvidenceUrl, binary: options.binary }, { branch: transport.branch, download },
+    definition, historical ? 'rollback' : 'activate');
   // Synthetic origins can never enter the production main branch.
   requireThat(candidate.source.kind !== 'synthetic' || transport.branch.startsWith('acceptance-'), 'Synthetic candidate requires an acceptance branch');
   const files: Record<string, Buffer> = {};
@@ -212,6 +227,7 @@ async function performActivation(options: ActivationOptions, historical?: { comm
       requireThat(endpoint.url.startsWith(urlPrefix), 'Unapproved stable subscription host or branch');
       const path = endpoint.url.slice(urlPrefix.length);
       requireThat(/^stable\/[a-z0-9/_.-]+\.(srs|json)$/.test(path) && !path.split('/').includes('..') && path !== recordPath, 'Invalid stable rule path');
+      requireThat(configured || !path.endsWith('/activation.json'), 'Legacy subscription cannot write a configured activation record');
       const signature = JSON.stringify([format, [...endpoint.requiredCapabilities].sort()]);
       requireThat(!endpointSignatures.has(path) || endpointSignatures.get(path) === signature, 'Conflicting stable endpoint declarations');
       endpointSignatures.set(path, signature);
@@ -249,31 +265,60 @@ async function performActivation(options: ActivationOptions, historical?: { comm
       requireThat(bytes.length === metadata.byteLength && sha256(bytes) === metadata.sha256, 'Previous stable file integrity mismatch');
     }
   }
-  const activation = { schemaVersion: 1, id: randomUUID(),
+  let previousCommit = options.expectedHead;
+  if (session && previous?.control && session.repository.lastChange) {
+    previousCommit = await session.repository.lastChange(options.expectedHead, recordPath);
+  }
+  const id = randomUUID();
+  const kind = historical ? 'rollback' as const : 'activate' as const;
+  const activation = { schemaVersion: 1, id,
+    ...(session ? { control: manualControl({ id, kind }) } : {}),
     ...(definition ? { logicalId: definition.id, history: previous ? [...previous.history,
-      { commit: options.expectedHead, id: previous.id, candidateId: previous.candidateId }] : [] } : {}),
+      { commit: previousCommit, id: previous.id, candidateId: previous.candidateId }] : [] } : {}),
     ...(historical ? { operation: 'rollback' as const, historicalActivationCommit: historical.commit, historicalActivationId: historical.record.id } : {}), candidateId: candidate.candidateId,
     candidateEvidenceUrl: candidate.evidenceUrl, source: candidate.source, validation: candidate.validation,
     expectedHead: options.expectedHead, subscription,
     files: Object.fromEntries(Object.entries(files).map(([path, bytes]) => [path, { sha256: sha256(bytes), byteLength: bytes.length }])) };
+  const reservation = session && definition ? await registerManualActivation(session, {
+    id, kind, logicalId: definition.id, recordPath, generation: session.journal.generation,
+    expectedHead: options.expectedHead, ...(previous ? { previousActivationId: previous.id } : {}),
+    candidateId: candidate.candidateId, candidateEvidenceUrl: candidate.evidenceUrl,
+    activationDigest: manualActivationDigest(activation),
+    ...(historical ? { historicalActivationCommit: historical.commit } : {}),
+  }) : undefined;
+  const expectedHead = reservation?.expectedHead ?? options.expectedHead;
+  activation.expectedHead = expectedHead;
   files[recordPath] = encode(activation);
   let commit: string;
-  try { commit = await transport.commit(options.expectedHead, files, `${historical ? '回滚到历史规则候选' : '激活规则候选'} ${candidate.candidateId}`); }
+  try {
+    commit = await transport.commit(expectedHead, files,
+      `${historical ? '回滚到历史规则候选' : '激活规则候选'} ${candidate.candidateId}`, reservation?.write);
+  }
   catch (error) {
     // No second write. Resolve a lost PATCH reply using its known immutable identity.
-    if (!(error instanceof ActivationWriteError)) throw error;
+    if (!(error instanceof ActivationWriteError)) {
+      if (!reservation) throw error;
+      try { await reservation.markNotCommitted(); }
+      catch (checkpointError) {
+        throw new Error(`ACTIVATION_NOT_APPLIED: operation ${id}; ${String(error)}; outcome checkpoint failed: ${String(checkpointError)}`, { cause: error });
+      }
+      throw new Error(`ACTIVATION_NOT_APPLIED: operation ${id}; ${String(error)}`, { cause: error });
+    }
     let head: string;
     try { head = await transport.head(); }
-    catch { throw new Error(`ACTIVATION_UNKNOWN: cannot reconcile ${error.attemptedCommit}`, { cause: error }); }
+    catch { throw new Error(`ACTIVATION_UNKNOWN: cannot reconcile ${error.attemptedCommit} (operation ${id})`, { cause: error }); }
     if (head === error.attemptedCommit) commit = head;
-    else if (head === options.expectedHead) throw new Error(`ACTIVATION_NOT_APPLIED: attempted ${error.attemptedCommit}, remote still at expected old state`, { cause: error });
+    else if (head === expectedHead) {
+      const code = reservation ? 'ACTIVATION_UNKNOWN' : 'ACTIVATION_NOT_APPLIED';
+      throw new Error(`${code}: attempted ${error.attemptedCommit}, remote still at expected old state (operation ${id})`, { cause: error });
+    }
     else {
       // A later commit may retain this set unchanged. Its unique record proves application.
       try {
         const current = await transport.download(immutableUrl(head, recordPath));
         requireThat(current.equals(files[recordPath]), 'Activation was superseded or not applied');
         commit = error.attemptedCommit;
-      } catch { throw new Error(`ACTIVATION_CONFLICT_OR_SUPERSEDED: remote ${head}, attempted ${error.attemptedCommit}`, { cause: error }); }
+      } catch { throw new Error(`ACTIVATION_CONFLICT_OR_SUPERSEDED: remote ${head}, attempted ${error.attemptedCommit} (operation ${id})`, { cause: error }); }
     }
   }
   // Confirm committed bytes via immutable HTTPS; branch CDN caches may still lag.
@@ -282,7 +327,7 @@ async function performActivation(options: ActivationOptions, historical?: { comm
       const actual = await transport.download(immutableUrl(commit, path));
       requireThat(actual.equals(bytes), `Committed activation mismatch: ${path}`);
     }
-  } catch (error) { throw new Error(`ACTIVATION_APPLIED_READBACK_PENDING: commit ${commit}`, { cause: error }); }
+  } catch (error) { throw new Error(`ACTIVATION_APPLIED_READBACK_PENDING: commit ${commit} (operation ${id})`, { cause: error }); }
   const result = { status: 'activated' as const, commit, activation };
   if (definition && options.stateDirectory) {
     await saveActivationReceipt(options.stateDirectory, result, definition.id);

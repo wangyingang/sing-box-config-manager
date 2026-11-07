@@ -28,6 +28,8 @@ test('逐集回滚恢复历史字节，兄弟集的稳定文件、版本和历�
     const commit = historical.get(id)!;
     const result = await rollbackRules({ ...env.options(id, ''), historicalActivationCommit: commit });
     assert.equal(result.activation.operation, 'rollback');
+    assert.deepEqual(result.activation.control, { revision: result.activation.id, reason: 'manual-rollback',
+      pauseAutomaticActivation: true, pauseAutomaticRetry: true });
     assert.equal(result.activation.candidateId, first[id].id);
     assert.equal(result.activation.historicalActivationCommit, commit);
     const after = env.snapshots.get(env.head())!;

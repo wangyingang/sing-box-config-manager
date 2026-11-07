@@ -9,12 +9,21 @@ export interface PublicationTransport {
   download(url: string): Promise<Buffer>;
 }
 
+export class GitHubHttpError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+  }
+}
+
 /** Uses the existing gh login; credentials never enter files or published records. */
 export function ghJson(args: string[], input?: unknown): Promise<any> {
   return new Promise((resolve, reject) => {
     const child = execFile('gh', args, { timeout: 120_000, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
-      if (error) reject(new Error(`gh failed: ${stderr.trim() || error.message}`));
-      else { try { resolve(stdout.trim() ? JSON.parse(stdout) : null); } catch (error) { reject(error); } }
+      if (error) {
+        const message = `gh failed: ${stderr.trim() || error.message}`;
+        const status = /^gh: .* \(HTTP (\d{3})\)$/m.exec(stderr)?.[1];
+        reject(status && !error.killed ? new GitHubHttpError(Number(status), message) : new Error(message));
+      } else { try { resolve(stdout.trim() ? JSON.parse(stdout) : null); } catch (error) { reject(error); } }
     });
     if (input !== undefined) child.stdin!.end(JSON.stringify(input));
   });

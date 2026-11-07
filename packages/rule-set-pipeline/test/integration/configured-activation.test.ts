@@ -4,13 +4,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { activateRules } from '../../src/activation.js';
+import { readRemoteStatus } from '../../src/remote-status.js';
+import { readRemoteState, STATE_PATH } from '../../src/remote-state.js';
 import { readUpdateState } from '../../src/update.js';
 import { sha256 } from '../../src/release.js';
 import { configuredEnvironment } from './configured-activation-fixture.js';
 const binary = process.env.SING_BOX_TEST_BINARY;
-async function isolated(run: (env: Awaited<ReturnType<typeof configuredEnvironment>>, directory: string) => Promise<void>) {
+async function isolated(run: (env: Awaited<ReturnType<typeof configuredEnvironment>>, directory: string) => Promise<void>, branch?: string) {
   const directory = await mkdtemp(join(tmpdir(), 'configured-activation-'));
-  try { await run(await configuredEnvironment(binary!, directory), directory); }
+  try { await run(await configuredEnvironment(binary!, directory, branch), directory); }
   finally { await rm(directory, { recursive: true, force: true }); }
 }
 
@@ -23,7 +25,7 @@ test('三集依次激活再逐集切换，只改变选中集的稳定字节、�
     const result = await activateRules(env.options(id, second[id].evidenceUrl!));
     assert.equal(result.activation.candidateId, second[id].id);
     const after = env.snapshots.get(env.head())!;
-    const changed = Object.keys(after).filter(path => !after[path].equals(before[path]));
+    const changed = Object.keys(after).filter(path => path.startsWith('stable/') && !after[path].equals(before[path]));
     assert.deepEqual(changed.sort(), [`stable/${id}/activation.json`, `stable/${id}/domains.json`, `stable/${id}/domains.srs`]);
     const status = await readUpdateState(directory);
     assert.equal(status.activeRuleVersions[id].activation.candidateId, second[id].id);
@@ -87,8 +89,8 @@ for (const fault of ['wrong-set', 'duplicate-ids', 'missing', 'extra', 'evidence
   }));
 }
 
-for (const mode of ['applied', 'not-applied', 'unknown', 'superseded', 'readback', 'receipt']) {
-  test(`提交中断 ${mode} 返回可核实的提交身份且不重复写入`, { skip: !binary }, async () => isolated(async (env, directory) => {
+for (const mode of ['applied', 'not-applied', 'unknown', 'superseded', 'readback', 'receipt', 'rejected', 'registration']) {
+  test(`提交中断 ${mode} 可从远端核实且不重复切换`, { skip: !binary }, async () => isolated(async (env, directory) => {
     const candidates = await env.candidates(), id = env.ids[0];
     const options = env.options(id, candidates[id].evidenceUrl!);
     if (mode === 'receipt') {
@@ -100,11 +102,62 @@ for (const mode of ['applied', 'not-applied', 'unknown', 'superseded', 'readback
       assert.match(result.commit, /^[a-f0-9]{40}$/);
       if (mode === 'superseded') assert.notEqual(result.commit, env.head());
     } else {
-      const code = { 'not-applied': 'ACTIVATION_NOT_APPLIED', unknown: 'ACTIVATION_UNKNOWN', readback: 'ACTIVATION_APPLIED_READBACK_PENDING', receipt: 'ACTIVATION_APPLIED_LOCAL_RECEIPT_PENDING' }[mode]!;
-      await assert.rejects(activateRules(options), new RegExp(`${code}:.*[a-f0-9]{40}`));
+      const code = { 'not-applied': 'ACTIVATION_UNKNOWN', unknown: 'ACTIVATION_UNKNOWN', readback: 'ACTIVATION_APPLIED_READBACK_PENDING',
+        receipt: 'ACTIVATION_APPLIED_LOCAL_RECEIPT_PENDING', rejected: 'ACTIVATION_NOT_APPLIED', registration: 'MANUAL_REGISTRATION_FAILED' }[mode]!;
+      await assert.rejects(activateRules(options), new RegExp(`${code}:.*[a-f0-9-]{36}`));
     }
-    assert.equal(env.writes(), 1);
+    // Simulate a fresh process without the original state directory or a receipt.
+    await rm(directory, { recursive: true, force: true });
+    const readStatus = () => readRemoteStatus({ repository: env.repository, activation: env.transport });
+    const before = env.head();
+    let status = await readStatus();
+    assert.equal(status.manualOperations.length, 1);
+    const operation = status.manualOperations[0];
+    if (mode === 'readback') {
+      assert.equal(operation.status, 'pending');
+      assert.equal(operation.commit, before);
+      assert.equal(status.activeRuleVersions[id].activation.candidateId, candidates[id].id);
+    }
+    env.fail('');
+    status = await readStatus();
+    const neverSwitched = mode === 'rejected' || mode === 'registration';
+    const expected = neverSwitched ? 'not-committed' : mode === 'not-applied' ? 'pending' : 'committed';
+    assert.equal(status.manualOperations[0].status, expected);
+    assert.equal(env.head(), before);
+    assert.equal(env.writes(), neverSwitched ? 0 : 1);
   }));
+}
+
+test('新的人工决定使旧操作被替代，即使固定的是同一候选', { skip: !binary }, async () => isolated(async env => {
+  const candidates = await env.candidates(), id = env.ids[0];
+  const first = await activateRules(env.options(id, candidates[id].evidenceUrl!));
+  const sibling = env.ids[1];
+  await activateRules(env.options(sibling, candidates[sibling].evidenceUrl!));
+  const before = await readRemoteStatus({ repository: env.repository, activation: env.transport });
+  assert.equal(before.manualOperations.find(operation => operation.id === first.activation.id)?.commit, first.commit);
+  const next = await activateRules(env.options(id, candidates[id].evidenceUrl!));
+  const status = await readRemoteStatus({ repository: env.repository, activation: env.transport });
+  const byId = new Map(status.manualOperations.map(operation => [operation.id, operation]));
+  assert.equal(byId.get(first.activation.id)?.status, 'superseded');
+  assert.equal(byId.get(first.activation.id)?.commit, first.commit);
+  assert.equal(byId.get(next.activation.id)?.status, 'committed');
+}));
+
+for (const branch of ['acceptance-issue-39', 'main']) {
+  for (const race of ['maintenance', 'generation', 'head'] as const) {
+    test(`${branch} 的人工激活在写入前遇到 ${race} 变化时停下`, { skip: !binary }, async () => isolated(async env => {
+      const candidates = await env.candidates(), id = env.ids[0];
+      env.beforeSwitch(async () => {
+        const { snapshot, journal } = await readRemoteState(env.repository);
+        if (race === 'maintenance') journal.maintenance = 'maintenance';
+        if (race === 'generation') journal.generation++;
+        await env.repository.commit(snapshot.head, { [STATE_PATH]: Buffer.from(JSON.stringify(journal)) }, '模拟并发控制更新');
+      });
+      await assert.rejects(activateRules(env.options(id, candidates[id].evidenceUrl!)), /PUBLICATION_CONFLICT/);
+      assert.equal(env.writes(), 0);
+      assert.equal(env.snapshots.get(env.head())![`stable/${id}/activation.json`], undefined);
+    }, branch));
+  }
 }
 
 test('不同集竞争同一旧 head 至多一个成功，过期操作不能覆盖另一集', { skip: !binary }, async () => isolated(async env => {
@@ -126,4 +179,20 @@ test('订阅对象字段顺序不改变文件复用关系或既有契约', { ski
   const formats = options.subscription.projections['dns-query'].formats;
   options.subscription.projections['dns-query'].formats = { source: formats.source, binary: formats.binary };
   assert.equal((await activateRules(options)).status, 'activated');
+}));
+
+
+test('再次指定当前候选仍保存人工固定并更换控制修订', { skip: !binary }, async () => isolated(async env => {
+  const candidates = await env.candidates(), id = env.ids[0];
+  const first = await activateRules(env.options(id, candidates[id].evidenceUrl!));
+  const next = await activateRules(env.options(id, candidates[id].evidenceUrl!));
+  const path = `stable/${id}/activation.json`;
+  const before = JSON.parse(env.snapshots.get(first.commit)![path].toString());
+  const after = JSON.parse(env.snapshots.get(next.commit)![path].toString());
+  assert.deepEqual(after.files, before.files);
+  assert.equal(after.candidateId, before.candidateId);
+  assert.equal(after.control.reason, 'manual-activation');
+  assert.equal(after.control.pauseAutomaticActivation, true);
+  assert.equal(after.control.pauseAutomaticRetry, false);
+  assert.notEqual(after.control.revision, before.control.revision);
 }));

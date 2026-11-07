@@ -1,12 +1,16 @@
+import type { RemoteJournal } from './remote-state.js';
 import { ARTIFACT_REPOSITORY, ghJson, PUBLICATION_BRANCH } from './publication.js';
 
 export interface PublicationSnapshot {
   head: string;
+  /** Single parent, if present. */
+  parent?: string;
   paths: string[];
   read(path: string): Promise<Buffer | undefined>;
 }
 export interface PublicationRepository {
   readonly branch: string;
+  lastChange?(head: string, path: string): Promise<string>;
   snapshot(branch?: string): Promise<PublicationSnapshot>;
   /** The supplied head is the only parent; a conflict never rebases this write. */
   commit(expectedHead: string, files: Record<string, Buffer>, message: string): Promise<string>;
@@ -16,6 +20,16 @@ export class PublicationWriteError extends Error {
   constructor(public readonly attemptedCommit: string, cause: unknown) {
     super(`Publication write response uncertain: ${String(cause)}`, { cause });
   }
+}
+
+export function retainedCandidateDownload(snapshot: PublicationSnapshot, candidateId: string, download: (url: string) => Promise<Buffer>) {
+  return async (url: string) => {
+    const bytes = await download(url);
+    const path = new URL(url).pathname.split('/').slice(4).join('/');
+    const retained = path.startsWith(`candidates/${candidateId}/`) ? await snapshot.read(path) : undefined;
+    if (!retained?.equals(bytes)) throw new Error('CANDIDATE_UNAVAILABLE: immutable address differs from retained candidate');
+    return bytes;
+  };
 }
 
 const fullCommit = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
@@ -47,7 +61,7 @@ export function githubPublicationRepository(branch = PUBLICATION_BRANCH, request
         || !fullCommit(entry.sha) || entries.has(entry.path)) throw new Error('Invalid remote tree entry');
       entries.set(entry.path, entry);
     }
-    return { head, treeSha, entries, paths: [...entries.keys()],
+    return { head, parent: parent.parents?.length === 1 && fullCommit(parent.parents[0]?.sha) ? parent.parents[0].sha as string : undefined, treeSha, entries, paths: [...entries.keys()],
       async read(path: string): Promise<Buffer | undefined> {
         const entry = entries.get(path);
         if (!entry) return undefined;
@@ -63,6 +77,13 @@ export function githubPublicationRepository(branch = PUBLICATION_BRANCH, request
     };
   }
   return { branch, snapshot,
+    async lastChange(head, path) {
+      if (!fullCommit(head)) throw new Error('Expected full commit for path history');
+      const query = new URLSearchParams({ sha: head, path, per_page: '1' });
+      const commits = await api(`commits?${query}`);
+      if (!Array.isArray(commits) || !fullCommit(commits[0]?.sha)) throw new Error(`Cannot identify commit for ${path}`);
+      return commits[0].sha;
+    },
     async commit(expectedHead, files, message) {
       if (!fullCommit(expectedHead)) throw new Error('Expected full old commit');
       const current = await snapshot();
@@ -80,6 +101,27 @@ export function githubPublicationRepository(branch = PUBLICATION_BRANCH, request
         for (let index = 1; index < parts.length; index++) {
           const ancestor = current.entries.get(parts.slice(0, index).join('/'));
           if (ancestor && (ancestor.type !== 'tree' || ancestor.mode !== '040000')) throw new Error('Invalid publication parent path');
+        }
+      }
+      // A production manual switch registers on candidates before touching main.
+      // Keep the maintenance gate and generation in place until the registered
+      // main parent is fenced or the writer records a definite rejection.
+      if (branch === PUBLICATION_BRANCH && files['pipeline/state.json']) {
+        const previous = await current.read('pipeline/state.json');
+        if (previous) {
+          const journal: RemoteJournal = JSON.parse(previous.toString());
+          const next: RemoteJournal = JSON.parse(files['pipeline/state.json'].toString());
+          if (journal.targetBranch === 'main' && (next.maintenance !== journal.maintenance
+            || next.generation !== journal.generation || next.id !== journal.id)) {
+            const active = Object.values(journal.manualOperations ?? {}).filter(operation =>
+              !operation.notCommitted && operation.generation === journal.generation);
+            if (active.length) {
+              const stable = await snapshot('main');
+              if (active.some(operation => operation.expectedHead === stable.head)) {
+                throw new Error('MANUAL_OPERATION_PENDING: stable head can still accept a registered write');
+              }
+            }
+          }
         }
       }
       const tree = [];

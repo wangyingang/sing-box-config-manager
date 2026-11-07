@@ -13,6 +13,6 @@ export async function saveActivationReceipt(stateDirectory: string,
     await rename(temporary, destination);
   } catch (error) {
     await rm(temporary, { force: true }).catch(() => {});
-    throw new Error(`ACTIVATION_APPLIED_LOCAL_RECEIPT_PENDING: commit ${result.commit}`, { cause: error });
+    throw new Error(`ACTIVATION_APPLIED_LOCAL_RECEIPT_PENDING: commit ${result.commit} (operation ${result.activation.id})`, { cause: error });
   }
 }

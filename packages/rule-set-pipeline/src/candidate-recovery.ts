@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { verifyActivationCandidate } from './activation.js';
 import type { RuleDefinition } from './configured-build.js';
-import type { PublicationSnapshot } from './publication-repository.js';
+import { retainedCandidateDownload, type PublicationSnapshot } from './publication-repository.js';
 import type { PublicationTransport } from './publication.js';
 import { sha256 } from './release.js';
 import type { SourceRecord } from './types.js';
@@ -18,16 +18,9 @@ export async function verifyRetainedCandidate(options: {
       .some(file => !snapshot.paths.includes(`candidates/${candidate.id}/${file}`))) {
     throw new Error('CANDIDATE_UNAVAILABLE: processed Release no longer has a retained candidate');
   }
-  const download = async (url: string) => {
-    const bytes = await publication.download(url);
-    const path = new URL(url).pathname.split('/').slice(4).join('/');
-    const retained = path.startsWith(`candidates/${candidate.id}/`) ? await snapshot.read(path) : undefined;
-    if (!retained?.equals(bytes)) throw new Error('CANDIDATE_UNAVAILABLE: immutable address differs from retained candidate');
-    return bytes;
-  };
+  const download = retainedCandidateDownload(snapshot, candidate.id, url => publication.download(url));
   const verified = await verifyActivationCandidate({ candidateEvidenceUrl: candidate.evidenceUrl, binary: options.binary }, {
-    branch: options.targetBranch, download, head: async () => snapshot.head,
-    commit: async () => { throw new Error('Candidate verification is read-only'); },
+    branch: options.targetBranch, download,
   }, options.definition);
   if (!isDeepStrictEqual(verified.source, options.source) || verified.validation.buildId !== candidate.buildId) {
     throw new Error('RECOVERY_BUILD_CHANGED: registered source or build differs');
