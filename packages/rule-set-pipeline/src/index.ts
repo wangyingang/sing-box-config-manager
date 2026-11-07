@@ -66,5 +66,5 @@ export { readRemoteStatus } from './remote-status.js';
 export { githubPublicationRepository, PublicationWriteError } from './publication-repository.js';
 export type { PublicationRepository, PublicationSnapshot } from './publication-repository.js';
 
-export { checkRules } from './check-rules.js';
-export type { CheckOptions, CheckRecord } from './check-rules.js';
+export { checkRules, resumeRules } from './check-rules.js';
+export type { CheckOptions, CheckRecord, ResumeOptions } from './check-rules.js';

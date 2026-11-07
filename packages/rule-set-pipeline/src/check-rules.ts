@@ -7,7 +7,7 @@ import { githubActivation, type ActivationTransport } from './activation-transpo
 import { verifyRetainedCandidate } from './candidate-recovery.js';
 import { buildConfiguredRelease, configuredBuildTools, parseBuildConfiguration, type RuleDefinition } from './configured-build.js';
 import { publishConfiguredCandidate, type ConfiguredUpdateOptions } from './configured-update.js';
-import { readActivationOperationResults, type ObservedActivation } from './manual-activation.js';
+import { applicableResume, effectiveControl, readActivationOperationResults, type ObservedActivation } from './manual-activation.js';
 import { inspectBinary } from './native.js';
 import { githubPublication } from './publication.js';
 import { retainedCandidateDownload, type PublicationSnapshot } from './publication-repository.js';
@@ -29,7 +29,6 @@ export interface CheckRecord {
 }
 type Active = ObservedActivation & {
   subscription: unknown;
-  control?: { revision: string; reason: string; pauseAutomaticActivation: boolean; pauseAutomaticRetry: boolean };
   source: { releaseId?: number; tag?: string };
   validation: { buildId: string; tool: { sha256: string } };
   operation?: string;
@@ -37,14 +36,14 @@ type Active = ObservedActivation & {
 };
 type Delivery = { id: string; candidateId: string; releaseId?: number; tag?: string; commit?: string; containingCommit?: string };
 type CheckResult = CheckRecord & { id: string; current?: Delivery; lastObserved?: Delivery;
-  control?: Active['control']; pendingOperation?: { id: string; status: string; commit?: string; containingCommit?: string };
+  control?: ReturnType<typeof effectiveControl>; pendingOperation?: { id: string; status: string; commit?: string; containingCommit?: string };
   rollbackTargets?: { commit: string; id: string; candidateId: string }[] };
 type Built = Awaited<ReturnType<typeof buildConfiguredRelease>>;
 type SuccessfulBuild = Extract<Built['results'][number], { status: 'built-validated' }>;
 type CheckOperation = NonNullable<UpdateState['pendingOperation']>;
 const recordPath = (definition: RuleDefinition) => `${definition.stablePath}/activation.json`;
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
-const uncertain = (error: unknown) => /PUBLICATION_PENDING|ACTIVATION_(UNKNOWN|APPLIED_READBACK_PENDING|CONFLICT_OR_SUPERSEDED)/.test(message(error));
+const uncertain = (error: unknown) => /PUBLICATION_PENDING|RESUME_CHECK_PENDING|ACTIVATION_(UNKNOWN|APPLIED_READBACK_PENDING|CONFLICT_OR_SUPERSEDED)/.test(message(error));
 
 async function readActive(snapshot: PublicationSnapshot, definition: RuleDefinition, branch: string) {
   const path = recordPath(definition);
@@ -100,7 +99,20 @@ async function sameDelivery(result: SuccessfulBuild, built: Built, active: Activ
 }
 
 /** Check the configured sets against one official Release and activate verified changes. */
-export async function checkRules(options: CheckOptions) {
+export function checkRules(options: CheckOptions) {
+  return runRulesCheck(options);
+}
+
+export interface ResumeOptions extends Omit<CheckOptions, 'selectedIds'> {
+  logicalId: string;
+}
+
+/** Persist a single rule set's decision before checking the latest source. */
+export function resumeRules({ logicalId, ...options }: ResumeOptions) {
+  return runRulesCheck({ ...options, selectedIds: [logicalId] }, logicalId);
+}
+
+async function runRulesCheck(options: CheckOptions, resumeId?: string) {
   const configuration = parseBuildConfiguration(options.configuration);
   const ids = options.selectedIds ?? configuration.ruleSets.map(rule => rule.id);
   const definitions = configuration.ruleSets.filter(rule => ids.includes(rule.id));
@@ -136,6 +148,7 @@ export async function checkRules(options: CheckOptions) {
     const expectedStableHead = () => shared ? session.head : stableHead;
     const activeById = new Map<string, Active>();
     const errors = new Map<string, string>();
+    const controlFor = (id: string) => effectiveControl(journal, id, activeById.get(id));
     const paths = new Set(definitions.map(recordPath));
     const stableIdentities = new Map<string, string>();
     for (const path of stable.paths.filter(path => path.endsWith('/activation.json'))) {
@@ -154,7 +167,7 @@ export async function checkRules(options: CheckOptions) {
         const active = await readActive(stable, rule, branch);
         if (active) activeById.set(rule.id, active);
         else if (stableIdentities.has(rule.id)) throw new Error('Existing stable path cannot change during check');
-        if (active?.control?.pauseAutomaticRetry) continue;
+        if (!resumeId && controlFor(rule.id)?.pauseAutomaticRetry) continue;
         const subscription = activationSubscription(options.subscriptions[rule.id], branch, rule);
         if (active && !isDeepStrictEqual(active.subscription, subscription)) throw new Error('Existing subscription contract cannot change during check');
       } catch (error) {
@@ -164,13 +177,13 @@ export async function checkRules(options: CheckOptions) {
     }
 
     let operation = state.pendingOperation?.status === 'pending' ? state.pendingOperation : undefined;
-    if (operation && (operation.kind !== 'check' || !operation.configuration
-      || !isDeepStrictEqual(parseBuildConfiguration(operation.configuration), configuration)
-      || !isDeepStrictEqual(operation.selectedIds, definitions.map(rule => rule.id))
-      || !isDeepStrictEqual(operation.subscriptionHashes, subscriptionHashes))) {
-      throw new Error('RECOVERY_REQUEST_MISMATCH: resume the registered operation with its original configuration, subscriptions and selection');
-    }
-    const operationId = operation?.id ?? randomUUID();
+    const matchesRequest = () => operation?.kind === 'check' && operation.configuration
+      && isDeepStrictEqual(parseBuildConfiguration(operation.configuration), configuration)
+      && isDeepStrictEqual(operation.selectedIds, definitions.map(rule => rule.id))
+      && isDeepStrictEqual(operation.subscriptionHashes, subscriptionHashes);
+    const recoveryMismatch = new Error('RECOVERY_REQUEST_MISMATCH: resume the registered operation with its original configuration, subscriptions and selection');
+    if (!resumeId && operation && !matchesRequest()) throw recoveryMismatch;
+    let operationId = operation?.id ?? randomUUID();
     const checkedAt = new Date().toISOString();
     const results = new Map<string, CheckRecord>();
     const latestChecks = state.latestChecks ??= {};
@@ -178,6 +191,9 @@ export async function checkRules(options: CheckOptions) {
       const value = { operationId, checkedAt, status, ...fields };
       latestChecks[id] = value;
       results.set(id, value);
+      const resume = applicableResume(journal, id, activeById.get(id));
+      if (resume?.checkPending && status !== 'verification-pending' && !errors.has(id)
+        && (!operation || operation.controlRevisions?.[id] === resume.revision)) resume.checkPending = false;
     };
     const knownApplied = new Map<string, string>();
     const report = async (failure?: unknown) => {
@@ -205,7 +221,7 @@ export async function checkRules(options: CheckOptions) {
         if (current) {
           result.current = { ...delivery(current), commit: automatic?.commit ?? knownApplied.get(id),
             containingCommit: automatic?.containingCommit ?? remote?.commit };
-          result.control = current.control;
+          result.control = remote ? remote.control : controlFor(id);
         } else if (statusError && observed) result.lastObserved = delivery(observed);
         if (pending) {
           result.pendingOperation = { id: pending.id, status: pending.status, commit: pendingSwitch?.commit,
@@ -221,6 +237,8 @@ export async function checkRules(options: CheckOptions) {
           delete result.error;
           reconciledSwitch = true;
         }
+        const resumePending = remoteStatus?.pendingOperations.find(value => value.logicalId === id && value.status === 'resume-check-pending');
+        if (!result.pendingOperation && resumePending) result.pendingOperation = { id: resumePending.id, status: resumePending.status };
         if (remoteStatus && paths.has(recordPath(rule))) result.rollbackTargets = remoteStatus.rollbackTargets[id] ?? [];
         return result;
       });
@@ -245,14 +263,42 @@ export async function checkRules(options: CheckOptions) {
       return report(new Error('ACTIVATION_UNKNOWN: a registered switch must be reconciled before this check can write'));
     }
 
+    if (resumeId) {
+      const active = activeById.get(resumeId);
+      if (errors.has(resumeId) || !active) return report(new Error(errors.get(resumeId) ?? 'Resume requires a current rule version'));
+      if (!applicableResume(journal, resumeId, active)?.checkPending) {
+        (journal.resumes ??= {})[resumeId] = { revision: randomUUID(), activationId: active.id, checkPending: true };
+        // The old revision cannot deliver this set. Keep complete candidates
+        // and retire unfinished work only when no other set needs that batch.
+        if (operation?.kind === 'check' && (operation.selectedIds?.length === 1 && operation.selectedIds[0] === resumeId
+          || !operation.candidateIds.length && !Object.values(latestChecks).some(entry => entry.operationId === operation?.id))) {
+          for (const id of operation.candidateIds) {
+            const candidate = state.candidates[id];
+            if (candidate.phase !== 'complete') candidate.retained = false;
+          }
+          operation.status = 'complete';
+          operation = undefined;
+          operationId = randomUUID();
+        }
+        try { await session.save(); }
+        catch (error) { return report(error); }
+      }
+      if (operation && (!matchesRequest() || operation.controlRevisions?.[resumeId] !== controlFor(resumeId)?.revision)) {
+        const blockingId = operation.id;
+        operation = undefined;
+        operationId = randomUUID();
+        return report(new Error(`RESUME_CHECK_PENDING: finish operation ${blockingId} with its original command before checking latest`));
+      }
+    }
+
     for (const rule of definitions) {
       const { id } = rule;
-      const active = activeById.get(id);
-      const currentRevision = active?.control?.revision ?? null;
+      const control = controlFor(id);
+      const currentRevision = control?.revision ?? null;
       if (errors.has(id)) record(id, 'failed', { error: errors.get(id) });
-      else if (active?.control?.pauseAutomaticRetry) record(id, 'paused');
+      else if (control?.pauseAutomaticRetry) record(id, 'paused');
       else if (operation && operation.controlRevisions![id] !== currentRevision) {
-        if (active?.control?.pauseAutomaticActivation) record(id, 'paused');
+        if (control?.pauseAutomaticActivation) record(id, 'paused');
         else record(id, 'failed', { error: 'PUBLICATION_CONFLICT: control revision changed since registration' });
       } else if (operation && latestChecks[id]?.operationId === operationId && latestChecks[id].status !== 'verification-pending') {
         results.set(id, latestChecks[id]);
@@ -333,7 +379,7 @@ export async function checkRules(options: CheckOptions) {
             pin.identity = identity;
             state.pinned[String(releaseId)] = pin;
             if (!operation) {
-              const controlRevisions = Object.fromEntries(definitions.map(({ id }) => [id, activeById.get(id)?.control?.revision ?? null]));
+              const controlRevisions = Object.fromEntries(definitions.map(({ id }) => [id, controlFor(id)?.revision ?? null]));
               state.pendingOperation = operation = { id: operationId, kind: 'check', generation: session.generation,
                 releaseId, tag, status: 'pending', expectedHead: session.head, candidateIds: [], configuration: options.configuration,
                 selectedIds: definitions.map(rule => rule.id), controlRevisions, subscriptionHashes };
@@ -366,7 +412,7 @@ export async function checkRules(options: CheckOptions) {
           if (result.status === 'failed') throw new Error(`${result.error}: ${JSON.stringify(result.report.diagnostics)}`);
           if (active && await sameDelivery(result, built!, active, session.snapshot, publication, options.binary)) {
             abandonIncomplete(id);
-            record(id, active.control?.pauseAutomaticActivation ? 'paused' : 'unchanged', release);
+            record(id, controlFor(id)?.pauseAutomaticActivation ? 'paused' : 'unchanged', release);
             await session.save();
             continue;
           }
@@ -393,7 +439,7 @@ export async function checkRules(options: CheckOptions) {
         processed[id][String(release.releaseId)] = { candidateId: candidate.id, tag: release.tag, evidenceUrl: candidate.evidenceUrl!,
           definitionSha256: sha256(JSON.stringify({ definition, target: configuration.target })) };
         await session.save();
-        if (active?.control?.pauseAutomaticActivation) {
+        if (controlFor(id)?.pauseAutomaticActivation) {
           record(id, 'paused', { ...release, candidateId: candidate.id });
         } else {
           await activateAutomatically({ configuration: options.configuration, logicalId: id, subscription: options.subscriptions[id],

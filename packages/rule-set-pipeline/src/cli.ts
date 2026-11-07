@@ -13,7 +13,7 @@ import { initializeRemoteState } from './remote-state.js';
 import { readRemoteStatus } from './remote-status.js';
 import { sha256 } from './release.js';
 import { buildRelease, buildNative, decodedTerms, NativeBuildError, type SourceRecord } from './index.js';
-import { checkRules } from './check-rules.js';
+import { checkRules, resumeRules } from './check-rules.js';
 import { buildConfiguredRelease, parseBuildConfiguration } from './configured-build.js';
 
 async function sourceToken() {
@@ -28,21 +28,25 @@ async function main(): Promise<number> {
     options: { state: { type: 'string' }, release: { type: 'string' }, out: { type: 'string' }, config: { type: 'string' }, id: { type: 'string', multiple: true }, 'expected-source': { type: 'string' }, binary: { type: 'string' }, candidate: { type: 'string' }, activation: { type: 'string' }, subscription: { type: 'string' }, 'expected-head': { type: 'string' }, branch: { type: 'string' }, help: { type: 'boolean' } },
   });
   if (values.help) {
-    console.log('Usage: build --release <fixed-tag> --out <new-directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...]] [--expected-source <source.json>] | update --state <directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...] [--release <pinned-tag>]] | check-now --state <directory> --binary <absolute-1.14.4-path> --config <versioned-yaml> --subscription <v2-contract-map.json> [--id <logical-id> ...] | initialize/status [--config <yaml> | --branch <target>] | rebuild/activate/rollback (see package README)');
+    console.log('Usage: build --release <fixed-tag> --out <new-directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...]] [--expected-source <source.json>] | update --state <directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...] [--release <pinned-tag>]] | check-now --state <directory> --binary <absolute-1.14.4-path> --config <versioned-yaml> --subscription <v2-contract-map.json> [--id <logical-id> ...] | resume --state <directory> --binary <absolute-1.14.4-path> --config <versioned-yaml> --subscription <v2-contract-map.json> --id <logical-id> | initialize/status [--config <yaml> | --branch <target>] | rebuild/activate/rollback (see package README)');
     return 0;
   }
-  if (positionals.length === 1 && positionals[0] === 'check-now') {
+  if (positionals.length === 1 && ['check-now', 'resume'].includes(positionals[0])) {
+    const resume = positionals[0] === 'resume';
     if (!values.config || !values.subscription || !values.state || !values.binary || values.out || values.release
-      || values['expected-source'] || values.activation || values.candidate || values['expected-head'] || values.branch) {
-      throw new Error('check-now requires --config, --subscription, --state and --binary');
+      || values['expected-source'] || values.activation || values.candidate || values['expected-head'] || values.branch || (resume && values.id?.length !== 1)) {
+      throw new Error(`${positionals[0]} requires --config, --subscription, --state and --binary${resume ? ', and exactly one --id' : ''}`);
     }
     const configuration = await readFile(values.config, 'utf8');
     const subscriptions = JSON.parse(await readFile(values.subscription, 'utf8'));
     if (!subscriptions || typeof subscriptions !== 'object' || Array.isArray(subscriptions)) {
-      throw new Error('check-now requires a JSON object of v2 Rule Subscriptions keyed by logical ID');
+      throw new Error(`${positionals[0]} requires a JSON object of v2 Rule Subscriptions keyed by logical ID`);
     }
-    const result = await checkRules({ configuration, subscriptions, selectedIds: values.id,
-      stateDirectory: resolve(values.state), binary: values.binary, token: await sourceToken() });
+    const options = { configuration, subscriptions,
+      stateDirectory: resolve(values.state), binary: values.binary, token: await sourceToken() };
+    const result = resume
+      ? await resumeRules({ ...options, logicalId: values.id![0] })
+      : await checkRules({ ...options, selectedIds: values.id });
     console.log(JSON.stringify(result));
     return result.exitCode;
   }

@@ -174,6 +174,27 @@ pnpm --dir packages/rule-set-pipeline check-now \
 
 `update` 和 `rebuild` 仍只发布候选，显式激活和回滚仍保留人工固定语义。验收场景见 [Issue #50](docs/verification/issue-50.md)。
 
+## 恢复单集跟随最新来源
+
+`resume` 为已有当前规则版本的一集保存新的控制修订，解除人工固定，再使用与 `check-now` 相同的检查流程。命令需要且只接受一个逻辑 ID，并读取与 `check-now` 相同的配置和订阅映射。以下命令适用于已初始化的隔离目标：
+
+```sh
+pnpm --dir packages/rule-set-pipeline resume \
+  --config /absolute/path/to/acceptance-rule-sets.yml \
+  --subscription /absolute/path/to/subscriptions.json \
+  --state /absolute/path/to/state \
+  --binary /absolute/path/to/sing-box \
+  --id ai-openai
+```
+
+- 首次检查直接读取最新官方 Release。暂停期间的中间 Release 不补跑。最新 Release 如果曾被回滚，仍可以在验证通过后采用。
+- 验证失败时继续交付当前版本，恢复决定仍有效。下一次 `check-now` 可以重试。恢复决定提交后、检查开始前中断时，新目录中的 `check-now` 或同一条 `resume` 命令都可以继续。
+- 如果另一批已登记的操作仍需恢复，`resume` 返回 `RESUME_CHECK_PENDING`。使用原命令核实或完成该操作，再对选中集检查最新来源。双分支目标若有仍可能提交的稳定切换，须先核实切换结果，才能保存恢复决定。
+- `status` 中的 `activeRuleVersions[逻辑 ID].control` 表示当前有效控制状态，`activation` 保存原激活记录。尚未完成的恢复检查在 `pendingOperations` 中显示为 `resume-check-pending`。后来人工指定或回滚会重新固定该集。
+- 稳定 URL 和客户端配置沿用原值。客户端按原生更新周期加载后续规则。
+
+包入口为 `resumeRules({ logicalId, configuration, subscriptions, stateDirectory, binary, ... })`。验收场景见 [Issue #51](docs/verification/issue-51.md)。
+
 ## 显式重建固定 Release
 
 `update` 会跳过相同定义下已成功处理的 Release。同一 Release 增选另一集，或修改所选集的列表、稳定路径或发布目标时，会处理对应的新定义。管理者需要用当前转换器或验证流程重新处理已经成功的定义时，使用 `rebuild`，并指定远端已成功处理、必要来源与候选证据仍保留的固定 Release tag：

@@ -9,7 +9,7 @@ import { parseBuildConfiguration, type RuleDefinition } from './configured-build
 import type { PublicationRepository } from './publication-repository.js';
 import { ARTIFACT_REPOSITORY, githubPublication, immutableUrl, type PublicationTransport } from './publication.js';
 import { readRemoteState } from './remote-state.js';
-import { manualControl, readActivationOperationResults, type ObservedActivation } from './manual-activation.js';
+import { applicableResume, effectiveControl, manualControl, readActivationOperationResults, type ObservedActivation } from './manual-activation.js';
 import { sha256 } from './release.js';
 
 const ajv = new Ajv({ strict: true });
@@ -28,7 +28,7 @@ interface CandidateAvailability {
 interface HistoryTarget { commit: string; id: string; candidateId: string }
 interface RollbackTarget extends HistoryTarget { candidateEvidenceUrl: string; verification: 'structural' | 'native' }
 interface UnavailableTarget extends HistoryTarget { reason: string }
-interface ActiveVersion { status: 'activated'; commit: string; activation: Record<string, any>; candidate: CandidateAvailability }
+interface ActiveVersion { status: 'activated'; commit: string; activation: Record<string, any>; candidate: CandidateAvailability; control?: ReturnType<typeof effectiveControl> }
 interface PendingOperation { id: string; candidateId?: string; logicalId?: string; phase?: string; status: string; error?: string }
 
 export function activationRecord(value: unknown, path: string, targetBranch: string) {
@@ -180,7 +180,12 @@ export async function readRemoteStatus(options: {
       logicalId: record.logicalId, status: 'activated-verification-pending', error: candidate.error ?? 'Current candidate dependencies are incomplete' });
     requireThat(!Object.hasOwn(activeRuleVersions, id), 'Duplicate active logical ID');
     if (path === 'stable/activation.json') activeRuleVersion = current;
-    else activeRuleVersions[id] = current;
+    else {
+      current.control = effectiveControl(journal, id, record);
+      const resume = applicableResume(journal, id, record);
+      if (resume?.checkPending) pendingOperations.push({ id: resume.revision, logicalId: id, status: 'resume-check-pending' });
+      activeRuleVersions[id] = current;
+    }
     rollbackTargets[id] = []; unavailableRollbackTargets[id] = [];
     historyComplete[id] = true; historyErrors[id] = [];
     const historyError = (commit: unknown, error: unknown) => {

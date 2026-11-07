@@ -3,32 +3,12 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { activateRules, checkRules, readRemoteStatus, rebuildRules, rollbackRules } from '../../src/index.js';
+import { activateRules, checkRules, readRemoteStatus, rebuildRules, resumeRules, rollbackRules } from '../../src/index.js';
 import { PublicationWriteError } from '../../src/publication-repository.js';
 import { STATE_PATH } from '../../src/remote-state.js';
-import { sha256 } from '../../src/release.js';
-import { configuredEnvironment } from './configured-activation-fixture.js';
+import { configuredEnvironment, upstream } from './configured-activation-fixture.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
-
-function upstream(revision: number, rules: Record<string, string> = {}) {
-  const requests: string[] = [];
-  const tag = `2026110411283${revision}`;
-  const input = JSON.stringify({ lists: ['openai', 'anthropic', 'google-deepmind', 'openai-alt'].map(name =>
-    ({ name, length: 1, rules: [rules[name] ?? `domain:${name}.example`] })) });
-  const fetcher: typeof fetch = async url => {
-    const path = String(url);
-    requests.push(path);
-    if (path.endsWith('/latest') || path.endsWith(`/releases/${revision}`)) return Response.json({ id: revision, tag_name: tag,
-      assets: ['dlc.dat_plain.yml', 'dlc.dat_plain.yml.sha256sum'].map((name, i) => ({ id: 11 + i, name,
-        browser_download_url: `https://github.com/v2fly/domain-list-community/releases/download/${tag}/${name}` })) });
-    if (path.includes('/git/ref/tags/')) return Response.json({ object: { type: 'commit', sha: 'a'.repeat(40) } });
-    if (path.endsWith('/assets/11')) return new Response(input);
-    if (path.endsWith('/assets/12')) return new Response(`${sha256(input)}  dlc.dat_plain.yml\n`);
-    throw new Error(`Unexpected source: ${path}`);
-  };
-  return { fetcher, requests };
-}
 
 async function isolated(run: (environment: Awaited<ReturnType<typeof configuredEnvironment>>, directory: string) => Promise<void>, branch?: string) {
   const directory = await mkdtemp(join(tmpdir(), 'check-now-'));
@@ -295,3 +275,123 @@ test('稳定切换登记后发生人工固定，旧自动切换在提交前被�
   assert.equal(result.results[0].control?.pauseAutomaticActivation, true);
   assert.equal(env.writes(), 1);
 }, 'main'));
+
+test('恢复只解除选中集的限制，并允许重新采用刚回滚掉的最新版本', { skip: !binary }, async () => isolated(async (env, directory) => {
+  const first = await checkRules(options(env, directory, upstream(1)));
+  const openaiCommit = await env.repository.lastChange!(env.head(), 'stable/ai-openai/activation.json');
+  const latest = upstream(3, { openai: 'domain:new-openai.example' });
+  const second = await checkRules(options(env, directory, latest));
+  const pin = await rollbackRules({ ...env.options('ai-openai', ''), historicalActivationCommit: openaiCommit });
+  const before = await readRemoteStatus({ repository: env.repository, publication: options(env, directory, latest).publication, activation: env.transport });
+  const sibling = await activateRules(env.options('ai-anthropic', before.activeRuleVersions['ai-anthropic'].activation.candidateEvidenceUrl));
+
+  latest.requests.length = 0;
+  const result = await resumeRules({ ...options(env, join(directory, 'fresh'), latest), logicalId: 'ai-openai' });
+  assert.equal(result.exitCode, 0, JSON.stringify(result));
+  assert.equal(result.results.length, 1);
+  assert.equal(result.results[0].id, 'ai-openai');
+  assert.equal(result.results[0].status, 'activated');
+  assert.equal(result.results[0].current?.candidateId, second.results[0].candidateId);
+  assert.notEqual(result.results[0].current?.candidateId, first.results[0].candidateId);
+  assert.notEqual(result.results[0].control?.revision, pin.activation.control?.revision);
+  assert.equal(result.results[0].control?.pauseAutomaticRetry, false);
+  assert.equal(result.results[0].control?.pauseAutomaticActivation, false);
+  assert.equal(latest.requests.filter(url => url.endsWith('/latest')).length, 1);
+  assert.ok(latest.requests.every(url => !url.endsWith('/releases/2')));
+  const after = await readRemoteStatus({ repository: env.repository, publication: options(env, directory, latest).publication, activation: env.transport });
+  assert.deepEqual(after.activeRuleVersions['ai-anthropic'].activation, sibling.activation);
+  assert.deepEqual(after.activeRuleVersions['ai-google-deepmind'].activation, before.activeRuleVersions['ai-google-deepmind'].activation);
+}));
+
+for (const branch of ['acceptance-issue-51', 'main']) {
+  test(`${branch} 恢复决定提交后断线，换机检查失败仍保持恢复并能再次更新`, { skip: !binary }, async () => isolated(async (env, directory) => {
+    const candidates = await env.candidates();
+    const pinned = await activateRules(env.options('ai-openai', candidates['ai-openai'].evidenceUrl!));
+    const sibling = await activateRules(env.options('ai-anthropic', candidates['ai-anthropic'].evidenceUrl!));
+    const latest = upstream(3);
+    const first = options(env, join(directory, 'first'), latest);
+    let offline = false;
+    const repository = { ...env.repository,
+      async snapshot(target?: string) {
+        if (offline) throw new Error('Connection lost');
+        return env.repository.snapshot(target);
+      },
+      async commit(...args: Parameters<typeof env.repository.commit>) {
+        const head = await env.repository.commit(...args);
+        offline = true;
+        throw new PublicationWriteError(head, 'Resume response lost');
+      },
+    };
+    const interrupted = await resumeRules({ ...first, logicalId: 'ai-openai', publication: { ...first.publication, repository } });
+    assert.equal(interrupted.exitCode, 1);
+    assert.equal(interrupted.results[0].status, 'verification-pending');
+    assert.deepEqual(latest.requests, []);
+    assert.equal(env.writes(), 2);
+
+    const status = () => readRemoteStatus({ repository: env.repository, publication: first.publication, activation: env.transport });
+    const saved = await status();
+    const control = saved.activeRuleVersions['ai-openai'].control;
+    assert.equal(control?.reason, 'manual-resume');
+    assert.notEqual(control?.revision, pinned.activation.control?.revision);
+    assert.deepEqual(saved.activeRuleVersions['ai-openai'].activation, pinned.activation);
+    assert.ok(saved.pendingOperations.some(entry => entry.id === control?.revision && entry.status === 'resume-check-pending'));
+
+    const fresh = options(env, join(directory, 'second'), upstream(3, { openai: 'unsupported:invalid.example' }));
+    const failed = await checkRules({ ...fresh, selectedIds: ['ai-openai'] });
+    assert.equal(failed.exitCode, 1);
+    assert.equal(failed.results[0].current?.id, pinned.activation.id);
+    assert.deepEqual(failed.results[0].control, control);
+    assert.equal(env.writes(), 2);
+    assert.ok(!(await status()).pendingOperations.some(entry => entry.status === 'resume-check-pending'));
+
+    const retried = await checkRules({ ...options(env, join(directory, 'third'), upstream(4)), selectedIds: ['ai-openai'] });
+    assert.equal(retried.exitCode, 0);
+    assert.equal(retried.results[0].status, 'activated');
+    assert.equal(retried.results[0].releaseId, 4);
+    assert.deepEqual(retried.results[0].control, control);
+    assert.deepEqual((await status()).activeRuleVersions['ai-anthropic'].control, sibling.activation.control);
+    assert.equal(env.writes(), 3);
+  }, branch));
+
+  test(`${branch} 自动检查登记后人工固定并恢复，最早任务仍不能发布或激活`, { skip: !binary }, async () => isolated(async (env, directory) => {
+    const initial = options(env, directory, upstream(1));
+    await checkRules({ ...initial, selectedIds: ['ai-openai'] });
+    const before = await readRemoteStatus({ repository: env.repository, publication: initial.publication, activation: env.transport });
+    const candidate = before.activeRuleVersions['ai-openai'].activation.candidateEvidenceUrl;
+    const source = upstream(2, { openai: 'domain:old-task.example' });
+    const first = options(env, join(directory, 'old'), source);
+    const old = await checkRules({ ...first, selectedIds: ['ai-openai'], fetch: async (url, init) => {
+      if (String(url).endsWith('/assets/11')) {
+        const pinned = await activateRules(env.options('ai-openai', candidate));
+        const resumed = await resumeRules({ ...options(env, join(directory, 'new'), upstream(3)), logicalId: 'ai-openai' });
+        assert.equal(resumed.exitCode, 0, JSON.stringify(resumed));
+        assert.equal(resumed.results[0].status, 'unchanged');
+        assert.notEqual(resumed.results[0].control?.revision, pinned.activation.control?.revision);
+      }
+      return source.fetcher(url, init);
+    } });
+    assert.equal(old.exitCode, 1);
+    assert.match(old.error ?? '', /PUBLICATION_CONFLICT/);
+    assert.equal(old.results[0].control?.pauseAutomaticActivation, false);
+    const after = await readRemoteStatus({ repository: env.repository, publication: initial.publication, activation: env.transport });
+    assert.equal(Object.keys(after.state.candidates).length, 1);
+    assert.equal(after.state.latestChecks?.['ai-openai'].releaseId, 3);
+    assert.equal(env.writes(), 2);
+  }, branch));
+}
+
+test('维护期间拒绝保存恢复决定或访问上游', { skip: !binary }, async () => isolated(async (env, directory) => {
+  const candidates = await env.candidates();
+  const pin = await activateRules(env.options('ai-openai', candidates['ai-openai'].evidenceUrl!));
+  const snapshot = await env.repository.snapshot();
+  const journal = JSON.parse((await snapshot.read(STATE_PATH))!.toString());
+  journal.maintenance = 'maintenance';
+  const head = await env.repository.commit(snapshot.head, { [STATE_PATH]: Buffer.from(JSON.stringify(journal)) }, 'Enter maintenance');
+  const source = upstream(1);
+  const common = options(env, directory, source);
+  await assert.rejects(resumeRules({ ...common, logicalId: 'ai-openai' }), /REPOSITORY_MAINTENANCE/);
+  assert.deepEqual(source.requests, []);
+  assert.equal(env.head(), head);
+  const status = await readRemoteStatus({ ...common, repository: env.repository });
+  assert.deepEqual(status.activeRuleVersions['ai-openai'].control, pin.activation.control);
+}));

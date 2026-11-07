@@ -16,6 +16,13 @@ export interface RemoteJournal {
   state: UpdateState;
   manualOperations?: Record<string, ManualOperation>;
   automaticOperations?: Record<string, ActivationOperation>;
+  resumes?: Record<string, ResumeDecision>;
+}
+
+export interface ResumeDecision {
+  revision: string;
+  activationId: string;
+  checkPending: boolean;
 }
 
 export interface ManualOperation extends ActivationOperation {
@@ -88,6 +95,15 @@ function validate(value: unknown): asserts value is RemoteJournal {
         || (op.kind === 'rollback' ? !sha(op.historicalActivationCommit) : op.historicalActivationCommit !== undefined)
         || (op.kind === 'automatic' ? !operationId(op.checkOperationId) : op.checkOperationId !== undefined)
         || op.notCommitted !== undefined && op.notCommitted !== true) throw new Error('REMOTE_STATE_CORRUPT: activation operation');
+    }
+  }
+  if (value.resumes !== undefined) {
+    if (!object(value.resumes)) throw new Error('REMOTE_STATE_CORRUPT: resume decisions');
+    for (const [id, decision] of Object.entries(value.resumes)) {
+      if (!/^[a-z][a-z0-9-]*$/.test(id) || !object(decision) || !operationId(decision.revision)
+        || typeof decision.activationId !== 'string' || !decision.activationId || typeof decision.checkPending !== 'boolean') {
+        throw new Error('REMOTE_STATE_CORRUPT: resume decision');
+      }
     }
   }
   const state = value.state;
