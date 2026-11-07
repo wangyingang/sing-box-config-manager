@@ -920,8 +920,10 @@ for (const branch of ['acceptance-issue-54', 'main']) {
     assert.match(JSON.stringify(interruptedCleanup), /Temporary ref cleanup interrupted/);
     assert.equal((await readRemoteState(env.repository)).journal.maintenance, 'maintenance');
     failCleanup = false;
-    const completed = await manageMaintenance({ ...maintenance, action: 'resume' });
+    const resumedAt = new Date('2026-11-08T15:00:00Z');
+    const completed = await manageMaintenance({ ...maintenance, action: 'resume', now: resumedAt });
     assert.equal(completed.status, 'completed', JSON.stringify(completed));
+    assert.equal((await readRemoteState(env.repository)).journal.lastCleanupAt, resumedAt.toISOString());
     assert.equal(completed.maintenance, 'open');
     assert.equal((await manageMaintenance({ ...maintenance, binary: undefined, action: 'resume' })).status, 'completed');
     assert.equal(env.refs.switches(), 1);
@@ -939,99 +941,157 @@ for (const branch of ['acceptance-issue-54', 'main']) {
   }, branch));
 }
 
-test('两轮清理保留 pin 和新历史，并拒绝旧代次写入、回滚及重建', { timeout: 120_000, skip: !binary }, async () => isolated(async (env, directory) => {
-  const anthropic = 'ai-anthropic';
-  const openai = 'ai-openai';
-  const blocked = new Set<string>();
-  const download = (url: string) => {
-    assert.ok(!blocked.has(url.split('/')[5]), `Old artifact address used: ${url}`);
-    return env.transport.download(url);
-  };
-  const next = (source: ReturnType<typeof upstream>, label: string) => {
-    const base = options(env, join(directory, label), source);
-    return { ...base, publication: { ...base.publication, download }, activation: { ...base.activation, download } };
-  };
-  const a = upstream(1);
-  const b = upstream(2, { anthropic: 'domain:version-b.example' });
-  const initial = next(a, 'original');
-  assert.equal((await checkRules(initial)).exitCode, 0);
-  const status = (opts = initial) => readRemoteStatus({ ...opts, repository: env.repository });
-  const started = await status();
-  await activateRules(env.options(openai, started.activeRuleVersions[openai].activation.candidateEvidenceUrl));
-  const pinned = (await status()).activeRuleVersions[openai];
-  const unrelated = { ref: 'refs/heads/acceptance-issue-54-unrelated', after: env.head() };
-  await env.refs.update([unrelated]);
+for (const branch of ['acceptance-issue-54', 'main']) {
+  test(`${branch} 两轮清理保留 pin 和新历史，并拒绝旧代次写入、回滚及重建`, { timeout: 120_000, skip: !binary }, async () => isolated(async (env, directory) => {
+    const anthropic = 'ai-anthropic';
+    const openai = 'ai-openai';
+    const blocked = new Set<string>();
+    const download = (url: string) => {
+      assert.ok(!blocked.has(url.split('/')[5]), `Old artifact address used: ${url}`);
+      return env.transport.download(url);
+    };
+    const next = (source: ReturnType<typeof upstream>, label: string) => {
+      const base = options(env, join(directory, label), source);
+      return { ...base, publication: { ...base.publication, download }, activation: { ...base.activation, download } };
+    };
+    const a = upstream(1);
+    const b = upstream(2, { anthropic: 'domain:version-b.example' });
+    const initial = next(a, 'original');
+    assert.equal((await checkRules(initial)).exitCode, 0);
+    const status = (opts = initial) => readRemoteStatus({ ...opts, repository: env.repository });
+    const started = await status();
+    await activateRules(env.options(openai, started.activeRuleVersions[openai].activation.candidateEvidenceUrl));
+    const pinned = (await status()).activeRuleVersions[openai];
+    const unrelated = { ref: 'refs/heads/acceptance-issue-54-unrelated', after: env.head() };
+    await env.refs.update([unrelated]);
 
-  const maintenance = { ...initial, repository: env.repository, baseline: env.baseline, refTransport: env.refs };
-  async function clean() {
-    const prior = [...env.snapshots.keys()];
+    const maintenance = { ...initial, repository: env.repository, baseline: env.baseline, refTransport: env.refs };
+    async function clean() {
+      const prior = [...env.snapshots.keys()];
+      assert.equal((await manageMaintenance({ ...maintenance, action: 'enter', manual: true })).status, 'isolated');
+      assert.equal((await manageMaintenance({ ...maintenance, action: 'prepare' })).status, 'prepared');
+      const switched = await manageMaintenance({ ...maintenance, action: 'switch' });
+      assert.equal(switched.status, 'completed', JSON.stringify(switched));
+      assert.match(JSON.stringify(switched), /acceptance-issue-54-unrelated/);
+      return prior;
+    }
+    for (const sha of await clean()) blocked.add(sha);
+    const afterFirst = await status(next(a, 'after-first'));
+    assert.equal(afterFirst.generation, 2);
+    assert.deepEqual(afterFirst.activeRuleVersions[openai].control, pinned.control);
+    assert.equal(afterFirst.activeRuleVersions[anthropic].activation.id, started.activeRuleVersions[anthropic].activation.id);
+    assert.deepEqual(afterFirst.rollbackTargets[anthropic], []);
+
+    const updated = await checkRules(next(b, 'update-b'));
+    assert.equal(updated.exitCode, 0, JSON.stringify(updated));
+    const afterB = await status();
+    const [retainedA] = afterB.rollbackTargets[anthropic];
+    assert.equal(retainedA.id, started.activeRuleVersions[anthropic].activation.id);
+    const rollback = await rollbackRules({ ...env.options(anthropic, ''), transport: initial.activation, historicalActivationCommit: retainedA.commit });
+    assert.deepEqual(rollback.activation.files, started.activeRuleVersions[anthropic].activation.files);
+    assert.equal((await resumeRules({ ...next(b, 'resume-b'), logicalId: anthropic })).exitCode, 0);
+    const beforeSecond = await status();
+    assert.deepEqual(beforeSecond.activeRuleVersions[anthropic].activation.files, afterB.activeRuleVersions[anthropic].activation.files);
+
+    const stale = next(upstream(3, { anthropic: 'domain:stale.example' }), 'stale-operation');
+    let continueCheck!: () => void, markStarted!: () => void;
+    const release = new Promise<void>(resolve => { continueCheck = resolve; });
+    const startedFetch = new Promise<void>(resolve => { markStarted = resolve; });
+    const waiting = checkRules({ ...stale, fetch: async (...args) => {
+      markStarted();
+      await release;
+      return stale.fetch(...args);
+    } });
+    await startedFetch;
+    let releaseStatus!: () => void, markStatusStarted!: () => void;
+    const statusRelease = new Promise<void>(resolve => { releaseStatus = resolve; });
+    const statusStarted = new Promise<void>(resolve => { markStatusStarted = resolve; });
+    let waitForSwitch = true;
+    const querying = readRemoteStatus({ ...initial, repository: { ...env.repository, async snapshot(target?: string) {
+      const snapshot = await env.repository.snapshot(target);
+      if (waitForSwitch) {
+        waitForSwitch = false;
+        markStatusStarted();
+        await statusRelease;
+      }
+      return snapshot;
+    } } });
+    await statusStarted;
+    let obsolete: string[];
+    try { obsolete = await clean(); }
+    finally { continueCheck(); releaseStatus(); }
+    const observed = await querying;
+    assert.equal(observed.generation, branch === 'main' ? 3 : 2);
+    if (branch === 'main') assert.deepEqual(observed.rollbackTargets[anthropic], []);
+    const newHead = env.head();
+    const staleResult = await waiting;
+    assert.equal(staleResult.exitCode, 1);
+    assert.match(JSON.stringify(staleResult), /earlier maintenance generation/);
+    assert.equal(env.head(), newHead);
+
+    // Even when GitHub still serves an obsolete object, its SHA cannot select a rollback.
+    await assert.rejects(rollbackRules({ ...env.options(anthropic, ''), historicalActivationCommit: retainedA.commit }), /ROLLBACK_UNAVAILABLE/);
+    for (const sha of obsolete) blocked.add(sha);
+    const fresh = next(b, 'fresh-generation-3');
+    const afterSecond = await status(fresh);
+    assert.equal(afterSecond.generation, 3);
+    assert.deepEqual(afterSecond.rollbackTargets[anthropic], []);
+    for (const id of env.ids) {
+      const before = beforeSecond.activeRuleVersions[id];
+      const after = afterSecond.activeRuleVersions[id];
+      assert.equal(after.activation.id, before.activation.id);
+      assert.deepEqual(after.activation.files, before.activation.files);
+      assert.deepEqual(after.activation.subscription, before.activation.subscription);
+      assert.deepEqual(after.control, before.control);
+      assert.equal(after.candidate.status, 'available');
+    }
+    const old = next(a, 'original');
+    assert.ok((await readUpdateState(old.stateDirectory)).state.candidates[retainedA.candidateId]);
+    await assert.rejects(updateRules({ ...old, selectedIds: [anthropic] }), /CANDIDATE_UNAVAILABLE/);
+    assert.equal((await readUpdateState(old.stateDirectory)).state.candidates[retainedA.candidateId], undefined);
+    await assert.rejects(rebuildRules({ ...old, release: '20261104112831', selectedIds: [anthropic] }), /CANDIDATE_UNAVAILABLE/);
+    const same = await checkRules(fresh);
+    assert.equal(same.exitCode, 0, JSON.stringify(same));
+    assert.equal(same.results.find(entry => entry.id === anthropic)?.status, 'unchanged');
+    assert.equal((await status()).activeRuleVersions[anthropic].activation.id, afterSecond.activeRuleVersions[anthropic].activation.id);
+  }, branch));
+}
+
+test('人工激活回读跨越清理后拒绝返回旧地址或覆盖本地回执', { skip: !binary, timeout: 120_000 }, async () => isolated(async (env, directory) => {
+  const id = 'ai-anthropic';
+  const first = options(env, directory, upstream(1));
+  const candidate = await updateRules({ ...first, selectedIds: [id] });
+  const built = candidate.results.find(entry => entry.id === id);
+  assert.ok(built?.status === 'processed');
+  const old = env.options(id, built.candidate.evidenceUrl!);
+  let releaseReadback!: () => void, markCommitted!: () => void;
+  const release = new Promise<void>(resolve => { releaseReadback = resolve; });
+  const committed = new Promise<void>(resolve => { markCommitted = resolve; });
+  let oldCommit: string | undefined;
+  const pending = activateRules({ ...old, transport: { ...env.transport, async commit(...args) {
+    return oldCommit = await env.transport.commit(...args);
+  }, async download(url) {
+    if (oldCommit && url.split('/')[5] === oldCommit) {
+      markCommitted();
+      await release;
+    }
+    return env.transport.download(url);
+  } } });
+  const refused = assert.rejects(pending, /PUBLICATION_CONFLICT: generation or maintenance changed/);
+  await committed;
+  try {
+    const latest = options(env, directory, upstream(2, { anthropic: 'domain:replacement.example' }));
+    const next = await updateRules({ ...latest, selectedIds: [id] });
+    const replacement = next.results.find(entry => entry.id === id);
+    assert.ok(replacement?.status === 'processed');
+    const active = await activateRules(env.options(id, replacement.candidate.evidenceUrl!));
+    const maintenance = { ...first, repository: env.repository, baseline: env.baseline, refTransport: env.refs };
     assert.equal((await manageMaintenance({ ...maintenance, action: 'enter', manual: true })).status, 'isolated');
     assert.equal((await manageMaintenance({ ...maintenance, action: 'prepare' })).status, 'prepared');
-    const switched = await manageMaintenance({ ...maintenance, action: 'switch' });
-    assert.equal(switched.status, 'completed', JSON.stringify(switched));
-    assert.match(JSON.stringify(switched), /acceptance-issue-54-unrelated/);
-    return prior;
-  }
-  for (const sha of await clean()) blocked.add(sha);
-  const afterFirst = await status(next(a, 'after-first'));
-  assert.equal(afterFirst.generation, 2);
-  assert.deepEqual(afterFirst.activeRuleVersions[openai].control, pinned.control);
-  assert.equal(afterFirst.activeRuleVersions[anthropic].activation.id, started.activeRuleVersions[anthropic].activation.id);
-  assert.deepEqual(afterFirst.rollbackTargets[anthropic], []);
-
-  const updated = await checkRules(next(b, 'update-b'));
-  assert.equal(updated.exitCode, 0, JSON.stringify(updated));
-  const afterB = await status();
-  const [retainedA] = afterB.rollbackTargets[anthropic];
-  assert.equal(retainedA.id, started.activeRuleVersions[anthropic].activation.id);
-  const rollback = await rollbackRules({ ...env.options(anthropic, ''), transport: initial.activation, historicalActivationCommit: retainedA.commit });
-  assert.deepEqual(rollback.activation.files, started.activeRuleVersions[anthropic].activation.files);
-  assert.equal((await resumeRules({ ...next(b, 'resume-b'), logicalId: anthropic })).exitCode, 0);
-  const beforeSecond = await status();
-  assert.deepEqual(beforeSecond.activeRuleVersions[anthropic].activation.files, afterB.activeRuleVersions[anthropic].activation.files);
-
-  const stale = next(upstream(3, { anthropic: 'domain:stale.example' }), 'stale-operation');
-  let continueCheck!: () => void, markStarted!: () => void;
-  const release = new Promise<void>(resolve => { continueCheck = resolve; });
-  const startedFetch = new Promise<void>(resolve => { markStarted = resolve; });
-  const waiting = checkRules({ ...stale, fetch: async (...args) => {
-    markStarted();
-    await release;
-    return stale.fetch(...args);
-  } });
-  await startedFetch;
-  let obsolete: string[];
-  try { obsolete = await clean(); }
-  finally { continueCheck(); }
-  const newHead = env.head();
-  const staleResult = await waiting;
-  assert.equal(staleResult.exitCode, 1);
-  assert.match(JSON.stringify(staleResult), /earlier maintenance generation/);
-  assert.equal(env.head(), newHead);
-
-  // Even when GitHub still serves an obsolete object, its SHA cannot select a rollback.
-  await assert.rejects(rollbackRules({ ...env.options(anthropic, ''), historicalActivationCommit: retainedA.commit }), /ROLLBACK_UNAVAILABLE/);
-  for (const sha of obsolete) blocked.add(sha);
-  const fresh = next(b, 'fresh-generation-3');
-  const afterSecond = await status(fresh);
-  assert.equal(afterSecond.generation, 3);
-  assert.deepEqual(afterSecond.rollbackTargets[anthropic], []);
-  for (const id of env.ids) {
-    const before = beforeSecond.activeRuleVersions[id];
-    const after = afterSecond.activeRuleVersions[id];
-    assert.equal(after.activation.id, before.activation.id);
-    assert.deepEqual(after.activation.files, before.activation.files);
-    assert.deepEqual(after.activation.subscription, before.activation.subscription);
-    assert.deepEqual(after.control, before.control);
-    assert.equal(after.candidate.status, 'available');
-  }
-  const old = next(a, 'original');
-  assert.ok((await readUpdateState(old.stateDirectory)).state.candidates[retainedA.candidateId]);
-  await assert.rejects(updateRules({ ...old, selectedIds: [anthropic] }), /CANDIDATE_UNAVAILABLE/);
-  assert.equal((await readUpdateState(old.stateDirectory)).state.candidates[retainedA.candidateId], undefined);
-  await assert.rejects(rebuildRules({ ...old, release: '20261104112831', selectedIds: [anthropic] }), /CANDIDATE_UNAVAILABLE/);
-  const same = await checkRules(fresh);
-  assert.equal(same.exitCode, 0, JSON.stringify(same));
-  assert.equal(same.results.find(entry => entry.id === anthropic)?.status, 'unchanged');
-  assert.equal((await status()).activeRuleVersions[anthropic].activation.id, afterSecond.activeRuleVersions[anthropic].activation.id);
+    assert.equal((await manageMaintenance({ ...maintenance, action: 'switch' })).status, 'completed');
+    releaseReadback();
+    await refused;
+    assert.equal((await readUpdateState(directory)).activeRuleVersions[id].activation.id, active.activation.id);
+    assert.equal((await readRemoteStatus({ ...first, repository: env.repository })).state.candidates[built.candidate.id], undefined);
+  } finally { releaseReadback(); }
 }));

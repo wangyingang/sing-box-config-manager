@@ -143,9 +143,10 @@ export async function finishMaintenance(options: MaintenanceOptions, initial: Sn
     if (owned(after).length) throw new Error(`Maintenance refs still require cleanup: ${errorMessage(deleteError ?? 'refs did not change')}`);
     const { maintenanceCleanup: _cleanup, ...journal } = current.journal;
     phase = 'reopen';
-    current = await checkpoint(current, { ...journal, maintenance: 'open', lastCleanupAt: cleanup.verifiedAt },
+    const completedAt = (options.now ?? new Date()).toISOString();
+    current = await checkpoint(current, { ...journal, maintenance: 'open', lastCleanupAt: completedAt },
       `完成规则产物清理 ${maintenanceId}`, maintenanceId);
-    return report('completed', { phase: 'completed', maintenanceId, completedAt: cleanup.verifiedAt, otherRefs: otherRefs(after) });
+    return report('completed', { phase: 'completed', maintenanceId, completedAt, otherRefs: otherRefs(after) });
   } catch (error) {
     return report('failed', { phase, maintenanceId, error: errorMessage(error), observedJournalHead: current.snapshot.head });
   }

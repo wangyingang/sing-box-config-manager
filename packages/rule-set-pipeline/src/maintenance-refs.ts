@@ -1,9 +1,9 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { stageRef } from './maintenance-baseline-transport.js';
+import { baselineStageNames, stageRef } from './maintenance-baseline-transport.js';
 import { ARTIFACT_REPOSITORY } from './publication.js';
 
 export interface Ref { ref: string; head: string }
@@ -17,8 +17,10 @@ export interface MaintenanceRefTransport {
 export const branchRef = (branch: string) => `refs/heads/${branch}`;
 
 export function cleanupRefNames(id: string, shared: boolean) {
-  return ['files', 'metadata', 'evidence', 'journal', 'old-journal',
-    ...shared ? [] : ['stable-root', 'stable', 'old-stable']].map(step => branchRef(stageRef(id, step)));
+  const stages = new Set(Object.values(baselineStageNames(shared)));
+  stages.add('old-journal');
+  if (!shared) stages.add('old-stable');
+  return [...stages].map(step => branchRef(stageRef(id, step)));
 }
 
 export function gitMaintenanceRefs(remote = `https://github.com/${ARTIFACT_REPOSITORY}.git`): MaintenanceRefTransport {
@@ -47,7 +49,19 @@ export function gitMaintenanceRefs(remote = `https://github.com/${ARTIFACT_REPOS
         await git(['init', '--bare'], cwd);
         const objects = [...new Set(changes.flatMap(({ after }) => after ? [after] : []))];
         if (objects.length) await git(['fetch', '--no-tags', '--', remote, ...objects], cwd);
-        await git(['push', '--atomic', '--porcelain',
+        // Git omits up-to-date refs from the push even when their leases
+        // disagree. Check the advertised transaction before it can be sent.
+        const zero = '0'.repeat(40);
+        const expected = changes.map(({ ref, before, after }) => `${after ?? zero} ${ref} ${before ?? zero}`).sort().join('\n');
+        await writeFile(join(cwd, 'maintenance-transaction'), expected + '\n');
+        await writeFile(join(cwd, 'pre-push'), `#!/bin/sh
+set -eu
+if ! cut -d ' ' -f 2- | LC_ALL=C sort | cmp -s maintenance-transaction -; then
+  echo 'Maintenance push refused: advertised transaction differs from expected refs and heads' >&2
+  exit 1
+fi
+`, { mode: 0o700 });
+        await git(['-c', `core.hooksPath=${cwd}`, 'push', '--atomic', '--porcelain',
           ...changes.map(({ ref, before }) => `--force-with-lease=${ref}:${before ?? ''}`),
           '--', remote, ...changes.map(({ ref, after }) => `${after ?? ''}:${ref}`)], cwd);
       } finally {

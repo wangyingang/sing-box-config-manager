@@ -1,4 +1,3 @@
-import { BASELINE_PATH } from './remote-state.js';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { saveActivationReceipt } from './activation-receipt.js';
@@ -13,7 +12,8 @@ import { sha256 } from './release.js';
 import { ARTIFACT_REPOSITORY, immutableUrl } from './publication.js';
 import { retainedCandidateDownload } from './publication-repository.js';
 import { activationDigest, effectiveControl, manualControl, openManualActivation, registerManualActivation, type ActivationWriteReservation, type ObservedActivation } from './manual-activation.js';
-import type { ActivationOperation } from './remote-state.js';
+import { BASELINE_PATH, guardResultGeneration, type ActivationOperation } from './remote-state.js';
+import { activationRecord, walkLegacyActivationHistory } from './remote-status.js';
 import { ActivationWriteError, githubActivation, type ActivationTransport } from './activation-transport.js';
 
 const ajv = new Ajv({ strict: true });
@@ -203,27 +203,25 @@ export function activateAutomatically(options: ActivationOptions, coordination: 
 
 /** After a rewrite, only the live record and its retained history are supported. */
 async function requireRetainedRollback(transport: ActivationTransport, path: string, head: string, target: string, configured: boolean) {
-  const unavailable = 'ROLLBACK_UNAVAILABLE: activation is outside retained history';
-  const read = async (commit: string) => {
-    const url = immutableUrl(commit, path);
-    try { return JSON.parse((await transport.download(url)).toString()); }
-    catch (error) {
-      if (error instanceof Error && error.message === `Readback HTTP 404: ${url}`) throw new Error(unavailable);
-      throw error;
-    }
-  };
   if (target === head) return;
+  const url = immutableUrl(head, path);
+  const unavailable = 'ROLLBACK_UNAVAILABLE: activation is outside retained history';
+  let bytes: Buffer;
+  try { bytes = await transport.download(url); }
+  catch (error) {
+    if (error instanceof Error && error.message === `Readback HTTP 404: ${url}`) throw new Error(unavailable);
+    throw error;
+  }
+  const { record, history } = activationRecord(JSON.parse(bytes.toString()), path, transport.branch);
   if (configured) {
-    const active = await read(head);
-    requireThat(Array.isArray(active.history) && active.history.some((entry: { commit?: string }) => entry.commit === target), unavailable);
+    requireThat(history.some(entry => entry.commit === target), unavailable);
     return;
   }
-  const seen = new Set<string>();
-  while (head !== target) {
-    requireThat(/^[a-f0-9]{40}$/.test(head) && !seen.has(head), 'Invalid legacy activation history');
-    seen.add(head);
-    head = (await read(head)).expectedHead;
+  for await (const item of walkLegacyActivationHistory(record, head, transport.branch, url => transport.download(url))) {
+    if ('error' in item) throw item.error;
+    if (item.commit === target) return;
   }
+  throw new Error(unavailable);
 }
 
 async function performActivation(options: ActivationOptions | RollbackOptions, automatic?: AutomaticActivation) {
@@ -392,6 +390,7 @@ async function performActivation(options: ActivationOptions | RollbackOptions, a
       requireThat(actual.equals(bytes), `Committed activation mismatch: ${path}`);
     }
   } catch (error) { throw new Error(`ACTIVATION_APPLIED_READBACK_PENDING: commit ${commit} (operation ${id})`, { cause: error }); }
+  if (session && !automatic) await guardResultGeneration(session.repository, session.journal);
   const result = { status: 'activated' as const, commit, activation };
   if (definition && options.stateDirectory) {
     await saveActivationReceipt(options.stateDirectory, result, definition.id);

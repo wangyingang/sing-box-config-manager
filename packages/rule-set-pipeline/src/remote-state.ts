@@ -308,6 +308,13 @@ export async function guardRemoteState(repository: PublicationRepository, expect
   }
 }
 
+/** A successful result may only expose addresses from the same open generation. */
+export async function guardResultGeneration(repository: PublicationRepository, journal: RemoteJournal) {
+  const current = await readRemoteState(repository);
+  if (current.journal.id !== journal.id || current.journal.generation !== journal.generation
+    || current.journal.maintenance !== 'open') throw new Error('PUBLICATION_CONFLICT: generation or maintenance changed');
+}
+
 export function commitRemoteState(repository: PublicationRepository, expectedHead: string, journal: RemoteJournal,
   files: Record<string, Buffer>, message: string, maintenanceId?: string) {
   validate(journal);
@@ -388,11 +395,7 @@ export async function openRemoteSession(publication: PublicationTransport, direc
       if (expectedHead !== parent) throw new Error('PUBLICATION_CONFLICT: unexpected activation parent');
       expectedHead = commit;
     },
-    async confirmGeneration() {
-      const current = await readRemoteState(repository);
-      if (current.journal.id !== journal.id || current.journal.generation !== journal.generation
-        || current.journal.maintenance !== 'open') throw new Error('PUBLICATION_CONFLICT: generation or maintenance changed');
-    },
+    confirmGeneration: () => guardResultGeneration(repository, journal),
     generation: journal.generation, snapshot: restored.snapshot,
     get cacheWarning() { return cacheWarning; },
     save: () => write({}, '保存候选操作进度').then(() => undefined),
