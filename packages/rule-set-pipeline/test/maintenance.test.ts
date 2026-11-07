@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { manageMaintenance } from '../src/maintenance.js';
+import { githubBaselineTransport } from '../src/maintenance-baseline-transport.js';
 import { initializeRemoteState, STATE_PATH } from '../src/remote-state.js';
 import type { PublicationRepository } from '../src/publication-repository.js';
-import type { PublicationTransport } from '../src/publication.js';
+import { GitHubHttpError, type PublicationTransport } from '../src/publication.js';
 
 const branch = 'acceptance-issue-52';
 const now = new Date('2026-11-07T12:00:00Z');
@@ -61,4 +62,41 @@ test('远端 ready 记录损坏时拒绝恢复和退出', async () => {
   await assert.rejects(manageMaintenance({ ...options, action: 'resume' }), /REMOTE_STATE_CORRUPT: maintenance run/);
   await assert.rejects(manageMaintenance({ ...options, action: 'abort', maintenanceId: id }), /REMOTE_STATE_CORRUPT: maintenance run/);
   assert.equal((await repository.snapshot()).head, corruptHead);
+});
+
+test('GitHub 临时分支创建回复丢失后采用已有的无父提交，拒绝采用冲突内容', async () => {
+  const ref = 'maintenance-941f6c16-53dc-49f6-89f9-6549d93723b2-files';
+  const root = 'a'.repeat(40), tree = 'b'.repeat(40), blob = 'c'.repeat(40);
+  const path = 'pipeline/baseline.json', content = Buffer.from('{}');
+  let created = false, commitCount = 0;
+  const transport = githubBaselineTransport(async (args, input) => {
+    const endpoint = args[1].replace('repos/wangyingang/sing-box-rule-artifacts', '');
+    switch (endpoint) {
+      case '': return { private: false };
+      case `/git/ref/heads/${ref}`:
+        if (!created) throw new GitHubHttpError(404, 'Scratch ref absent');
+        return { object: { sha: root } };
+      case '/git/blobs': return { sha: blob };
+      case '/git/trees':
+        assert.deepEqual(input, { tree: [{ path, mode: '100644', type: 'blob', sha: blob }] });
+        return { sha: tree };
+      case '/git/commits':
+        assert.deepEqual(input, { message: 'prepare', tree, parents: [] });
+        commitCount++;
+        return { sha: root };
+      case '/git/refs':
+        assert.deepEqual(input, { ref: `refs/heads/${ref}`, sha: root });
+        assert.ok(!created);
+        created = true;
+        throw new Error('Create response lost');
+      case `/git/commits/${root}`: return { tree: { sha: tree }, parents: [] };
+      case `/git/trees/${tree}?recursive=1`: return { tree: [{ path, type: 'blob', mode: '100644', sha: blob }] };
+      case `/git/blobs/${blob}`: return { encoding: 'base64', content: content.toString('base64'), size: content.length };
+      default: throw new Error(`Unexpected endpoint: ${endpoint}`);
+    }
+  });
+  assert.equal(await transport.stage(ref, undefined, { [path]: content }, 'prepare'), root);
+  assert.equal(await transport.stage(ref, undefined, { [path]: content }, 'prepare'), root);
+  await assert.rejects(transport.stage(ref, undefined, { [path]: Buffer.from('conflict') }, 'prepare'), /Baseline content conflict/);
+  assert.equal(commitCount, 1);
 });

@@ -5,8 +5,11 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { activateRules, checkRules, readRemoteState, readRemoteStatus, rebuildRules, resumeRules, rollbackRules, updateRules } from '../../src/index.js';
 import { manageMaintenance } from '../../src/maintenance.js';
+import type { BaselineTransport } from '../../src/maintenance-baseline-transport.js';
+
 import { PublicationWriteError } from '../../src/publication-repository.js';
 import { STATE_PATH, type RemoteJournal } from '../../src/remote-state.js';
+import { sha256 } from '../../src/release.js';
 import { configuredEnvironment, upstream } from './configured-activation-fixture.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
@@ -726,3 +729,122 @@ test('使用不同构建配置重新请求中断的恢复时，旧请求不能�
   assert.equal(fresh.results[0].releaseId, 4);
   assert.ok(later.requests[0].endsWith('/latest'));
 }, 'main'));
+
+for (const branch of ['acceptance-issue-53', 'main']) {
+  test(`${branch} 新基线回读中断后可恢复，屏蔽旧地址后仍核验各集当前版本、pin 和处理进度`, { skip: !binary }, async () => isolated(async (env, directory) => {
+    const first = options(env, join(directory, 'initial'), upstream(1));
+    assert.equal((await checkRules(first)).exitCode, 0);
+    const openai = 'ai-openai', anthropic = 'ai-anthropic';
+    const before = await readRemoteStatus({ ...first, repository: env.repository });
+    const pin = await activateRules(env.options(openai, before.activeRuleVersions[openai].activation.candidateEvidenceUrl));
+    if (branch !== 'main') {
+      const legacy = upstream(4);
+      const input = JSON.stringify({ lists: [{ name: 'category-ai-!cn', length: 1, rules: ['domain:legacy.example'] }] });
+      const built = await updateRules({ binary: binary!, stateDirectory: join(directory, 'legacy'), publication: first.publication,
+        fetch: async (url, init) => String(url).endsWith('/assets/11') ? new Response(input)
+          : String(url).endsWith('/assets/12') ? new Response(`${sha256(input)}  dlc.dat_plain.yml\n`) : legacy.fetcher(url, init),
+      });
+      if (built.status !== 'processed' || !('candidate' in built)) throw new Error('Expected a legacy candidate');
+      const formats = {
+        source: { url: `https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/${branch}/stable/domains.json`, requiredCapabilities: [] },
+        binary: { url: `https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/${branch}/stable/domains.srs`, requiredCapabilities: [] },
+      };
+      await activateRules({ binary: binary!, stateDirectory: directory, expectedHead: env.head(), transport: env.transport,
+        candidateEvidenceUrl: built.candidate.evidenceUrl!, subscription: {
+          schemaVersion: 1, systemRuleSetId: 'v2fly:domain-list-community:category-ai-!cn', targetVersion: '1.14.4',
+          sourceFormatVersion: 4, projections: { route: { formats }, 'dns-query': { formats }, 'dns-response': { unavailable: 'empty' } },
+        },
+      });
+    }
+    const next = options(env, join(directory, 'second'), upstream(2, { anthropic: 'domain:new-anthropic.example' }));
+    next.configuration = next.configuration.replace('list: openai', 'list: openai-alt');
+    assert.notEqual(next.configuration, env.configuration);
+    assert.equal((await checkRules(next)).exitCode, 0);
+    const live = await readRemoteStatus({ ...next, repository: env.repository });
+
+    const stages = new Map<string, { head: string; parent?: string; files: Record<string, Buffer> }>();
+    const baseline: BaselineTransport = {
+      async stage(ref, parent, files) {
+        if (!stages.has(ref)) {
+          const previous = [...stages.values()].find(stage => stage.head === parent);
+          assert.equal(previous?.head, parent);
+          stages.set(ref, { head: (100 + stages.size).toString(16).padStart(40, 'b'), parent,
+            files: { ...previous?.files, ...files } });
+        }
+        return stages.get(ref)!.head;
+      },
+      async snapshot(ref) {
+        const { head, parent, files } = stages.get(ref)!;
+        return { head, parents: parent ? [parent] : [], paths: Object.keys(files), async read(path) { return files[path]; } };
+      },
+    };
+    let failReadback = true, blockOld = false;
+    const download = async (url: string) => {
+      const [, , , , , ref, ...parts] = url.split('/');
+      const path = parts.join('/');
+      const stage = [...stages.values()].find(value => value.head === ref);
+      if (!stage) {
+        if (blockOld) throw new Error('Old artifact address blocked');
+        return env.transport.download(url);
+      }
+      if (failReadback) throw new Error('New HTTPS address temporarily unavailable');
+      if (!stage.files[path]) throw new Error(`Readback HTTP 404: ${url}`);
+      return stage.files[path];
+    };
+    const maintenance = { ...next, repository: env.repository, baseline,
+      activation: { download }, publication: { ...next.publication, download }, refs: async () => [] };
+    const entered = await manageMaintenance({ ...maintenance, action: 'enter', manual: true });
+    assert.equal(entered.status, 'isolated', JSON.stringify(entered));
+    const pausedHead = env.head(), writes = env.writes();
+    const missingTool = await manageMaintenance({ ...maintenance, binary: undefined, action: 'prepare' });
+    assert.equal(missingTool.status, 'deferred');
+    assert.equal(stages.size, 0);
+    const interrupted = await manageMaintenance({ ...maintenance, action: 'prepare' });
+    assert.equal(interrupted.status, 'failed');
+    assert.equal(env.head(), pausedHead);
+    failReadback = false;
+    const prepared = await manageMaintenance({ ...maintenance, action: 'prepare' });
+    assert.equal(prepared.status, 'prepared', JSON.stringify(prepared));
+    assert.equal(prepared.run?.phase, 'prepared');
+    if (prepared.run?.phase !== 'prepared') throw new Error('Expected a verified baseline');
+    assert.equal(prepared.run.id, entered.run?.id);
+    assert.equal(env.writes(), writes);
+    assert.equal((await readRemoteStatus({ ...next, repository: env.repository })).activeRuleVersions[openai].activation.id, pin.activation.id);
+
+    const liveHead = env.head();
+    blockOld = true;
+    assert.equal((await manageMaintenance({ ...maintenance, action: 'resume' })).status, 'prepared');
+    assert.equal(env.head(), liveHead);
+    const { stable, journal } = prepared.run.baseline.stages;
+    assert.equal(stable.head === journal.head, branch !== 'main');
+    const newRepository = { ...env.repository, snapshot: (target = env.repository.branch) =>
+      baseline.snapshot(target === env.repository.branch ? journal.ref : stable.ref) };
+    const after = await readRemoteStatus({ ...maintenance, repository: newRepository });
+    assert.deepEqual(after.pendingOperations, []);
+    assert.deepEqual(after.state.latestChecks, live.state.latestChecks);
+    assert.deepEqual(after.state.pinned, live.state.pinned);
+    assert.deepEqual(after.activeRuleVersions[openai].control, live.activeRuleVersions[openai].control);
+    assert.equal(after.activeRuleVersions[openai].activation.id, pin.activation.id);
+    assert.equal(after.activeRuleVersions[anthropic].activation.source.releaseId, 2);
+    for (const id of env.ids) {
+      const original = live.activeRuleVersions[id].activation;
+      const active = after.activeRuleVersions[id].activation;
+      assert.deepEqual(active.source, original.source);
+      assert.deepEqual(active.validation, original.validation);
+      assert.deepEqual(active.subscription, original.subscription);
+      assert.deepEqual(active.files, original.files);
+      assert.deepEqual(after.rollbackTargets[id], []);
+    }
+    if (branch !== 'main') {
+      assert.equal(after.activeRuleVersion?.activation.id, live.activeRuleVersion?.activation.id);
+      assert.deepEqual(after.activeRuleVersion?.activation.files, live.activeRuleVersion?.activation.files);
+      assert.deepEqual(after.rollbackTargets['v2fly:category-ai-!cn'], []);
+    }
+    assert.equal(Object.keys(after.state.candidates).length, branch === 'main' ? 3 : 4);
+    const pinnedBuildPath = `candidates/${pin.activation.candidateId}/build.json`;
+    const oldBuild = await (await env.repository.snapshot()).read(pinnedBuildPath);
+    assert.deepEqual(await (await newRepository.snapshot()).read(pinnedBuildPath), oldBuild);
+    assert.equal(after.state.configuredProcessed?.[anthropic]['1'].evidenceUrl, undefined);
+    assert.equal(after.state.configuredProcessed?.[anthropic]['1'].candidateId, live.state.configuredProcessed?.[anthropic]['1'].candidateId);
+  }, branch));
+}

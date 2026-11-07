@@ -161,6 +161,7 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, 
         if (!candidate || candidate.phase !== 'complete') throw new Error('CANDIDATE_UNAVAILABLE: processed candidate is incomplete');
         await verify(candidate, definition);
       }
+      if (!existing.evidenceUrl) throw new Error('CANDIDATE_UNAVAILABLE: processed candidate has no retained address');
       results.push({ id: definition.id, status: 'skipped', candidateId: existing.candidateId, evidenceUrl: existing.evidenceUrl });
     }
     if (pending.length) {

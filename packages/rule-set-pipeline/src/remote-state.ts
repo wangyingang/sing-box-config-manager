@@ -6,6 +6,7 @@ import { immutableUrl, type PublicationTransport } from './publication.js';
 import type { PublicationRepository } from './publication-repository.js';
 import { PublicationWriteError } from './publication-repository.js';
 import type { UpdateState } from './update.js';
+import { validBaseline } from './maintenance-baseline-transport.js';
 import type { MaintenanceRun } from './maintenance.js';
 import { parseBuildConfiguration } from './configured-build.js';
 
@@ -103,7 +104,9 @@ function validate(value: unknown): asserts value is RemoteJournal {
   if (run !== undefined && (!object(run) || value.maintenance !== 'maintenance' || !operationId(run.id)
     || run.generation !== value.generation || !object(run.oldHeads) || !sha(run.oldHeads.journal) || !sha(run.oldHeads.stable)
     || (run.phase === 'isolated' ? run.isolatedHead !== undefined || run.plan !== undefined
-      : run.phase !== 'ready' || !sha(run.isolatedHead) || !validMaintenancePlan(run.plan)))) {
+      : !sha(run.isolatedHead) || !validMaintenancePlan(run.plan)
+        || (run.phase === 'prepared' ? !sha(run.readyHead) || !validBaseline(run.baseline, run.id, value.targetBranch !== 'main')
+          : run.phase !== 'ready' || run.baseline !== undefined || run.readyHead !== undefined)))) {
     throw new Error('REMOTE_STATE_CORRUPT: maintenance run');
   }
   if (value.lastCleanupAt !== undefined && (typeof value.lastCleanupAt !== 'string' || !Number.isFinite(Date.parse(value.lastCleanupAt)))) {
@@ -189,7 +192,7 @@ function validate(value: unknown): asserts value is RemoteJournal {
     for (const [releaseId, record] of Object.entries(records)) {
       if (!object(record) || typeof record.candidateId !== 'string' || !/^[a-f0-9-]+$/.test(record.candidateId)
         || !/^[0-9]{14}$/.test(record.tag) || !/^[1-9][0-9]*$/.test(releaseId)
-        || typeof record.evidenceUrl !== 'string'
+        || record.evidenceUrl !== undefined && typeof record.evidenceUrl !== 'string'
         || record.definitionSha256 !== undefined && !digest(record.definitionSha256)) throw new Error('REMOTE_STATE_CORRUPT: processed');
     }
   };

@@ -5,6 +5,7 @@ export interface PublicationSnapshot {
   head: string;
   /** Single parent, if present. */
   parent?: string;
+  parents?: string[];
   paths: string[];
   read(path: string): Promise<Buffer | undefined>;
 }
@@ -61,7 +62,11 @@ export function githubPublicationRepository(branch = PUBLICATION_BRANCH, request
         || !fullCommit(entry.sha) || entries.has(entry.path)) throw new Error('Invalid remote tree entry');
       entries.set(entry.path, entry);
     }
-    return { head, parent: parent.parents?.length === 1 && fullCommit(parent.parents[0]?.sha) ? parent.parents[0].sha as string : undefined, treeSha, entries, paths: [...entries.keys()],
+    if (parent.parents !== undefined && (!Array.isArray(parent.parents) || !parent.parents.every((entry: { sha?: string }) => fullCommit(entry?.sha)))) {
+      throw new Error('Invalid remote commit parents');
+    }
+    const parents: string[] | undefined = parent.parents?.map((entry: { sha: string }) => entry.sha);
+    return { head, parent: parents?.length === 1 ? parents[0] : undefined, parents, treeSha, entries, paths: [...entries.keys()],
       async read(path: string): Promise<Buffer | undefined> {
         const entry = entries.get(path);
         if (!entry) return undefined;
