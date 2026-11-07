@@ -546,3 +546,32 @@ test('恢复决定写入后断线，候选更新用原命令继续已暂存的 R
   assert.equal(resumed.results[0].releaseId, 3);
   assert.deepEqual(resumed.results[0].control, saved.activeRuleVersions['ai-openai'].control);
 }));
+
+test('普通批次不会把已恢复到新 Release 的兄弟集纳入较旧的恢复检查', { skip: !binary }, async () => isolated(async (env, directory) => {
+  const initial = options(env, directory, upstream(1));
+  await checkRules(initial);
+  const status = () => readRemoteStatus({ repository: env.repository, publication: initial.publication, activation: env.transport });
+  const before = await status();
+  for (const id of ['ai-openai', 'ai-anthropic']) {
+    await activateRules(env.options(id, before.activeRuleVersions[id].activation.candidateEvidenceUrl));
+  }
+  const earlier = options(env, join(directory, 'earlier'), upstream(2, {
+    openai: 'domain:openai-earlier.example', anthropic: 'domain:anthropic-earlier.example',
+  }));
+  const interrupted = await resumeRules({ ...earlier, logicalId: 'ai-openai', publication: {
+    ...earlier.publication, repository: loseCheckpoint(env, journal => journal.state.pendingOperation?.releaseId === 2),
+  } });
+  assert.equal(interrupted.exitCode, 1);
+  const latest = options(env, join(directory, 'latest'), upstream(3, { anthropic: 'domain:anthropic-latest.example' }));
+  const sibling = await resumeRules({ ...latest, logicalId: 'ai-anthropic' });
+  assert.equal(sibling.exitCode, 0, JSON.stringify(sibling));
+  assert.equal(sibling.results[0].status, 'activated');
+
+  await assert.rejects(checkRules({ ...earlier, stateDirectory: join(directory, 'batch') }), /RECOVERY_REQUEST_MISMATCH/);
+  const resumed = await resumeRules({ ...earlier, stateDirectory: join(directory, 'fresh'), logicalId: 'ai-openai' });
+  assert.equal(resumed.exitCode, 0, JSON.stringify(resumed));
+  assert.equal(resumed.results[0].releaseId, 2);
+  const after = await status();
+  assert.equal(after.activeRuleVersions['ai-anthropic'].activation.source.releaseId, 3);
+  assert.equal(after.activeRuleVersions['ai-anthropic'].activation.id, sibling.results[0].current?.id);
+}));

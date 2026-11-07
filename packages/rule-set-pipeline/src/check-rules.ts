@@ -187,13 +187,15 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
       && entry.selectedIds?.some(id => id !== exceptId && selectedIds.includes(id)
         && entry.controlRevisions?.[id] === (controlFor(id)?.revision ?? null)));
     const requestMismatch = 'RECOVERY_REQUEST_MISMATCH: resume the registered operation with its original configuration, subscriptions and selection';
+    const hasNewerSiblingSource = (id: string, tag: string) => selectedIds.some(sibling => sibling !== id
+      && [activeById.get(sibling)?.source?.tag, state.latestChecks?.[sibling]?.tag].some(observed => observed && observed > tag));
     const canExtendResumeCheck = (entry: RemoteOperation) => {
       const id = entry.selectedIds?.[0];
       return sameConfiguration(entry) && entry.selectedIds?.length === 1 && id && selectedIds.includes(id)
         && entry.subscriptionHashes?.[id] === subscriptionHashes[id]
         && Object.hasOwn(journal.resumes ?? {}, id)
         && entry.controlRevisions?.[id] === journal.resumes![id].revision
-        && !hasParkedCheck(id);
+        && !hasParkedCheck(id) && !hasNewerSiblingSource(id, entry.tag);
     };
     let extendResumeCheck = false;
     if (!resumeId) {
