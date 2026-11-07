@@ -3,7 +3,7 @@ import type { ActivationTransport } from './activation-transport.js';
 import type { PublicationRepository, PublicationSnapshot } from './publication-repository.js';
 import { immutableUrl } from './publication.js';
 import { sha256 } from './release.js';
-import { commitRemoteState, guardRemoteState, readRemoteState, type ManualOperation, type RemoteJournal } from './remote-state.js';
+import { commitRemoteState, guardRemoteState, readRemoteState, type ActivationOperation, type ManualOperation, type RemoteJournal } from './remote-state.js';
 
 export function manualControl(operation: Pick<ManualOperation, 'id' | 'kind'>) {
   return {
@@ -28,7 +28,7 @@ export interface ManualWriteReservation {
 export async function authorizeManualWrite(repository: PublicationRepository, branch: string, expectedHead: string,
   files: Record<string, Buffer>, reservation: ManualWriteReservation) {
   const { snapshot, journal } = await readRemoteState(repository);
-  const operation = journal.manualOperations?.[reservation.operationId];
+  const operation = journal.manualOperations?.[reservation.operationId] ?? journal.automaticOperations?.[reservation.operationId];
   if (snapshot.head !== reservation.journalHead || journal.targetBranch !== branch || journal.maintenance !== 'open'
     || !operation || operation.notCommitted || operation.generation !== journal.generation
     || expectedHead !== (repository.branch === branch ? snapshot.head : operation.expectedHead)) {
@@ -40,9 +40,9 @@ export async function authorizeManualWrite(repository: PublicationRepository, br
   const ruleFiles = Object.keys(files).filter(path => path !== operation.recordPath);
   if (record?.schemaVersion !== 1 || record.id !== operation.id || record.logicalId !== operation.logicalId || record.expectedHead !== expectedHead
     || record.candidateId !== operation.candidateId || record.candidateEvidenceUrl !== operation.candidateEvidenceUrl
-    || record.operation !== (operation.kind === 'rollback' ? 'rollback' : undefined)
+    || record.operation !== (operation.kind === 'activate' ? undefined : operation.kind)
     || record.historicalActivationCommit !== operation.historicalActivationCommit
-    || !isDeepStrictEqual(record.control, manualControl(operation)) || manualActivationDigest(record) !== operation.activationDigest
+    || !isDeepStrictEqual(record.control, operation.kind === 'automatic' ? undefined : manualControl({ id: operation.id, kind: operation.kind })) || manualActivationDigest(record) !== operation.activationDigest
     || !ruleFiles.length || !isDeepStrictEqual(Object.keys(record.files ?? {}).sort(), ruleFiles.sort())
     || ruleFiles.some(path => {
       const expected = record.files[path];
@@ -104,18 +104,17 @@ export interface ObservedActivation {
   history?: { id: string; commit: string }[];
 }
 
-export interface ManualOperationResult extends ManualOperation {
+export interface ActivationOperationResult extends ActivationOperation {
   status: 'committed' | 'not-committed' | 'pending' | 'superseded';
   commit?: string;
   containingCommit?: string;
   error?: string;
 }
 
-export async function readManualOperationResults(repository: PublicationRepository, journal: RemoteJournal,
+export async function readActivationOperationResults(repository: PublicationRepository, journal: RemoteJournal,
   stable: PublicationSnapshot, currentByPath: ReadonlyMap<string, ObservedActivation>,
-  download: ActivationTransport['download']) {
-  const operations = Object.values(journal.manualOperations ?? {});
-  return Promise.all(operations.map(async (operation): Promise<ManualOperationResult> => {
+  download: ActivationTransport['download'], operations: ActivationOperation[]) {
+  return Promise.all(operations.map(async (operation): Promise<ActivationOperationResult> => {
     const current = currentByPath.get(operation.recordPath);
     if (current?.id === operation.id) {
       let commit: string | undefined;

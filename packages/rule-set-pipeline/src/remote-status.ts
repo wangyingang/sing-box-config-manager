@@ -9,7 +9,7 @@ import { parseBuildConfiguration, type RuleDefinition } from './configured-build
 import type { PublicationRepository } from './publication-repository.js';
 import { ARTIFACT_REPOSITORY, githubPublication, immutableUrl, type PublicationTransport } from './publication.js';
 import { readRemoteState } from './remote-state.js';
-import { manualControl, readManualOperationResults, type ObservedActivation } from './manual-activation.js';
+import { manualControl, readActivationOperationResults, type ObservedActivation } from './manual-activation.js';
 import { sha256 } from './release.js';
 
 const ajv = new Ajv({ strict: true });
@@ -31,7 +31,7 @@ interface UnavailableTarget extends HistoryTarget { reason: string }
 interface ActiveVersion { status: 'activated'; commit: string; activation: Record<string, any>; candidate: CandidateAvailability }
 interface PendingOperation { id: string; candidateId?: string; logicalId?: string; phase?: string; status: string; error?: string }
 
-function activationRecord(value: unknown, path: string, targetBranch: string) {
+export function activationRecord(value: unknown, path: string, targetBranch: string) {
   requireThat(object(value) && value.schemaVersion === 1 && typeof value.id === 'string' && value.id.length
     && typeof value.candidateId === 'string' && /^[a-f0-9-]+$/.test(value.candidateId)
     && typeof value.candidateEvidenceUrl === 'string' && object(value.files), 'Invalid remote activation record');
@@ -84,7 +84,7 @@ function activationRecord(value: unknown, path: string, targetBranch: string) {
   return { record: value as Record<string, any> & ObservedActivation, history };
 }
 
-async function verifyStableFiles(record: Record<string, any>, read: (path: string) => Promise<Buffer | undefined>) {
+export async function verifyStableFiles(record: Record<string, any>, read: (path: string) => Promise<Buffer | undefined>) {
   for (const [path, metadata] of Object.entries(record.files) as [string, { sha256: string; byteLength: number }][]) {
     const bytes = await read(path);
     requireThat(bytes && bytes.length === metadata.byteLength && sha256(bytes) === metadata.sha256, `Stable file integrity mismatch: ${path}`);
@@ -250,14 +250,17 @@ export async function readRemoteStatus(options: {
   }
   const operation = journal.state.pendingOperation;
   if (operation?.status === 'pending') pendingOperations.unshift({ id: operation.id, status: 'pending' });
-  const manualOperations = await readManualOperationResults(options.repository, journal, stable, currentByPath, url => activation.download(url));
-  for (const operation of manualOperations) {
+  const operations = await readActivationOperationResults(options.repository, journal, stable, currentByPath,
+    url => activation.download(url), [...Object.values(journal.manualOperations ?? {}), ...Object.values(journal.automaticOperations ?? {})]);
+  const manualOperations = operations.filter(operation => operation.kind !== 'automatic');
+  const automaticOperations = operations.filter(operation => operation.kind === 'automatic');
+  for (const operation of operations) {
     if (operation.status === 'pending') pendingOperations.push({ id: operation.id, logicalId: operation.logicalId,
-      candidateId: operation.candidateId, status: (operation.commit || operation.containingCommit) ? 'activated-readback-pending' : 'manual-commit-pending',
+      candidateId: operation.candidateId, status: (operation.commit || operation.containingCommit) ? 'activated-readback-pending' : operation.kind === 'automatic' ? 'automatic-commit-pending' : 'manual-commit-pending',
       ...(operation.error ? { error: operation.error } : {}) });
   }
   return { authority: 'remote' as const, head: snapshot.head, stableHead: stable.head, generation: journal.generation,
     maintenance: journal.maintenance, state: journal.state, activeRuleVersion,
-    activeRuleVersions, rollbackTargets, unavailableRollbackTargets, candidateAvailability, manualOperations, pendingOperations,
+    activeRuleVersions, rollbackTargets, unavailableRollbackTargets, candidateAvailability, manualOperations, automaticOperations, pendingOperations,
     historyComplete, historyErrors };
 }

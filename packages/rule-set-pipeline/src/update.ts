@@ -11,6 +11,7 @@ import { processConfiguredUpdate, type ConfiguredRebuildOptions, type Configured
 import { publishCandidate } from './candidate-publication.js';
 import type { RuleDefinition } from './configured-build.js';
 import { openRemoteSession } from './remote-state.js';
+import type { CheckRecord } from './check-rules.js';
 import { verifyRetainedCandidate } from './candidate-recovery.js';
 
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
@@ -31,8 +32,9 @@ export interface UpdateState {
   processed: Record<string, { candidateId: string; tag: string; evidenceUrl: string }>;
   configuredProcessed?: Record<string, Record<string, { candidateId: string; tag: string; evidenceUrl: string; definitionSha256: string }>>;
   candidates: Record<string, Candidate>;
-  pendingOperation?: { id: string; kind: 'update' | 'rebuild'; generation: number; releaseId: number; tag: string;
-    status: 'pending' | 'complete'; expectedHead: string; candidateIds: string[]; configuration?: string; selectedIds?: string[] };
+  latestChecks?: Record<string, CheckRecord>;
+  pendingOperation?: { id: string; kind: 'update' | 'rebuild' | 'check'; generation: number; releaseId: number; tag: string;
+    status: 'pending' | 'complete'; expectedHead: string; candidateIds: string[]; configuration?: string; selectedIds?: string[]; controlRevisions?: Record<string, string | null>; subscriptionHashes?: Record<string, string> };
 }
 async function readJson(path: string): Promise<any> {
   try { return JSON.parse(await readFile(path, 'utf8')); }

@@ -15,11 +15,16 @@ export interface RemoteJournal {
   schemaVersion: 1; id: string; generation: number; maintenance: 'open' | 'maintenance'; targetBranch: string;
   state: UpdateState;
   manualOperations?: Record<string, ManualOperation>;
+  automaticOperations?: Record<string, ActivationOperation>;
 }
 
-export interface ManualOperation {
-  id: string;
+export interface ManualOperation extends ActivationOperation {
   kind: 'activate' | 'rollback';
+}
+
+export interface ActivationOperation {
+  id: string;
+  kind: 'activate' | 'rollback' | 'automatic';
   logicalId: string;
   recordPath: string;
   generation: number;
@@ -30,9 +35,11 @@ export interface ManualOperation {
   activationDigest: string;
   historicalActivationCommit?: string;
   notCommitted?: true;
+  checkOperationId?: string;
 }
 const object = (value: unknown): value is Record<string, any> => !!value && typeof value === 'object' && !Array.isArray(value);
 const sha = (value: unknown) => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
+const operationId = (value: unknown) => typeof value === 'string' && /^[a-f0-9-]{36}$/.test(value);
 const branch = (value: unknown) => typeof value === 'string' && (value === 'main' || /^acceptance-[a-zA-Z0-9._-]+$/.test(value));
 const digest = (value: unknown) => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 
@@ -65,10 +72,11 @@ function validate(value: unknown): asserts value is RemoteJournal {
   if (!object(value) || value.schemaVersion !== 1 || typeof value.id !== 'string' || !value.id
     || !Number.isSafeInteger(value.generation) || value.generation < 1 || !['open', 'maintenance'].includes(value.maintenance)
     || !branch(value.targetBranch) || !object(value.state)) throw new Error('REMOTE_STATE_CORRUPT');
-  if (value.manualOperations !== undefined) {
-    if (!object(value.manualOperations)) throw new Error('REMOTE_STATE_CORRUPT: manual operations');
-    for (const [id, op] of Object.entries(value.manualOperations)) {
-      if (!object(op) || !/^[a-f0-9-]{36}$/.test(id) || op.id !== id || !['activate', 'rollback'].includes(op.kind)
+  for (const [operations, kinds] of [[value.manualOperations, ['activate', 'rollback']], [value.automaticOperations, ['automatic']]] as const) {
+    if (operations === undefined) continue;
+    if (!object(operations)) throw new Error('REMOTE_STATE_CORRUPT: activation operations');
+    for (const [id, op] of Object.entries(operations)) {
+      if (!object(op) || !/^[a-f0-9-]{36}$/.test(id) || op.id !== id || !kinds.some(kind => kind === op.kind)
         || typeof op.logicalId !== 'string' || !/^[a-z][a-z0-9-]*$/.test(op.logicalId)
         || typeof op.recordPath !== 'string' || !/^stable\/(?:[a-z0-9][a-z0-9._-]*\/)+activation\.json$/.test(op.recordPath)
         || !Number.isSafeInteger(op.generation) || op.generation < 1 || op.generation > value.generation
@@ -78,7 +86,8 @@ function validate(value: unknown): asserts value is RemoteJournal {
         || !sha(op.candidateEvidenceUrl.split('/')[5])
         || op.candidateEvidenceUrl !== immutableUrl(op.candidateEvidenceUrl.split('/')[5], `candidates/${op.candidateId}/readback.json`)
         || (op.kind === 'rollback' ? !sha(op.historicalActivationCommit) : op.historicalActivationCommit !== undefined)
-        || op.notCommitted !== undefined && op.notCommitted !== true) throw new Error('REMOTE_STATE_CORRUPT: manual operation');
+        || (op.kind === 'automatic' ? !operationId(op.checkOperationId) : op.checkOperationId !== undefined)
+        || op.notCommitted !== undefined && op.notCommitted !== true) throw new Error('REMOTE_STATE_CORRUPT: activation operation');
     }
   }
   const state = value.state;
@@ -131,9 +140,23 @@ function validate(value: unknown): asserts value is RemoteJournal {
   };
   processed(state.processed);
   for (const records of Object.values(state.configuredProcessed ?? {})) processed(records);
+  if (state.latestChecks !== undefined) {
+    if (!object(state.latestChecks)) throw new Error('REMOTE_STATE_CORRUPT: latest checks');
+    for (const [id, check] of Object.entries(state.latestChecks)) {
+      if (!/^[a-z][a-z0-9-]*$/.test(id) || !object(check) || typeof check.operationId !== 'string'
+        || !/^[a-f0-9-]{36}$/.test(check.operationId) || !['activated', 'unchanged', 'paused', 'failed', 'verification-pending'].includes(check.status)
+        || typeof check.checkedAt !== 'string' || !Number.isFinite(Date.parse(check.checkedAt))
+        || (check.releaseId === undefined ? check.tag !== undefined : !Number.isSafeInteger(check.releaseId)
+          || state.pinned[String(check.releaseId)]?.identity?.tag !== check.tag || typeof check.tag !== 'string')
+        || check.error !== undefined && typeof check.error !== 'string'
+        || check.candidateId !== undefined && (typeof check.candidateId !== 'string' || !/^[a-f0-9-]+$/.test(check.candidateId))) {
+        throw new Error('REMOTE_STATE_CORRUPT: latest check');
+      }
+    }
+  }
   if (state.pendingOperation !== undefined) {
     const op = state.pendingOperation;
-    if (!object(op) || typeof op.id !== 'string' || !/^[a-f0-9-]+$/.test(op.id) || !['update', 'rebuild'].includes(op.kind)
+    if (!object(op) || typeof op.id !== 'string' || !/^[a-f0-9-]+$/.test(op.id) || !['update', 'rebuild', 'check'].includes(op.kind)
       || op.generation !== value.generation || !Number.isSafeInteger(op.releaseId) || !/^[0-9]{14}$/.test(op.tag)
       || !sha(op.expectedHead) || !Array.isArray(op.candidateIds) || new Set(op.candidateIds).size !== op.candidateIds.length
       || !state.pinned[String(op.releaseId)] || op.tag !== state.pinned[String(op.releaseId)].identity.tag
@@ -146,10 +169,18 @@ function validate(value: unknown): asserts value is RemoteJournal {
         || op.selectedIds.some((id: unknown) => !configuration.ruleSets.some(rule => rule.id === id)))) throw new Error('REMOTE_STATE_CORRUPT: operation selection');
     } else if (op.selectedIds !== undefined) throw new Error('REMOTE_STATE_CORRUPT: operation selection');
     const configuration = op.configuration === undefined ? undefined : parseBuildConfiguration(op.configuration);
+    if (op.kind === 'check') {
+      if (!configuration || !op.selectedIds || !object(op.controlRevisions) || !object(op.subscriptionHashes)
+        || Object.keys(op.controlRevisions).length !== op.selectedIds.length || Object.keys(op.subscriptionHashes).length !== op.selectedIds.length
+        || op.selectedIds.some((id: string) => !(op.controlRevisions[id] === null || typeof op.controlRevisions[id] === 'string')
+          || !digest(op.subscriptionHashes[id]))) throw new Error('REMOTE_STATE_CORRUPT: check operation');
+    } else if (op.controlRevisions !== undefined || op.subscriptionHashes !== undefined) {
+      throw new Error('REMOTE_STATE_CORRUPT: unexpected check operation fields');
+    }
     for (const id of op.candidateIds) {
       const candidate = state.candidates[id];
       const definition = configuration?.ruleSets.find(rule => rule.id === candidate?.logicalId);
-      if (typeof id !== 'string' || !object(candidate) || candidate.operationId !== op.id || candidate.operation !== op.kind
+      if (typeof id !== 'string' || !object(candidate) || candidate.operationId !== op.id || candidate.operation !== (op.kind === 'check' ? 'update' : op.kind)
         || candidate.releaseId !== op.releaseId || candidate.tag !== op.tag
         || (configuration ? !definition || op.selectedIds && !op.selectedIds.includes(definition.id)
           || !isDeepStrictEqual(candidate.definition, definition) : candidate.logicalId !== undefined || candidate.definition !== undefined)) {
@@ -203,7 +234,7 @@ export function commitRemoteState(repository: PublicationRepository, expectedHea
 }
 
 /** The captured head and generation are never refreshed to make an old write succeed. */
-export async function openRemoteSession(publication: PublicationTransport, directory: string, targetBranch: string) {
+export async function openRemoteSession(publication: PublicationTransport, directory: string, targetBranch: string, beforeWrite?: () => Promise<void>) {
   const repository = publication.repository!;
   const restored = await readRemoteState(repository);
   const { journal } = restored;
@@ -237,7 +268,10 @@ export async function openRemoteSession(publication: PublicationTransport, direc
     validate(journal);
     const next = encode(journal);
     try {
-      try { await guardRemoteState(repository, expected, journal); }
+      try {
+        await beforeWrite?.();
+        await guardRemoteState(repository, expected, journal);
+      }
       catch (error) {
         if (error instanceof Error && error.message.startsWith('PUBLICATION_CONFLICT')) stopped = true;
         throw error;
@@ -266,7 +300,13 @@ export async function openRemoteSession(publication: PublicationTransport, direc
       throw error;
     }
   };
-  return { state: journal.state, generation: journal.generation, snapshot: restored.snapshot,
+  return { journal, state: journal.state, get head() { return expectedHead; },
+    acceptStableCommit(parent: string, commit: string) {
+      if (repository.branch !== targetBranch) return;
+      if (expectedHead !== parent) throw new Error('PUBLICATION_CONFLICT: unexpected activation parent');
+      expectedHead = commit;
+    },
+    generation: journal.generation, snapshot: restored.snapshot,
     get cacheWarning() { return cacheWarning; },
     save: () => write({}, '保存候选操作进度').then(() => undefined),
     publication: { ...publication, async commit(files: Record<string, Buffer>, message: string) {

@@ -13,7 +13,14 @@ import { initializeRemoteState } from './remote-state.js';
 import { readRemoteStatus } from './remote-status.js';
 import { sha256 } from './release.js';
 import { buildRelease, buildNative, decodedTerms, NativeBuildError, type SourceRecord } from './index.js';
+import { checkRules } from './check-rules.js';
 import { buildConfiguredRelease, parseBuildConfiguration } from './configured-build.js';
+
+async function sourceToken() {
+  if (process.env.GITHUB_TOKEN) return process.env.GITHUB_TOKEN;
+  try { return (await promisify(execFile)('gh', ['auth', 'token'])).stdout.trim(); }
+  catch { return undefined; } // The source API can also serve anonymous reads.
+}
 
 async function main(): Promise<number> {
   const { values, positionals } = parseArgs({
@@ -21,8 +28,23 @@ async function main(): Promise<number> {
     options: { state: { type: 'string' }, release: { type: 'string' }, out: { type: 'string' }, config: { type: 'string' }, id: { type: 'string', multiple: true }, 'expected-source': { type: 'string' }, binary: { type: 'string' }, candidate: { type: 'string' }, activation: { type: 'string' }, subscription: { type: 'string' }, 'expected-head': { type: 'string' }, branch: { type: 'string' }, help: { type: 'boolean' } },
   });
   if (values.help) {
-    console.log('Usage: build --release <fixed-tag> --out <new-directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...]] [--expected-source <source.json>] | update --state <directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...] [--release <pinned-tag>]] | initialize/status [--config <yaml> | --branch <target>] | rebuild/activate/rollback (see package README)');
+    console.log('Usage: build --release <fixed-tag> --out <new-directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...]] [--expected-source <source.json>] | update --state <directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...] [--release <pinned-tag>]] | check-now --state <directory> --binary <absolute-1.14.4-path> --config <versioned-yaml> --subscription <v2-contract-map.json> [--id <logical-id> ...] | initialize/status [--config <yaml> | --branch <target>] | rebuild/activate/rollback (see package README)');
     return 0;
+  }
+  if (positionals.length === 1 && positionals[0] === 'check-now') {
+    if (!values.config || !values.subscription || !values.state || !values.binary || values.out || values.release
+      || values['expected-source'] || values.activation || values.candidate || values['expected-head'] || values.branch) {
+      throw new Error('check-now requires --config, --subscription, --state and --binary');
+    }
+    const configuration = await readFile(values.config, 'utf8');
+    const subscriptions = JSON.parse(await readFile(values.subscription, 'utf8'));
+    if (!subscriptions || typeof subscriptions !== 'object' || Array.isArray(subscriptions)) {
+      throw new Error('check-now requires a JSON object of v2 Rule Subscriptions keyed by logical ID');
+    }
+    const result = await checkRules({ configuration, subscriptions, selectedIds: values.id,
+      stateDirectory: resolve(values.state), binary: values.binary, token: await sourceToken() });
+    console.log(JSON.stringify(result));
+    return result.exitCode;
   }
   if (positionals.length === 1 && ['activate', 'rollback'].includes(positionals[0])) {
     const rollback = positionals[0] === 'rollback';
@@ -62,11 +84,7 @@ async function main(): Promise<number> {
       throw new Error('update/status requires --state; rebuild requires --state, --release <fixed-tag> and --binary');
     }
     {
-      let token = process.env.GITHUB_TOKEN;
-      if (!token) {
-        try { token = (await promisify(execFile)('gh', ['auth', 'token'])).stdout.trim(); } catch { /* public API may work without auth */ }
-      }
-      const options = { stateDirectory: resolve(values.state), binary: values.binary ?? '', token };
+      const options = { stateDirectory: resolve(values.state), binary: values.binary ?? '', token: await sourceToken() };
       const result = rebuild ? values.config
         ? await rebuildRules({ ...options, release: values.release!, configuration: await readFile(values.config, 'utf8'), selectedIds: values.id! })
         : await rebuildRules({ ...options, release: values.release! }) : values.config

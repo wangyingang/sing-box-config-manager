@@ -191,7 +191,7 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, 
         try {
           if (candidate.buildId && candidate.buildId !== result.buildId) throw new Error('RECOVERY_BUILD_CHANGED: original tool and build identity required');
           candidate.buildId = result.buildId;
-          const readback = await publish(result, candidate, built.source, built.tools, configuration.target, publication, options.binary, save);
+          const readback = await publishConfiguredCandidate(result, candidate, built.source, built.tools, configuration.target, publication, options.binary, save);
           candidate.status = 'verified'; delete candidate.error;
           if (session) candidate.phase = 'complete';
           if (!rebuildTag) {
@@ -222,7 +222,7 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, 
   } finally { await rm(lock, { recursive: true, force: true }); }
 }
 
-async function publish(result: Extract<Awaited<ReturnType<typeof buildConfiguredRelease>>['results'][number], { status: 'built-validated' }>,
+export async function publishConfiguredCandidate(result: Extract<Awaited<ReturnType<typeof buildConfiguredRelease>>['results'][number], { status: 'built-validated' }>,
   candidate: Candidate, source: SourceRecord, tools: Record<string, string | number>, target: { repository: string; branch: string },
   publication: PublicationTransport, binary: string, save: () => Promise<void>) {
   const prefix = `candidates/${candidate.id}`;

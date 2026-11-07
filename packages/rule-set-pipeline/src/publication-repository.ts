@@ -113,7 +113,7 @@ export function githubPublicationRepository(branch = PUBLICATION_BRANCH, request
           const next: RemoteJournal = JSON.parse(files['pipeline/state.json'].toString());
           if (journal.targetBranch === 'main' && (next.maintenance !== journal.maintenance
             || next.generation !== journal.generation || next.id !== journal.id)) {
-            const active = Object.values(journal.manualOperations ?? {}).filter(operation =>
+            const active = [...Object.values(journal.manualOperations ?? {}), ...Object.values(journal.automaticOperations ?? {})].filter(operation =>
               !operation.notCommitted && operation.generation === journal.generation);
             if (active.length) {
               const stable = await snapshot('main');

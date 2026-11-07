@@ -11,7 +11,8 @@ import { decodedTerms, USAGES } from './projection.js';
 import { sha256 } from './release.js';
 import { ARTIFACT_REPOSITORY, immutableUrl } from './publication.js';
 import { retainedCandidateDownload } from './publication-repository.js';
-import { manualActivationDigest, manualControl, openManualActivation, registerManualActivation } from './manual-activation.js';
+import { manualActivationDigest, manualControl, openManualActivation, registerManualActivation, type ManualWriteReservation, type ObservedActivation } from './manual-activation.js';
+import type { ActivationOperation } from './remote-state.js';
 import { ActivationWriteError, githubActivation, type ActivationTransport } from './activation-transport.js';
 
 const ajv = new Ajv({ strict: true });
@@ -143,6 +144,7 @@ export async function verifyActivationCandidate(options: Pick<ActivationOptions,
     requireThat(Array.isArray(ids) && ids.length === 2 && new Set(ids).size === 2 && manifest.artifacts.every((entry: any) => ids.includes(entry.id)), 'Projection mapping mismatch');
   }
   return { candidateId: location.id, evidenceUrl: options.candidateEvidenceUrl, manifest, source, bytesByFormat,
+    build: { definition: build.definition, tools: build.tools, tool: build.tool },
     validation: { tool: native.tool, buildId: build.buildId, nativeBuildId: native.buildId } };
 }
 
@@ -169,12 +171,9 @@ export async function activateRules(options: ActivationOptions) {
   return performActivation(options);
 }
 
-async function performActivation(options: ActivationOptions | RollbackOptions) {
-  const transport = options.transport ?? githubActivation();
-  requireThat(/^[a-f0-9]{40}$/.test(options.expectedHead), 'Expected full old remote head is required');
-  const { configured, definition, recordPath } = activationContext(options, transport);
-  requireThat((configured ? validateSubscriptionV2 : validateSubscription)(options.subscription) as boolean, 'Invalid Rule Subscription');
-  const subscription = options.subscription as any;
+export function activationSubscription(input: unknown, branch: string, definition?: RuleDefinition) {
+  requireThat((definition ? validateSubscriptionV2 : validateSubscription)(input) as boolean, 'Invalid Rule Subscription');
+  const subscription = input as any;
   requireThat(subscription.systemRuleSetId === (definition?.id ?? 'v2fly:domain-list-community:category-ai-!cn'), 'System rule set identity mismatch');
   if (definition) {
     requireThat(subscription.projections['dns-response'].unavailable === 'empty', 'Subscription usage availability mismatch');
@@ -182,12 +181,34 @@ async function performActivation(options: ActivationOptions | RollbackOptions) {
     requireThat(expectedFormats && equal(expectedFormats, subscription.projections['dns-query'].formats), 'Subscription file reuse mismatch');
     for (const [format, endpoint] of Object.entries(expectedFormats) as [string, any][]) {
       const file = format === 'binary' ? 'domains.srs' : 'domains.json';
-      requireThat(endpoint.url === `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${transport.branch}/${definition.stablePath}/${file}`
+      requireThat(endpoint.url === `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${branch}/${definition.stablePath}/${file}`
         && equal(endpoint.requiredCapabilities, []), 'Subscription stable path or capability mismatch');
     }
   }
+  return subscription;
+}
+
+interface AutomaticActivation {
+  journalHead: string;
+  register(operation: ActivationOperation): Promise<{
+    expectedHead: string; write: ManualWriteReservation; markNotCommitted(): Promise<void>;
+  }>;
+  applied(parent: string, commit: string, activation: ObservedActivation & Record<string, unknown>): void;
+}
+
+export function activateAutomatically(options: ActivationOptions, coordination: AutomaticActivation) {
+  return performActivation(options, coordination);
+}
+
+async function performActivation(options: ActivationOptions | RollbackOptions, automatic?: AutomaticActivation) {
+  const transport = options.transport ?? githubActivation();
+  requireThat(/^[a-f0-9]{40}$/.test(options.expectedHead), 'Expected full old remote head is required');
+  const { configured, definition, recordPath } = activationContext(options, transport);
+  requireThat(!automatic || definition, 'Automatic activation requires a configured rule set');
+  const subscription = activationSubscription(options.subscription, transport.branch, definition);
   requireThat(await transport.head() === options.expectedHead, 'ACTIVATION_CONFLICT: remote head changed');
   const session = definition ? await openManualActivation(transport, options.expectedHead) : undefined;
+  requireThat(!automatic || session?.snapshot.head === automatic.journalHead, 'PUBLICATION_CONFLICT: coordination head changed');
   let historical: { commit: string; record: any } | undefined;
   let candidateEvidenceUrl: string;
   if ('historicalActivationCommit' in options) {
@@ -258,6 +279,7 @@ async function performActivation(options: ActivationOptions | RollbackOptions) {
     previous = JSON.parse(previousBytes.toString());
     requireThat(previous.schemaVersion === 1 && typeof previous.id === 'string' && typeof previous.candidateId === 'string'
       && previous.files && (!definition || (previous.logicalId === definition.id && Array.isArray(previous.history))), 'Invalid previous activation record');
+    requireThat(!automatic || !previous.control?.pauseAutomaticActivation, 'Automatic activation is paused');
     requireThat(equal(previous.subscription, subscription), 'Existing subscription contract cannot change during activation');
     requireThat(equal(Object.keys(previous.files).sort(), Object.keys(files).sort()), 'Previous stable file set mismatch');
     for (const [path, metadata] of Object.entries(previous.files) as [string, any][]) {
@@ -266,26 +288,30 @@ async function performActivation(options: ActivationOptions | RollbackOptions) {
     }
   }
   let previousCommit = options.expectedHead;
-  if (session && previous?.control && session.repository.lastChange) {
+  if (session && previous && (previous.control || previous.operation === 'automatic') && session.repository.lastChange) {
     previousCommit = await session.repository.lastChange(options.expectedHead, recordPath);
   }
   const id = randomUUID();
   const kind = historical ? 'rollback' as const : 'activate' as const;
+  const control = !automatic && session ? manualControl({ id, kind }) : undefined;
   const activation = { schemaVersion: 1, id,
-    ...(session ? { control: manualControl({ id, kind }) } : {}),
+    ...control && { control },
+    ...(automatic ? { operation: 'automatic' as const } : {}),
     ...(definition ? { logicalId: definition.id, history: previous ? [...previous.history,
       { commit: previousCommit, id: previous.id, candidateId: previous.candidateId }] : [] } : {}),
     ...(historical ? { operation: 'rollback' as const, historicalActivationCommit: historical.commit, historicalActivationId: historical.record.id } : {}), candidateId: candidate.candidateId,
     candidateEvidenceUrl: candidate.evidenceUrl, source: candidate.source, validation: candidate.validation,
     expectedHead: options.expectedHead, subscription,
     files: Object.fromEntries(Object.entries(files).map(([path, bytes]) => [path, { sha256: sha256(bytes), byteLength: bytes.length }])) };
-  const reservation = session && definition ? await registerManualActivation(session, {
+  const operation = session && definition ? {
     id, kind, logicalId: definition.id, recordPath, generation: session.journal.generation,
     expectedHead: options.expectedHead, ...(previous ? { previousActivationId: previous.id } : {}),
     candidateId: candidate.candidateId, candidateEvidenceUrl: candidate.evidenceUrl,
     activationDigest: manualActivationDigest(activation),
     ...(historical ? { historicalActivationCommit: historical.commit } : {}),
-  }) : undefined;
+  } : undefined;
+  const reservation = operation && (automatic ? await automatic.register({ ...operation, kind: 'automatic' })
+    : await registerManualActivation(session!, operation));
   const expectedHead = reservation?.expectedHead ?? options.expectedHead;
   activation.expectedHead = expectedHead;
   files[recordPath] = encode(activation);
@@ -321,6 +347,7 @@ async function performActivation(options: ActivationOptions | RollbackOptions) {
       } catch { throw new Error(`ACTIVATION_CONFLICT_OR_SUPERSEDED: remote ${head}, attempted ${error.attemptedCommit} (operation ${id})`, { cause: error }); }
     }
   }
+  automatic?.applied(expectedHead, commit, activation);
   // Confirm committed bytes via immutable HTTPS; branch CDN caches may still lag.
   try {
     for (const [path, bytes] of Object.entries(files)) {

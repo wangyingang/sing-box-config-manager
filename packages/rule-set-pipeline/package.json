@@ -13,6 +13,7 @@
     "test:integration": "pnpm --filter @sing-box-config-manager/config-compiler generate:validator && node --import tsx --test test/integration/*.test.ts",
     "rebuild": "node --import tsx src/cli.ts rebuild",
     "test:rebuild": "node --import tsx --test test/acceptance/rebuild.test.ts",
+    "check-now": "node --import tsx src/cli.ts check-now",
     "update": "node --import tsx src/cli.ts update",
     "status": "node --import tsx src/cli.ts status",
     "initialize": "node --import tsx src/cli.ts initialize",

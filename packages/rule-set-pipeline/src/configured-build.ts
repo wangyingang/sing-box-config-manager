@@ -61,6 +61,15 @@ export function parseBuildConfiguration(input: string): BuildConfiguration {
 export type ConfiguredResult = { id: string; definition: RuleDefinition; status: 'failed'; report: ConversionReport; error: string }
   | { id: string; definition: RuleDefinition; status: 'built-validated'; report: ConversionReport; native: NativeBuild; buildId: string };
 
+export async function configuredBuildTools() {
+  const implementationSha256 = sha256(Buffer.concat(await Promise.all(
+    ['configured-build', 'release', 'yaml-input', 'convert', 'types', 'projection', 'native', 'semantics'].map(name =>
+      readFile(new URL(`./${name}.${import.meta.url.endsWith('.ts') ? 'ts' : 'js'}`, import.meta.url))),
+  )));
+  return { pipeline: packageInfo.version, implementationSha256, conversionPolicy: 'v2fly-domain-v1',
+    node: process.versions.node, yaml: yamlPackage.version, sourceFormat: 4 };
+}
+
 export async function buildConfiguredRelease(options: {
   configuration: string; release: ReleaseOptions; binary: string; selectedIds?: string[];
 }): Promise<{ source: SourceRecord; configuration: BuildConfiguration; tools: Record<string, string | number>; results: ConfiguredResult[] }> {
@@ -75,12 +84,7 @@ export async function buildConfiguredRelease(options: {
   // A broken shared document is a batch failure; missing or invalid individual
   // lists remain independent results.
   const lists = readLists(source.bytes, [...new Set(definitions.map(rule => rule.list))]);
-  const implementationSha256 = sha256(Buffer.concat(await Promise.all(
-    ['configured-build', 'release', 'yaml-input', 'convert', 'types', 'projection', 'native', 'semantics'].map(name =>
-      readFile(new URL(`./${name}.${import.meta.url.endsWith('.ts') ? 'ts' : 'js'}`, import.meta.url))),
-  )));
-  const tools = { pipeline: packageInfo.version, implementationSha256, conversionPolicy: 'v2fly-domain-v1',
-    node: process.versions.node, yaml: yamlPackage.version, sourceFormat: 4 };
+  const tools = await configuredBuildTools();
   const results: ConfiguredResult[] = [];
   for (const definition of definitions) {
     const parsed = lists.get(definition.list)!;
