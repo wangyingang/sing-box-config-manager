@@ -183,7 +183,22 @@ node --import tsx src/cli.ts maintenance-prepare --branch acceptance-example --b
 
 准备命令以 `maintenance-<维护 ID>-<阶段>` 创建临时分支。准备成功后，`status: prepared` 的 `baseline.stages` 列出临时分支及不可变提交，`journal` 和 `stable` 是待切换的两个 heads，单分支目标共用同一个 head。记录包含验证时间与工具摘要。准备中断后，在任意新目录重跑 `maintenance-prepare`。成功后可带同一版本的 binary 运行 `maintenance-resume`，只用新产物地址复验。当前证据或 binary 缺失会延期；准备写入或回读失败会报告失败并保持隔离。
 
-切换前仍可按维护 ID 安全退出。准备留下的临时分支保留供核验和后续处理。切换及临时引用清理由 [#54](https://github.com/wangyingang/sing-box-config-manager/issues/54) 交付。测试场景见 [#53 验收记录](docs/verification/issue-53.md)。
+切换前仍可按维护 ID 安全退出。准备留下的临时分支保留供核验和后续处理。准备场景见 [#53 验收记录](docs/verification/issue-53.md)。
+
+## 切换基线并恢复写入
+
+准备成功后，在已授权的目标上运行切换。首次切换和切换后的证据复验均使用 sing-box 1.14.4 的绝对路径。
+
+```sh
+node --import tsx src/cli.ts maintenance-switch --branch acceptance-example --binary "$sing_box_binary"
+node --import tsx src/cli.ts maintenance-resume --branch acceptance-example --binary "$sing_box_binary"
+```
+
+切换通过一次 Git 原子推送更新所有目标分支，并保留旧 heads 的临时引用。每条目标分支都使用远端记录中的预期旧 head。服务器拒绝原子推送或租约过期时，旧发布状态继续有效。若远端结果待核实，使用 `maintenance-resume` 从任意新目录读取实际状态。已切换时，恢复直接核验新 heads、稳定 URL 和当前版本证据。若仍处在已准备阶段，恢复只复验准备结果；确认可继续后可再次显式运行切换。
+
+核验成功后，Pipeline 先持久记录核验结果，再用租约删除本次维护拥有且 head 仍匹配的临时引用。清理中断可再次恢复。核验已经持久化时，恢复清理无需 binary。最终 `status: completed` 表示普通写入已恢复，`otherRefs` 列出仍存在的其他引用。其他引用和 GitHub 对旧对象的保留可能延长旧 SHA 的可读时间。
+
+稳定 URL、规则字节、版本身份和人工固定状态跨清理保留。清理保留的当前版本日后被替换时，可用 `status` 列出的历史提交回滚。后续清理移除该版本后，旧 SHA 和依赖已清理证据的重建会明确失败。使用原状态目录运行检查或更新时，Pipeline 从远端代次恢复候选状态。复现步骤见 [#54 验收记录](docs/verification/issue-54.md)。
 
 ## 立即检查并激活
 

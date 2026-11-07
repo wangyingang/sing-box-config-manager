@@ -124,6 +124,7 @@ async function processRelease(options: UpdateOptions, rebuildTag?: string) {
         candidateId: recoverable.id, tag: recovery.tag, evidenceUrl: recoverable.evidenceUrl!,
       };
       recovery.status = 'complete'; await save();
+      await session.confirmGeneration();
       return { status: 'processed' as const, candidate: recoverable, activeRuleVersion: restored.activeRuleVersion, readback,
         ...(session.cacheWarning ? { cacheWarning: session.cacheWarning } : {}) };
     }
@@ -158,6 +159,7 @@ async function processRelease(options: UpdateOptions, rebuildTag?: string) {
       await verifyRetained(previousProcessed.candidateId);
       if (!previousProcessed.evidenceUrl) throw new Error('CANDIDATE_UNAVAILABLE: processed candidate has no retained address');
       if (session && recovery) { recovery.status = 'complete'; await save(); }
+      await session?.confirmGeneration();
       return { status: 'skipped' as const, releaseId: release.id, ...previousProcessed, evidenceUrl: previousProcessed.evidenceUrl, activeRuleVersion: restored.activeRuleVersion,
         ...(session?.cacheWarning ? { cacheWarning: session.cacheWarning } : {}) };
     }
@@ -221,6 +223,7 @@ async function processRelease(options: UpdateOptions, rebuildTag?: string) {
     if (session) { candidate.phase = 'complete'; state.pendingOperation!.status = 'complete'; }
     if (!rebuildTag) state.processed[key] = { candidateId: candidate.id, tag, evidenceUrl: candidate.evidenceUrl! };
     await save();
+    await session?.confirmGeneration();
     return { status: 'processed' as const, candidate, activeRuleVersion: restored.activeRuleVersion, readback,
       ...(session?.cacheWarning ? { cacheWarning: session.cacheWarning } : {}) };
   } catch (error) {

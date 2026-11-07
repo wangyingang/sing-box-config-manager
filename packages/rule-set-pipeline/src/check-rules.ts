@@ -233,10 +233,13 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
       try {
         remoteStatus = await readRemoteStatus({ repository: repo, publication, activation, recordPaths: paths });
       } catch (error) { statusError = message(error); }
+      const superseded = remoteStatus !== undefined && remoteStatus.generation !== session.generation;
+      const supersededError = 'PUBLICATION_CONFLICT: check belongs to an earlier maintenance generation';
       let reconciledSwitch = false;
       const ordered = definitions.map(rule => {
         const { id } = rule;
-        const entry = results.get(id) ?? {
+        const entry = superseded ? { operationId, checkedAt, status: 'failed' as const, error: supersededError }
+          : results.get(id) ?? {
           operationId, checkedAt, status: uncertain(failure) ? 'verification-pending' as const : 'failed' as const,
           ...(operation ? { releaseId: operation.releaseId, tag: operation.tag } : {}), error: message(failure),
         };
@@ -250,7 +253,7 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
           ?? remoteStatus?.manualOperations.find(value => value.id === pending.id));
         const result: CheckResult = { id, ...entry };
         if (current) {
-          result.current = { ...delivery(current), commit: automatic?.commit ?? knownApplied.get(id),
+          result.current = { ...delivery(current), commit: automatic?.commit ?? (superseded ? undefined : knownApplied.get(id)),
             containingCommit: automatic?.containingCommit ?? remote?.commit };
           result.control = remote ? remote.control : controlFor(id);
         } else if (statusError && observed) result.lastObserved = delivery(observed);
@@ -275,7 +278,7 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
       });
       const switchFailureReconciled = reconciledSwitch
         && /ACTIVATION_(UNKNOWN|APPLIED_READBACK_PENDING|CONFLICT_OR_SUPERSEDED)/.test(message(failure));
-      const unresolvedFailure = switchFailureReconciled ? undefined : failure;
+      const unresolvedFailure = superseded ? supersededError : switchFailureReconciled ? undefined : failure;
       return { exitCode: unresolvedFailure || statusError || ordered.some(result => result.status === 'failed' || result.status === 'verification-pending') ? 1 : 0,
         ...(operation ? { releaseId: operation.releaseId, tag: operation.tag } : {}), results: ordered,
         ...(unresolvedFailure ? { error: message(unresolvedFailure) } : {}), ...(statusError ? { statusError } : {}),

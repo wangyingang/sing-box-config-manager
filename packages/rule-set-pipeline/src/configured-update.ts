@@ -119,8 +119,11 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, 
       if (recoveredResults.length) {
         if (operationFinished()) recovery.status = 'complete';
         await save();
-        if (recoveredResults.length === definitions.length) return { status: 'processed', releaseId: recovery.releaseId, tag: recovery.tag,
-          results: recoveredResults, activeRuleVersion: undefined, ...(session.cacheWarning ? { cacheWarning: session.cacheWarning } : {}) };
+        if (recoveredResults.length === definitions.length) {
+          await session.confirmGeneration();
+          return { status: 'processed', releaseId: recovery.releaseId, tag: recovery.tag,
+            results: recoveredResults, activeRuleVersion: undefined, ...(session.cacheWarning ? { cacheWarning: session.cacheWarning } : {}) };
+        }
       }
     }
     const fetcher = options.fetch ?? fetch;
@@ -220,6 +223,7 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, 
     results.sort((a, b) => definitions.findIndex(rule => rule.id === a.id) - definitions.findIndex(rule => rule.id === b.id));
     const failed = results.filter(entry => entry.status === 'failed').length;
     if (session && !failed) { state.pendingOperation!.status = operationFinished() ? 'complete' : 'pending'; await save(); }
+    await session?.confirmGeneration();
     return { status: failed ? (failed === results.length ? 'failed' : 'partial') : pending.length ? 'processed' : 'skipped',
       releaseId, tag, results, activeRuleVersion: restored.activeRuleVersion, ...(session?.cacheWarning ? { cacheWarning: session.cacheWarning } : {}) };
   } finally { await rm(lock, { recursive: true, force: true }); }

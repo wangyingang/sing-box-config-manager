@@ -1,3 +1,4 @@
+import { BASELINE_PATH } from './remote-state.js';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { saveActivationReceipt } from './activation-receipt.js';
@@ -200,6 +201,31 @@ export function activateAutomatically(options: ActivationOptions, coordination: 
   return performActivation(options, coordination);
 }
 
+/** After a rewrite, only the live record and its retained history are supported. */
+async function requireRetainedRollback(transport: ActivationTransport, path: string, head: string, target: string, configured: boolean) {
+  const unavailable = 'ROLLBACK_UNAVAILABLE: activation is outside retained history';
+  const read = async (commit: string) => {
+    const url = immutableUrl(commit, path);
+    try { return JSON.parse((await transport.download(url)).toString()); }
+    catch (error) {
+      if (error instanceof Error && error.message === `Readback HTTP 404: ${url}`) throw new Error(unavailable);
+      throw error;
+    }
+  };
+  if (target === head) return;
+  if (configured) {
+    const active = await read(head);
+    requireThat(Array.isArray(active.history) && active.history.some((entry: { commit?: string }) => entry.commit === target), unavailable);
+    return;
+  }
+  const seen = new Set<string>();
+  while (head !== target) {
+    requireThat(/^[a-f0-9]{40}$/.test(head) && !seen.has(head), 'Invalid legacy activation history');
+    seen.add(head);
+    head = (await read(head)).expectedHead;
+  }
+}
+
 async function performActivation(options: ActivationOptions | RollbackOptions, automatic?: AutomaticActivation) {
   const transport = options.transport ?? githubActivation();
   requireThat(/^[a-f0-9]{40}$/.test(options.expectedHead), 'Expected full old remote head is required');
@@ -222,6 +248,9 @@ async function performActivation(options: ActivationOptions | RollbackOptions, a
   if ('historicalActivationCommit' in options) {
     const commit = options.historicalActivationCommit;
     requireThat(/^[a-f0-9]{40}$/.test(commit), 'Expected full historical activation commit');
+    if (session?.snapshot.paths.includes(BASELINE_PATH)) {
+      await requireRetainedRollback(transport, recordPath, options.expectedHead, commit, configured);
+    }
     const record = JSON.parse((await transport.download(immutableUrl(commit, recordPath))).toString());
     requireThat(record.schemaVersion === 1 && typeof record.id === 'string' && record.id.length > 0
       && typeof record.candidateId === 'string' && typeof record.candidateEvidenceUrl === 'string'
