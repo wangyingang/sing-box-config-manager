@@ -298,9 +298,9 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
       const active = activeById.get(resumeId);
       if (errors.has(resumeId) || !active) return report(new Error(errors.get(resumeId) ?? 'Resume requires a current rule version'));
       const existing = applicableResume(journal, resumeId, active);
-      const sharedCheck = existing && [operation, ...parked].some(entry => (entry?.selectedIds?.length ?? 0) > 1
-        && entry?.controlRevisions?.[resumeId] === existing.revision);
-      const decision = existing?.checkPending && !sharedCheck ? existing
+      const mismatchedCheck = existing && [operation, ...parked].some(entry =>
+        entry?.controlRevisions?.[resumeId] === existing.revision && !matchesRequest(entry));
+      const decision = existing?.checkPending && !mismatchedCheck ? existing
         : { revision: randomUUID(), activationId: active.id, checkPending: true };
       const isResumeCheck = (entry: RemoteOperation | undefined) => matchesRequest(entry)
         && entry?.controlRevisions?.[resumeId] === decision.revision;

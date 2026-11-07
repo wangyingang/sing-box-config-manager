@@ -575,3 +575,31 @@ test('普通批次不会把已恢复到新 Release 的兄弟集纳入较旧的�
   assert.equal(after.activeRuleVersions['ai-anthropic'].activation.source.releaseId, 3);
   assert.equal(after.activeRuleVersions['ai-anthropic'].activation.id, sibling.results[0].current?.id);
 }));
+
+test('使用不同构建配置重新请求中断的恢复时，旧请求不能重放', { skip: !binary }, async () => isolated(async (env, directory) => {
+  const initial = options(env, directory, upstream(1));
+  await checkRules(initial);
+  const status = () => readRemoteStatus({ repository: env.repository, publication: initial.publication, activation: env.transport });
+  const before = await status();
+  await activateRules(env.options('ai-openai', before.activeRuleVersions['ai-openai'].activation.candidateEvidenceUrl));
+  const earlier = options(env, join(directory, 'earlier'), upstream(2, { openai: 'domain:earlier.example' }));
+  const interrupted = await resumeRules({ ...earlier, logicalId: 'ai-openai', publication: {
+    ...earlier.publication, repository: loseCheckpoint(env, journal => journal.state.pendingOperation?.releaseId === 2),
+  } });
+  assert.equal(interrupted.exitCode, 1);
+  const registered = await status();
+
+  const next = options(env, join(directory, 'next'), upstream(3, { 'openai-alt': 'domain:new-definition.example' }));
+  const resumed = await resumeRules({ ...next, logicalId: 'ai-openai', configuration: next.configuration.replace('list: openai', 'list: openai-alt') });
+  assert.equal(resumed.exitCode, 0, JSON.stringify(resumed));
+  assert.equal(resumed.results[0].releaseId, 3);
+  assert.notEqual(resumed.results[0].control?.revision, registered.activeRuleVersions['ai-openai'].control?.revision);
+  const after = await status();
+  assert.ok(!after.pendingOperations.some(entry => entry.id === registered.state.pendingOperation?.id));
+
+  const later = upstream(4);
+  const fresh = await checkRules({ ...options(env, join(directory, 'old-command'), later), selectedIds: ['ai-openai'] });
+  assert.equal(fresh.exitCode, 0, JSON.stringify(fresh));
+  assert.equal(fresh.results[0].releaseId, 4);
+  assert.ok(later.requests[0].endsWith('/latest'));
+}, 'main'));
