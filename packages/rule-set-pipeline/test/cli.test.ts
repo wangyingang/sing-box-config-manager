@@ -285,3 +285,35 @@ for (const operation of ['initialize', 'status']) {
     } finally { await rm(directory, { recursive: true, force: true }); }
   });
 }
+
+test('CLI 立即检查需要可信配置和订阅映射，并返回逐集结果和退出码', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'rule-check-cli-'));
+  try {
+    const config = join(directory, 'config.yml'), subscriptions = join(directory, 'subscriptions.json');
+    const preload = join(directory, 'preload.mjs'), implementation = join(directory, 'check.mjs');
+    await writeFile(config, await readFile(new URL('../samples/three-ai-rule-sets.yml', import.meta.url), 'utf8'));
+    await writeFile(subscriptions, '{"ai-anthropic":{"schemaVersion":2}}');
+    await writeFile(implementation, `export async function checkRules(options) {
+      if (!options.configuration.includes('ai-anthropic') || options.subscriptions['ai-anthropic'].schemaVersion !== 2) {
+        throw new Error('Missing trusted inputs');
+      }
+      const status = options.selectedIds?.length ? 'verification-pending' : 'paused';
+      return { exitCode: status === 'paused' ? 0 : 1, results: [{ id: 'ai-anthropic', status }] };
+    }`);
+    await writeFile(preload, `import { registerHooks } from 'node:module';
+import { pathToFileURL } from 'node:url';
+registerHooks({ resolve(specifier, context, nextResolve) {
+  if (context.parentURL?.endsWith('/src/cli.ts') && specifier === './check-rules.js')
+    return { url: pathToFileURL(${JSON.stringify(implementation)}).href, shortCircuit: true };
+  return nextResolve(specifier, context);
+} });`);
+    const run = (...args: string[]) => exec(process.execPath, ['--import', 'tsx', '--import', preload, 'src/cli.ts', 'check-now',
+      '--state', directory, '--binary', '/unused', '--config', config, ...args],
+      { env: { ...process.env, GITHUB_TOKEN: 'controlled-cli-fixture' } });
+    await assert.rejects(run(), { code: 1 });
+    const paused = await run('--subscription', subscriptions);
+    assert.equal(JSON.parse(paused.stdout).results[0].status, 'paused');
+    await assert.rejects(run('--subscription', subscriptions, '--id', 'ai-anthropic'), (error: { code?: number; stdout?: string }) =>
+      error.code === 1 && JSON.parse(error.stdout ?? '').results[0].status === 'verification-pending');
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});

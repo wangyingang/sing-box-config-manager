@@ -3,7 +3,7 @@ import type { ActivationTransport } from './activation-transport.js';
 import type { PublicationRepository, PublicationSnapshot } from './publication-repository.js';
 import { immutableUrl } from './publication.js';
 import { sha256 } from './release.js';
-import { commitRemoteState, guardRemoteState, readRemoteState, type ManualOperation, type RemoteJournal } from './remote-state.js';
+import { commitRemoteState, guardRemoteState, readRemoteState, type ActivationOperation, type ManualOperation, type RemoteJournal } from './remote-state.js';
 
 export function manualControl(operation: Pick<ManualOperation, 'id' | 'kind'>) {
   return {
@@ -14,25 +14,36 @@ export function manualControl(operation: Pick<ManualOperation, 'id' | 'kind'>) {
   };
 }
 
-export function manualActivationDigest(record: Record<string, unknown>) {
+export function activationDigest(record: Record<string, unknown>) {
   // On a shared branch the registration itself becomes the switch parent.
   const { expectedHead: _parent, ...activation } = record;
   return sha256(JSON.stringify(activation));
 }
 
-export interface ManualWriteReservation {
+export interface ActivationWriteReservation {
   operationId: string;
   journalHead: string;
 }
 
-export async function authorizeManualWrite(repository: PublicationRepository, branch: string, expectedHead: string,
-  files: Record<string, Buffer>, reservation: ManualWriteReservation) {
+export async function authorizeActivationWrite(repository: PublicationRepository, branch: string, expectedHead: string,
+  files: Record<string, Buffer>, reservation: ActivationWriteReservation) {
   const { snapshot, journal } = await readRemoteState(repository);
-  const operation = journal.manualOperations?.[reservation.operationId];
+  const operation = journal.manualOperations?.[reservation.operationId] ?? journal.automaticOperations?.[reservation.operationId];
   if (snapshot.head !== reservation.journalHead || journal.targetBranch !== branch || journal.maintenance !== 'open'
     || !operation || operation.notCommitted || operation.generation !== journal.generation
     || expectedHead !== (repository.branch === branch ? snapshot.head : operation.expectedHead)) {
     throw new Error('PUBLICATION_CONFLICT: registration, head, generation or maintenance changed');
+  }
+  if (operation.kind === 'automatic') {
+    const check = journal.state.pendingOperation;
+    const stable = repository.branch === branch ? snapshot : await repository.snapshot(branch);
+    const previousBytes = await stable.read(operation.recordPath);
+    const previous = previousBytes && JSON.parse(previousBytes.toString());
+    if (stable.head !== expectedHead || check?.kind !== 'check' || check.status !== 'pending' || check.id !== operation.checkOperationId
+      || previous?.id !== operation.previousActivationId || previous?.control?.pauseAutomaticActivation
+      || (previous?.control?.revision ?? null) !== check.controlRevisions?.[operation.logicalId]) {
+      throw new Error('PUBLICATION_CONFLICT: automatic activation control revision changed');
+    }
   }
   const recordBytes = files[operation.recordPath];
   const record = recordBytes && JSON.parse(recordBytes.toString());
@@ -40,9 +51,9 @@ export async function authorizeManualWrite(repository: PublicationRepository, br
   const ruleFiles = Object.keys(files).filter(path => path !== operation.recordPath);
   if (record?.schemaVersion !== 1 || record.id !== operation.id || record.logicalId !== operation.logicalId || record.expectedHead !== expectedHead
     || record.candidateId !== operation.candidateId || record.candidateEvidenceUrl !== operation.candidateEvidenceUrl
-    || record.operation !== (operation.kind === 'rollback' ? 'rollback' : undefined)
+    || record.operation !== (operation.kind === 'activate' ? undefined : operation.kind)
     || record.historicalActivationCommit !== operation.historicalActivationCommit
-    || !isDeepStrictEqual(record.control, manualControl(operation)) || manualActivationDigest(record) !== operation.activationDigest
+    || !isDeepStrictEqual(record.control, operation.kind === 'automatic' ? undefined : manualControl({ id: operation.id, kind: operation.kind })) || activationDigest(record) !== operation.activationDigest
     || !ruleFiles.length || !isDeepStrictEqual(Object.keys(record.files ?? {}).sort(), ruleFiles.sort())
     || ruleFiles.some(path => {
       const expected = record.files[path];
@@ -91,7 +102,7 @@ export async function registerManualActivation(session: Awaited<ReturnType<typeo
   }
   return {
     expectedHead: repository.branch === journal.targetBranch ? head : operation.expectedHead,
-    write: { operationId: operation.id, journalHead: head } satisfies ManualWriteReservation,
+    write: { operationId: operation.id, journalHead: head } satisfies ActivationWriteReservation,
     markNotCommitted,
   };
 }
@@ -104,18 +115,17 @@ export interface ObservedActivation {
   history?: { id: string; commit: string }[];
 }
 
-export interface ManualOperationResult extends ManualOperation {
+export interface ActivationOperationResult extends ActivationOperation {
   status: 'committed' | 'not-committed' | 'pending' | 'superseded';
   commit?: string;
   containingCommit?: string;
   error?: string;
 }
 
-export async function readManualOperationResults(repository: PublicationRepository, journal: RemoteJournal,
+export async function readActivationOperationResults(repository: PublicationRepository, journal: RemoteJournal,
   stable: PublicationSnapshot, currentByPath: ReadonlyMap<string, ObservedActivation>,
-  download: ActivationTransport['download']) {
-  const operations = Object.values(journal.manualOperations ?? {});
-  return Promise.all(operations.map(async (operation): Promise<ManualOperationResult> => {
+  download: ActivationTransport['download'], operations: ActivationOperation[]) {
+  return Promise.all(operations.map(async (operation): Promise<ActivationOperationResult> => {
     const current = currentByPath.get(operation.recordPath);
     if (current?.id === operation.id) {
       let commit: string | undefined;
@@ -126,7 +136,7 @@ export async function readManualOperationResults(repository: PublicationReposito
         commit = await repository.lastChange?.(stable.head, operation.recordPath);
         const containingCommit = commit ?? stable.head;
         const record = JSON.parse((await download(immutableUrl(containingCommit, operation.recordPath))).toString());
-        if (record.id !== operation.id || manualActivationDigest(record) !== operation.activationDigest) {
+        if (record.id !== operation.id || activationDigest(record) !== operation.activationDigest) {
           throw new Error('Commit does not contain the registered activation');
         }
         for (const [path, expected] of Object.entries(current.files)) {

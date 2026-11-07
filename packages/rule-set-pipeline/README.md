@@ -137,7 +137,7 @@ pnpm --dir packages/rule-set-pipeline status --config samples/three-ai-rule-sets
 
 `status` 返回 `authority: remote`、维护状态、`candidateAvailability` 和 `pendingOperations`。默认执行证据结构、地址和字节摘要核验，标注 `verification: structural`；提供 `--binary` 时额外执行真实原生复验，标注 `native`。已提交的当前版本即使候选回读失败也仍报告为已激活，并单独标记待核实。旧单集的历史通过 `expectedHead` 追溯，在结果映射中使用 `v2fly:category-ai-!cn`；历史读取失败通过 `historyComplete`／`historyErrors` 报告，不能将空列表视为完整历史。初始化和查询 API 分别为 `initializeRemoteState(repository, targetBranch)`、`readRemoteStatus({ repository, publication?, binary? })`。
 
-同一缓存目录的 `update.lock/` 仍拒绝本机并发；远端预期 head 保护跨机器写入。进程被强制终止后，可换新目录恢复；要复用旧目录，先确认没有存活进程再移除残留锁。不要删除远端来源记录来绕过来源变化错误。人工固定已接入同一远端 journal。自动检查、主动恢复、调度及历史清理由父 Spec 的后续工单交付。
+同一缓存目录的 `update.lock/` 仍拒绝本机并发；远端预期 head 保护跨机器写入。进程被强制终止后，可换新目录恢复；要复用旧目录，先确认没有存活进程再移除残留锁。不要删除远端来源记录来绕过来源变化错误。人工固定和立即检查使用同一远端 journal。主动恢复、调度及历史清理由父 Spec 的后续工单交付。
 
 Artifact Manifest（产物清单）记录某次不可变规则文件的固定地址、摘要和使用约束。原有单集及目标为 `main` 的配置驱动更新在产物仓库的 `candidates` 分支追加候选；配置目标为 `acceptance-*` 时在该隔离分支追加候选。两者均采用三个有序的候选提交阶段，并穿插远端操作检查点，使清单可以引用已固定的 commit 地址：
 
@@ -150,6 +150,29 @@ Artifact Manifest（产物清单）记录某次不可变规则文件的固定地
 远程文件逐一核对字节数、SHA-256 和逐字节内容。下载的 JSON 重新编译、解码及加载，所得 SRS 必须与下载的 SRS 一致。随后回读元数据，并在第三步提交、回读证据文件后才记为 `verified` 和成功处理。失败返回非零并保留远端阶段；重试复用原候选，补齐未完成阶段并重新核验，残缺文件不能作为通过证据。发布的 `build.json` 仅表示本地验证，只有完整远程证据及成功候选状态才能供后续激活检查。
 
 本命令不写稳定路径、不激活候选、不修改实际客户端配置，也不切换全局 binary。首次创建产物仓库、候选发布属于外部写入，须有覆盖它们的授权；命令不自动创建仓库。
+
+## 立即检查并激活
+
+`check-now` 使用版本化配置、目标分支已初始化的远端状态和可信宿主维护的 Rule Subscription v2。订阅 JSON 文件以逻辑 ID 为键，值是该集的[完整 v2 订阅对象](contracts/rule-subscription-v2.example.json)。其中的稳定 URL 必须指向配置的目标分支和对应的 `stablePath`。以下命令用于预先创建并初始化的 `acceptance-*` 目标：
+
+```sh
+pnpm --dir packages/rule-set-pipeline check-now \
+  --config /absolute/path/to/acceptance-rule-sets.yml \
+  --subscription /absolute/path/to/subscriptions-by-id.json \
+  --binary /absolute/path/to/sing-box-1.14.4 \
+  --state /absolute/path/to/rule-state
+```
+
+默认检查配置中全部逻辑 ID。可重复 `--id` 选择其中几集。定时工作流可复用同一个 `checkRules({ configuration, subscriptions, binary, stateDirectory, selectedIds? })` 入口。
+
+- 新批次固定一个官方 V2Fly Release，共享校验后的输入。共同输入校验失败时整批停止。单集转换、校验或确定未提交的切换失败时，其他集仍可继续。
+- 定义、构建工具和订阅契约一致时，比较实际 JSON、SRS、用途映射和当前稳定文件。内容未变只更新 `state.latestChecks`，保留实际检查的 Release。定义或工具变化时重新验证，已有订阅契约不兼容时拒绝切换。
+- 人工回滚暂停自动重试和激活。人工指定暂停自动激活，仍允许检查和发布候选。正常暂停不改变当前版本或控制修订。
+- 候选证据与稳定入口切换分开记录。中断后使用原配置、订阅和选择恢复；未完成的构建仍固定原 Release，完整证据可从远端复验并继续激活。普通失败可在下一次检查重试。待核实的提交会出现在 `status` 的 `automaticOperations`／`pendingOperations` 中。若仍无法确认一个双分支切换是否会提交，检查保留待核实状态并停止写入。
+- 每次写入使用已捕获的分支 head 和维护代次。恢复时核对原控制修订，运行中发生人工切换、维护或并发写入会拒绝旧任务继续提交。
+- 每集结果为 `activated`、`unchanged`、`paused`、`failed` 或 `verification-pending`。摘要附当前交付版本、人工控制和已核实的回滚目标。实际失败或待核实使 CLI 退出 1。已知提交即使仍待 HTTPS 回读，也会反映在当前交付版本中。可重建的本地缓存失败单列为 `cacheWarning`。
+
+`update` 和 `rebuild` 仍只发布候选，显式激活和回滚仍保留人工固定语义。验收场景见 [Issue #50](docs/verification/issue-50.md)。
 
 ## 显式重建固定 Release
 

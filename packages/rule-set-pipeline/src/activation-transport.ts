@@ -1,5 +1,5 @@
 import { githubPublicationRepository, type PublicationRepository } from './publication-repository.js';
-import { authorizeManualWrite, type ManualWriteReservation } from './manual-activation.js';
+import { authorizeActivationWrite, type ActivationWriteReservation } from './manual-activation.js';
 import { ARTIFACT_REPOSITORY, ghJson, GitHubHttpError, githubPublication, immutableUrl } from './publication.js';
 
 export interface ActivationTransport {
@@ -12,7 +12,7 @@ export interface ActivationTransport {
    * Verify the registered operation immediately before updating the ref.
    * Wrap uncertain ref updates in ActivationWriteError.
    */
-  commit(expectedHead: string, files: Record<string, Buffer>, message: string, reservation?: ManualWriteReservation): Promise<string>;
+  commit(expectedHead: string, files: Record<string, Buffer>, message: string, reservation?: ActivationWriteReservation): Promise<string>;
 }
 
 const configuredRecord = /^stable\/(?:[a-z0-9][a-z0-9._-]*\/)+activation\.json$/;
@@ -97,7 +97,7 @@ export function githubActivation(branch = 'main', request: typeof ghJson = ghJso
       const commit = await api('git/commits', { message, tree: createdTree.sha, parents: [expectedHead] });
       if (reservation) {
         if (await this.head() !== expectedHead) throw new Error('ACTIVATION_CONFLICT: remote head changed');
-        await authorizeManualWrite(repository, branch, expectedHead, files, reservation);
+        await authorizeActivationWrite(repository, branch, expectedHead, files, reservation);
       }
       // The caller knows this identity before PATCH, so even a lost reply can be reconciled.
       try {

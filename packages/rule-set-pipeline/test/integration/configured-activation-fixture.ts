@@ -3,7 +3,7 @@ import { updateRules } from '../../src/update.js';
 import { sha256 } from '../../src/release.js';
 import { immutableUrl, type PublicationTransport } from '../../src/publication.js';
 import { PublicationWriteError, type PublicationRepository } from '../../src/publication-repository.js';
-import { authorizeManualWrite } from '../../src/manual-activation.js';
+import { authorizeActivationWrite } from '../../src/manual-activation.js';
 import { initializeRemoteState, STATE_PATH } from '../../src/remote-state.js';
 import { ActivationWriteError, type ActivationTransport } from '../../src/activation-transport.js';
 
@@ -65,7 +65,7 @@ export async function configuredEnvironment(binary: string, directory: string, b
     async commit(expected, files, _message, reservation) {
       if (mode === 'rejected') throw new Error('Server rejected before requesting the ref update');
       await beforeSwitch?.();
-      if (reservation) await authorizeManualWrite(repository, branch, expected, files, reservation);
+      if (reservation) await authorizeActivationWrite(repository, branch, expected, files, reservation);
       // No await between compare and update: model the remote atomic ref operation.
       if (head !== expected) throw new Error('ACTIVATION_CONFLICT');
       writes++;

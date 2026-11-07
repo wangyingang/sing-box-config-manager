@@ -9,7 +9,7 @@ import { parseBuildConfiguration, type RuleDefinition } from './configured-build
 import type { PublicationRepository } from './publication-repository.js';
 import { ARTIFACT_REPOSITORY, githubPublication, immutableUrl, type PublicationTransport } from './publication.js';
 import { readRemoteState } from './remote-state.js';
-import { manualControl, readManualOperationResults, type ObservedActivation } from './manual-activation.js';
+import { manualControl, readActivationOperationResults, type ObservedActivation } from './manual-activation.js';
 import { sha256 } from './release.js';
 
 const ajv = new Ajv({ strict: true });
@@ -31,7 +31,7 @@ interface UnavailableTarget extends HistoryTarget { reason: string }
 interface ActiveVersion { status: 'activated'; commit: string; activation: Record<string, any>; candidate: CandidateAvailability }
 interface PendingOperation { id: string; candidateId?: string; logicalId?: string; phase?: string; status: string; error?: string }
 
-function activationRecord(value: unknown, path: string, targetBranch: string) {
+export function activationRecord(value: unknown, path: string, targetBranch: string) {
   requireThat(object(value) && value.schemaVersion === 1 && typeof value.id === 'string' && value.id.length
     && typeof value.candidateId === 'string' && /^[a-f0-9-]+$/.test(value.candidateId)
     && typeof value.candidateEvidenceUrl === 'string' && object(value.files), 'Invalid remote activation record');
@@ -84,7 +84,7 @@ function activationRecord(value: unknown, path: string, targetBranch: string) {
   return { record: value as Record<string, any> & ObservedActivation, history };
 }
 
-async function verifyStableFiles(record: Record<string, any>, read: (path: string) => Promise<Buffer | undefined>) {
+export async function verifyStableFiles(record: Record<string, any>, read: (path: string) => Promise<Buffer | undefined>) {
   for (const [path, metadata] of Object.entries(record.files) as [string, { sha256: string; byteLength: number }][]) {
     const bytes = await read(path);
     requireThat(bytes && bytes.length === metadata.byteLength && sha256(bytes) === metadata.sha256, `Stable file integrity mismatch: ${path}`);
@@ -96,6 +96,8 @@ export async function readRemoteStatus(options: {
   repository: PublicationRepository; binary?: string; publication?: PublicationTransport;
   /** Injected only for isolated reads; production distinguishes Git absence from CDN errors. */
   activation?: Pick<ActivationTransport, 'download'>;
+  /** Limit delivery and switch verification to these stable activation paths. */
+  recordPaths?: ReadonlySet<string>;
 }) {
   const { snapshot, journal } = await readRemoteState(options.repository);
   const publication = options.publication ?? githubPublication();
@@ -164,7 +166,7 @@ export async function readRemoteStatus(options: {
   const historyComplete: Record<string, boolean> = {};
   const historyErrors: Record<string, { commit?: string; error: string }[]> = {};
   const currentByPath = new Map<string, ObservedActivation>();
-  const paths = stable.paths.filter(path => /^stable\/(?:[a-z0-9._-]+\/)*activation\.json$/.test(path));
+  const paths = stable.paths.filter(path => (!options.recordPaths || options.recordPaths.has(path)) && /^stable\/(?:[a-z0-9._-]+\/)*activation\.json$/.test(path));
   for (const path of paths) {
     const bytes = await stable.read(path);
     requireThat(bytes, `Missing activation record: ${path}`);
@@ -240,7 +242,7 @@ export async function readRemoteStatus(options: {
       }
     }
   }
-  for (const candidate of Object.values(journal.state.candidates)) {
+  for (const candidate of options.recordPaths ? [] : Object.values(journal.state.candidates)) {
     const availability = await inspectCandidate(candidate.id);
     if (candidate.retained && (candidate.phase !== 'complete' || availability.status !== 'available')) {
       pendingOperations.push({ id: candidate.id, candidateId: candidate.id, logicalId: candidate.logicalId,
@@ -250,14 +252,18 @@ export async function readRemoteStatus(options: {
   }
   const operation = journal.state.pendingOperation;
   if (operation?.status === 'pending') pendingOperations.unshift({ id: operation.id, status: 'pending' });
-  const manualOperations = await readManualOperationResults(options.repository, journal, stable, currentByPath, url => activation.download(url));
-  for (const operation of manualOperations) {
+  const operations = await readActivationOperationResults(options.repository, journal, stable, currentByPath,
+    url => activation.download(url), [...Object.values(journal.manualOperations ?? {}), ...Object.values(journal.automaticOperations ?? {})]
+      .filter(operation => !options.recordPaths || options.recordPaths.has(operation.recordPath)));
+  const manualOperations = operations.filter(operation => operation.kind !== 'automatic');
+  const automaticOperations = operations.filter(operation => operation.kind === 'automatic');
+  for (const operation of operations) {
     if (operation.status === 'pending') pendingOperations.push({ id: operation.id, logicalId: operation.logicalId,
-      candidateId: operation.candidateId, status: (operation.commit || operation.containingCommit) ? 'activated-readback-pending' : 'manual-commit-pending',
+      candidateId: operation.candidateId, status: (operation.commit || operation.containingCommit) ? 'activated-readback-pending' : operation.kind === 'automatic' ? 'automatic-commit-pending' : 'manual-commit-pending',
       ...(operation.error ? { error: operation.error } : {}) });
   }
   return { authority: 'remote' as const, head: snapshot.head, stableHead: stable.head, generation: journal.generation,
     maintenance: journal.maintenance, state: journal.state, activeRuleVersion,
-    activeRuleVersions, rollbackTargets, unavailableRollbackTargets, candidateAvailability, manualOperations, pendingOperations,
+    activeRuleVersions, rollbackTargets, unavailableRollbackTargets, candidateAvailability, manualOperations, automaticOperations, pendingOperations,
     historyComplete, historyErrors };
 }
