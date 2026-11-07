@@ -29,8 +29,8 @@ export interface Candidate {
 export interface UpdateState {
   schemaVersion: 1;
   pinned: Record<string, { identity?: Pin; source?: SourceRecord }>;
-  processed: Record<string, { candidateId: string; tag: string; evidenceUrl: string }>;
-  configuredProcessed?: Record<string, Record<string, { candidateId: string; tag: string; evidenceUrl: string; definitionSha256: string }>>;
+  processed: Record<string, { candidateId: string; tag: string; evidenceUrl?: string }>;
+  configuredProcessed?: Record<string, Record<string, { candidateId: string; tag: string; evidenceUrl?: string; definitionSha256: string }>>;
   candidates: Record<string, Candidate>;
   latestChecks?: Record<string, CheckRecord>;
   pendingOperation?: { id: string; kind: 'update' | 'rebuild' | 'check'; generation: number; releaseId: number; tag: string;
@@ -156,8 +156,9 @@ async function processRelease(options: UpdateOptions, rebuildTag?: string) {
         return matches.length !== 1 || matches[0].id !== asset.id || matches[0].browser_download_url !== asset.url;
       }))) throw new Error('SOURCE_CHANGED: processed Release assets changed');
       await verifyRetained(previousProcessed.candidateId);
+      if (!previousProcessed.evidenceUrl) throw new Error('CANDIDATE_UNAVAILABLE: processed candidate has no retained address');
       if (session && recovery) { recovery.status = 'complete'; await save(); }
-      return { status: 'skipped' as const, releaseId: release.id, ...state.processed[key], activeRuleVersion: restored.activeRuleVersion,
+      return { status: 'skipped' as const, releaseId: release.id, ...previousProcessed, evidenceUrl: previousProcessed.evidenceUrl, activeRuleVersion: restored.activeRuleVersion,
         ...(session?.cacheWarning ? { cacheWarning: session.cacheWarning } : {}) };
     }
     if (session && !recovery) state.pendingOperation = { id: randomUUID(), kind: rebuildTag ? 'rebuild' : 'update',

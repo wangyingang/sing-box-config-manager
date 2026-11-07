@@ -31,10 +31,10 @@ async function main(): Promise<number> {
       'maintenance-id': { type: 'string' }, help: { type: 'boolean' } },
   });
   if (values.help) {
-    console.log('Usage: build --release <fixed-tag> --out <new-directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...]] [--expected-source <source.json>] | update --state <directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...] [--release <pinned-tag>]] | check-now --state <directory> --binary <absolute-1.14.4-path> --config <versioned-yaml> --subscription <v2-contract-map.json> [--id <logical-id> ...] | resume --state <directory> --binary <absolute-1.14.4-path> --config <versioned-yaml> --subscription <v2-contract-map.json> --id <logical-id> | initialize/status [--config <yaml> | --branch <target>] | maintenance-preview/maintenance-enter/maintenance-resume/maintenance-abort | rebuild/activate/rollback (see package README)');
+    console.log('Usage: build --release <fixed-tag> --out <new-directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...]] [--expected-source <source.json>] | update --state <directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...] [--release <pinned-tag>]] | check-now --state <directory> --binary <absolute-1.14.4-path> --config <versioned-yaml> --subscription <v2-contract-map.json> [--id <logical-id> ...] | resume --state <directory> --binary <absolute-1.14.4-path> --config <versioned-yaml> --subscription <v2-contract-map.json> --id <logical-id> | initialize/status [--config <yaml> | --branch <target>] | maintenance-preview/maintenance-enter/maintenance-prepare/maintenance-resume/maintenance-abort | rebuild/activate/rollback (see package README)');
     return 0;
   }
-  const maintenanceAction = positionals.length === 1 ? /^maintenance-(preview|enter|resume|abort)$/.exec(positionals[0])?.[1] : undefined;
+  const maintenanceAction = positionals.length === 1 ? /^maintenance-(preview|enter|prepare|resume|abort)$/.exec(positionals[0])?.[1] : undefined;
   if (maintenanceAction) {
     if (values.config || values.state || values.release || values.out || values.id || values['expected-source']
       || values.candidate || values.activation || values.subscription || values['expected-head']) throw new Error('Invalid maintenance options');
@@ -53,13 +53,13 @@ async function main(): Promise<number> {
       result = await manageMaintenance({ ...options, action: maintenanceAction, schedule, manual: values.manual });
     } else {
       if (period !== undefined || startAt !== undefined || values.manual !== undefined || !!maintenanceId !== (maintenanceAction === 'abort')) {
-        throw new Error('maintenance-abort requires --maintenance-id; maintenance-resume uses the recorded identity');
+        throw new Error('maintenance-abort requires --maintenance-id; maintenance-prepare and maintenance-resume use the recorded identity');
       }
-      result = maintenanceAction === 'resume' ? await manageMaintenance({ ...options, action: 'resume' })
-        : await manageMaintenance({ ...options, action: 'abort', maintenanceId: maintenanceId! });
+      result = maintenanceAction === 'abort' ? await manageMaintenance({ ...options, action: 'abort', maintenanceId: maintenanceId! })
+        : await manageMaintenance({ ...options, action: maintenanceAction as 'prepare' | 'resume' });
     }
     console.log(JSON.stringify(result));
-    return 0;
+    return result.status === 'failed' ? 1 : 0;
   }
   if (values['period-days'] !== undefined || values['start-at'] !== undefined || values.manual !== undefined
     || values['maintenance-id'] !== undefined) throw new Error('Maintenance options require a maintenance command');

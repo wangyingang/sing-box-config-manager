@@ -4,8 +4,11 @@ import { isDeepStrictEqual, promisify } from 'node:util';
 import type { ActivationTransport } from './activation-transport.js';
 import type { PublicationRepository } from './publication-repository.js';
 import { PublicationWriteError } from './publication-repository.js';
-import { ARTIFACT_REPOSITORY, type PublicationTransport } from './publication.js';
+import { ARTIFACT_REPOSITORY, githubPublication, type PublicationTransport } from './publication.js';
 import { commitRemoteState, IDENTITY_PATH, readRemoteState, STATE_PATH, type RemoteJournal } from './remote-state.js';
+import { prepareBaseline, verifyPreparedBaseline } from './maintenance-baseline.js';
+import { githubBaselineTransport, type BaselineTransport, type PreparedBaseline } from './maintenance-baseline-transport.js';
+import { inspectBinary } from './native.js';
 import { candidateEvidenceFiles, readRemoteStatus } from './remote-status.js';
 
 export interface MaintenanceSchedule { periodDays: number; startAt: string }
@@ -15,12 +18,14 @@ interface Heads { journal: string; stable: string }
 export type MaintenanceRun = { id: string; generation: number; oldHeads: Heads } & (
   { phase: 'isolated'; isolatedHead?: never; plan?: never }
   | { phase: 'ready'; isolatedHead: string; plan: MaintenancePlan }
+  | { phase: 'prepared'; isolatedHead: string; plan: MaintenancePlan; readyHead: string; baseline: PreparedBaseline }
 );
 
 export interface MaintenanceOptions {
   repository: PublicationRepository;
   publication?: PublicationTransport;
   activation?: Pick<ActivationTransport, 'download'>;
+  baseline?: BaselineTransport;
   refs?: () => Promise<Ref[]>;
   binary?: string;
   now?: Date;
@@ -28,7 +33,7 @@ export interface MaintenanceOptions {
 
 type Request =
   | { action: 'preview' | 'enter'; schedule?: MaintenanceSchedule; manual?: boolean }
-  | { action: 'resume' }
+  | { action: 'resume' | 'prepare' }
   | { action: 'abort'; maintenanceId: string };
 
 const day = 86_400_000;
@@ -135,7 +140,7 @@ async function checkpoint(repository: PublicationRepository, current: Snapshot, 
   return actual;
 }
 
-/** Pause and inspect only. Ordinary writers keep using their original head and generation. */
+/** Isolate publication and prepare a new graph under scratch refs. */
 export async function manageMaintenance(options: MaintenanceOptions & Request) {
   const { repository, action } = options;
   let current = await readRemoteState(repository);
@@ -181,17 +186,62 @@ export async function manageMaintenance(options: MaintenanceOptions & Request) {
   const run = current.journal.maintenanceRun;
   if (!run) return report('deferred', { reason: 'No recoverable maintenance run' });
   if (action === 'abort' && options.maintenanceId !== run.id) return report('deferred', { reason: 'Maintenance identity mismatch' });
+  const shared = repository.branch === current.journal.targetBranch;
+  const expectedParent = run.phase === 'isolated' ? run.oldHeads.journal : run.phase === 'ready' ? run.isolatedHead : run.readyHead;
+  const verifyLiveHeads = async () => {
+    const live = await repository.snapshot();
+    return live.head === current.snapshot.head && live.parent === expectedParent
+      && (shared || (await repository.snapshot(current.journal.targetBranch)).head === run.oldHeads.stable);
+  };
+  if (action === 'prepare' || action === 'resume' && run.phase === 'prepared') {
+    const binary = options.binary;
+    if (!binary) return report('deferred', { reason: 'Baseline verification requires an explicit sing-box 1.14.4 binary' });
+    let tool;
+    try { tool = await inspectBinary(binary); }
+    catch (error) { return report('deferred', { reason: error instanceof Error ? error.message : String(error) }); }
+    if (run.phase === 'isolated') return report('deferred', { reason: 'Resume maintenance to finish recording its retention plan first' });
+    if (!await verifyLiveHeads()) return report('deferred', { reason: 'Maintenance heads changed; cannot prepare or verify this baseline' });
+    const verification = { repository, transport: options.baseline ?? githubBaselineTransport(),
+      publication: options.publication ?? githubPublication(), binary, targetBranch: current.journal.targetBranch,
+      plan: run.plan, runId: run.id };
+    if (run.phase === 'prepared') {
+      try { await verifyPreparedBaseline(verification, run.baseline.stages); }
+      catch (error) { return report('failed', { error: error instanceof Error ? error.message : String(error) }); }
+      if (!await verifyLiveHeads()) return report('deferred', { reason: 'Maintenance heads changed during verification' });
+      return report('prepared', { baseline: run.baseline });
+    }
+    // Revalidate the frozen old inventory before copying its files.
+    const verified = await inspect();
+    if ('error' in verified) return report('deferred', verified);
+    if (verified.blockers.length || verified.heads.journal !== current.snapshot.head
+      || verified.heads.stable !== (shared ? current.snapshot.head : run.oldHeads.stable)
+      || !isDeepStrictEqual(run.plan.retain, verified.plan.retain) || !isDeepStrictEqual(run.plan.discard, verified.plan.discard)) {
+      return report('deferred', { ...verified, reason: 'The recorded plan cannot be verified against the isolated state' });
+    }
+    let baseline: PreparedBaseline;
+    try {
+      const stable = shared ? current.snapshot : await repository.snapshot(current.journal.targetBranch);
+      if (!shared && stable.head !== run.oldHeads.stable) return report('deferred', { reason: 'Stable head changed before preparation' });
+      baseline = await prepareBaseline({ ...verification, journal: current.journal, source: current.snapshot, stable, tool,
+        now: options.now ?? new Date() });
+    } catch (error) {
+      return report('failed', { error: error instanceof Error ? error.message : String(error) });
+    }
+    if (!await verifyLiveHeads()) return report('deferred', { reason: 'Maintenance heads changed during preparation' });
+    current = await checkpoint(repository, current, { ...current.journal, maintenanceRun: {
+      ...run, phase: 'prepared', readyHead: current.snapshot.head, baseline,
+    } }, `记录已核验的规则产物基线 ${run.id}`);
+    return report('prepared', { baseline });
+  }
   const isolated = await inspect();
   if ('error' in isolated) return report('deferred', isolated);
   // Shared-branch control commits move its head without changing stable bytes.
-  const shared = repository.branch === current.journal.targetBranch;
-  const expectedParent = run.phase === 'isolated' ? run.oldHeads.journal : run.isolatedHead;
   if (current.snapshot.parent !== expectedParent || isolated.heads.journal !== current.snapshot.head
     || isolated.heads.stable !== (shared ? current.snapshot.head : run.oldHeads.stable)) {
     return report('deferred', { reason: 'Maintenance heads changed; cannot prove this is still before the switch', ...isolated });
   }
   if (isolated.blockers.length) return report('deferred', isolated);
-  if (run.phase === 'ready' && (!isDeepStrictEqual(run.plan.retain, isolated.plan.retain)
+  if (run.phase !== 'isolated' && (!isDeepStrictEqual(run.plan.retain, isolated.plan.retain)
     || !isDeepStrictEqual(run.plan.discard, isolated.plan.discard))) {
     return report('deferred', { reason: 'The recorded plan differs from the isolated state', ...isolated });
   }

@@ -171,6 +171,20 @@ node --import tsx src/cli.ts maintenance-abort --branch acceptance-example --mai
 
 断线后用 `maintenance-resume` 读取远端维护 ID、旧 heads 和阶段，并续做未完成的保留核实。切换前可用输出中的 `run.id` 安全退出。退出会重新核实状态和 heads，并保留递增后的代次。无法确认时会延期并维持隔离。给预览、进入或恢复传入 `--binary`，可增加当前候选的原生复验。操作流程和验证边界见 [#52 验收记录](docs/verification/issue-52.md)。
 
+## 准备新发布基线
+
+进入维护并记录保留集合后，显式运行准备命令：
+
+```sh
+node --import tsx src/cli.ts maintenance-prepare --branch acceptance-example --binary "$sing_box_binary"
+```
+
+使用 sing-box 1.14.4 的绝对路径。命令从远端复制当前规则字节、原规则定义和构建记录，为新提交重写 Manifest 及内部证据地址，并对新地址执行 HTTPS 回读和原生验证。处理记录仍可说明某个 Release 已处理。只有保留的候选才有证据地址。稳定订阅继续使用原 URL，固定原因和控制修订保持。
+
+准备命令以 `maintenance-<维护 ID>-<阶段>` 创建临时分支。准备成功后，`status: prepared` 的 `baseline.stages` 列出临时分支及不可变提交，`journal` 和 `stable` 是待切换的两个 heads，单分支目标共用同一个 head。记录包含验证时间与工具摘要。准备中断后，在任意新目录重跑 `maintenance-prepare`。成功后可带同一版本的 binary 运行 `maintenance-resume`，只用新产物地址复验。当前证据或 binary 缺失会延期；准备写入或回读失败会报告失败并保持隔离。
+
+切换前仍可按维护 ID 安全退出。准备留下的临时分支保留供核验和后续处理。切换及临时引用清理由 [#54](https://github.com/wangyingang/sing-box-config-manager/issues/54) 交付。测试场景见 [#53 验收记录](docs/verification/issue-53.md)。
+
 ## 立即检查并激活
 
 `check-now` 使用版本化配置、目标分支已初始化的远端状态和可信宿主维护的 Rule Subscription v2。订阅 JSON 文件以逻辑 ID 为键，值是该集的[完整 v2 订阅对象](contracts/rule-subscription-v2.example.json)。其中的稳定 URL 必须指向配置的目标分支和对应的 `stablePath`。以下命令用于预先创建并初始化的 `acceptance-*` 目标：
