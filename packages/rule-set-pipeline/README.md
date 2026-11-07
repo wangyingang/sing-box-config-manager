@@ -1,6 +1,6 @@
 # Rule Set Pipeline
 
-包名：`@sing-box-config-manager/rule-set-pipeline`。管理者需要更新系统维护的规则集合时，本模块从官方来源生成 sing-box 可加载的规则文件，验证并上传为候选，再由管理者显式激活。客户端随后通过稳定地址取得当前规则；构建成功、候选验证成功、稳定入口切换和客户端加载完成是不同的状态。
+包名：`@sing-box-config-manager/rule-set-pipeline`。管理者需要更新系统维护的规则集合时，本模块从官方来源生成 sing-box 可加载的规则文件，验证并上传为候选。管理者可显式激活候选，检查流程也可自动激活符合条件的规则。客户端随后通过稳定地址取得当前规则；构建成功、候选验证成功、稳定入口切换和客户端加载完成是不同的状态。
 
 当前 `update` 可发布 V2Fly `domain-list-community` 官方 Release 中 `dlc.dat_plain.yml` 的 `category-ai-!cn`，也可按管理者的 YAML 配置从同一 Release 发布多个列表。本地 `build` 同样支持配置驱动的多集构建。`activate` 与 `rollback` 均可通过 `--config ... --id ...` 按逻辑 ID 独立操作。输出包括 JSON 源规则文件和 SRS 二进制规则文件，目标版本固定为 sing-box **1.14.4**，JSON Source Format 固定为 **4**。合成 IP／混合输入用于验证构建 API，不表示已经支持其他真实来源或其发布激活。
 
