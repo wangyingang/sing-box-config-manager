@@ -11,7 +11,7 @@ import { decodedTerms, USAGES } from './projection.js';
 import { sha256 } from './release.js';
 import { ARTIFACT_REPOSITORY, immutableUrl } from './publication.js';
 import { retainedCandidateDownload } from './publication-repository.js';
-import { activationDigest, manualControl, openManualActivation, registerManualActivation, type ActivationWriteReservation, type ObservedActivation } from './manual-activation.js';
+import { activationDigest, effectiveControl, manualControl, openManualActivation, registerManualActivation, type ActivationWriteReservation, type ObservedActivation } from './manual-activation.js';
 import type { ActivationOperation } from './remote-state.js';
 import { ActivationWriteError, githubActivation, type ActivationTransport } from './activation-transport.js';
 
@@ -279,7 +279,7 @@ async function performActivation(options: ActivationOptions | RollbackOptions, a
     previous = JSON.parse(previousBytes.toString());
     requireThat(previous.schemaVersion === 1 && typeof previous.id === 'string' && typeof previous.candidateId === 'string'
       && previous.files && (!definition || (previous.logicalId === definition.id && Array.isArray(previous.history))), 'Invalid previous activation record');
-    requireThat(!automatic || !previous.control?.pauseAutomaticActivation, 'Automatic activation is paused');
+    requireThat(!automatic || !effectiveControl(session!.journal, definition!.id, previous)?.pauseAutomaticActivation, 'Automatic activation is paused');
     requireThat(equal(previous.subscription, subscription), 'Existing subscription contract cannot change during activation');
     requireThat(equal(Object.keys(previous.files).sort(), Object.keys(files).sort()), 'Previous stable file set mismatch');
     for (const [path, metadata] of Object.entries(previous.files) as [string, any][]) {

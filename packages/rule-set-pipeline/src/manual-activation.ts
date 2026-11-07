@@ -14,6 +14,19 @@ export function manualControl(operation: Pick<ManualOperation, 'id' | 'kind'>) {
   };
 }
 
+export function applicableResume(journal: RemoteJournal, id: string, active: ObservedActivation | undefined) {
+  const decision = Object.hasOwn(journal.resumes ?? {}, id) ? journal.resumes![id] : undefined;
+  // The resume clears the specific pin it observed. A later manual switch
+  // installs its own pin. Automatic switches leave the resume revision intact.
+  return decision && active && (!active.control || active.id === decision.activationId) ? decision : undefined;
+}
+
+export function effectiveControl(journal: RemoteJournal, id: string, active: ObservedActivation | undefined) {
+  const decision = applicableResume(journal, id, active);
+  return decision ? { revision: decision.revision, reason: 'manual-resume' as const,
+    pauseAutomaticActivation: false, pauseAutomaticRetry: false } : active?.control;
+}
+
 export function activationDigest(record: Record<string, unknown>) {
   // On a shared branch the registration itself becomes the switch parent.
   const { expectedHead: _parent, ...activation } = record;
@@ -39,9 +52,10 @@ export async function authorizeActivationWrite(repository: PublicationRepository
     const stable = repository.branch === branch ? snapshot : await repository.snapshot(branch);
     const previousBytes = await stable.read(operation.recordPath);
     const previous = previousBytes && JSON.parse(previousBytes.toString());
+    const control = effectiveControl(journal, operation.logicalId, previous);
     if (stable.head !== expectedHead || check?.kind !== 'check' || check.status !== 'pending' || check.id !== operation.checkOperationId
-      || previous?.id !== operation.previousActivationId || previous?.control?.pauseAutomaticActivation
-      || (previous?.control?.revision ?? null) !== check.controlRevisions?.[operation.logicalId]) {
+      || previous?.id !== operation.previousActivationId || control?.pauseAutomaticActivation
+      || (control?.revision ?? null) !== check.controlRevisions?.[operation.logicalId]) {
       throw new Error('PUBLICATION_CONFLICT: automatic activation control revision changed');
     }
   }
@@ -113,6 +127,7 @@ export interface ObservedActivation {
   candidateEvidenceUrl: string;
   files: Record<string, { byteLength: number; sha256: string }>;
   history?: { id: string; commit: string }[];
+  control?: ReturnType<typeof manualControl>;
 }
 
 export interface ActivationOperationResult extends ActivationOperation {
