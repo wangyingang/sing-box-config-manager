@@ -9,6 +9,7 @@ import { parseBuildConfiguration, type RuleDefinition } from './configured-build
 import type { PublicationRepository } from './publication-repository.js';
 import { ARTIFACT_REPOSITORY, githubPublication, immutableUrl, type PublicationTransport } from './publication.js';
 import { readRemoteState } from './remote-state.js';
+import { manualControl, readManualOperationResults, type ObservedActivation } from './manual-activation.js';
 import { sha256 } from './release.js';
 
 const ajv = new Ajv({ strict: true });
@@ -38,6 +39,10 @@ function activationRecord(value: unknown, path: string, targetBranch: string) {
   if (configured) {
     requireThat(typeof value.logicalId === 'string' && /^[a-z][a-z0-9-]*$/.test(value.logicalId)
       && Array.isArray(value.history), 'Invalid configured activation history');
+    if (value.control !== undefined) {
+      const kind = value.operation === 'rollback' ? 'rollback' : 'activate';
+      requireThat(isDeepStrictEqual(value.control, manualControl({ id: value.id, kind })), 'Invalid manual control record');
+    }
   } else requireThat(value.logicalId === undefined, 'Invalid legacy activation identity');
   requireThat((configured ? validateSubscriptionV2 : validateSubscription)(value.subscription), 'Invalid remote Rule Subscription');
   const subscription: any = value.subscription;
@@ -76,7 +81,7 @@ function activationRecord(value: unknown, path: string, targetBranch: string) {
       && typeof item.candidateId === 'string' && /^[a-f0-9-]+$/.test(item.candidateId) && !ids.has(item.id), 'Invalid activation history entry');
     ids.add(item.id);
   }
-  return { record: value, history };
+  return { record: value as Record<string, any> & ObservedActivation, history };
 }
 
 async function verifyStableFiles(record: Record<string, any>, read: (path: string) => Promise<Buffer | undefined>) {
@@ -145,8 +150,7 @@ export async function readRemoteStatus(options: {
       if (candidate) requireThat(source.releaseId === candidate.releaseId && source.tag === candidate.tag
         && (!candidate.logicalId || candidate.logicalId === manifest.id), 'Candidate source or logical identity mismatch');
       if (options.binary) await verifyActivationCandidate({ candidateEvidenceUrl: selectedUrl, binary: options.binary }, {
-        branch: journal.targetBranch, head: async () => stable.head, download: publication.download.bind(publication),
-        async commit() { throw new Error('status cannot write'); },
+        branch: journal.targetBranch, download: url => publication.download(url),
       }, definition, 'rollback');
       return candidateAvailability[id] = { status: 'available', verification: options.binary ? 'native' : 'structural', evidenceUrl: selectedUrl };
     } catch (error) {
@@ -159,12 +163,14 @@ export async function readRemoteStatus(options: {
   const unavailableRollbackTargets: Record<string, UnavailableTarget[]> = {};
   const historyComplete: Record<string, boolean> = {};
   const historyErrors: Record<string, { commit?: string; error: string }[]> = {};
+  const currentByPath = new Map<string, ObservedActivation>();
   const paths = stable.paths.filter(path => /^stable\/(?:[a-z0-9._-]+\/)*activation\.json$/.test(path));
   for (const path of paths) {
     const bytes = await stable.read(path);
     requireThat(bytes, `Missing activation record: ${path}`);
     const { record, history } = activationRecord(JSON.parse(bytes.toString()), path, journal.targetBranch);
     await verifyStableFiles(record, file => stable.read(file));
+    currentByPath.set(path, record);
     const candidate = await inspectCandidate(record.candidateId, record.candidateEvidenceUrl);
     const current: ActiveVersion = { status: 'activated', commit: stable.head, activation: record, candidate };
     const id: string = record.logicalId ?? 'v2fly:category-ai-!cn';
@@ -244,8 +250,14 @@ export async function readRemoteStatus(options: {
   }
   const operation = journal.state.pendingOperation;
   if (operation?.status === 'pending') pendingOperations.unshift({ id: operation.id, status: 'pending' });
-  return { authority: 'remote' as const, head: snapshot.head, generation: journal.generation,
+  const manualOperations = await readManualOperationResults(options.repository, journal, stable, currentByPath, url => activation.download(url));
+  for (const operation of manualOperations) {
+    if (operation.status === 'pending') pendingOperations.push({ id: operation.id, logicalId: operation.logicalId,
+      candidateId: operation.candidateId, status: operation.commit ? 'activated-readback-pending' : 'manual-commit-pending',
+      ...(operation.error ? { error: operation.error } : {}) });
+  }
+  return { authority: 'remote' as const, head: snapshot.head, stableHead: stable.head, generation: journal.generation,
     maintenance: journal.maintenance, state: journal.state, activeRuleVersion,
-    activeRuleVersions, rollbackTargets, unavailableRollbackTargets, candidateAvailability, pendingOperations,
+    activeRuleVersions, rollbackTargets, unavailableRollbackTargets, candidateAvailability, manualOperations, pendingOperations,
     historyComplete, historyErrors };
 }

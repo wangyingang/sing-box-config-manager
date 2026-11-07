@@ -1,11 +1,21 @@
+import { githubPublicationRepository, type PublicationRepository } from './publication-repository.js';
 import { ARTIFACT_REPOSITORY, ghJson, githubPublication } from './publication.js';
 
 export interface ActivationTransport {
   readonly branch: string;
+  /** Coordination journal for configured operations, on candidates in production. */
+  readonly repository?: PublicationRepository;
   head(): Promise<string>;
   download(url: string): Promise<Buffer>;
-  /** Exactly one parent, expectedHead; never rebase or force-push on conflict. */
-  commit(expectedHead: string, files: Record<string, Buffer>, message: string): Promise<string>;
+  /** Exactly one parent, expectedHead; never rebase or force-push on conflict.
+   * Run the configured operation's guard immediately before updating the ref.
+   * Wrap uncertain ref updates in ActivationWriteError.
+   */
+  commit(expectedHead: string, files: Record<string, Buffer>, message: string, beforeWrite?: () => Promise<void>): Promise<string>;
+}
+
+export function isConfiguredActivationPath(path: string) {
+  return /^stable\/.+\/(?:domains\.(?:srs|json)|activation\.json)$/.test(path);
 }
 
 /** Branch must already exist. Creating a production or acceptance environment is separate. */
@@ -15,6 +25,7 @@ export function githubActivation(branch = 'main', request: typeof ghJson = ghJso
     ...(input === undefined ? [] : ['--method', 'POST', '--input', '-'])], input);
   return {
     branch,
+    repository: githubPublicationRepository(branch === 'main' ? 'candidates' : branch, request),
     async head() {
       const repository = await request(['api', `repos/${ARTIFACT_REPOSITORY}`]);
       if (repository.private) throw new Error('Artifact repository must be public');
@@ -40,19 +51,28 @@ export function githubActivation(branch = 'main', request: typeof ghJson = ghJso
       if (bytes.length !== blob.size) throw new Error('Previous activation blob size mismatch');
       return bytes;
     },
-    async commit(expectedHead, files, message) {
+    async commit(expectedHead, files, message, beforeWrite) {
       if (!/^[a-f0-9]{40}$/.test(expectedHead)) throw new Error('Expected full old commit');
+      for (const path of Object.keys(files)) {
+        if (!/^stable\/[a-zA-Z0-9/_.-]+$/.test(path) || path.split('/').some(part => part === '.' || part === '..' || !part)) throw new Error('Invalid stable path');
+      }
+      if (!beforeWrite && Object.keys(files).some(isConfiguredActivationPath)) {
+        throw new Error('Configured activation requires a registered write guard');
+      }
       // Recheck immediately before constructing the single-parent update.
       if (await this.head() !== expectedHead) throw new Error('ACTIVATION_CONFLICT: remote head changed');
       const parent = await api(`git/commits/${expectedHead}`);
       const tree = [];
       for (const [path, bytes] of Object.entries(files)) {
-        if (!/^stable\/[a-zA-Z0-9/_.-]+$/.test(path) || path.split('/').some(part => part === '.' || part === '..' || !part)) throw new Error('Invalid stable path');
         const blob = await api('git/blobs', { content: bytes.toString('base64'), encoding: 'base64' });
         tree.push({ path, mode: '100644', type: 'blob', sha: blob.sha });
       }
       const createdTree = await api('git/trees', { base_tree: parent.tree.sha, tree });
       const commit = await api('git/commits', { message, tree: createdTree.sha, parents: [expectedHead] });
+      if (beforeWrite) {
+        if (await this.head() !== expectedHead) throw new Error('ACTIVATION_CONFLICT: remote head changed');
+        await beforeWrite();
+      }
       // The caller knows this identity before PATCH, so even a lost reply can be reconciled.
       try {
         await request(['api', `repos/${ARTIFACT_REPOSITORY}/git/refs/heads/${branch}`, '--method', 'PATCH', '--input', '-'],

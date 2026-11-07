@@ -168,3 +168,21 @@ for (const recordPath of ['stable/ai-openai/activation.json', 'stable/providers/
     assert.equal(remote.paths.length, 3);
   });
 }
+
+
+test('低层激活 transport 拒绝绕过登记直接修改配置化稳定文件', async () => {
+  const remote = github();
+  await assert.rejects(remote.transport.commit(oldHead, { 'stable/ai-openai/domains.srs': Buffer.from('rules') }, '绕过登记'),
+    /requires a registered write guard/);
+  assert.equal(remote.calls.length, 0);
+});
+
+test('配置化提交准备完毕后，门禁拒绝就不会发送 ref PATCH', async () => {
+  const remote = github();
+  await assert.rejects(remote.transport.commit(oldHead, { 'stable/ai-openai/domains.srs': Buffer.from('rules') }, '激活候选',
+    async () => {
+      assert.ok(remote.calls.some(call => call.args[1].endsWith('/git/commits') && call.input));
+      throw new Error('REPOSITORY_MAINTENANCE');
+    }), /REPOSITORY_MAINTENANCE/);
+  assert.ok(!remote.calls.some(call => call.args.includes('PATCH')));
+});

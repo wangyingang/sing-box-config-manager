@@ -2,44 +2,80 @@ import { readFile } from 'node:fs/promises';
 import { updateRules } from '../../src/update.js';
 import { sha256 } from '../../src/release.js';
 import { immutableUrl, type PublicationTransport } from '../../src/publication.js';
+import type { PublicationRepository } from '../../src/publication-repository.js';
+import { initializeRemoteState } from '../../src/remote-state.js';
 import { ActivationWriteError, type ActivationTransport } from '../../src/activation-transport.js';
 
-export async function configuredEnvironment(binary: string, directory: string) {
-  const branch = 'acceptance-issue-39';
+export async function configuredEnvironment(binary: string, directory: string, branch = 'acceptance-issue-39') {
   const configuration = (await readFile(new URL('../../samples/three-ai-rule-sets.yml', import.meta.url), 'utf8')).replace('branch: main', `branch: ${branch}`);
   const ids = ['ai-openai', 'ai-anthropic', 'ai-google-deepmind'];
   let sequence = 0, head = 'a'.repeat(40), mode = '', revision = 0, writes = 0;
-  const snapshots = new Map<string, Record<string, Buffer>>([[head, {}]]);
+  let journalHead = branch === 'main' ? 'b'.repeat(40) : head;
+  const parents = new Map<string, string>();
+  const retained: Record<string, Buffer> = {};
+  const snapshots = new Map<string, Record<string, Buffer>>([[head, {}], [journalHead, {}]]);
   const stored = new Map<string, Buffer>();
   const publish: PublicationTransport['commit'] = async files => {
     const commit = (++sequence).toString(16).padStart(40, '0');
-    for (const [path, bytes] of Object.entries(files)) stored.set(immutableUrl(commit, path), bytes);
+    for (const [path, bytes] of Object.entries(files)) {
+      stored.set(immutableUrl(commit, path), bytes);
+      retained[path] = bytes;
+    }
     return commit;
   };
   const download = async (url: string) => {
     const parsed = new URL(url), parts = parsed.pathname.split('/').slice(3), ref = parts.shift()!, path = parts.join('/');
+    if (mode === 'readback' && ref === head && path.endsWith('/domains.srs')) throw new Error('HTTPS temporarily unavailable');
     const bytes = snapshots.get(ref === branch ? head : ref)?.[path] ?? stored.get(url);
     if (!bytes) throw new Error(`Readback HTTP 404: ${url}`);
     return bytes;
   };
-  const transport: ActivationTransport = {
-    branch, async head() { if (mode === 'unknown-head') throw new Error('offline'); return head; }, download,
+  const coordinationBranch = branch === 'main' ? 'candidates' : branch;
+  const repository: PublicationRepository = {
+    branch: coordinationBranch,
+    async snapshot(target = coordinationBranch) {
+      const fixed = target === branch ? head : journalHead;
+      const tree = { ...(target === coordinationBranch ? retained : {}), ...snapshots.get(fixed) };
+      return { head: fixed, parent: parents.get(fixed), paths: Object.keys(tree), async read(path) { return tree[path]; } };
+    },
     async commit(expected, files) {
+      const current = branch === 'main' ? journalHead : head;
+      if (current !== expected) throw new Error('PUBLICATION_CONFLICT');
+      const commit = (++sequence).toString(16).padStart(40, '0');
+      parents.set(commit, current);
+      snapshots.set(commit, { ...snapshots.get(current), ...files });
+      if (branch === 'main') journalHead = commit;
+      else head = commit;
+      return commit;
+    },
+  };
+  await initializeRemoteState(repository, branch);
+  let beforeSwitch: (() => Promise<void>) | undefined;
+  const transport: ActivationTransport = {
+    branch, repository, async head() { if (mode === 'unknown-head') throw new Error('offline'); return head; }, download,
+    async commit(expected, files, _message, beforeWrite) {
+      if (mode === 'rejected') throw new Error('Server rejected before requesting the ref update');
+      await beforeSwitch?.();
+      await beforeWrite?.();
       // No await between compare and update: model the remote atomic ref operation.
       if (head !== expected) throw new Error('ACTIVATION_CONFLICT');
       writes++;
       const commit = (++sequence).toString(16).padStart(40, '0');
       snapshots.set(commit, { ...snapshots.get(head), ...files });
-      if (mode === 'not-applied' || mode === 'unknown') {
-        if (mode === 'unknown') mode = 'unknown-head';
+      parents.set(commit, head);
+      if (mode === 'not-applied') {
         throw new ActivationWriteError(commit, 'lost reply');
       }
       head = commit;
-      if (mode === 'readback') snapshots.get(commit)![Object.keys(files).find(path => path.endsWith('activation.json'))!] = Buffer.from('damaged');
+      if (mode === 'unknown') {
+        mode = 'unknown-head';
+        throw new ActivationWriteError(commit, 'lost reply and connection');
+      }
       if (mode === 'applied' || mode === 'superseded') {
         if (mode === 'superseded') {
           head = (++sequence).toString(16).padStart(40, '0');
           snapshots.set(head, { ...snapshots.get(commit) });
+          parents.set(head, commit);
         }
         throw new ActivationWriteError(commit, 'lost reply');
       }
@@ -71,8 +107,8 @@ export async function configuredEnvironment(binary: string, directory: string) {
     return { schemaVersion: 2, systemRuleSetId: id, targetVersion: '1.14.4', sourceFormatVersion: 4,
       projections: { route: { formats }, 'dns-query': { formats: structuredClone(formats) }, 'dns-response': { unavailable: 'empty' } } };
   };
-  return { ids, candidates, subscription, transport, stored, snapshots, configuration, publish, head: () => head,
-    writes: () => writes, fail(value: string) { mode = value; },
+  return { ids, candidates, subscription, transport, repository, stored, snapshots, configuration, publish, head: () => head,
+    writes: () => writes, beforeSwitch(hook: () => Promise<void>) { beforeSwitch = hook; }, fail(value: string) { mode = value; },
     options: (id: string, evidenceUrl: string) => ({ logicalId: id, configuration, stateDirectory: directory,
       subscription: subscription(id), binary, expectedHead: head, candidateEvidenceUrl: evidenceUrl, transport }) };
 }

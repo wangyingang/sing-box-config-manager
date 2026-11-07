@@ -12,6 +12,9 @@ import { promisify } from 'node:util';
 import test from 'node:test';
 import { renderSubscription, type RuleSubscription } from '../../../config-compiler/src/index.js';
 import { activateRules, rollbackRules } from '../../src/activation.js';
+import { initializeRemoteState } from '../../src/remote-state.js';
+import type { PublicationRepository } from '../../src/publication-repository.js';
+import type { ActivationTransport } from '../../src/activation-transport.js';
 import { ARTIFACT_REPOSITORY } from '../../src/publication.js';
 import { sha256 } from '../../src/release.js';
 import { parseBuildConfiguration } from '../../src/configured-build.js';
@@ -90,8 +93,22 @@ test('只发布一次 v2 Recipe，换源 A/B 与回滚 A 后同一进程通过�
   let count = 0, head = 'a'.repeat(40);
   const downloads: { url: string; sha256: string; observedAt: string }[] = [];
   const published: { path: string; sha256: string; commit: string }[] = [];
-  const transport = {
+  const repository: PublicationRepository = {
     branch,
+    async snapshot() {
+      const tree = new Map(stable);
+      return { head, paths: [...tree.keys()], async read(path) { return tree.get(path); } };
+    },
+    async commit(expected, files) {
+      assert.equal(expected, head);
+      head = (++count).toString(16).padStart(40, '0');
+      for (const [path, content] of Object.entries(files)) stable.set(path, content);
+      return head;
+    },
+  };
+  await initializeRemoteState(repository, branch);
+  const transport: ActivationTransport = {
+    branch, repository,
     async head() { return head; },
     async download(address: string) {
       const path = new URL(address).pathname.split('/').slice(3).join('/');
@@ -99,7 +116,8 @@ test('只发布一次 v2 Recipe，换源 A/B 与回滚 A 后同一进程通过�
       if (!content) throw new Error(`Readback HTTP 404: ${address}`);
       return content;
     },
-    async commit(expectedHead: string, files: Record<string, Buffer>, _message: string) {
+    async commit(expectedHead, files, _message, beforeWrite) {
+      await beforeWrite?.();
       assert.equal(expectedHead, head, 'CAS must reject stale activations');
       head = (++count).toString(16).padStart(40, '0');
       for (const [path, content] of Object.entries(files)) {
@@ -111,7 +129,10 @@ test('只发布一次 v2 Recipe，换源 A/B 与回滚 A 后同一进程通过�
   };
   const publish = async (files: Record<string, Buffer>) => {
     const commit = (++count).toString(16).padStart(40, '0');
-    for (const [path, content] of Object.entries(files)) immutable.set(`${commit}/${path}`, content);
+    for (const [path, content] of Object.entries(files)) {
+      immutable.set(`${commit}/${path}`, content);
+      stable.set(path, content);
+    }
     return commit;
   };
   try {

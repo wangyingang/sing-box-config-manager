@@ -2,6 +2,8 @@ import { ARTIFACT_REPOSITORY, ghJson, PUBLICATION_BRANCH } from './publication.j
 
 export interface PublicationSnapshot {
   head: string;
+  /** Single parent, if present. */
+  parent?: string;
   paths: string[];
   read(path: string): Promise<Buffer | undefined>;
 }
@@ -16,6 +18,16 @@ export class PublicationWriteError extends Error {
   constructor(public readonly attemptedCommit: string, cause: unknown) {
     super(`Publication write response uncertain: ${String(cause)}`, { cause });
   }
+}
+
+export function retainedCandidateDownload(snapshot: PublicationSnapshot, candidateId: string, download: (url: string) => Promise<Buffer>) {
+  return async (url: string) => {
+    const bytes = await download(url);
+    const path = new URL(url).pathname.split('/').slice(4).join('/');
+    const retained = path.startsWith(`candidates/${candidateId}/`) ? await snapshot.read(path) : undefined;
+    if (!retained?.equals(bytes)) throw new Error('CANDIDATE_UNAVAILABLE: immutable address differs from retained candidate');
+    return bytes;
+  };
 }
 
 const fullCommit = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
@@ -47,7 +59,7 @@ export function githubPublicationRepository(branch = PUBLICATION_BRANCH, request
         || !fullCommit(entry.sha) || entries.has(entry.path)) throw new Error('Invalid remote tree entry');
       entries.set(entry.path, entry);
     }
-    return { head, treeSha, entries, paths: [...entries.keys()],
+    return { head, parent: parent.parents?.length === 1 && fullCommit(parent.parents[0]?.sha) ? parent.parents[0].sha as string : undefined, treeSha, entries, paths: [...entries.keys()],
       async read(path: string): Promise<Buffer | undefined> {
         const entry = entries.get(path);
         if (!entry) return undefined;
