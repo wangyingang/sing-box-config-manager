@@ -12,9 +12,9 @@ import { inspectBinary } from './native.js';
 import { githubPublication } from './publication.js';
 import { retainedCandidateDownload, type PublicationSnapshot } from './publication-repository.js';
 import { sha256 } from './release.js';
-import { openRemoteSession } from './remote-state.js';
+import { openRemoteSession, type RemoteOperation } from './remote-state.js';
 import { activationRecord, readRemoteStatus, verifyStableFiles } from './remote-status.js';
-import type { Candidate, UpdateState } from './update.js';
+import type { Candidate } from './update.js';
 
 export interface CheckOptions extends Omit<ConfiguredUpdateOptions, 'sampleTag' | 'retryRelease'> {
   /** Trusted, complete v2 Rule Subscription for each selected logical ID. */
@@ -40,10 +40,9 @@ type CheckResult = CheckRecord & { id: string; current?: Delivery; lastObserved?
   rollbackTargets?: { commit: string; id: string; candidateId: string }[] };
 type Built = Awaited<ReturnType<typeof buildConfiguredRelease>>;
 type SuccessfulBuild = Extract<Built['results'][number], { status: 'built-validated' }>;
-type CheckOperation = NonNullable<UpdateState['pendingOperation']>;
 const recordPath = (definition: RuleDefinition) => `${definition.stablePath}/activation.json`;
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
-const uncertain = (error: unknown) => /PUBLICATION_PENDING|RESUME_CHECK_PENDING|ACTIVATION_(UNKNOWN|APPLIED_READBACK_PENDING|CONFLICT_OR_SUPERSEDED)/.test(message(error));
+const uncertain = (error: unknown) => /PUBLICATION_PENDING|ACTIVATION_(UNKNOWN|APPLIED_READBACK_PENDING|CONFLICT_OR_SUPERSEDED)/.test(message(error));
 
 async function readActive(snapshot: PublicationSnapshot, definition: RuleDefinition, branch: string) {
   const path = recordPath(definition);
@@ -176,18 +175,50 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
       }
     }
 
+    const parked = journal.parkedOperations ?? [];
     let operation = state.pendingOperation?.status === 'pending' ? state.pendingOperation : undefined;
-    const matchesRequest = () => operation?.kind === 'check' && operation.configuration
-      && isDeepStrictEqual(parseBuildConfiguration(operation.configuration), configuration)
-      && isDeepStrictEqual(operation.selectedIds, definitions.map(rule => rule.id))
-      && isDeepStrictEqual(operation.subscriptionHashes, subscriptionHashes);
-    const recoveryMismatch = new Error('RECOVERY_REQUEST_MISMATCH: resume the registered operation with its original configuration, subscriptions and selection');
-    if (!resumeId && operation && !matchesRequest()) throw recoveryMismatch;
+    const selectedIds = definitions.map(rule => rule.id);
+    const sameConfiguration = (entry: RemoteOperation | undefined) => entry?.kind === 'check' && entry.configuration
+      && isDeepStrictEqual(parseBuildConfiguration(entry.configuration), configuration);
+    const matchesRequest = (entry: RemoteOperation | undefined) => sameConfiguration(entry)
+      && isDeepStrictEqual(entry?.selectedIds, selectedIds)
+      && isDeepStrictEqual(entry?.subscriptionHashes, subscriptionHashes);
+    const selectParked = (index: number) => {
+      const [selected] = parked.splice(index, 1);
+      if (operation) parked.push(operation);
+      state.pendingOperation = selected;
+      return selected;
+    };
+    const canExtendResumeCheck = (entry: RemoteOperation) => {
+      const id = entry.selectedIds?.[0];
+      return sameConfiguration(entry) && entry.selectedIds?.length === 1 && id && selectedIds.includes(id)
+        && entry.subscriptionHashes?.[id] === subscriptionHashes[id]
+        && Object.hasOwn(journal.resumes ?? {}, id)
+        && entry.controlRevisions?.[id] === journal.resumes![id].revision;
+    };
+    let extendResumeCheck = false;
+    if (!resumeId && !matchesRequest(operation)) {
+      const index = parked.findIndex(matchesRequest);
+      if (index >= 0) operation = selectParked(index);
+      else if (operation) {
+        if (!canExtendResumeCheck(operation)) {
+          throw new Error('RECOVERY_REQUEST_MISMATCH: resume the registered operation with its original configuration, subscriptions and selection');
+        }
+        extendResumeCheck = true;
+      }
+    }
+    // Return the journal to interrupted work when this check has settled.
+    const finishCheck = () => {
+      if (!state.pendingOperation || state.pendingOperation.status === 'complete') {
+        if (parked.length) state.pendingOperation = parked.pop();
+      }
+      return session.save();
+    };
     let operationId = operation?.id ?? randomUUID();
     const checkedAt = new Date().toISOString();
     const results = new Map<string, CheckRecord>();
     const latestChecks = state.latestChecks ??= {};
-    const record = (id: string, status: CheckStatus, fields: Partial<CheckRecord> = {}) => {
+    const recordCheckOutcome = (id: string, status: CheckStatus, fields: Partial<CheckRecord> = {}) => {
       const value = { operationId, checkedAt, status, ...fields };
       latestChecks[id] = value;
       results.set(id, value);
@@ -266,40 +297,67 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
     if (resumeId) {
       const active = activeById.get(resumeId);
       if (errors.has(resumeId) || !active) return report(new Error(errors.get(resumeId) ?? 'Resume requires a current rule version'));
-      if (!applicableResume(journal, resumeId, active)?.checkPending) {
-        (journal.resumes ??= {})[resumeId] = { revision: randomUUID(), activationId: active.id, checkPending: true };
-        // The old revision cannot deliver this set. Keep complete candidates
-        // and retire unfinished work only when no other set needs that batch.
-        if (operation?.kind === 'check' && (operation.selectedIds?.length === 1 && operation.selectedIds[0] === resumeId
-          || !operation.candidateIds.length && !Object.values(latestChecks).some(entry => entry.operationId === operation?.id))) {
-          for (const id of operation.candidateIds) {
-            const candidate = state.candidates[id];
-            if (candidate.phase !== 'complete') candidate.retained = false;
-          }
-          operation.status = 'complete';
-          operation = undefined;
-          operationId = randomUUID();
+      const existing = applicableResume(journal, resumeId, active);
+      const sharedCheck = existing && [operation, ...parked].some(entry => (entry?.selectedIds?.length ?? 0) > 1
+        && entry?.controlRevisions?.[resumeId] === existing.revision);
+      const decision = existing?.checkPending && !sharedCheck ? existing
+        : { revision: randomUUID(), activationId: active.id, checkPending: true };
+      const isResumeCheck = (entry: RemoteOperation | undefined) => matchesRequest(entry)
+        && entry?.controlRevisions?.[resumeId] === decision.revision;
+      const superseded = (entry: RemoteOperation) => entry.kind === 'check' && entry.selectedIds?.length === 1
+        && entry.selectedIds[0] === resumeId && entry.controlRevisions?.[resumeId] !== decision.revision;
+      const abandon = (entry: RemoteOperation) => {
+        for (const id of entry.candidateIds) {
+          const candidate = state.candidates[id];
+          if (candidate.phase !== 'complete') candidate.retained = false;
         }
+      };
+      const rearrange = !isResumeCheck(operation) && (operation || parked.some(entry => superseded(entry) || isResumeCheck(entry)));
+      if (rearrange) {
+        // Preserve the fixed Release, candidates and outcomes of other work.
+        // The checkpoint fences its old writer before this check can start.
+        if (operation) {
+          if (superseded(operation)) abandon(operation);
+          else {
+            parked.push(operation);
+            journal.parkedOperations = parked;
+          }
+          state.pendingOperation = operation = undefined;
+        }
+        for (let index = parked.length - 1; index >= 0; index--) {
+          if (superseded(parked[index])) abandon(parked.splice(index, 1)[0]);
+        }
+        const index = parked.findIndex(isResumeCheck);
+        if (index >= 0) operation = selectParked(index);
+        operationId = operation?.id ?? randomUUID();
+      }
+      if (decision !== existing || rearrange) {
+        (journal.resumes ??= {})[resumeId] = decision;
         try { await session.save(); }
         catch (error) { return report(error); }
       }
-      if (operation && (!matchesRequest() || operation.controlRevisions?.[resumeId] !== controlFor(resumeId)?.revision)) {
-        const blockingId = operation.id;
-        operation = undefined;
-        operationId = randomUUID();
-        return report(new Error(`RESUME_CHECK_PENDING: finish operation ${blockingId} with its original command before checking latest`));
-      }
+    }
+
+    if (extendResumeCheck && operation) {
+      // The normal batch recovers the selected set and uses its already fixed
+      // Release for newly included sets. Keep the original control revision.
+      operation.selectedIds = selectedIds;
+      operation.controlRevisions = { ...Object.fromEntries(selectedIds.map(id => [id, controlFor(id)?.revision ?? null])),
+        ...operation.controlRevisions };
+      operation.subscriptionHashes = subscriptionHashes;
+      try { await session.save(); }
+      catch (error) { return report(error); }
     }
 
     for (const rule of definitions) {
       const { id } = rule;
       const control = controlFor(id);
       const currentRevision = control?.revision ?? null;
-      if (errors.has(id)) record(id, 'failed', { error: errors.get(id) });
-      else if (control?.pauseAutomaticRetry) record(id, 'paused');
+      if (errors.has(id)) recordCheckOutcome(id, 'failed', { error: errors.get(id) });
+      else if (control?.pauseAutomaticRetry) recordCheckOutcome(id, 'paused');
       else if (operation && operation.controlRevisions![id] !== currentRevision) {
-        if (control?.pauseAutomaticActivation) record(id, 'paused');
-        else record(id, 'failed', { error: 'PUBLICATION_CONFLICT: control revision changed since registration' });
+        if (control?.pauseAutomaticActivation) recordCheckOutcome(id, 'paused');
+        else recordCheckOutcome(id, 'failed', { error: 'PUBLICATION_CONFLICT: control revision changed since registration' });
       } else if (operation && latestChecks[id]?.operationId === operationId && latestChecks[id].status !== 'verification-pending') {
         results.set(id, latestChecks[id]);
       }
@@ -312,7 +370,7 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
         if (!active || !pendingSwitch) continue;
         const [outcome] = await readActivationOperationResults(repo, journal, stable,
           new Map([[recordPath(rule), active]]), url => activation.download(url), [pendingSwitch]);
-        record(rule.id, outcome.status === 'committed' ? 'activated' : 'verification-pending', {
+        recordCheckOutcome(rule.id, outcome.status === 'committed' ? 'activated' : 'verification-pending', {
           releaseId: recovery.releaseId, tag: recovery.tag, candidateId: active.candidateId,
           ...(outcome.error ? { error: outcome.error } : {}),
         });
@@ -329,7 +387,7 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
         for (const rule of definitions) abandonIncomplete(rule.id);
         if (![...results.values()].some(entry => entry.status === 'verification-pending')) operation.status = 'complete';
       }
-      try { await session.save(); }
+      try { await finishCheck(); }
       catch (error) { results.clear(); return report(error); }
       return report();
     }
@@ -345,12 +403,12 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
     } catch (error) {
       if (/PUBLICATION_(PENDING|CONFLICT)/.test(message(error))) return report(error);
       const fields = operation ? { releaseId: operation.releaseId, tag: operation.tag } : {};
-      for (const { id } of remaining) record(id, 'failed', { ...fields, error: message(error) });
+      for (const { id } of remaining) recordCheckOutcome(id, 'failed', { ...fields, error: message(error) });
       if (operation) {
         for (const rule of definitions) abandonIncomplete(rule.id);
         if (![...results.values()].some(entry => entry.status === 'verification-pending')) operation.status = 'complete';
       }
-      try { await session.save(); }
+      try { await finishCheck(); }
       catch (checkpoint) { return report(checkpoint); }
       return report();
     }
@@ -382,7 +440,7 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
               const controlRevisions = Object.fromEntries(definitions.map(({ id }) => [id, controlFor(id)?.revision ?? null]));
               state.pendingOperation = operation = { id: operationId, kind: 'check', generation: session.generation,
                 releaseId, tag, status: 'pending', expectedHead: session.head, candidateIds: [], configuration: options.configuration,
-                selectedIds: definitions.map(rule => rule.id), controlRevisions, subscriptionHashes };
+                selectedIds, controlRevisions, subscriptionHashes };
             }
             await session.save();
           },
@@ -412,7 +470,7 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
           if (result.status === 'failed') throw new Error(`${result.error}: ${JSON.stringify(result.report.diagnostics)}`);
           if (active && await sameDelivery(result, built!, active, session.snapshot, publication, options.binary)) {
             abandonIncomplete(id);
-            record(id, controlFor(id)?.pauseAutomaticActivation ? 'paused' : 'unchanged', release);
+            recordCheckOutcome(id, controlFor(id)?.pauseAutomaticActivation ? 'paused' : 'unchanged', release);
             await session.save();
             continue;
           }
@@ -440,7 +498,7 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
           definitionSha256: sha256(JSON.stringify({ definition, target: configuration.target })) };
         await session.save();
         if (controlFor(id)?.pauseAutomaticActivation) {
-          record(id, 'paused', { ...release, candidateId: candidate.id });
+          recordCheckOutcome(id, 'paused', { ...release, candidateId: candidate.id });
         } else {
           await activateAutomatically({ configuration: options.configuration, logicalId: id, subscription: options.subscriptions[id],
             candidateEvidenceUrl: candidate.evidenceUrl!, binary: options.binary, expectedHead: expectedStableHead(), transport: activation }, {
@@ -459,7 +517,7 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
               activeById.set(id, activationRecord(current, recordPath(definition), branch).record as Active);
             },
           });
-          record(id, 'activated', { ...release, candidateId: candidate.id });
+          recordCheckOutcome(id, 'activated', { ...release, candidateId: candidate.id });
         }
         await session.save();
       } catch (error) {
@@ -471,7 +529,7 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
           continue;
         }
         const pending = uncertain(error) || candidate?.phase === 'evidence' && !/^(RECOVERY_BUILD_CHANGED|CANDIDATE_UNAVAILABLE)/.test(message(error));
-        record(id, pending ? 'verification-pending' : 'failed', { ...release, error: message(error),
+        recordCheckOutcome(id, pending ? 'verification-pending' : 'failed', { ...release, error: message(error),
           ...(candidate ? { candidateId: candidate.id } : {}) });
         if (coordinationStopped) return report(error);
         if (!pending) abandonIncomplete(id);
@@ -481,7 +539,7 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
     }
     for (const { id } of definitions) if (results.get(id)?.status === 'failed' || results.get(id)?.status === 'paused') abandonIncomplete(id);
     if (![...results.values()].some(result => result.status === 'verification-pending')) operation!.status = 'complete';
-    try { await session.save(); }
+    try { await finishCheck(); }
     catch (error) {
       return report(error);
     }

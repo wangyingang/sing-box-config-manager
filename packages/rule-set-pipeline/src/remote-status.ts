@@ -257,6 +257,7 @@ export async function readRemoteStatus(options: {
   }
   const operation = journal.state.pendingOperation;
   if (operation?.status === 'pending') pendingOperations.unshift({ id: operation.id, status: 'pending' });
+  for (const parked of journal.parkedOperations ?? []) pendingOperations.push({ id: parked.id, status: 'parked' });
   const operations = await readActivationOperationResults(options.repository, journal, stable, currentByPath,
     url => activation.download(url), [...Object.values(journal.manualOperations ?? {}), ...Object.values(journal.automaticOperations ?? {})]
       .filter(operation => !options.recordPaths || options.recordPaths.has(operation.recordPath)));

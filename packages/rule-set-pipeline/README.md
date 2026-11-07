@@ -13,6 +13,8 @@
 | `build:release` | 读取指定 Release，在新目录生成经过本地原生验证的规则文件及记录 | 否；不上传 |
 | `update` | 先恢复远端未完成操作；无待恢复操作时查询一次 latest，逐集发布候选 | 否；候选仍待显式激活 |
 | `rebuild` | 对远端已固定且成功处理、必要证据仍保留的 Release 重建候选 | 否；保留原候选与成功处理记录 |
+| `check-now` | 检查固定的最新 Release，发布并激活允许自动更新的有效变化 | 有验证通过的有效变化时 |
+| `resume` | 解除所选集的人工固定并立即检查最新 Release | 所选集有验证通过的有效变化时 |
 | `activate` | 复验选定候选，更新稳定规则文件及激活记录 | 是；客户端何时加载由其更新机制决定 |
 | `rollback` | 复验保留的历史激活版本，新增提交恢复其规则内容 | 是；同样存在传播与轮询延迟 |
 | `initialize` | 在已存在的发布分支显式创建远端恢复状态；拒绝覆盖已有状态 | 否 |
@@ -137,7 +139,7 @@ pnpm --dir packages/rule-set-pipeline status --config samples/three-ai-rule-sets
 
 `status` 返回 `authority: remote`、维护状态、`candidateAvailability` 和 `pendingOperations`。默认执行证据结构、地址和字节摘要核验，标注 `verification: structural`；提供 `--binary` 时额外执行真实原生复验，标注 `native`。已提交的当前版本即使候选回读失败也仍报告为已激活，并单独标记待核实。旧单集的历史通过 `expectedHead` 追溯，在结果映射中使用 `v2fly:category-ai-!cn`；历史读取失败通过 `historyComplete`／`historyErrors` 报告，不能将空列表视为完整历史。初始化和查询 API 分别为 `initializeRemoteState(repository, targetBranch)`、`readRemoteStatus({ repository, publication?, binary? })`。
 
-同一缓存目录的 `update.lock/` 仍拒绝本机并发；远端预期 head 保护跨机器写入。进程被强制终止后，可换新目录恢复；要复用旧目录，先确认没有存活进程再移除残留锁。不要删除远端来源记录来绕过来源变化错误。人工固定和立即检查使用同一远端 journal。主动恢复、调度及历史清理由父 Spec 的后续工单交付。
+同一缓存目录的 `update.lock/` 仍拒绝本机并发；远端预期 head 保护跨机器写入。进程被强制终止后，可换新目录恢复；要复用旧目录，先确认没有存活进程再移除残留锁。不要删除远端来源记录来绕过来源变化错误。人工固定、立即检查和主动恢复使用同一远端 journal。调度及历史清理由父 Spec 的后续工单交付。
 
 Artifact Manifest（产物清单）记录某次不可变规则文件的固定地址、摘要和使用约束。原有单集及目标为 `main` 的配置驱动更新在产物仓库的 `candidates` 分支追加候选；配置目标为 `acceptance-*` 时在该隔离分支追加候选。两者均采用三个有序的候选提交阶段，并穿插远端操作检查点，使清单可以引用已固定的 commit 地址：
 
@@ -189,7 +191,7 @@ pnpm --dir packages/rule-set-pipeline resume \
 
 - 首次检查直接读取最新官方 Release。暂停期间的中间 Release 不补跑。最新 Release 如果曾被回滚，仍可以在验证通过后采用。
 - 验证失败时继续交付当前版本，恢复决定仍有效。下一次 `check-now` 可以重试。恢复决定提交后、检查开始前中断时，新目录中的 `check-now` 或同一条 `resume` 命令都可以继续。
-- 如果另一批已登记的操作仍需恢复，`resume` 返回 `RESUME_CHECK_PENDING`。使用原命令核实或完成该操作，再对选中集检查最新来源。双分支目标若有仍可能提交的稳定切换，须先核实切换结果，才能保存恢复决定。
+- 恢复会保留其他操作已固定的 Release、候选进度和结果。其他操作可用原命令继续。如果单集恢复已固定 Release 后中断，包含该集的普通批次可用同一 Release 继续检查。双分支目标若有仍可能提交的稳定切换，须先核实切换结果，才能保存恢复决定。
 - `status` 中的 `activeRuleVersions[逻辑 ID].control` 表示当前有效控制状态，`activation` 保存原激活记录。尚未完成的恢复检查在 `pendingOperations` 中显示为 `resume-check-pending`。后来人工指定或回滚会重新固定该集。
 - 稳定 URL 和客户端配置沿用原值。客户端按原生更新周期加载后续规则。
 

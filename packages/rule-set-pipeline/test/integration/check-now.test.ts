@@ -395,3 +395,75 @@ test('维护期间拒绝保存恢复决定或访问上游', { skip: !binary }, a
   const status = await readRemoteStatus({ ...common, repository: env.repository });
   assert.deepEqual(status.activeRuleVersions['ai-openai'].control, pin.activation.control);
 }));
+
+test('恢复 OpenAI 立即检查最新来源，Anthropic 保留原批次和已发布的候选文件', { skip: !binary }, async () => isolated(async (env, directory) => {
+  const initial = options(env, directory, upstream(1));
+  await checkRules(initial);
+  const status = () => readRemoteStatus({ repository: env.repository, publication: initial.publication, activation: env.transport });
+  const original = await status();
+  await activateRules(env.options('ai-openai', original.activeRuleVersions['ai-openai'].activation.candidateEvidenceUrl));
+  const earlier = options(env, join(directory, 'earlier'), upstream(2, { anthropic: 'domain:earlier.example' }));
+  let earlierCandidate: string | undefined;
+  const repository = { ...env.repository, async commit(...args: Parameters<typeof env.repository.commit>) {
+    const head = await env.repository.commit(...args);
+    const ruleFile = Object.keys(args[1]).find(path => path.startsWith('candidates/') && path.endsWith('/domains.srs'));
+    if (!earlierCandidate && ruleFile) {
+      earlierCandidate = ruleFile.split('/')[1];
+      const resumed = await resumeRules({ ...options(env, join(directory, 'resume'), upstream(3, { openai: 'domain:latest.example' })), logicalId: 'ai-openai' });
+      assert.equal(resumed.exitCode, 0, JSON.stringify(resumed));
+      assert.equal(resumed.results[0].releaseId, 3);
+      assert.equal(resumed.results[0].status, 'activated');
+    }
+    return head;
+  } };
+  const old = await checkRules({ ...earlier, selectedIds: ['ai-anthropic'], publication: { ...earlier.publication, repository } });
+  assert.equal(old.exitCode, 1);
+  assert.ok(earlierCandidate);
+  const after = await status();
+  assert.equal(after.state.pendingOperation?.releaseId, 2);
+  assert.equal(after.state.candidates[earlierCandidate].phase, 'files');
+  assert.equal(after.activeRuleVersions['ai-anthropic'].activation.id, original.activeRuleVersions['ai-anthropic'].activation.id);
+  const pinnedSource = upstream(2, { anthropic: 'domain:earlier.example' });
+  const recovery = await checkRules({ ...options(env, join(directory, 'recover'), pinnedSource), selectedIds: ['ai-anthropic'] });
+  assert.equal(recovery.exitCode, 0, JSON.stringify(recovery));
+  assert.equal(recovery.results[0].candidateId, earlierCandidate);
+  assert.equal(recovery.results[0].releaseId, 2);
+  assert.ok(pinnedSource.requests.every(url => !url.endsWith('/latest')));
+}, 'main'));
+
+test('单集恢复已固定来源后中断，正常批次用同一个 Release 继续三个规则集', { skip: !binary }, async () => isolated(async (env, directory) => {
+  const first = options(env, directory, upstream(1));
+  await checkRules(first);
+  const initial = await readRemoteStatus({ repository: env.repository, publication: first.publication, activation: env.transport });
+  await activateRules(env.options('ai-openai', initial.activeRuleVersions['ai-openai'].activation.candidateEvidenceUrl));
+  const source = upstream(2, { openai: 'domain:openai-next.example', anthropic: 'domain:anthropic-next.example' });
+  const common = options(env, join(directory, 'first'), source);
+  let offline = false;
+  const repository = { ...env.repository,
+    async snapshot(target?: string) {
+      if (offline) throw new Error('Connection lost');
+      return env.repository.snapshot(target);
+    },
+    async commit(...args: Parameters<typeof env.repository.commit>) {
+      const head = await env.repository.commit(...args);
+      const state = JSON.parse(args[1][STATE_PATH].toString()).state;
+      if (state.pendingOperation?.status === 'pending' && state.pendingOperation.releaseId === 2) {
+        offline = true;
+        throw new PublicationWriteError(head, 'Pinned Release response lost');
+      }
+      return head;
+    },
+  };
+  const interrupted = await resumeRules({ ...common, logicalId: 'ai-openai', publication: { ...common.publication, repository } });
+  assert.equal(interrupted.exitCode, 1);
+  assert.deepEqual(interrupted.results.map(result => result.status), ['verification-pending']);
+
+  source.requests.length = 0;
+  const continued = await checkRules(options(env, join(directory, 'fresh'), source));
+  assert.equal(continued.exitCode, 0, JSON.stringify(continued));
+  assert.deepEqual(continued.results.map(result => [result.id, result.status, result.releaseId]), [
+    ['ai-openai', 'activated', 2], ['ai-anthropic', 'activated', 2], ['ai-google-deepmind', 'unchanged', 2],
+  ]);
+  assert.ok(source.requests.some(url => url.endsWith('/releases/2')));
+  assert.ok(source.requests.every(url => !url.endsWith('/latest')));
+}));
