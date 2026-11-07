@@ -14,6 +14,7 @@ export interface WorkflowOptions {
 
 interface MaintenanceOutcome {
   status: string;
+  error?: string;
   maintenance?: 'open' | 'maintenance';
   run?: { id: string; phase: string };
   blockers?: { status: string }[];
@@ -25,7 +26,8 @@ export interface WorkflowOperations {
 }
 
 function maintenanceFailed(result: MaintenanceOutcome | undefined) {
-  return !result || result.status === 'failed' || (result.maintenance === 'maintenance' && !result.run)
+  return !result || result.status === 'failed' || result.error !== undefined
+    || (result.maintenance === 'maintenance' && !result.run)
     || result.blockers?.some(({ status }) => /(?:^|-)verification-pending$|-commit-pending$|-readback-pending$/.test(status)
       || status === 'current-evidence-mismatch' || status === 'candidate-completion-unverified');
 }

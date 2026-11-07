@@ -93,3 +93,12 @@ test('manual cleanup reports pending remote verification as a failure while defe
   assert.equal(await result, 1);
   assert.deepEqual(reports['进入维护'], deferred);
 });
+
+test('an inspection error fails the workflow even when maintenance defers writes', async () => {
+  const deferred = { status: 'deferred', error: 'Unable to list artifact refs' };
+  const { result, reports } = run({ operation: 'cleanup', cleanupEnabled: true }, {
+    maintenance: async () => deferred,
+  });
+  assert.equal(await result, 1);
+  assert.deepEqual(reports['进入维护'], deferred);
+});
