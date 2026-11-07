@@ -16,11 +16,13 @@ export async function configuredEnvironment(binary: string, directory: string, b
   const retained: Record<string, Buffer> = {};
   const snapshots = new Map<string, Record<string, Buffer>>([[head, {}], [journalHead, {}]]);
   const stored = new Map<string, Buffer>();
+  const publishedAt = new Map<string, string>();
   const publish: PublicationTransport['commit'] = async files => {
     const commit = (++sequence).toString(16).padStart(40, '0');
     for (const [path, bytes] of Object.entries(files)) {
       stored.set(immutableUrl(commit, path), bytes);
       retained[path] = bytes;
+      publishedAt.set(path, commit);
     }
     return commit;
   };
@@ -40,6 +42,7 @@ export async function configuredEnvironment(binary: string, directory: string, b
       return { head: fixed, parent: parents.get(fixed), paths: Object.keys(tree), async read(path) { return tree[path]; } };
     },
     async lastChange(at, path) {
+      if (!snapshots.get(at)?.[path] && publishedAt.has(path)) return publishedAt.get(path)!;
       while (parents.has(at) && snapshots.get(at)?.[path] === snapshots.get(parents.get(at)!)?.[path]) at = parents.get(at)!;
       return at;
     },

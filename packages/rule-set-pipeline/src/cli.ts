@@ -9,6 +9,7 @@ import { activateRules, rollbackRules } from './activation.js';
 import { githubActivation } from './activation-transport.js';
 import { rebuildRules, updateRules } from './update.js';
 import { githubPublication } from './publication.js';
+import { manageMaintenance, type MaintenanceSchedule } from './maintenance.js';
 import { initializeRemoteState } from './remote-state.js';
 import { readRemoteStatus } from './remote-status.js';
 import { sha256 } from './release.js';
@@ -25,12 +26,39 @@ async function sourceToken() {
 async function main(): Promise<number> {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
-    options: { state: { type: 'string' }, release: { type: 'string' }, out: { type: 'string' }, config: { type: 'string' }, id: { type: 'string', multiple: true }, 'expected-source': { type: 'string' }, binary: { type: 'string' }, candidate: { type: 'string' }, activation: { type: 'string' }, subscription: { type: 'string' }, 'expected-head': { type: 'string' }, branch: { type: 'string' }, help: { type: 'boolean' } },
+    options: { state: { type: 'string' }, release: { type: 'string' }, out: { type: 'string' }, config: { type: 'string' }, id: { type: 'string', multiple: true }, 'expected-source': { type: 'string' }, binary: { type: 'string' }, candidate: { type: 'string' }, activation: { type: 'string' }, subscription: { type: 'string' }, 'expected-head': { type: 'string' }, branch: { type: 'string' },
+      'period-days': { type: 'string' }, 'start-at': { type: 'string' }, manual: { type: 'boolean' },
+      'maintenance-id': { type: 'string' }, help: { type: 'boolean' } },
   });
   if (values.help) {
-    console.log('Usage: build --release <fixed-tag> --out <new-directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...]] [--expected-source <source.json>] | update --state <directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...] [--release <pinned-tag>]] | check-now --state <directory> --binary <absolute-1.14.4-path> --config <versioned-yaml> --subscription <v2-contract-map.json> [--id <logical-id> ...] | initialize/status [--config <yaml> | --branch <target>] | rebuild/activate/rollback (see package README)');
+    console.log('Usage: build --release <fixed-tag> --out <new-directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...]] [--expected-source <source.json>] | update --state <directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...] [--release <pinned-tag>]] | check-now --state <directory> --binary <absolute-1.14.4-path> --config <versioned-yaml> --subscription <v2-contract-map.json> [--id <logical-id> ...] | initialize/status [--config <yaml> | --branch <target>] | maintenance-preview/maintenance-enter/maintenance-resume/maintenance-abort | rebuild/activate/rollback (see package README)');
     return 0;
   }
+  const maintenanceAction = positionals.length === 1 ? /^maintenance-(preview|enter|resume|abort)$/.exec(positionals[0])?.[1] : undefined;
+  if (maintenanceAction) {
+    if (values.config || values.state || values.release || values.out || values.id || values['expected-source']
+      || values.candidate || values.activation || values.subscription || values['expected-head']) throw new Error('Invalid maintenance options');
+    const repository = githubPublication(undefined, values.branch && values.branch !== 'main' ? values.branch : 'candidates').repository!;
+    const options = { repository, binary: values.binary };
+    const period = values['period-days'], startAt = values['start-at'], maintenanceId = values['maintenance-id'];
+    let result;
+    if (maintenanceAction === 'preview' || maintenanceAction === 'enter') {
+      if ((period === undefined) !== (startAt === undefined) || (period !== undefined && !/^[1-9][0-9]*$/.test(period))
+        || maintenanceId !== undefined) throw new Error('Use --period-days and --start-at together');
+      const schedule: MaintenanceSchedule | undefined = period !== undefined ? { periodDays: Number(period), startAt: startAt! } : undefined;
+      result = await manageMaintenance({ ...options, action: maintenanceAction, schedule, manual: values.manual });
+    } else {
+      if (period !== undefined || startAt !== undefined || values.manual !== undefined || !!maintenanceId !== (maintenanceAction === 'abort')) {
+        throw new Error('maintenance-abort requires --maintenance-id; maintenance-resume uses the recorded identity');
+      }
+      result = maintenanceAction === 'resume' ? await manageMaintenance({ ...options, action: 'resume' })
+        : await manageMaintenance({ ...options, action: 'abort', maintenanceId: maintenanceId! });
+    }
+    console.log(JSON.stringify(result));
+    return 0;
+  }
+  if (values['period-days'] !== undefined || values['start-at'] !== undefined || values.manual !== undefined
+    || values['maintenance-id'] !== undefined) throw new Error('Maintenance options require a maintenance command');
   if (positionals.length === 1 && positionals[0] === 'check-now') {
     if (!values.config || !values.subscription || !values.state || !values.binary || values.out || values.release
       || values['expected-source'] || values.activation || values.candidate || values['expected-head'] || values.branch) {

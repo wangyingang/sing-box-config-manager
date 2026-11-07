@@ -16,7 +16,7 @@ const ajv = new Ajv({ strict: true });
 const validateManifest = ajv.compile(manifestSchema);
 const validateSubscription = ajv.compile(subscriptionSchema);
 const validateSubscriptionV2 = ajv.compile(subscriptionV2Schema);
-const requiredFiles = ['domains.json', 'domains.srs', 'manifest.json', 'source.json', 'conversion-report.json', 'build.json', 'readback.json'];
+export const candidateEvidenceFiles = ['domains.json', 'domains.srs', 'manifest.json', 'source.json', 'conversion-report.json', 'build.json', 'readback.json'];
 const commitId = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
 const object = (value: unknown): value is Record<string, any> => !!value && typeof value === 'object' && !Array.isArray(value);
 function requireThat(value: unknown, message: string): asserts value { if (!value) throw new Error(message); }
@@ -25,11 +25,11 @@ interface CandidateAvailability {
   status: 'available' | 'incomplete' | 'unavailable' | 'verification-pending';
   verification?: 'structural' | 'native'; evidenceUrl?: string; missingFiles?: string[]; error?: string;
 }
-interface HistoryTarget { commit: string; id: string; candidateId: string }
+export interface HistoryTarget { commit: string; id: string; candidateId: string }
 interface RollbackTarget extends HistoryTarget { candidateEvidenceUrl: string; verification: 'structural' | 'native' }
 interface UnavailableTarget extends HistoryTarget { reason: string }
 interface ActiveVersion { status: 'activated'; commit: string; activation: Record<string, any>; candidate: CandidateAvailability }
-interface PendingOperation { id: string; candidateId?: string; logicalId?: string; phase?: string; status: string; error?: string }
+export interface PendingOperation { id: string; candidateId?: string; logicalId?: string; phase?: string; status: string; error?: string }
 
 export function activationRecord(value: unknown, path: string, targetBranch: string) {
   requireThat(object(value) && value.schemaVersion === 1 && typeof value.id === 'string' && value.id.length
@@ -54,7 +54,7 @@ export function activationRecord(value: unknown, path: string, targetBranch: str
     'Remote subscription file reuse mismatch');
   const directory = path.slice(0, -'/activation.json'.length);
   const prefix = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${targetBranch}/`;
-  const expected = new Map<string, string>();
+  const expected = new Map<string, { signature: string; candidateFile: string }>();
   for (const usage of ['route', 'dns-query']) {
     for (const [format, endpoint] of Object.entries(subscription.projections[usage].formats) as [string, any][]) {
       requireThat(endpoint.url.startsWith(prefix), 'Unapproved remote subscription host or branch');
@@ -64,8 +64,8 @@ export function activationRecord(value: unknown, path: string, targetBranch: str
       if (configured) requireThat(file === `${directory}/${format === 'binary' ? 'domains.srs' : 'domains.json'}`
         && endpoint.requiredCapabilities.length === 0, 'Remote subscription stable path or capability mismatch');
       const signature = JSON.stringify([format, [...endpoint.requiredCapabilities].sort()]);
-      requireThat(!expected.has(file) || expected.get(file) === signature, 'Conflicting remote subscription endpoint declarations');
-      expected.set(file, signature);
+      requireThat(!expected.has(file) || expected.get(file)?.signature === signature, 'Conflicting remote subscription endpoint declarations');
+      expected.set(file, { signature, candidateFile: format === 'binary' ? 'domains.srs' : 'domains.json' });
     }
   }
   requireThat(isDeepStrictEqual(Object.keys(value.files).sort(), [...expected.keys()].sort()), 'Invalid remote activation file set');
@@ -81,7 +81,8 @@ export function activationRecord(value: unknown, path: string, targetBranch: str
       && typeof item.candidateId === 'string' && /^[a-f0-9-]+$/.test(item.candidateId) && !ids.has(item.id), 'Invalid activation history entry');
     ids.add(item.id);
   }
-  return { record: value as Record<string, any> & ObservedActivation, history };
+  return { record: value as Record<string, any> & ObservedActivation, history,
+    candidateFiles: Object.fromEntries([...expected].map(([path, { candidateFile }]) => [path, candidateFile])) };
 }
 
 export async function verifyStableFiles(record: Record<string, any>, read: (path: string) => Promise<Buffer | undefined>) {
@@ -98,6 +99,8 @@ export async function readRemoteStatus(options: {
   activation?: Pick<ActivationTransport, 'download'>;
   /** Limit delivery and switch verification to these stable activation paths. */
   recordPaths?: ReadonlySet<string>;
+  /** Verify current delivery and in-flight writes, while only inventorying discardable history. */
+  maintenanceInventory?: true;
 }) {
   const { snapshot, journal } = await readRemoteState(options.repository);
   const publication = options.publication ?? githubPublication();
@@ -105,22 +108,24 @@ export async function readRemoteStatus(options: {
   const stable = options.repository.branch === journal.targetBranch ? snapshot : await options.repository.snapshot(journal.targetBranch);
   const candidateAvailability: Record<string, CandidateAvailability> = {};
   const pendingOperations: PendingOperation[] = [];
-  const inspectCandidate = async (id: string, evidenceUrl?: string): Promise<CandidateAvailability> => {
+  const inspectCandidate = async (id: string, evidenceUrl?: string, native = true): Promise<CandidateAvailability> => {
     const known = candidateAvailability[id];
     if (known && (!evidenceUrl || known.evidenceUrl === evidenceUrl || known.status !== 'available')) return known;
     const candidate = journal.state.candidates[id];
     const prefix = `candidates/${id}`;
     if (candidate?.retained === false) return candidateAvailability[id] = { status: 'unavailable', error: 'Candidate is no longer retained' };
-    const missingFiles = requiredFiles.filter(file => !snapshot.paths.includes(`${prefix}/${file}`));
+    const missingFiles = candidateEvidenceFiles.filter(file => !snapshot.paths.includes(`${prefix}/${file}`));
     if (missingFiles.length) return candidateAvailability[id] = { status: 'incomplete', missingFiles };
     try {
       const files = new Map<string, Buffer>();
-      for (const file of requiredFiles) {
+      for (const file of candidateEvidenceFiles) {
         const bytes = await snapshot.read(`${prefix}/${file}`);
         requireThat(bytes?.length, `Missing retained candidate file: ${file}`); files.set(file, bytes);
       }
       const evidence = JSON.parse(files.get('readback.json')!.toString());
-      const selectedUrl = evidenceUrl ?? candidate?.evidenceUrl ?? immutableUrl(snapshot.head, `${prefix}/readback.json`);
+      const evidencePath = `${prefix}/readback.json`;
+      const selectedUrl = evidenceUrl ?? candidate?.evidenceUrl ?? immutableUrl(
+        (options.maintenanceInventory && await options.repository.lastChange?.(snapshot.head, evidencePath)) || snapshot.head, evidencePath);
       const evidencePrefix = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/`;
       requireThat(selectedUrl.startsWith(evidencePrefix)
         && /^[a-f0-9]{40}$/.test(selectedUrl.slice(evidencePrefix.length).split('/')[0])
@@ -128,7 +133,7 @@ export async function readRemoteStatus(options: {
       requireThat(evidence.schemaVersion === 1 && evidence.status === 'remote-verified' && evidence.candidateId === id
         && commitId(evidence.filesCommit) && commitId(evidence.metadataCommit)
         && Array.isArray(evidence.readback) && evidence.readback.length === 6, 'Incomplete candidate evidence');
-      for (const file of requiredFiles.filter(name => name !== 'readback.json')) {
+      for (const file of candidateEvidenceFiles.filter(name => name !== 'readback.json')) {
         const url = immutableUrl(file.startsWith('domains.') ? evidence.filesCommit : evidence.metadataCommit, `${prefix}/${file}`);
         const matches = evidence.readback.filter((entry: any) => entry?.url === url);
         const bytes = files.get(file)!;
@@ -151,10 +156,10 @@ export async function readRemoteStatus(options: {
       }
       if (candidate) requireThat(source.releaseId === candidate.releaseId && source.tag === candidate.tag
         && (!candidate.logicalId || candidate.logicalId === manifest.id), 'Candidate source or logical identity mismatch');
-      if (options.binary) await verifyActivationCandidate({ candidateEvidenceUrl: selectedUrl, binary: options.binary }, {
+      if (native && options.binary) await verifyActivationCandidate({ candidateEvidenceUrl: selectedUrl, binary: options.binary }, {
         branch: journal.targetBranch, download: url => publication.download(url),
       }, definition, 'rollback');
-      return candidateAvailability[id] = { status: 'available', verification: options.binary ? 'native' : 'structural', evidenceUrl: selectedUrl };
+      return candidateAvailability[id] = { status: 'available', verification: native && options.binary ? 'native' : 'structural', evidenceUrl: selectedUrl };
     } catch (error) {
       return candidateAvailability[id] = { status: 'verification-pending', error: error instanceof Error ? error.message : String(error) };
     }
@@ -165,15 +170,25 @@ export async function readRemoteStatus(options: {
   const unavailableRollbackTargets: Record<string, UnavailableTarget[]> = {};
   const historyComplete: Record<string, boolean> = {};
   const historyErrors: Record<string, { commit?: string; error: string }[]> = {};
-  const currentByPath = new Map<string, ObservedActivation>();
+  const historicalActivations: Record<string, HistoryTarget[]> = {};
+  const currentByPath = new Map<string, ReturnType<typeof activationRecord>['record']>();
   const paths = stable.paths.filter(path => (!options.recordPaths || options.recordPaths.has(path)) && /^stable\/(?:[a-z0-9._-]+\/)*activation\.json$/.test(path));
   for (const path of paths) {
     const bytes = await stable.read(path);
     requireThat(bytes, `Missing activation record: ${path}`);
-    const { record, history } = activationRecord(JSON.parse(bytes.toString()), path, journal.targetBranch);
+    const { record, history, candidateFiles } = activationRecord(JSON.parse(bytes.toString()), path, journal.targetBranch);
     await verifyStableFiles(record, file => stable.read(file));
     currentByPath.set(path, record);
     const candidate = await inspectCandidate(record.candidateId, record.candidateEvidenceUrl);
+    if (options.maintenanceInventory && candidate.status === 'available') {
+      for (const [file, source] of Object.entries(candidateFiles)) {
+        const expected = record.files[file];
+        const bytes = await snapshot.read(`candidates/${record.candidateId}/${source}`);
+        if (!bytes || bytes.length !== expected.byteLength || sha256(bytes) !== expected.sha256) {
+          pendingOperations.push({ id: record.id, status: 'current-evidence-mismatch', error: `${path}: ${file}` });
+        }
+      }
+    }
     const current: ActiveVersion = { status: 'activated', commit: stable.head, activation: record, candidate };
     const id: string = record.logicalId ?? 'v2fly:category-ai-!cn';
     if (candidate.status !== 'available') pendingOperations.push({ id: record.id, candidateId: record.candidateId,
@@ -182,6 +197,7 @@ export async function readRemoteStatus(options: {
     if (path === 'stable/activation.json') activeRuleVersion = current;
     else activeRuleVersions[id] = current;
     rollbackTargets[id] = []; unavailableRollbackTargets[id] = [];
+    historicalActivations[path] = [];
     historyComplete[id] = true; historyErrors[id] = [];
     const historyError = (commit: unknown, error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
@@ -191,6 +207,10 @@ export async function readRemoteStatus(options: {
         status: 'history-verification-pending', error: message });
     };
     const inspectHistorical = async (target: HistoryTarget, historical: Record<string, any>) => {
+      if (options.maintenanceInventory) {
+        historicalActivations[path].push(target);
+        return;
+      }
       try {
         requireThat(historical.id === target.id && historical.candidateId === target.candidateId
           && historical.logicalId === record.logicalId, 'Historical activation identity mismatch');
@@ -233,6 +253,10 @@ export async function readRemoteStatus(options: {
         previous = historical.expectedHead;
       }
     } else for (const target of history) {
+      if (options.maintenanceInventory) {
+        historicalActivations[path].push(target);
+        continue;
+      }
       try {
         const historical = activationRecord(JSON.parse((await activation.download(immutableUrl(target.commit, path))).toString()), path, journal.targetBranch).record;
         await inspectHistorical(target, historical);
@@ -243,11 +267,20 @@ export async function readRemoteStatus(options: {
     }
   }
   for (const candidate of options.recordPaths ? [] : Object.values(journal.state.candidates)) {
+    if (options.maintenanceInventory && candidate.phase === 'complete') continue;
     const availability = await inspectCandidate(candidate.id);
     if (candidate.retained && (candidate.phase !== 'complete' || availability.status !== 'available')) {
       pendingOperations.push({ id: candidate.id, candidateId: candidate.id, logicalId: candidate.logicalId,
         phase: candidate.phase, status: availability.status === 'available' ? 'verification-pending' : availability.status,
         ...(availability.error ? { error: availability.error } : {}) });
+    }
+  }
+  if (options.maintenanceInventory) {
+    // Pre-journal candidates can have an evidence file whose final HTTPS
+    // readback never completed. File names alone do not establish completion.
+    const ids = new Set(snapshot.paths.flatMap(path => /^candidates\/([a-f0-9-]+)\//.exec(path)?.[1] ?? []));
+    for (const id of ids) {
+      if (!journal.state.candidates[id] && !candidateAvailability[id]) await inspectCandidate(id, undefined, false);
     }
   }
   const operation = journal.state.pendingOperation;
@@ -265,5 +298,6 @@ export async function readRemoteStatus(options: {
   return { authority: 'remote' as const, head: snapshot.head, stableHead: stable.head, generation: journal.generation,
     maintenance: journal.maintenance, state: journal.state, activeRuleVersion,
     activeRuleVersions, rollbackTargets, unavailableRollbackTargets, candidateAvailability, manualOperations, automaticOperations, pendingOperations,
-    historyComplete, historyErrors };
+    historyComplete, historyErrors,
+    ...(options.maintenanceInventory ? { inventory: { targetBranch: journal.targetBranch, snapshot, stable, currentByPath, historicalActivations } } : {}) };
 }

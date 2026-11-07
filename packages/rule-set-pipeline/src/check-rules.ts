@@ -238,7 +238,7 @@ export async function checkRules(options: CheckOptions) {
     const allSwitches = [...Object.values(journal.manualOperations ?? {}), ...Object.values(journal.automaticOperations ?? {})];
     const unfenced = allSwitches.filter(entry => !entry.notCommitted && entry.generation === session.generation
       && (shared ? stable.parent === entry.expectedHead : stable.head === entry.expectedHead)
-      && activeById.get(entry.logicalId)?.id !== entry.id);
+      && (entry.logicalId === undefined || activeById.get(entry.logicalId)?.id !== entry.id));
     if (unfenced.length) {
       try { if (shared) await session.save(); }
       catch (error) { return report(error); }

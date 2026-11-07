@@ -3,7 +3,8 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { activateRules, checkRules, readRemoteStatus, rebuildRules, rollbackRules } from '../../src/index.js';
+import { activateRules, checkRules, readRemoteState, readRemoteStatus, rebuildRules, rollbackRules } from '../../src/index.js';
+import { manageMaintenance } from '../../src/maintenance.js';
 import { PublicationWriteError } from '../../src/publication-repository.js';
 import { STATE_PATH } from '../../src/remote-state.js';
 import { sha256 } from '../../src/release.js';
@@ -295,3 +296,114 @@ test('稳定切换登记后发生人工固定，旧自动切换在提交前被�
   assert.equal(result.results[0].control?.pauseAutomaticActivation, true);
   assert.equal(env.writes(), 1);
 }, 'main'));
+
+
+test('维护重新确定所有当前版本和 pin，从远端恢复并安全退出，旧任务仍然过期', { skip: !binary }, async () => isolated(async (env, directory) => {
+  const common = options(env, directory, upstream(1));
+  const initial = await checkRules(common);
+  assert.equal(initial.exitCode, 0);
+  const maintenance = { ...common, repository: env.repository, refs: async () => [
+    { ref: 'refs/heads/acceptance-other-task', head: 'e'.repeat(40) },
+  ] };
+  const preview = await manageMaintenance({ ...maintenance, action: 'preview', manual: true });
+  assert.equal(preview.status, 'ready');
+  const candidates = await env.candidates();
+  const pinned = await activateRules(env.options('ai-openai', candidates['ai-openai'].evidenceUrl!));
+  const oldHead = env.head();
+  const staleSource = upstream(2);
+  const oldCheck = await checkRules({ ...common, stateDirectory: join(directory, 'old'), fetch: async (url, init) => {
+    if (String(url).endsWith('/latest')) {
+      const entered = await manageMaintenance({ ...maintenance, action: 'enter', manual: true });
+      assert.equal(entered.status, 'isolated');
+      assert.equal(entered.run?.phase, 'ready');
+      assert.equal(entered.run?.oldHeads.stable, oldHead);
+      assert.equal(entered.generation, preview.generation + 1);
+      assert.equal(entered.run.plan.retain.active.length, 3);
+      const openai = entered.run.plan.retain.active.find(active => active.recordPath === 'stable/ai-openai/activation.json')!;
+      assert.equal(openai.record.id, pinned.activation.id);
+      assert.deepEqual(openai.record.control, pinned.activation.control);
+      assert.equal(openai.candidatePaths.length, 7);
+      assert.ok(!entered.run.plan.discard.candidateIds.includes(pinned.activation.candidateId));
+      assert.ok(entered.run.plan.discard.candidateIds.includes(candidates['ai-anthropic'].id));
+      assert.equal(entered.run.plan.otherRefs[0].ref, 'refs/heads/acceptance-other-task');
+      for (const active of entered.run.plan.retain.active) {
+        for (const file of Object.keys(active.record.files)) {
+          assert.deepEqual(await (await env.repository.snapshot(env.transport.branch)).read(file), env.snapshots.get(oldHead)![file]);
+        }
+      }
+      await assert.rejects(activateRules(env.options('ai-openai', candidates['ai-openai'].evidenceUrl!)), /REPOSITORY_MAINTENANCE/);
+      const resumed = await manageMaintenance({ ...maintenance, action: 'resume' });
+      assert.deepEqual(resumed.run, entered.run);
+      const wrong = await manageMaintenance({ ...maintenance, action: 'abort', maintenanceId: 'another-run' });
+      assert.equal(wrong.status, 'deferred');
+      const ended = await manageMaintenance({ ...maintenance, action: 'abort', maintenanceId: entered.run.id });
+      assert.equal(ended.status, 'aborted');
+      assert.equal(ended.generation, entered.generation);
+    }
+    return staleSource.fetcher(url, init);
+  } });
+  assert.equal(oldCheck.exitCode, 1);
+  assert.match(oldCheck.error ?? '', /PUBLICATION_CONFLICT/);
+  assert.equal(env.writes(), 4);
+  const next = await checkRules(options(env, join(directory, 'fresh'), upstream(2)));
+  assert.equal(next.exitCode, 0);
+  assert.equal(next.results[0].current?.id, pinned.activation.id);
+}));
+
+test('候选各提交阶段都使维护延期，远端登记在任务中断后仍然有效', { skip: !binary }, async () => isolated(async (env, directory) => {
+  const common = options(env, directory, upstream(1));
+  const observed = new Set<string>();
+  let offline = false;
+  const maintenance = { ...common, repository: env.repository, refs: async () => [] };
+  const repository = { ...env.repository, async snapshot(branch?: string) {
+    if (offline) throw new Error('Writer lost its connection');
+    return env.repository.snapshot(branch);
+  }, async commit(head: string, files: Record<string, Buffer>, message: string) {
+    const phasePath = Object.keys(files).find(path => path.startsWith('candidates/'));
+    if (phasePath) {
+      const preview = await manageMaintenance({ ...maintenance, action: 'enter', manual: true });
+      assert.equal(preview.status, 'deferred');
+      assert.equal(preview.maintenance, 'open');
+      assert.equal((await env.repository.snapshot()).head, head);
+      observed.add(phasePath.split('/').at(-1)!);
+      if (phasePath.endsWith('/readback.json')) {
+        offline = true;
+        throw new Error('Writer interrupted before evidence');
+      }
+    }
+    return env.repository.commit(head, files, message);
+  } };
+  const result = await checkRules({ ...common, selectedIds: ['ai-openai'], publication: { ...common.publication, repository } });
+  assert.equal(result.exitCode, 1);
+  assert.deepEqual([...observed], ['domains.json', 'manifest.json', 'readback.json']);
+  const deferred = await manageMaintenance({ ...maintenance, action: 'enter', manual: true });
+  assert.equal(deferred.status, 'deferred');
+  assert.equal(deferred.maintenance, 'open');
+}));
+
+test('隔离已提交后断线，新调用续做保留集合。稳定 head 改变后保持隔离', { skip: !binary }, async () => isolated(async (env, directory) => {
+  const common = options(env, directory, upstream(1));
+  assert.equal((await checkRules(common)).exitCode, 0);
+  const maintenance = { ...common, repository: env.repository, refs: async () => [] };
+  let offline = false;
+  const repository = { ...env.repository, async snapshot(branch?: string) {
+    if (offline) throw new Error('Connection unavailable');
+    return env.repository.snapshot(branch);
+  }, async commit(head: string, files: Record<string, Buffer>, message: string) {
+    const commit = await env.repository.commit(head, files, message);
+    offline = true;
+    throw new PublicationWriteError(commit, 'lost maintenance reply');
+  } };
+  await assert.rejects(manageMaintenance({ ...maintenance, repository, action: 'enter', manual: true }), /Connection unavailable/);
+  const isolated = await readRemoteState(env.repository);
+  assert.equal(isolated.journal.maintenanceRun?.phase, 'isolated');
+  const result = await manageMaintenance({ ...maintenance, action: 'resume' });
+  assert.equal(result.status, 'isolated');
+  assert.equal(result.run?.phase, 'ready');
+  assert.equal(result.run.id, isolated.journal.maintenanceRun.id);
+  const head = env.head();
+  await env.transport.commit(head, { 'stable/untracked/domains.srs': Buffer.from('external writer') }, 'External writer');
+  const abort = await manageMaintenance({ ...maintenance, action: 'abort', maintenanceId: result.run.id });
+  assert.equal(abort.status, 'deferred');
+  assert.equal((await readRemoteState(env.repository)).journal.maintenance, 'maintenance');
+}));

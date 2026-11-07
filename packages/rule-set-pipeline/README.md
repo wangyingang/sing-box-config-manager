@@ -151,6 +151,24 @@ Artifact Manifest（产物清单）记录某次不可变规则文件的固定地
 
 本命令不写稳定路径、不激活候选、不修改实际客户端配置，也不切换全局 binary。首次创建产物仓库、候选发布属于外部写入，须有覆盖它们的授权；命令不自动创建仓库。
 
+## 预览清理与维护隔离
+
+用 `maintenance-preview` 查看当前稳定入口、人工控制、候选证据、处理进度、拟清理范围和可能保留旧历史的其他 Git 引用。预览只读取远端。保留集合覆盖配置化规则集和仍受支持的 v1 入口，当前版本的使用时长不影响保留。非当前历史和已完成的未激活候选可进入清理范围，没有最低保留天数。
+
+```sh
+node --import tsx src/cli.ts maintenance-preview --branch acceptance-example \
+  --period-days 14 --start-at 2026-11-01T00:00:00Z
+node --import tsx src/cli.ts maintenance-enter --branch acceptance-example --manual
+node --import tsx src/cli.ts maintenance-resume --branch acceptance-example
+node --import tsx src/cli.ts maintenance-abort --branch acceptance-example --maintenance-id "$maintenance_id"
+```
+
+在 `packages/rule-set-pipeline` 下运行上述命令。分支需已存在并完成远端初始化。周期和 UTC 起算点必须一起提供。首次到期时间是起算点加周期，有成功清理记录时从记录时间与起算点中较晚的一项计算。未配置时自动清理关闭，显式 `--manual` 可立即评估。JSON 的 `schedule` 表示周期状态，`status` 表示实际结果，包括关闭、未到期、无须清理、延期、已隔离和已退出。
+
+`maintenance-enter` 检查待恢复操作和当前证据，按预期 head 取得隔离并递增代次，随后从远端重新核实并记录保留集合。候选发布中断或激活结果待核实时，先使用对应的原操作恢复。仅取消 Actions 任务不会解除远端登记。隔离期间稳定规则继续可读，候选发布和新激活写入暂停。生产 `main` 的旧版激活与回滚也需要已初始化的协调状态和远端登记。
+
+断线后用 `maintenance-resume` 读取远端维护 ID、旧 heads 和阶段，并续做未完成的保留核实。切换前可用输出中的 `run.id` 安全退出。退出会重新核实状态和 heads，并保留递增后的代次。无法确认时会延期并维持隔离。给预览、进入或恢复传入 `--binary`，可增加当前候选的原生复验。操作流程和验证边界见 [#52 验收记录](docs/verification/issue-52.md)。
+
 ## 立即检查并激活
 
 `check-now` 使用版本化配置、目标分支已初始化的远端状态和可信宿主维护的 Rule Subscription v2。订阅 JSON 文件以逻辑 ID 为键，值是该集的[完整 v2 订阅对象](contracts/rule-subscription-v2.example.json)。其中的稳定 URL 必须指向配置的目标分支和对应的 `stablePath`。以下命令用于预先创建并初始化的 `acceptance-*` 目标：

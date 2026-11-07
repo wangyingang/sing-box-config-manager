@@ -1,0 +1,208 @@
+import { execFile } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual, promisify } from 'node:util';
+import type { ActivationTransport } from './activation-transport.js';
+import type { PublicationRepository } from './publication-repository.js';
+import { PublicationWriteError } from './publication-repository.js';
+import { ARTIFACT_REPOSITORY, type PublicationTransport } from './publication.js';
+import { commitRemoteState, IDENTITY_PATH, readRemoteState, STATE_PATH, type RemoteJournal } from './remote-state.js';
+import { candidateEvidenceFiles, readRemoteStatus } from './remote-status.js';
+
+export interface MaintenanceSchedule { periodDays: number; startAt: string }
+interface Ref { ref: string; head: string }
+interface Heads { journal: string; stable: string }
+
+export type MaintenanceRun = { id: string; generation: number; oldHeads: Heads } & (
+  { phase: 'isolated'; isolatedHead?: never; plan?: never }
+  | { phase: 'ready'; isolatedHead: string; plan: MaintenancePlan }
+);
+
+export interface MaintenanceOptions {
+  repository: PublicationRepository;
+  publication?: PublicationTransport;
+  activation?: Pick<ActivationTransport, 'download'>;
+  refs?: () => Promise<Ref[]>;
+  binary?: string;
+  now?: Date;
+}
+
+type Request =
+  | { action: 'preview' | 'enter'; schedule?: MaintenanceSchedule; manual?: boolean }
+  | { action: 'resume' }
+  | { action: 'abort'; maintenanceId: string };
+
+const day = 86_400_000;
+function assessSchedule(schedule: MaintenanceSchedule | undefined, lastCleanupAt: string | undefined, now: Date) {
+  if (!schedule) return { status: 'disabled' as const, enabled: false, lastCleanupAt };
+  const start = new Date(schedule.startAt);
+  if (!Number.isSafeInteger(schedule.periodDays) || schedule.periodDays <= 0
+    || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{3})?Z$/.test(schedule.startAt)
+    || !Number.isFinite(start.valueOf()) || start.toISOString() !== (schedule.startAt.length === 20 ? schedule.startAt.slice(0, -1) + '.000Z' : schedule.startAt)) {
+    throw new Error('Invalid maintenance schedule: specify positive period days and a UTC start date');
+  }
+  const origin = Math.max(start.valueOf(), lastCleanupAt ? Date.parse(lastCleanupAt) : start.valueOf());
+  const nextDue = new Date(origin + schedule.periodDays * day);
+  if (!Number.isFinite(nextDue.valueOf())) throw new Error('Maintenance due date is out of range');
+  return { ...schedule, enabled: true, lastCleanupAt, nextDueAt: nextDue.toISOString(),
+    status: now < nextDue ? 'not-due' as const : 'due' as const };
+}
+
+async function listRemoteRefs(): Promise<Ref[]> {
+  const { stdout } = await promisify(execFile)('git', ['ls-remote', '--refs', `https://github.com/${ARTIFACT_REPOSITORY}.git`],
+    { timeout: 120_000, maxBuffer: 16 * 1024 * 1024 });
+  return stdout.trim().split('\n').filter(Boolean).map(line => {
+    const [head, ref] = line.split('\t');
+    if (!/^[a-f0-9]{40}$/.test(head) || !ref?.startsWith('refs/')) throw new Error('Invalid remote ref');
+    return { ref, head };
+  });
+}
+
+async function scan(options: MaintenanceOptions) {
+  const status = await readRemoteStatus({ ...options, maintenanceInventory: true });
+  const { targetBranch, snapshot, stable, currentByPath, historicalActivations } = status.inventory!;
+  const blockers = [...status.pendingOperations];
+  const active = [...currentByPath].map(([recordPath, record]) => {
+    const candidatePaths = candidateEvidenceFiles.map(file => `candidates/${record.candidateId}/${file}`);
+    return { recordPath, record, candidatePaths };
+  });
+  const currentIds = new Set(active.map(({ record }) => record.candidateId));
+  const candidateIds = new Set(snapshot.paths.flatMap(path => /^candidates\/([a-f0-9-]+)\//.exec(path)?.[1] ?? []));
+  for (const candidate of Object.values(status.state.candidates)) candidateIds.add(candidate.id);
+  const discardCandidates: string[] = [];
+  for (const id of candidateIds) {
+    if (currentIds.has(id)) continue;
+    const candidate = status.state.candidates[id];
+    const completed = candidate ? candidate.phase === 'complete' && candidate.status === 'verified'
+      : status.candidateAvailability[id]?.status === 'available';
+    if (completed || candidate?.retained === false) {
+      discardCandidates.push(id);
+    } else if (!blockers.some(blocker => blocker.candidateId === id)) {
+      blockers.push({ id, candidateId: id, status: 'candidate-completion-unverified',
+        error: status.candidateAvailability[id]?.error });
+    }
+  }
+  for (const [id, check] of Object.entries(status.state.latestChecks ?? {})) {
+    if (check.status === 'verification-pending') blockers.push({ id: check.operationId, logicalId: id, status: check.status, error: check.error });
+  }
+  const knownPaths = new Set(active.flatMap(({ recordPath, record }) => [recordPath, ...Object.keys(record.files)]));
+  const unmatched = stable.paths.filter(path => path.startsWith('stable/') && /\.(srs|json)$/.test(path) && !knownPaths.has(path));
+  for (const path of unmatched) blockers.push({ id: path, status: 'unidentified-stable-file' });
+  const journal = status.state;
+  const operations = [...status.manualOperations, ...status.automaticOperations];
+  const ownRefs = new Set([`refs/heads/${options.repository.branch}`, `refs/heads/${targetBranch}`]);
+  const otherRefs = (await (options.refs ?? listRemoteRefs)()).filter(({ ref }) => !ownRefs.has(ref));
+  const plan = {
+    retain: {
+      active,
+      journalPaths: [IDENTITY_PATH, STATE_PATH],
+      progress: {
+        pinnedReleaseIds: Object.keys(journal.pinned),
+        processedReleaseIds: Object.keys(journal.processed),
+        configuredProcessedReleaseIds: Object.fromEntries(Object.entries(journal.configuredProcessed ?? {})
+          .map(([id, records]) => [id, Object.keys(records)])),
+        latestChecks: journal.latestChecks ?? {},
+      },
+    },
+    discard: {
+      candidateIds: discardCandidates.sort(),
+      activations: historicalActivations,
+      completedOperationIds: [...operations.filter(operation => operation.status !== 'pending').map(operation => operation.id),
+        ...(journal.pendingOperation?.status === 'complete' ? [journal.pendingOperation.id] : [])],
+    },
+    otherRefs,
+  };
+  const hasCleanup = plan.discard.candidateIds.length > 0 || plan.discard.completedOperationIds.length > 0
+    || Object.values(historicalActivations).some(entries => entries.length > 0);
+  return { heads: { journal: snapshot.head, stable: stable.head }, plan, blockers, hasCleanup };
+}
+export type MaintenancePlan = Awaited<ReturnType<typeof scan>>['plan'];
+
+type Snapshot = Awaited<ReturnType<typeof readRemoteState>>;
+async function checkpoint(repository: PublicationRepository, current: Snapshot, next: RemoteJournal, message: string) {
+  let expected: string;
+  try {
+    expected = await commitRemoteState(repository, current.snapshot.head, next, {}, message, current.journal.maintenanceRun?.id);
+  } catch (error) {
+    if (!(error instanceof PublicationWriteError)) throw error;
+    expected = error.attemptedCommit;
+  }
+  const actual = await readRemoteState(repository);
+  if (actual.snapshot.head !== expected) {
+    throw new Error(`MAINTENANCE_WRITE_UNCERTAIN: ${expected}; read remote state before retrying`);
+  }
+  return actual;
+}
+
+/** Pause and inspect only. Ordinary writers keep using their original head and generation. */
+export async function manageMaintenance(options: MaintenanceOptions & Request) {
+  const { repository, action } = options;
+  let current = await readRemoteState(repository);
+  const schedule = assessSchedule('schedule' in options ? options.schedule : undefined, current.journal.lastCleanupAt, options.now ?? new Date());
+  const report = <S extends string, D extends object>(status: S, details: D) => ({
+    status, schedule, generation: current.journal.generation, maintenance: current.journal.maintenance,
+    run: current.journal.maintenanceRun, ...details,
+  });
+  const inspect = async () => {
+    try { return await scan(options); }
+    catch (error) { return { error: error instanceof Error ? error.message : String(error) }; }
+  };
+  if (action === 'enter' && current.journal.maintenance === 'open' && !options.manual && schedule.status !== 'due') {
+    return report(schedule.status, {});
+  }
+  if (action === 'preview' || action === 'enter') {
+    const preview = await inspect();
+    if ('error' in preview) return report('deferred', preview);
+    if (preview.heads.journal !== current.snapshot.head) {
+      current = await readRemoteState(repository);
+      return report('deferred', { reason: 'Journal changed during preview' });
+    }
+    if (current.journal.maintenance === 'maintenance') {
+      return report('deferred', { ...preview, reason: 'Maintenance already active; use maintenance-resume' });
+    }
+    if (!options.manual && schedule.status !== 'due') return report(schedule.status, preview);
+    if (preview.blockers.length) return report('deferred', preview);
+    if (!preview.hasCleanup) return report('no-cleanup', preview);
+    if (action === 'preview') return report('ready', preview);
+    const run: MaintenanceRun = { id: randomUUID(), generation: current.journal.generation + 1, phase: 'isolated', oldHeads: preview.heads };
+    try {
+      current = await checkpoint(repository, current, {
+        ...current.journal, generation: run.generation, maintenance: 'maintenance', maintenanceRun: run,
+      }, `进入规则产物维护 ${run.id}`);
+    } catch (error) {
+      if (!(error instanceof Error) || !/^(PUBLICATION_CONFLICT|MANUAL_OPERATION_PENDING)/.test(error.message)) throw error;
+      current = await readRemoteState(repository);
+      return report('deferred', { reason: error.message });
+    }
+    if (current.journal.maintenanceRun?.id !== run.id) throw new Error('MAINTENANCE_CONFLICT: isolation identity changed');
+  }
+
+  const run = current.journal.maintenanceRun;
+  if (!run) return report('deferred', { reason: 'No recoverable maintenance run' });
+  if (action === 'abort' && options.maintenanceId !== run.id) return report('deferred', { reason: 'Maintenance identity mismatch' });
+  const isolated = await inspect();
+  if ('error' in isolated) return report('deferred', isolated);
+  // Shared-branch control commits move its head without changing stable bytes.
+  const shared = repository.branch === current.journal.targetBranch;
+  const expectedParent = run.phase === 'isolated' ? run.oldHeads.journal : run.isolatedHead;
+  if (current.snapshot.parent !== expectedParent || isolated.heads.journal !== current.snapshot.head
+    || isolated.heads.stable !== (shared ? current.snapshot.head : run.oldHeads.stable)) {
+    return report('deferred', { reason: 'Maintenance heads changed; cannot prove this is still before the switch', ...isolated });
+  }
+  if (isolated.blockers.length) return report('deferred', isolated);
+  if (run.phase === 'ready' && (!isDeepStrictEqual(run.plan.retain, isolated.plan.retain)
+    || !isDeepStrictEqual(run.plan.discard, isolated.plan.discard))) {
+    return report('deferred', { reason: 'The recorded plan differs from the isolated state', ...isolated });
+  }
+  if (action === 'abort') {
+    const { maintenanceRun: _ended, ...journal } = current.journal;
+    current = await checkpoint(repository, current, { ...journal, maintenance: 'open' }, `安全退出规则产物维护 ${run.id}`);
+    return report('aborted', { maintenanceId: run.id });
+  }
+  if (run.phase === 'isolated') {
+    current = await checkpoint(repository, current, { ...current.journal, maintenanceRun: {
+      ...run, phase: 'ready', isolatedHead: current.snapshot.head, plan: isolated.plan,
+    } }, `记录规则产物维护保留集合 ${run.id}`);
+    if (current.journal.maintenanceRun?.id !== run.id) throw new Error('MAINTENANCE_CONFLICT: isolation identity changed');
+  }
+  return report('isolated', { plan: isolated.plan });
+}

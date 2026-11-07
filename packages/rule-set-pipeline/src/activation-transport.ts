@@ -1,4 +1,5 @@
 import { githubPublicationRepository, type PublicationRepository } from './publication-repository.js';
+import { IDENTITY_PATH, STATE_PATH } from './remote-state.js';
 import { authorizeActivationWrite, type ActivationWriteReservation } from './manual-activation.js';
 import { ARTIFACT_REPOSITORY, ghJson, GitHubHttpError, githubPublication, immutableUrl } from './publication.js';
 
@@ -69,6 +70,9 @@ export function githubActivation(branch = 'main', request: typeof ghJson = ghJso
       const existingTree = await api(`git/trees/${parent.tree.sha}?recursive=1`);
       if (existingTree.truncated || !Array.isArray(existingTree.tree)) throw new Error('Cannot establish stable path ownership: incomplete tree');
       const existingPaths = new Map<string, string>(existingTree.tree.map((entry: { path: string; type: string }) => [entry.path, entry.type]));
+      if (!reservation && (branch === 'main' || existingPaths.has(STATE_PATH) || existingPaths.has(IDENTITY_PATH))) {
+        throw new Error('Managed activation requires a registered write');
+      }
       const ownedDirectories = [...existingPaths.keys()].filter(path => configuredRecord.test(path) && !paths.includes(path))
         .map(recordDirectory);
       const selectedRecord = paths.find(path => configuredRecord.test(path));
@@ -84,7 +88,7 @@ export function githubActivation(branch = 'main', request: typeof ghJson = ghJso
           throw new Error(`Stable path is owned by another rule set or is not a file: ${path}`);
         }
       }
-      if (reservation && existingPaths.has(legacyRecordPath)) {
+      if (selectedRecord && existingPaths.has(legacyRecordPath)) {
         const legacy = JSON.parse((await this.download(immutableUrl(expectedHead, legacyRecordPath))).toString());
         if (!legacy.files || paths.some(path => Object.hasOwn(legacy.files, path))) throw new Error('Stable path is owned by the legacy rule set');
       }

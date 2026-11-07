@@ -64,28 +64,27 @@ function github(options: { branch?: string; head?: string; private?: boolean; mi
   return { transport: githubActivation(branch, request), calls };
 }
 
-for (const branch of ['main', 'acceptance-issue-19']) {
-  test(`${branch} 使用既有分支的预期旧 head，一次提交稳定文件及记录且非强制更新`, async () => {
-    const remote = github({ branch });
-    const files = { 'stable/domains.srs': Buffer.from([0, 255, 1]), 'stable/activation.json': Buffer.from('{"candidate":"B"}\n') };
-    assert.equal(await remote.transport.head(), oldHead);
-    assert.equal(await remote.transport.commit(oldHead, files, '激活候选 B'), newCommit);
-    const blobs = remote.calls.filter(c => c.args[1].endsWith('/git/blobs'));
-    assert.deepEqual(blobs.map(c => Buffer.from(c.input.content, 'base64')), Object.values(files));
-    assert.ok(blobs.every(c => c.input.encoding === 'base64'));
-    const tree = remote.calls.find(c => c.args[1].endsWith('/git/trees'))!;
-    assert.equal(tree.input.base_tree, 'b'.repeat(40));
-    assert.deepEqual(tree.input.tree.map((entry: any) => entry.path), Object.keys(files));
-    const commit = remote.calls.filter(c => c.args[1].endsWith('/git/commits'));
-    assert.equal(commit.length, 1);
-    assert.deepEqual(commit[0].input, { message: '激活候选 B', tree: 'd'.repeat(40), parents: [oldHead] });
-    const patches = remote.calls.filter(c => c.args.includes('PATCH'));
-    assert.equal(patches.length, 1);
-    assert.equal(patches[0].args[1], `repos/${ARTIFACT_REPOSITORY}/git/refs/heads/${branch}`);
-    assert.deepEqual(patches[0].input, { sha: newCommit, force: false });
-    assert.ok(!remote.calls.some(c => c.args[1].endsWith('/git/refs')), 'Activation must not create missing branches');
-  });
-}
+test('未初始化的隔离分支使用预期旧 head，一次提交稳定文件及记录且非强制更新', async () => {
+  const branch = 'acceptance-issue-19';
+  const remote = github({ branch });
+  const files = { 'stable/domains.srs': Buffer.from([0, 255, 1]), 'stable/activation.json': Buffer.from('{"candidate":"B"}\n') };
+  assert.equal(await remote.transport.head(), oldHead);
+  assert.equal(await remote.transport.commit(oldHead, files, '激活候选 B'), newCommit);
+  const blobs = remote.calls.filter(c => c.args[1].endsWith('/git/blobs'));
+  assert.deepEqual(blobs.map(c => Buffer.from(c.input.content, 'base64')), Object.values(files));
+  assert.ok(blobs.every(c => c.input.encoding === 'base64'));
+  const tree = remote.calls.find(c => c.args[1].endsWith('/git/trees'))!;
+  assert.equal(tree.input.base_tree, 'b'.repeat(40));
+  assert.deepEqual(tree.input.tree.map((entry: any) => entry.path), Object.keys(files));
+  const commit = remote.calls.filter(c => c.args[1].endsWith('/git/commits'));
+  assert.equal(commit.length, 1);
+  assert.deepEqual(commit[0].input, { message: '激活候选 B', tree: 'd'.repeat(40), parents: [oldHead] });
+  const patches = remote.calls.filter(c => c.args.includes('PATCH'));
+  assert.equal(patches.length, 1);
+  assert.equal(patches[0].args[1], `repos/${ARTIFACT_REPOSITORY}/git/refs/heads/${branch}`);
+  assert.deepEqual(patches[0].input, { sha: newCommit, force: false });
+  assert.ok(!remote.calls.some(c => c.args[1].endsWith('/git/refs')), 'Activation must not create missing branches');
+});
 
 for (const path of ['candidates/abc/domains.srs', 'README.md', '/stable/domains.srs', 'stable/../candidate.srs',
   'stable/./domains.srs', 'stable//domains.srs', 'stable/domains.srs?x=1', 'stable/']) {
@@ -107,7 +106,7 @@ test('预期旧 head 已被其他激活改变时直接冲突，不创建提交�
 test('PATCH 回复失败携带准确 attemptedCommit，保留 cause 且不重试覆盖', async () => {
   const failure = new Error('lost response');
   const remote = github({ patchError: failure });
-  await assert.rejects(remote.transport.commit(oldHead, { 'stable/domains.srs': Buffer.from('rules') }, '激活候选'), error => {
+  await assert.rejects(remote.transport.commit(oldHead, stableFiles, '激活候选', reservation), error => {
     assert.ok(error instanceof ActivationWriteError);
     assert.equal(error.attemptedCommit, newCommit);
     assert.equal(error.cause, failure);
@@ -215,13 +214,23 @@ test('低层激活 transport 拒绝直接修改配置化稳定文件，也拒绝
 });
 
 test('允许旧 v1 入口更新既有格式，拒绝它覆盖配置化规则集的稳定文件', async () => {
-  const legacy = github();
+  const legacy = github({ branch: 'acceptance-issue-19' });
   await legacy.transport.commit(oldHead, { 'stable/v2fly/category-ai-not-cn/domains.srs': rule, 'stable/activation.json': Buffer.from('{}') }, '旧单集');
   assert.ok(legacy.calls.some(call => call.args.includes('PATCH')));
-  const managed = github({ managedRecord: recordPath });
+  const managed = github({ branch: 'acceptance-issue-19', managedRecord: recordPath });
   await assert.rejects(managed.transport.commit(oldHead, { [rulePath]: rule, 'stable/activation.json': Buffer.from('{}') }, '覆盖固定版本'),
     /owned by another rule set/);
   assert.ok(!managed.calls.some(call => call.args.includes('PATCH')));
+});
+
+test('已协调目标的 v1 写入也必须登记', async () => {
+  for (const remote of [github(), github({ branch: 'acceptance-issue-19', managedRecord: statePath })]) {
+    await assert.rejects(remote.transport.commit(oldHead, {
+      'stable/v2fly/category-ai-not-cn/domains.srs': rule,
+      'stable/activation.json': Buffer.from('{}'),
+    }, '绕过登记'), /requires a registered write/);
+    assert.ok(!remote.calls.some(call => call.input));
+  }
 });
 
 test('配置化提交准备完毕后，维护门禁拒绝就不会发送 ref PATCH', async () => {
