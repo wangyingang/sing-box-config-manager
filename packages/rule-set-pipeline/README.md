@@ -6,7 +6,7 @@
 
 ## 操作分别产生什么结果
 
-管理者通过本地 CLI 操作；本模块不提供生产定时任务或 Web 管理页面。各命令产生的结果如下：
+管理者可通过本地 CLI 操作，也可使用[独立的 GitHub Actions 工作流](docs/verification/issue-55.md)检查规则或清理历史。生产更新和清理默认关闭。各命令产生的结果如下：
 
 | 操作 | 输入与结果 | 是否改变稳定入口 |
 | --- | --- | --- |
@@ -139,7 +139,7 @@ pnpm --dir packages/rule-set-pipeline status --config samples/three-ai-rule-sets
 
 `status` 返回 `authority: remote`、维护状态、`candidateAvailability` 和 `pendingOperations`。默认执行证据结构、地址和字节摘要核验，标注 `verification: structural`；提供 `--binary` 时额外执行真实原生复验，标注 `native`。已提交的当前版本即使候选回读失败也仍报告为已激活，并单独标记待核实。旧单集的历史通过 `expectedHead` 追溯，在结果映射中使用 `v2fly:category-ai-!cn`；历史读取失败通过 `historyComplete`／`historyErrors` 报告，不能将空列表视为完整历史。初始化和查询 API 分别为 `initializeRemoteState(repository, targetBranch)`、`readRemoteStatus({ repository, publication?, binary? })`。
 
-同一缓存目录的 `update.lock/` 仍拒绝本机并发；远端预期 head 保护跨机器写入。进程被强制终止后，可换新目录恢复；要复用旧目录，先确认没有存活进程再移除残留锁。不要删除远端来源记录来绕过来源变化错误。人工固定、立即检查和主动恢复使用同一远端 journal。调度及历史清理由父 Spec 的后续工单交付。
+同一缓存目录的 `update.lock/` 仍拒绝本机并发；远端预期 head 保护跨机器写入。进程被强制终止后，可换新目录恢复；要复用旧目录，先确认没有存活进程再移除残留锁。不要删除远端来源记录来绕过来源变化错误。人工固定、立即检查和主动恢复使用同一远端 journal。[工作流运行说明](docs/verification/issue-55.md)包含调度、通知和恢复步骤。
 
 Artifact Manifest（产物清单）记录某次不可变规则文件的固定地址、摘要和使用约束。原有单集及目标为 `main` 的配置驱动更新在产物仓库的 `candidates` 分支追加候选；配置目标为 `acceptance-*` 时在该隔离分支追加候选。两者均采用三个有序的候选提交阶段，并穿插远端操作检查点，使清单可以引用已固定的 commit 地址：
 

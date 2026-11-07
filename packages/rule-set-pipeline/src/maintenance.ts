@@ -33,9 +33,10 @@ export interface MaintenanceOptions {
   now?: Date;
 }
 
-type Request =
+export type MaintenanceRequest =
   | { action: 'preview' | 'enter'; schedule?: MaintenanceSchedule; manual?: boolean }
-  | { action: 'resume' | 'prepare' | 'switch' }
+  | { action: 'resume' }
+  | { action: 'prepare' | 'switch'; maintenanceId?: string }
   | { action: 'abort'; maintenanceId: string };
 
 const day = 86_400_000;
@@ -133,7 +134,7 @@ async function checkpoint(repository: PublicationRepository, current: Snapshot, 
 }
 
 /** Coordinate publication history maintenance through the remote journal. */
-export async function manageMaintenance(options: MaintenanceOptions & Request) {
+export async function manageMaintenance(options: MaintenanceOptions & MaintenanceRequest) {
   const { repository, action } = options;
   let current = await readRemoteState(repository);
   const schedule = assessSchedule('schedule' in options ? options.schedule : undefined, current.journal.lastCleanupAt, options.now ?? new Date());
@@ -181,6 +182,9 @@ export async function manageMaintenance(options: MaintenanceOptions & Request) {
     return report(status, details);
   };
   const run = current.journal.maintenanceRun;
+  if ((action === 'prepare' || action === 'switch') && options.maintenanceId !== undefined && options.maintenanceId !== run?.id) {
+    return report('deferred', { reason: 'Maintenance identity mismatch' });
+  }
   if (!run && (action === 'resume' || action === 'switch')) return finish();
   if (action === 'switch' && run?.phase !== 'prepared') return report('deferred', { reason: 'Prepare and verify a baseline before switching' });
   if (!run) return report('deferred', { reason: 'No recoverable maintenance run' });
