@@ -12,7 +12,7 @@ import { inspectBinary } from './native.js';
 import { githubPublication } from './publication.js';
 import { retainedCandidateDownload, type PublicationSnapshot } from './publication-repository.js';
 import { sha256 } from './release.js';
-import { openRemoteSession, type RemoteOperation } from './remote-state.js';
+import { openRemoteSession, selectRemoteOperation, type RemoteOperation } from './remote-state.js';
 import { activationRecord, readRemoteStatus, verifyStableFiles } from './remote-status.js';
 import type { Candidate } from './update.js';
 
@@ -183,29 +183,27 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
     const matchesRequest = (entry: RemoteOperation | undefined) => sameConfiguration(entry)
       && isDeepStrictEqual(entry?.selectedIds, selectedIds)
       && isDeepStrictEqual(entry?.subscriptionHashes, subscriptionHashes);
-    const selectParked = (index: number) => {
-      const [selected] = parked.splice(index, 1);
-      if (operation) parked.push(operation);
-      state.pendingOperation = selected;
-      return selected;
-    };
+    const hasParkedCheck = (exceptId?: string) => parked.some(entry => entry.kind === 'check'
+      && entry.selectedIds?.some(id => id !== exceptId && selectedIds.includes(id)
+        && entry.controlRevisions?.[id] === (controlFor(id)?.revision ?? null)));
+    const requestMismatch = 'RECOVERY_REQUEST_MISMATCH: resume the registered operation with its original configuration, subscriptions and selection';
     const canExtendResumeCheck = (entry: RemoteOperation) => {
       const id = entry.selectedIds?.[0];
       return sameConfiguration(entry) && entry.selectedIds?.length === 1 && id && selectedIds.includes(id)
         && entry.subscriptionHashes?.[id] === subscriptionHashes[id]
         && Object.hasOwn(journal.resumes ?? {}, id)
-        && entry.controlRevisions?.[id] === journal.resumes![id].revision;
+        && entry.controlRevisions?.[id] === journal.resumes![id].revision
+        && !hasParkedCheck(id);
     };
     let extendResumeCheck = false;
-    if (!resumeId && !matchesRequest(operation)) {
-      const index = parked.findIndex(matchesRequest);
-      if (index >= 0) operation = selectParked(index);
-      else if (operation) {
+    if (!resumeId) {
+      operation = selectRemoteOperation(journal, matchesRequest);
+      if (operation && !matchesRequest(operation)) {
         if (!canExtendResumeCheck(operation)) {
-          throw new Error('RECOVERY_REQUEST_MISMATCH: resume the registered operation with its original configuration, subscriptions and selection');
+          throw new Error(requestMismatch);
         }
         extendResumeCheck = true;
-      }
+      } else if (!operation && hasParkedCheck()) throw new Error(requestMismatch);
     }
     // Return the journal to interrupted work when this check has settled.
     const finishCheck = () => {
@@ -327,8 +325,7 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
         for (let index = parked.length - 1; index >= 0; index--) {
           if (superseded(parked[index])) abandon(parked.splice(index, 1)[0]);
         }
-        const index = parked.findIndex(isResumeCheck);
-        if (index >= 0) operation = selectParked(index);
+        operation = selectRemoteOperation(journal, isResumeCheck);
         operationId = operation?.id ?? randomUUID();
       }
       if (decision !== existing || rearrange) {
@@ -357,7 +354,7 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
       else if (control?.pauseAutomaticRetry) recordCheckOutcome(id, 'paused');
       else if (operation && operation.controlRevisions![id] !== currentRevision) {
         if (control?.pauseAutomaticActivation) recordCheckOutcome(id, 'paused');
-        else recordCheckOutcome(id, 'failed', { error: 'PUBLICATION_CONFLICT: control revision changed since registration' });
+        else results.set(id, { operationId, checkedAt, status: 'failed', error: 'PUBLICATION_CONFLICT: control revision changed since registration' });
       } else if (operation && latestChecks[id]?.operationId === operationId && latestChecks[id].status !== 'verification-pending') {
         results.set(id, latestChecks[id]);
       }

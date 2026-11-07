@@ -3,9 +3,9 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { activateRules, checkRules, readRemoteStatus, rebuildRules, resumeRules, rollbackRules } from '../../src/index.js';
+import { activateRules, checkRules, readRemoteStatus, rebuildRules, resumeRules, rollbackRules, updateRules } from '../../src/index.js';
 import { PublicationWriteError } from '../../src/publication-repository.js';
-import { STATE_PATH } from '../../src/remote-state.js';
+import { STATE_PATH, type RemoteJournal } from '../../src/remote-state.js';
 import { configuredEnvironment, upstream } from './configured-activation-fixture.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
@@ -466,4 +466,83 @@ test('单集恢复已固定来源后中断，正常批次用同一个 Release �
   ]);
   assert.ok(source.requests.some(url => url.endsWith('/releases/2')));
   assert.ok(source.requests.every(url => !url.endsWith('/latest')));
+}));
+
+function loseCheckpoint(env: Awaited<ReturnType<typeof configuredEnvironment>>, lose: (journal: RemoteJournal) => boolean) {
+  let offline = false;
+  return { ...env.repository,
+    async snapshot(target?: string) {
+      if (offline) throw new Error('Connection lost');
+      return env.repository.snapshot(target);
+    },
+    async commit(...args: Parameters<typeof env.repository.commit>) {
+      const head = await env.repository.commit(...args);
+      if (lose(JSON.parse(args[1][STATE_PATH].toString()))) {
+        offline = true;
+        throw new PublicationWriteError(head, 'Checkpoint response lost');
+      }
+      return head;
+    },
+  };
+}
+
+test('恢复登记后断线，普通批次不会抢先更新仍有旧检查的兄弟集', { skip: !binary }, async () => isolated(async (env, directory) => {
+  const first = options(env, directory, upstream(1));
+  await checkRules(first);
+  const status = () => readRemoteStatus({ repository: env.repository, publication: first.publication, activation: env.transport });
+  const original = await status();
+  await activateRules(env.options('ai-openai', original.activeRuleVersions['ai-openai'].activation.candidateEvidenceUrl));
+  const earlier = upstream(2, { anthropic: 'domain:earlier.example' });
+  const latest = upstream(3, { openai: 'domain:latest.example', anthropic: 'domain:also-latest.example' });
+  const prior = options(env, join(directory, 'prior'), earlier);
+  const interruptedPrior = await checkRules({ ...prior, selectedIds: ['ai-anthropic'], publication: {
+    ...prior.publication, repository: loseCheckpoint(env, journal => journal.state.pendingOperation?.releaseId === 2),
+  } });
+  assert.equal(interruptedPrior.exitCode, 1);
+  const current = options(env, join(directory, 'resume'), latest);
+  const interruptedResume = await resumeRules({ ...current, logicalId: 'ai-openai', publication: {
+    ...current.publication, repository: loseCheckpoint(env, journal => journal.state.pendingOperation?.releaseId === 3),
+  } });
+  assert.equal(interruptedResume.exitCode, 1);
+  await assert.rejects(checkRules(options(env, join(directory, 'batch'), latest)), /RECOVERY_REQUEST_MISMATCH/);
+  assert.equal((await status()).activeRuleVersions['ai-anthropic'].activation.source.releaseId, 1);
+
+  const resumed = await resumeRules({ ...current, stateDirectory: join(directory, 'resume-retry'), logicalId: 'ai-openai' });
+  assert.equal(resumed.exitCode, 0, JSON.stringify(resumed));
+  assert.equal(resumed.results[0].releaseId, 3);
+  const continued = await checkRules({ ...prior, stateDirectory: join(directory, 'prior-retry'), selectedIds: ['ai-anthropic'] });
+  assert.equal(continued.exitCode, 0, JSON.stringify(continued));
+  assert.equal(continued.results[0].releaseId, 2);
+  assert.equal((await status()).activeRuleVersions['ai-anthropic'].activation.source.releaseId, 2);
+}, 'main'));
+
+test('恢复决定写入后断线，候选更新用原命令继续已暂存的 Release', { skip: !binary }, async () => isolated(async (env, directory) => {
+  const first = options(env, directory, upstream(1));
+  await checkRules(first);
+  const status = () => readRemoteStatus({ repository: env.repository, publication: first.publication, activation: env.transport });
+  const before = await status();
+  await activateRules(env.options('ai-openai', before.activeRuleVersions['ai-openai'].activation.candidateEvidenceUrl));
+  const source = upstream(2, { anthropic: 'domain:earlier.example' });
+  const prior = options(env, join(directory, 'prior'), source);
+  await assert.rejects(updateRules({ ...prior, selectedIds: ['ai-anthropic'], publication: {
+    ...prior.publication, repository: loseCheckpoint(env, journal => journal.state.pendingOperation?.releaseId === 2),
+  } }), /PUBLICATION_PENDING/);
+  const latest = options(env, join(directory, 'resume'), upstream(3));
+  const interrupted = await resumeRules({ ...latest, logicalId: 'ai-openai', publication: {
+    ...latest.publication, repository: loseCheckpoint(env, journal => journal.resumes?.['ai-openai']?.checkPending === true),
+  } });
+  assert.equal(interrupted.exitCode, 1);
+  const saved = await status();
+  assert.ok(saved.pendingOperations.some(entry => entry.status === 'parked'));
+  source.requests.length = 0;
+  const continued = await updateRules({ ...prior, stateDirectory: join(directory, 'fresh'), selectedIds: ['ai-anthropic'] });
+  assert.equal(continued.releaseId, 2);
+  assert.equal(continued.results[0].status, 'processed');
+  assert.ok(source.requests.some(url => url.endsWith('/releases/2')));
+  assert.ok(source.requests.every(url => !url.endsWith('/latest')));
+  assert.equal((await status()).activeRuleVersions['ai-anthropic'].activation.id, before.activeRuleVersions['ai-anthropic'].activation.id);
+  const resumed = await resumeRules({ ...latest, stateDirectory: join(directory, 'resume-retry'), logicalId: 'ai-openai' });
+  assert.equal(resumed.exitCode, 0, JSON.stringify(resumed));
+  assert.equal(resumed.results[0].releaseId, 3);
+  assert.deepEqual(resumed.results[0].control, saved.activeRuleVersions['ai-openai'].control);
 }));

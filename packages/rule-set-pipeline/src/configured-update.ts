@@ -7,7 +7,7 @@ import { githubPublication, immutableUrl, type PublicationTransport } from './pu
 import { sha256 } from './release.js';
 import type { SourceRecord } from './types.js';
 import { readUpdateState, type Candidate, type UpdateState } from './update.js';
-import { openRemoteSession } from './remote-state.js';
+import { openRemoteSession, selectRemoteOperation, type RemoteOperation } from './remote-state.js';
 import { verifyRetainedCandidate } from './candidate-recovery.js';
 
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
@@ -55,11 +55,13 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, 
     const publication = session?.publication ?? transport;
     const restored = session ? { state: session.state, activeRuleVersion: undefined } : await readUpdateState(options.stateDirectory);
     const state: UpdateState = restored.state;
-    const recovery = session && state.pendingOperation?.status === 'pending' ? state.pendingOperation : undefined;
-    if (recovery && (recovery.kind !== (rebuildTag ? 'rebuild' : 'update') || !recovery.configuration
-      || JSON.stringify(parseBuildConfiguration(recovery.configuration)) !== JSON.stringify(configuration)
-      || definitions.some(rule => recovery.selectedIds && !recovery.selectedIds.includes(rule.id))
-      || (rebuildTag ?? options.retryRelease) && (rebuildTag ?? options.retryRelease) !== recovery.tag)) {
+    const fixed = rebuildTag ?? options.retryRelease;
+    const matches = (entry: RemoteOperation) => entry.kind === (rebuildTag ? 'rebuild' : 'update') && entry.configuration
+      && JSON.stringify(parseBuildConfiguration(entry.configuration)) === JSON.stringify(configuration)
+      && definitions.every(rule => !entry.selectedIds || entry.selectedIds.includes(rule.id))
+      && (!fixed || fixed === entry.tag);
+    const recovery = session && selectRemoteOperation(session.journal, matches);
+    if (recovery && !matches(recovery) || !recovery && session?.journal.parkedOperations?.length) {
       throw new Error('RECOVERY_REQUEST_MISMATCH: resume the registered operation with its original configuration and selection');
     }
     state.configuredProcessed ??= {};

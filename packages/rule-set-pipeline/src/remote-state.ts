@@ -218,6 +218,18 @@ function validate(value: unknown): asserts value is RemoteJournal {
   }
 }
 
+/** Resume matching work without replacing a different operation's checkpoint. */
+export function selectRemoteOperation(journal: RemoteJournal, matches: (operation: RemoteOperation) => unknown) {
+  const { state, parkedOperations } = journal;
+  const active = state.pendingOperation?.status === 'pending' ? state.pendingOperation : undefined;
+  if (active && matches(active)) return active;
+  const index = parkedOperations?.findIndex(matches) ?? -1;
+  if (index < 0) return active;
+  const [selected] = parkedOperations!.splice(index, 1);
+  if (active) parkedOperations!.push(active);
+  return state.pendingOperation = selected;
+}
+
 export async function readRemoteState(repository: PublicationRepository) {
   const snapshot = await repository.snapshot();
   const [identityBytes, stateBytes] = await Promise.all([snapshot.read(IDENTITY_PATH), snapshot.read(STATE_PATH)]);

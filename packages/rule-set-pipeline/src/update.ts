@@ -10,7 +10,7 @@ import { githubPublication, immutableUrl, type PublicationTransport } from './pu
 import { processConfiguredUpdate, type ConfiguredRebuildOptions, type ConfiguredUpdateOptions } from './configured-update.js';
 import { publishCandidate } from './candidate-publication.js';
 import type { RuleDefinition } from './configured-build.js';
-import { openRemoteSession } from './remote-state.js';
+import { openRemoteSession, selectRemoteOperation, type RemoteOperation } from './remote-state.js';
 import type { CheckRecord } from './check-rules.js';
 import { verifyRetainedCandidate } from './candidate-recovery.js';
 
@@ -103,9 +103,10 @@ async function processRelease(options: UpdateOptions, rebuildTag?: string) {
     const publication = session?.publication ?? transport;
     const restored = session ? { state: session.state, activeRuleVersion: undefined } : await readUpdateState(options.stateDirectory);
     state = restored.state;
-    const recovery = session && state.pendingOperation?.status === 'pending' ? state.pendingOperation : undefined;
-    if (recovery && (recovery.kind !== (rebuildTag ? 'rebuild' : 'update') || recovery.configuration !== undefined
-      || recovery.selectedIds !== undefined || rebuildTag && rebuildTag !== recovery.tag || options.sampleTag && options.sampleTag !== recovery.tag)) {
+    const matches = (entry: RemoteOperation) => entry.kind === (rebuildTag ? 'rebuild' : 'update') && entry.configuration === undefined
+      && entry.selectedIds === undefined && (!rebuildTag || rebuildTag === entry.tag) && (!options.sampleTag || options.sampleTag === entry.tag);
+    const recovery = session && selectRemoteOperation(session.journal, matches);
+    if (recovery && !matches(recovery) || !recovery && session?.journal.parkedOperations?.length) {
       throw new Error('RECOVERY_REQUEST_MISMATCH: resume the registered operation with its original command and Release');
     }
     const verifyRetained = async (id: string, allowEvidence = false) => {
