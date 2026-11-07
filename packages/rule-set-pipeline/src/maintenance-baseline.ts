@@ -7,13 +7,12 @@ import { buildNative, type NativeTool } from './native.js';
 import { decodedTerms } from './projection.js';
 import type { PublicationRepository, PublicationSnapshot } from './publication-repository.js';
 import { ARTIFACT_REPOSITORY, immutableUrl, type PublicationTransport } from './publication.js';
-import { IDENTITY_PATH, STATE_PATH, type RemoteJournal } from './remote-state.js';
+import { BASELINE_PATH, IDENTITY_PATH, STATE_PATH, type RemoteJournal } from './remote-state.js';
 import { activationRecord, candidateEvidenceFiles, readRemoteStatus } from './remote-status.js';
 import { sha256 } from './release.js';
 import type { Candidate, UpdateState } from './update.js';
 
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
-const markerPath = 'pipeline/baseline.json';
 interface Verification {
   transport: BaselineTransport;
   publication: PublicationTransport;
@@ -114,7 +113,7 @@ export async function prepareBaseline(options: Verification & {
     const ref = stageRef(runId, name);
     return { ref, head: await transport.stage(ref, parent?.head, files, `规则产物维护 ${runId}：${name}`) };
   };
-  const assets: Record<string, Buffer> = { [markerPath]: marker };
+  const assets: Record<string, Buffer> = { [BASELINE_PATH]: marker };
   const metadata: Record<string, Buffer> = {};
   const ids = new Set(plan.retain.active.map(({ record }) => record.candidateId));
   for (const id of ids) {
@@ -184,7 +183,7 @@ export async function prepareBaseline(options: Verification & {
   const shared = repository.branch === targetBranch;
   let stableRoot: BaselineStage | undefined;
   if (!shared) {
-    const root = { [markerPath]: marker };
+    const root = { [BASELINE_PATH]: marker };
     await copyOtherFiles(stable, root);
     stableRoot = await stage('stable-root', undefined, root);
   }

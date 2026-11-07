@@ -113,7 +113,11 @@ export function githubPublicationRepository(branch = PUBLICATION_BRANCH, request
       if (previous) {
         const journal: RemoteJournal = JSON.parse(previous.toString());
         const state = files['pipeline/state.json'];
-        if (journal.maintenance === 'maintenance' && (!maintenanceId || journal.maintenanceRun?.id !== maintenanceId
+        const baseline = journal.maintenance === 'maintenance' && !journal.maintenanceRun && !journal.maintenanceCleanup
+          ? await current.read('pipeline/baseline.json') : undefined;
+        const marker = baseline && JSON.parse(baseline.toString());
+        const baselineId = marker?.schemaVersion === 1 && marker.generation === journal.generation ? marker.maintenanceId : undefined;
+        if (journal.maintenance === 'maintenance' && (!maintenanceId || (journal.maintenanceRun?.id ?? journal.maintenanceCleanup?.id ?? baselineId) !== maintenanceId
           || Object.keys(files).length !== 1 || !state)) {
           throw new Error('REPOSITORY_MAINTENANCE');
         }
@@ -126,7 +130,8 @@ export function githubPublicationRepository(branch = PUBLICATION_BRANCH, request
           || next.generation !== journal.generation || next.id !== journal.id)) {
           const stable = await snapshot('main');
           const oldHeads = (next.maintenanceRun ?? journal.maintenanceRun)?.oldHeads;
-          if (oldHeads && stable.head !== oldHeads.stable) throw new Error('PUBLICATION_CONFLICT: stable head changed');
+          const expectedStable = journal.maintenanceCleanup?.stableHead ?? oldHeads?.stable;
+          if (expectedStable && stable.head !== expectedStable) throw new Error('PUBLICATION_CONFLICT: stable head changed');
           const active = [...Object.values(journal.manualOperations ?? {}), ...Object.values(journal.automaticOperations ?? {})];
           if (active.some(operation => !operation.notCommitted && operation.generation === journal.generation
             && operation.expectedHead === stable.head)) {

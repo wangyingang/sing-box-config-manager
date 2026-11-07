@@ -7,16 +7,19 @@ import type { PublicationRepository } from './publication-repository.js';
 import { PublicationWriteError } from './publication-repository.js';
 import type { UpdateState } from './update.js';
 import { validBaseline } from './maintenance-baseline-transport.js';
-import type { MaintenanceRun } from './maintenance.js';
+import { cleanupRefNames } from './maintenance-refs.js';
+import type { MaintenanceCleanup, MaintenanceRun } from './maintenance.js';
 import { parseBuildConfiguration } from './configured-build.js';
 
 export const STATE_PATH = 'pipeline/state.json';
+export const BASELINE_PATH = 'pipeline/baseline.json';
 export const IDENTITY_PATH = 'pipeline/identity.json';
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
 export interface RemoteJournal {
   schemaVersion: 1; id: string; generation: number; maintenance: 'open' | 'maintenance'; targetBranch: string;
   state: UpdateState;
   maintenanceRun?: MaintenanceRun;
+  maintenanceCleanup?: MaintenanceCleanup;
   lastCleanupAt?: string;
   manualOperations?: Record<string, ManualOperation>;
   automaticOperations?: Record<string, ActivationOperation>;
@@ -108,6 +111,14 @@ function validate(value: unknown): asserts value is RemoteJournal {
         || (run.phase === 'prepared' ? !sha(run.readyHead) || !validBaseline(run.baseline, run.id, value.targetBranch !== 'main')
           : run.phase !== 'ready' || run.baseline !== undefined || run.readyHead !== undefined)))) {
     throw new Error('REMOTE_STATE_CORRUPT: maintenance run');
+  }
+  const cleanup = value.maintenanceCleanup;
+  if (cleanup !== undefined && (!object(cleanup) || run !== undefined || value.maintenance !== 'maintenance'
+    || !operationId(cleanup.id) || !sha(cleanup.stableHead) || typeof cleanup.verifiedAt !== 'string'
+    || !Number.isFinite(Date.parse(cleanup.verifiedAt)) || !object(cleanup.refs)
+    || !isDeepStrictEqual(Object.keys(cleanup.refs).sort(), cleanupRefNames(cleanup.id, value.targetBranch !== 'main').sort())
+    || !Object.values(cleanup.refs).every(sha))) {
+    throw new Error('REMOTE_STATE_CORRUPT: maintenance cleanup');
   }
   if (value.lastCleanupAt !== undefined && (typeof value.lastCleanupAt !== 'string' || !Number.isFinite(Date.parse(value.lastCleanupAt)))) {
     throw new Error('REMOTE_STATE_CORRUPT: last cleanup date');
@@ -297,6 +308,13 @@ export async function guardRemoteState(repository: PublicationRepository, expect
   }
 }
 
+/** A successful result may only expose addresses from the same open generation. */
+export async function guardResultGeneration(repository: PublicationRepository, journal: RemoteJournal) {
+  const current = await readRemoteState(repository);
+  if (current.journal.id !== journal.id || current.journal.generation !== journal.generation
+    || current.journal.maintenance !== 'open') throw new Error('PUBLICATION_CONFLICT: generation or maintenance changed');
+}
+
 export function commitRemoteState(repository: PublicationRepository, expectedHead: string, journal: RemoteJournal,
   files: Record<string, Buffer>, message: string, maintenanceId?: string) {
   validate(journal);
@@ -370,12 +388,14 @@ export async function openRemoteSession(publication: PublicationTransport, direc
       throw error;
     }
   };
+  await cache();
   return { journal, state: journal.state, get head() { return expectedHead; },
     acceptStableCommit(parent: string, commit: string) {
       if (repository.branch !== targetBranch) return;
       if (expectedHead !== parent) throw new Error('PUBLICATION_CONFLICT: unexpected activation parent');
       expectedHead = commit;
     },
+    confirmGeneration: () => guardResultGeneration(repository, journal),
     generation: journal.generation, snapshot: restored.snapshot,
     get cacheWarning() { return cacheWarning; },
     save: () => write({}, '保存候选操作进度').then(() => undefined),

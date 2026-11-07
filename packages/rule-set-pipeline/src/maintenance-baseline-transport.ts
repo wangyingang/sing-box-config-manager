@@ -25,13 +25,17 @@ export interface PreparedBaseline {
 
 export function stageRef(id: string, step: string) { return `maintenance-${id}-${step}`; }
 
+export function baselineStageNames(shared: boolean) {
+  return { files: 'files', metadata: 'metadata', evidence: 'evidence', journal: 'journal',
+    stable: shared ? 'journal' : 'stable', ...(!shared && { stableRoot: 'stable-root' }) };
+}
+
 export function validBaseline(value: unknown, runId: string, shared: boolean) {
   const baseline = value as PreparedBaseline | undefined;
   if (!baseline?.stages || typeof baseline.verifiedAt !== 'string' || !Number.isFinite(Date.parse(baseline.verifiedAt))
     || !/^[a-f0-9]{64}$/.test(baseline.toolSha256)) return false;
   const stages = baseline.stages;
-  const refs = { files: 'files', metadata: 'metadata', evidence: 'evidence', journal: 'journal',
-    stable: shared ? 'journal' : 'stable', ...(!shared && { stableRoot: 'stable-root' }) };
+  const refs = baselineStageNames(shared);
   return Object.keys(stages).length === Object.keys(refs).length && Object.entries(refs).every(([key, step]) => {
     const stage = stages[key as keyof BaselineStages];
     return stage?.ref === stageRef(runId, step) && /^[a-f0-9]{40}$/.test(stage.head);

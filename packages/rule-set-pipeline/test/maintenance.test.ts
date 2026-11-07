@@ -1,5 +1,11 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
+import { promisify } from 'node:util';
+import { gitMaintenanceRefs } from '../src/maintenance-refs.js';
 import { manageMaintenance } from '../src/maintenance.js';
 import { githubBaselineTransport } from '../src/maintenance-baseline-transport.js';
 import { initializeRemoteState, STATE_PATH } from '../src/remote-state.js';
@@ -118,4 +124,34 @@ test('重试拒绝父链相同但篡改继承文件的临时分支', async () =>
     }
   });
   await assert.rejects(transport.stage(ref, parent, {}, 'prepare'), /Baseline inherited content conflict.*README.md/);
+});
+
+test('Git 原子切换拒绝任何与租约不符的引用，即使它已经指向目标提交', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'maintenance-ref-lease-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const remote = join(directory, 'remote.git');
+  const git = async (...args: string[]) => (await promisify(execFile)('git', [
+    '-c', 'user.name=Test', '-c', 'user.email=test@example.test', ...args,
+  ], { cwd: directory })).stdout.trim();
+  await git('init', '--bare', remote);
+  const tree = await git('--git-dir', remote, 'hash-object', '-w', '-t', 'tree', '/dev/null');
+  const before = await git('--git-dir', remote, 'commit-tree', tree, '-m', 'before');
+  const after = await git('--git-dir', remote, 'commit-tree', tree, '-m', 'after');
+  const main = 'refs/heads/stable', journal = 'refs/heads/journal';
+  await git('--git-dir', remote, 'update-ref', main, before);
+  await git('--git-dir', remote, 'update-ref', journal, after);
+  const transport = gitMaintenanceRefs(remote);
+  const changes = [main, journal].map(ref => ({ ref, before, after }));
+  await assert.rejects(transport.update(changes));
+  assert.deepEqual(Object.fromEntries((await transport.list()).map(({ ref, head }) => [ref, head])), { [main]: before, [journal]: after });
+
+  await git('--git-dir', remote, 'update-ref', journal, before);
+  await git('--git-dir', remote, 'config', 'receive.advertiseAtomic', 'false');
+  await assert.rejects(transport.update(changes));
+  assert.ok((await transport.list()).every(ref => ref.head === before));
+  await git('--git-dir', remote, 'config', 'receive.advertiseAtomic', 'true');
+  await transport.update(changes);
+  assert.ok((await transport.list()).every(ref => ref.head === after));
+  await transport.update([{ ref: journal, before: after }]);
+  assert.deepEqual(await transport.list(), [{ ref: main, head: after }]);
 });

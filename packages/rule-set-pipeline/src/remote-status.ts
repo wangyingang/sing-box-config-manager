@@ -85,11 +85,52 @@ export function activationRecord(value: unknown, path: string, targetBranch: str
     candidateFiles: Object.fromEntries([...expected].map(([path, { candidateFile }]) => [path, candidateFile])) };
 }
 
+/** Legacy records link to the head that preceded each activation. */
+export async function* walkLegacyActivationHistory(record: ReturnType<typeof activationRecord>['record'], head: string,
+  targetBranch: string, download: ActivationTransport['download']): AsyncGenerator<
+    { commit: string; record: ReturnType<typeof activationRecord>['record'] } | { commit: unknown; error: unknown }> {
+  const path = 'stable/activation.json';
+  const seenCommits = new Set([head]), seenIds = new Set([record.id]);
+  let previous: unknown = record.expectedHead;
+  while (true) {
+    if (!commitId(previous) || seenCommits.has(previous)) {
+      yield { commit: previous, error: new Error('Invalid or cyclic legacy activation history') };
+      return;
+    }
+    seenCommits.add(previous);
+    const url = immutableUrl(previous, path);
+    try {
+      const historical = activationRecord(JSON.parse((await download(url)).toString()), path, targetBranch).record;
+      requireThat(historical.logicalId === undefined && !seenIds.has(historical.id), 'Invalid or cyclic legacy activation identity');
+      seenIds.add(historical.id);
+      yield { commit: previous, record: historical };
+      previous = historical.expectedHead;
+    } catch (error) {
+      // The exact absence is emitted only when an immutable Git tree has no activation.
+      if (!(error instanceof Error && error.message === `Readback HTTP 404: ${url}`)) yield { commit: previous, error };
+      return;
+    }
+  }
+}
+
 export async function verifyStableFiles(record: Record<string, any>, read: (path: string) => Promise<Buffer | undefined>) {
   for (const [path, metadata] of Object.entries(record.files) as [string, { sha256: string; byteLength: number }][]) {
     const bytes = await read(path);
     requireThat(bytes && bytes.length === metadata.byteLength && sha256(bytes) === metadata.sha256, `Stable file integrity mismatch: ${path}`);
   }
+}
+
+async function readStatusSnapshots(repository: PublicationRepository) {
+  // A split-branch switch can happen between the two reads. Re-read the
+  // journal head before using the pair so a new stable head cannot be
+  // interpreted against the previous generation's state.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const { snapshot, journal } = await readRemoteState(repository);
+    if (repository.branch === journal.targetBranch) return { snapshot, journal, stable: snapshot };
+    const stable = await repository.snapshot(journal.targetBranch);
+    if ((await repository.snapshot()).head === snapshot.head) return { snapshot, journal, stable };
+  }
+  throw new Error('PUBLICATION_CONFLICT: remote heads changed during status read');
 }
 
 /** Query authoritative Git state. No local receipt participates in this result. */
@@ -102,10 +143,9 @@ export async function readRemoteStatus(options: {
   /** Verify current delivery and in-flight writes, while only inventorying discardable history. */
   maintenanceInventory?: true;
 }) {
-  const { snapshot, journal } = await readRemoteState(options.repository);
+  const { snapshot, journal, stable } = await readStatusSnapshots(options.repository);
   const publication = options.publication ?? githubPublication();
   const activation = options.activation ?? githubActivation(journal.targetBranch);
-  const stable = options.repository.branch === journal.targetBranch ? snapshot : await options.repository.snapshot(journal.targetBranch);
   const candidateAvailability: Record<string, CandidateAvailability> = {};
   const pendingOperations: PendingOperation[] = [];
   const inspectCandidate = async (id: string, evidenceUrl?: string, native = true): Promise<CandidateAvailability> => {
@@ -229,33 +269,10 @@ export async function readRemoteStatus(options: {
       }
     };
     if (path === 'stable/activation.json') {
-      // Legacy activations predate the explicit per-set history index. Every
-      // record identifies its old branch head, including the first activation.
-      let previous: unknown = record.expectedHead;
-      const seenCommits = new Set([stable.head]), seenIds = new Set([record.id]);
-      while (true) {
-        if (!commitId(previous) || seenCommits.has(previous)) {
-          historyError(previous, new Error('Invalid or cyclic legacy activation history')); break;
-        }
-        seenCommits.add(previous);
-        const url = immutableUrl(previous, path);
-        let bytes: Buffer;
-        try { bytes = await activation.download(url); }
-        catch (error) {
-          // githubActivation emits this exact absence only after an immutable
-          // Git tree proves there was no activation. A missing commit or a CDN
-          // failure cannot establish the beginning of the history.
-          if (error instanceof Error && error.message === `Readback HTTP 404: ${url}`) break;
-          historyError(previous, error); break;
-        }
-        let historical: Record<string, any>;
-        try {
-          historical = activationRecord(JSON.parse(bytes.toString()), path, journal.targetBranch).record;
-          requireThat(historical.logicalId === undefined && !seenIds.has(historical.id), 'Invalid or cyclic legacy activation identity');
-          seenIds.add(historical.id);
-        } catch (error) { historyError(previous, error); break; }
-        await inspectHistorical({ commit: previous, id: historical.id, candidateId: historical.candidateId }, historical);
-        previous = historical.expectedHead;
+      for await (const item of walkLegacyActivationHistory(record, stable.head, journal.targetBranch, url => activation.download(url))) {
+        if ('error' in item) { historyError(item.commit, item.error); break; }
+        const { commit, record: historical } = item;
+        await inspectHistorical({ commit, id: historical.id, candidateId: historical.candidateId }, historical);
       }
     } else for (const target of history) {
       if (options.maintenanceInventory) {

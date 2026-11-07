@@ -1,18 +1,19 @@
-import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { isDeepStrictEqual, promisify } from 'node:util';
+import { isDeepStrictEqual } from 'node:util';
 import type { ActivationTransport } from './activation-transport.js';
 import type { PublicationRepository } from './publication-repository.js';
 import { PublicationWriteError } from './publication-repository.js';
-import { ARTIFACT_REPOSITORY, githubPublication, type PublicationTransport } from './publication.js';
+import { githubPublication, type PublicationTransport } from './publication.js';
 import { commitRemoteState, IDENTITY_PATH, readRemoteState, STATE_PATH, type RemoteJournal } from './remote-state.js';
 import { prepareBaseline, verifyPreparedBaseline } from './maintenance-baseline.js';
 import { githubBaselineTransport, type BaselineTransport, type PreparedBaseline } from './maintenance-baseline-transport.js';
+import { gitMaintenanceRefs, type MaintenanceRefTransport, type Ref } from './maintenance-refs.js';
+import { finishMaintenance } from './maintenance-switch.js';
+export type { MaintenanceCleanup } from './maintenance-switch.js';
 import { inspectBinary } from './native.js';
 import { candidateEvidenceFiles, readRemoteStatus } from './remote-status.js';
 
 export interface MaintenanceSchedule { periodDays: number; startAt: string }
-interface Ref { ref: string; head: string }
 interface Heads { journal: string; stable: string }
 
 export type MaintenanceRun = { id: string; generation: number; oldHeads: Heads } & (
@@ -26,6 +27,7 @@ export interface MaintenanceOptions {
   publication?: PublicationTransport;
   activation?: Pick<ActivationTransport, 'download'>;
   baseline?: BaselineTransport;
+  refTransport?: MaintenanceRefTransport;
   refs?: () => Promise<Ref[]>;
   binary?: string;
   now?: Date;
@@ -33,7 +35,7 @@ export interface MaintenanceOptions {
 
 type Request =
   | { action: 'preview' | 'enter'; schedule?: MaintenanceSchedule; manual?: boolean }
-  | { action: 'resume' | 'prepare' }
+  | { action: 'resume' | 'prepare' | 'switch' }
   | { action: 'abort'; maintenanceId: string };
 
 const day = 86_400_000;
@@ -50,16 +52,6 @@ function assessSchedule(schedule: MaintenanceSchedule | undefined, lastCleanupAt
   if (!Number.isFinite(nextDue.valueOf())) throw new Error('Maintenance due date is out of range');
   return { ...schedule, enabled: true, lastCleanupAt, nextDueAt: nextDue.toISOString(),
     status: now < nextDue ? 'not-due' as const : 'due' as const };
-}
-
-async function listRemoteRefs(): Promise<Ref[]> {
-  const { stdout } = await promisify(execFile)('git', ['ls-remote', '--refs', `https://github.com/${ARTIFACT_REPOSITORY}.git`],
-    { timeout: 120_000, maxBuffer: 16 * 1024 * 1024 });
-  return stdout.trim().split('\n').filter(Boolean).map(line => {
-    const [head, ref] = line.split('\t');
-    if (!/^[a-f0-9]{40}$/.test(head) || !ref?.startsWith('refs/')) throw new Error('Invalid remote ref');
-    return { ref, head };
-  });
 }
 
 async function scan(options: MaintenanceOptions) {
@@ -96,7 +88,7 @@ async function scan(options: MaintenanceOptions) {
   const journal = status.state;
   const operations = [...status.manualOperations, ...status.automaticOperations];
   const ownRefs = new Set([`refs/heads/${options.repository.branch}`, `refs/heads/${targetBranch}`]);
-  const otherRefs = (await (options.refs ?? listRemoteRefs)()).filter(({ ref }) => !ownRefs.has(ref));
+  const otherRefs = (await (options.refs ?? (options.refTransport ?? gitMaintenanceRefs()).list)()).filter(({ ref }) => !ownRefs.has(ref));
   const plan = {
     retain: {
       active,
@@ -125,10 +117,10 @@ async function scan(options: MaintenanceOptions) {
 export type MaintenancePlan = Awaited<ReturnType<typeof scan>>['plan'];
 
 type Snapshot = Awaited<ReturnType<typeof readRemoteState>>;
-async function checkpoint(repository: PublicationRepository, current: Snapshot, next: RemoteJournal, message: string) {
+async function checkpoint(repository: PublicationRepository, current: Snapshot, next: RemoteJournal, message: string, id = current.journal.maintenanceRun?.id) {
   let expected: string;
   try {
-    expected = await commitRemoteState(repository, current.snapshot.head, next, {}, message, current.journal.maintenanceRun?.id);
+    expected = await commitRemoteState(repository, current.snapshot.head, next, {}, message, id);
   } catch (error) {
     if (!(error instanceof PublicationWriteError)) throw error;
     expected = error.attemptedCommit;
@@ -140,7 +132,7 @@ async function checkpoint(repository: PublicationRepository, current: Snapshot, 
   return actual;
 }
 
-/** Isolate publication and prepare a new graph under scratch refs. */
+/** Coordinate publication history maintenance through the remote journal. */
 export async function manageMaintenance(options: MaintenanceOptions & Request) {
   const { repository, action } = options;
   let current = await readRemoteState(repository);
@@ -183,7 +175,14 @@ export async function manageMaintenance(options: MaintenanceOptions & Request) {
     if (current.journal.maintenanceRun?.id !== run.id) throw new Error('MAINTENANCE_CONFLICT: isolation identity changed');
   }
 
+  const finish = async (prepared?: Extract<MaintenanceRun, { phase: 'prepared' }>) => {
+    const { status, current: latest, ...details } = await finishMaintenance(options, current, checkpoint.bind(undefined, repository), prepared);
+    current = latest;
+    return report(status, details);
+  };
   const run = current.journal.maintenanceRun;
+  if (!run && (action === 'resume' || action === 'switch')) return finish();
+  if (action === 'switch' && run?.phase !== 'prepared') return report('deferred', { reason: 'Prepare and verify a baseline before switching' });
   if (!run) return report('deferred', { reason: 'No recoverable maintenance run' });
   if (action === 'abort' && options.maintenanceId !== run.id) return report('deferred', { reason: 'Maintenance identity mismatch' });
   const shared = repository.branch === current.journal.targetBranch;
@@ -193,22 +192,26 @@ export async function manageMaintenance(options: MaintenanceOptions & Request) {
     return live.head === current.snapshot.head && live.parent === expectedParent
       && (shared || (await repository.snapshot(current.journal.targetBranch)).head === run.oldHeads.stable);
   };
-  if (action === 'prepare' || action === 'resume' && run.phase === 'prepared') {
+  if (action === 'prepare' || (action === 'resume' || action === 'switch') && run.phase === 'prepared') {
     const binary = options.binary;
     if (!binary) return report('deferred', { reason: 'Baseline verification requires an explicit sing-box 1.14.4 binary' });
     let tool;
     try { tool = await inspectBinary(binary); }
     catch (error) { return report('deferred', { reason: error instanceof Error ? error.message : String(error) }); }
     if (run.phase === 'isolated') return report('deferred', { reason: 'Resume maintenance to finish recording its retention plan first' });
-    if (!await verifyLiveHeads()) return report('deferred', { reason: 'Maintenance heads changed; cannot prepare or verify this baseline' });
+    if (!await verifyLiveHeads()) return report(action === 'switch' ? 'failed' : 'deferred', {
+      reason: 'Maintenance heads changed; cannot verify this baseline',
+    });
     const verification = { repository, transport: options.baseline ?? githubBaselineTransport(),
       publication: options.publication ?? githubPublication(), binary, targetBranch: current.journal.targetBranch,
       plan: run.plan, runId: run.id };
     if (run.phase === 'prepared') {
       try { await verifyPreparedBaseline(verification, run.baseline.stages); }
       catch (error) { return report('failed', { error: error instanceof Error ? error.message : String(error) }); }
-      if (!await verifyLiveHeads()) return report('deferred', { reason: 'Maintenance heads changed during verification' });
-      return report('prepared', { baseline: run.baseline });
+      if (!await verifyLiveHeads()) return report(action === 'switch' ? 'failed' : 'deferred', {
+        reason: 'Maintenance heads changed during verification',
+      });
+      return action === 'switch' ? finish(run) : report('prepared', { baseline: run.baseline });
     }
     // Revalidate the frozen old inventory before copying its files.
     const verified = await inspect();

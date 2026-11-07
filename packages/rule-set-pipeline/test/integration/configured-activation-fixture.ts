@@ -5,6 +5,8 @@ import { immutableUrl, type PublicationTransport } from '../../src/publication.j
 import { PublicationWriteError, type PublicationRepository } from '../../src/publication-repository.js';
 import { authorizeActivationWrite } from '../../src/manual-activation.js';
 import { initializeRemoteState, STATE_PATH } from '../../src/remote-state.js';
+import type { BaselineTransport } from '../../src/maintenance-baseline-transport.js';
+import { branchRef, type MaintenanceRefTransport } from '../../src/maintenance-refs.js';
 import { ActivationWriteError, type ActivationTransport } from '../../src/activation-transport.js';
 
 export async function configuredEnvironment(binary: string, directory: string, branch = 'acceptance-issue-39') {
@@ -34,12 +36,57 @@ export async function configuredEnvironment(binary: string, directory: string, b
     return bytes;
   };
   const coordinationBranch = branch === 'main' ? 'candidates' : branch;
+  const scratch = new Map<string, string>();
+  const fixedSnapshot = (fixed: string, tree: Record<string, Buffer>) => {
+    const parent = parents.get(fixed);
+    return { head: fixed, parent, parents: parent ? [parent] : [], paths: Object.keys(tree), async read(path: string) { return tree[path]; } };
+  };
+  const baseline: BaselineTransport = {
+    async stage(ref, parent, files) {
+      const existing = scratch.get(branchRef(ref));
+      if (existing) return existing;
+      const commit = (++sequence).toString(16).padStart(40, '0');
+      if (parent) parents.set(commit, parent);
+      snapshots.set(commit, { ...parent && snapshots.get(parent), ...files });
+      scratch.set(branchRef(ref), commit);
+      return commit;
+    },
+    async snapshot(ref) {
+      const fixed = scratch.get(branchRef(ref));
+      return fixed ? fixedSnapshot(fixed, snapshots.get(fixed)!) : undefined;
+    },
+  };
+  let switchCount = 0;
+  const refs: MaintenanceRefTransport & { switches(): number } = {
+    switches: () => switchCount,
+    async list() {
+      return [...new Map([[branchRef(branch), head], [branchRef(coordinationBranch), branch === 'main' ? journalHead : head], ...scratch])]
+        .map(([ref, head]) => ({ ref, head }));
+    },
+    async update(changes) {
+      const heads = new Map((await refs.list()).map(({ ref, head }) => [ref, head]));
+      if (changes.some(({ ref, before }) => heads.get(ref) !== before)) throw new Error('STALE_REF');
+      if (changes.some(({ ref }) => ref === branchRef(branch))) switchCount++;
+      for (const { ref, after } of changes) {
+        if (ref === branchRef(branch)) head = after!;
+        if (ref === branchRef(coordinationBranch)) journalHead = after!;
+        if (ref === branchRef(branch) || ref === branchRef(coordinationBranch)) continue;
+        if (after) scratch.set(ref, after);
+        else scratch.delete(ref);
+      }
+    },
+  };
   const repository: PublicationRepository = {
     branch: coordinationBranch,
     async snapshot(target = coordinationBranch) {
+      if (target !== branch && target !== coordinationBranch) {
+        const snapshot = await baseline.snapshot(target);
+        if (!snapshot) throw new Error(`Missing branch: ${target}`);
+        return snapshot;
+      }
       const fixed = target === branch ? head : journalHead;
-      const tree = { ...(target === coordinationBranch ? retained : {}), ...snapshots.get(fixed) };
-      return { head: fixed, parent: parents.get(fixed), paths: Object.keys(tree), async read(path) { return tree[path]; } };
+      const tree = { ...(target === coordinationBranch && !switchCount ? retained : {}), ...snapshots.get(fixed) };
+      return fixedSnapshot(fixed, tree);
     },
     async lastChange(at, path) {
       if (!snapshots.get(at)?.[path] && publishedAt.has(path)) return publishedAt.get(path)!;
@@ -119,7 +166,7 @@ export async function configuredEnvironment(binary: string, directory: string, b
     return { schemaVersion: 2, systemRuleSetId: id, targetVersion: '1.14.4', sourceFormatVersion: 4,
       projections: { route: { formats }, 'dns-query': { formats: structuredClone(formats) }, 'dns-response': { unavailable: 'empty' } } };
   };
-  return { ids, candidates, subscription, transport, repository, stored, snapshots, configuration, publish, head: () => head,
+  return { ids, candidates, subscription, transport, repository, baseline, refs, stored, snapshots, configuration, publish, head: () => head,
     writes: () => writes, beforeSwitch(hook: () => Promise<void>) { beforeSwitch = hook; }, fail(value: string) { mode = value; },
     options: (id: string, evidenceUrl: string) => ({ logicalId: id, configuration, stateDirectory: directory,
       subscription: subscription(id), binary, expectedHead: head, candidateEvidenceUrl: evidenceUrl, transport }) };

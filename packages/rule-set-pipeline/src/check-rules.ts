@@ -226,23 +226,28 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
       if (resume?.checkPending && status !== 'verification-pending' && !errors.has(id)
         && (!operation || operation.controlRevisions?.[id] === resume.revision)) resume.checkPending = false;
     };
-    const knownApplied = new Map<string, string>();
+    const knownApplied = new Map<string, { activationId: string; commit: string }>();
     const report = async (failure?: unknown) => {
       let remoteStatus: Awaited<ReturnType<typeof readRemoteStatus>> | undefined;
       let statusError: string | undefined;
       try {
         remoteStatus = await readRemoteStatus({ repository: repo, publication, activation, recordPaths: paths });
       } catch (error) { statusError = message(error); }
+      const superseded = remoteStatus !== undefined && remoteStatus.generation !== session.generation;
+      const supersededError = 'PUBLICATION_CONFLICT: check belongs to an earlier maintenance generation';
       let reconciledSwitch = false;
       const ordered = definitions.map(rule => {
         const { id } = rule;
-        const entry = results.get(id) ?? {
+        const entry = superseded ? { operationId, checkedAt, status: 'failed' as const, error: supersededError }
+          : results.get(id) ?? {
           operationId, checkedAt, status: uncertain(failure) ? 'verification-pending' as const : 'failed' as const,
           ...(operation ? { releaseId: operation.releaseId, tag: operation.tag } : {}), error: message(failure),
         };
         const observed = activeById.get(id);
         const remote = remoteStatus?.activeRuleVersions[id];
-        const current = remoteStatus ? remote?.activation as Active | undefined : knownApplied.has(id) ? observed : undefined;
+        const applied = knownApplied.get(id);
+        const current = remoteStatus ? remote?.activation as Active | undefined
+          : applied && !statusError?.startsWith('PUBLICATION_CONFLICT:') ? observed : undefined;
         const automatic = remoteStatus?.automaticOperations.find(value => value.id === current?.id);
         const pending = remoteStatus?.pendingOperations.find(value => value.logicalId === id
           && ['activated-readback-pending', 'activated-verification-pending', 'automatic-commit-pending', 'manual-commit-pending'].includes(value.status));
@@ -250,7 +255,7 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
           ?? remoteStatus?.manualOperations.find(value => value.id === pending.id));
         const result: CheckResult = { id, ...entry };
         if (current) {
-          result.current = { ...delivery(current), commit: automatic?.commit ?? knownApplied.get(id),
+          result.current = { ...delivery(current), commit: automatic?.commit ?? (!superseded && applied?.activationId === current.id ? applied.commit : undefined),
             containingCommit: automatic?.containingCommit ?? remote?.commit };
           result.control = remote ? remote.control : controlFor(id);
         } else if (statusError && observed) result.lastObserved = delivery(observed);
@@ -275,7 +280,7 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
       });
       const switchFailureReconciled = reconciledSwitch
         && /ACTIVATION_(UNKNOWN|APPLIED_READBACK_PENDING|CONFLICT_OR_SUPERSEDED)/.test(message(failure));
-      const unresolvedFailure = switchFailureReconciled ? undefined : failure;
+      const unresolvedFailure = superseded ? supersededError : switchFailureReconciled ? undefined : failure;
       return { exitCode: unresolvedFailure || statusError || ordered.some(result => result.status === 'failed' || result.status === 'verification-pending') ? 1 : 0,
         ...(operation ? { releaseId: operation.releaseId, tag: operation.tag } : {}), results: ordered,
         ...(unresolvedFailure ? { error: message(unresolvedFailure) } : {}), ...(statusError ? { statusError } : {}),
@@ -512,7 +517,7 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
             applied(parent, commit, current) {
               session.acceptStableCommit(parent, commit);
               stableHead = commit;
-              knownApplied.set(id, commit);
+              knownApplied.set(id, { activationId: current.id, commit });
               activeById.set(id, activationRecord(current, recordPath(definition), branch).record as Active);
             },
           });
