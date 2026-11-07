@@ -1,12 +1,12 @@
 # Rule Set Pipeline
 
-包名：`@sing-box-config-manager/rule-set-pipeline`。管理者需要更新系统维护的规则集合时，本模块从官方来源生成 sing-box 可加载的规则文件，验证并上传为候选，再由管理者显式激活。客户端随后通过稳定地址取得当前规则；构建成功、候选验证成功、稳定入口切换和客户端加载完成是不同的状态。
+包名：`@sing-box-config-manager/rule-set-pipeline`。管理者需要更新系统维护的规则集合时，本模块从官方来源生成 sing-box 可加载的规则文件，验证并上传为候选。管理者可显式激活候选，检查流程也可自动激活符合条件的规则。客户端随后通过稳定地址取得当前规则；构建成功、候选验证成功、稳定入口切换和客户端加载完成是不同的状态。
 
 当前 `update` 可发布 V2Fly `domain-list-community` 官方 Release 中 `dlc.dat_plain.yml` 的 `category-ai-!cn`，也可按管理者的 YAML 配置从同一 Release 发布多个列表。本地 `build` 同样支持配置驱动的多集构建。`activate` 与 `rollback` 均可通过 `--config ... --id ...` 按逻辑 ID 独立操作。输出包括 JSON 源规则文件和 SRS 二进制规则文件，目标版本固定为 sing-box **1.14.4**，JSON Source Format 固定为 **4**。合成 IP／混合输入用于验证构建 API，不表示已经支持其他真实来源或其发布激活。
 
 ## 操作分别产生什么结果
 
-管理者通过本地 CLI 操作；本模块不提供生产定时任务或 Web 管理页面。各命令产生的结果如下：
+管理者可通过本地 CLI 操作，也可使用[独立的 GitHub Actions 工作流](docs/verification/issue-55.md)检查规则或清理历史。生产更新和清理默认关闭。各命令产生的结果如下：
 
 | 操作 | 输入与结果 | 是否改变稳定入口 |
 | --- | --- | --- |
@@ -139,7 +139,7 @@ pnpm --dir packages/rule-set-pipeline status --config samples/three-ai-rule-sets
 
 `status` 返回 `authority: remote`、维护状态、`candidateAvailability` 和 `pendingOperations`。默认执行证据结构、地址和字节摘要核验，标注 `verification: structural`；提供 `--binary` 时额外执行真实原生复验，标注 `native`。已提交的当前版本即使候选回读失败也仍报告为已激活，并单独标记待核实。旧单集的历史通过 `expectedHead` 追溯，在结果映射中使用 `v2fly:category-ai-!cn`；历史读取失败通过 `historyComplete`／`historyErrors` 报告，不能将空列表视为完整历史。初始化和查询 API 分别为 `initializeRemoteState(repository, targetBranch)`、`readRemoteStatus({ repository, publication?, binary? })`。
 
-同一缓存目录的 `update.lock/` 仍拒绝本机并发；远端预期 head 保护跨机器写入。进程被强制终止后，可换新目录恢复；要复用旧目录，先确认没有存活进程再移除残留锁。不要删除远端来源记录来绕过来源变化错误。人工固定、立即检查和主动恢复使用同一远端 journal。调度及历史清理由父 Spec 的后续工单交付。
+同一缓存目录的 `update.lock/` 仍拒绝本机并发；远端预期 head 保护跨机器写入。进程被强制终止后，可换新目录恢复；要复用旧目录，先确认没有存活进程再移除残留锁。不要删除远端来源记录来绕过来源变化错误。人工固定、立即检查和主动恢复使用同一远端 journal。[工作流运行说明](docs/verification/issue-55.md)包含调度、通知和恢复步骤。
 
 Artifact Manifest（产物清单）记录某次不可变规则文件的固定地址、摘要和使用约束。原有单集及目标为 `main` 的配置驱动更新在产物仓库的 `candidates` 分支追加候选；配置目标为 `acceptance-*` 时在该隔离分支追加候选。两者均采用三个有序的候选提交阶段，并穿插远端操作检查点，使清单可以引用已固定的 commit 地址：
 

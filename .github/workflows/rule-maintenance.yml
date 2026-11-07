@@ -1,0 +1,72 @@
+name: Rule set maintenance
+
+on:
+  schedule:
+    - cron: '23 20 * * *'
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Check for updates or clean history
+        type: choice
+        options: [check, cleanup]
+        default: check
+      target:
+        description: Artifact branch (main or a prepared acceptance-* branch)
+        type: string
+        default: main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rule-maintenance-${{ inputs.target || 'main' }}
+  cancel-in-progress: false
+
+jobs:
+  operate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      RULE_OPERATION: ${{ github.event_name == 'schedule' && 'daily' || inputs.operation }}
+      RULE_TARGET: ${{ inputs.target || 'main' }}
+      RULE_UPDATE_ENABLED: ${{ vars.RULE_UPDATE_ENABLED }}
+      RULE_CLEANUP_ENABLED: ${{ vars.RULE_CLEANUP_ENABLED }}
+      RULE_CLEANUP_PERIOD_DAYS: ${{ vars.RULE_CLEANUP_PERIOD_DAYS }}
+      RULE_CLEANUP_START_AT: ${{ vars.RULE_CLEANUP_START_AT }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@f520eceda224fe1a4aed5a2a27a194379a409996 # v6
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install verified sing-box
+        if: >-
+          env.RULE_TARGET != 'main' ||
+          (env.RULE_OPERATION != 'cleanup' && env.RULE_UPDATE_ENABLED == 'true') ||
+          (env.RULE_OPERATION != 'check' && env.RULE_CLEANUP_ENABLED == 'true')
+        shell: bash
+        run: |
+          build=packages/config-compiler/schemas/build.json
+          version=$(jq -er .version "$build")
+          digest=$(jq -er '.releaseAssets["linux-amd64"].sha256' "$build")
+          [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ && $digest =~ ^[a-f0-9]{64}$ ]]
+          name="sing-box-${version}-linux-amd64"
+          cd "$RUNNER_TEMP"
+          curl --fail --location --retry 3 \
+            "https://github.com/SagerNet/sing-box/releases/download/v${version}/${name}.tar.gz" \
+            --output "${name}.tar.gz"
+          printf '%s  %s\n' "$digest" "${name}.tar.gz" | sha256sum --check
+          tar -xzf "${name}.tar.gz"
+          test -x "$RUNNER_TEMP/$name/sing-box"
+          printf 'SING_BOX_BINARY=%s/%s/sing-box\n' "$RUNNER_TEMP" "$name" >> "$GITHUB_ENV"
+      - name: Check or clean rule sets
+        working-directory: packages/rule-set-pipeline
+        env:
+          GH_TOKEN: ${{ secrets.RULE_ARTIFACT_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          RULE_STATE_DIRECTORY: ${{ runner.temp }}/rule-state
+        run: node --import tsx src/rule-workflow.ts
