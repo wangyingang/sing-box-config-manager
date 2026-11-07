@@ -38,7 +38,11 @@ async function main(): Promise<number> {
   if (maintenanceAction) {
     if (values.config || values.state || values.release || values.out || values.id || values['expected-source']
       || values.candidate || values.activation || values.subscription || values['expected-head']) throw new Error('Invalid maintenance options');
-    const repository = githubPublication(undefined, values.branch && values.branch !== 'main' ? values.branch : 'candidates').repository!;
+    const target = values.branch ?? 'main';
+    if (target !== 'main' && !/^acceptance-[a-zA-Z0-9._-]+$/.test(target)) {
+      throw new Error('Maintenance target must be main or an acceptance branch');
+    }
+    const repository = githubPublication(undefined, target === 'main' ? 'candidates' : target).repository!;
     const options = { repository, binary: values.binary };
     const period = values['period-days'], startAt = values['start-at'], maintenanceId = values['maintenance-id'];
     let result;
