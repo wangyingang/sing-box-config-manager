@@ -18,6 +18,7 @@ export interface ActivationTransport {
 const configuredRecord = /^stable\/(?:[a-z0-9][a-z0-9._-]*\/)+activation\.json$/;
 const configuredRule = /^stable\/.+\/domains\.(?:srs|json)$/;
 const legacyRecordPath = 'stable/activation.json';
+const recordDirectory = (path: string) => path.slice(0, -'activation.json'.length);
 
 /** Branch must already exist. Creating a production or acceptance environment is separate. */
 export function githubActivation(branch = 'main', request: typeof ghJson = ghJson): ActivationTransport {
@@ -69,10 +70,17 @@ export function githubActivation(branch = 'main', request: typeof ghJson = ghJso
       if (existingTree.truncated || !Array.isArray(existingTree.tree)) throw new Error('Cannot establish stable path ownership: incomplete tree');
       const existingPaths = new Map<string, string>(existingTree.tree.map((entry: { path: string; type: string }) => [entry.path, entry.type]));
       const ownedDirectories = [...existingPaths.keys()].filter(path => configuredRecord.test(path) && !paths.includes(path))
-        .map(path => path.slice(0, -'activation.json'.length));
+        .map(recordDirectory);
+      const selectedRecord = paths.find(path => configuredRecord.test(path));
+      if (selectedRecord) {
+        const selectedDirectory = recordDirectory(selectedRecord);
+        if (ownedDirectories.some(directory => directory.startsWith(selectedDirectory) || selectedDirectory.startsWith(directory))) {
+          throw new Error('Configured stable directory overlaps another rule set');
+        }
+      }
       for (const path of paths) {
         if (existingPaths.has(path) && existingPaths.get(path) !== 'blob'
-          || ownedDirectories.some(directory => path.startsWith(directory))) {
+          || ownedDirectories.some(directory => path === directory + 'domains.srs' || path === directory + 'domains.json')) {
           throw new Error(`Stable path is owned by another rule set or is not a file: ${path}`);
         }
       }

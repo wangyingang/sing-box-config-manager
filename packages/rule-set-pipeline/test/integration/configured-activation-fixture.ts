@@ -2,9 +2,9 @@ import { readFile } from 'node:fs/promises';
 import { updateRules } from '../../src/update.js';
 import { sha256 } from '../../src/release.js';
 import { immutableUrl, type PublicationTransport } from '../../src/publication.js';
-import type { PublicationRepository } from '../../src/publication-repository.js';
+import { PublicationWriteError, type PublicationRepository } from '../../src/publication-repository.js';
 import { authorizeManualWrite } from '../../src/manual-activation.js';
-import { initializeRemoteState } from '../../src/remote-state.js';
+import { initializeRemoteState, STATE_PATH } from '../../src/remote-state.js';
 import { ActivationWriteError, type ActivationTransport } from '../../src/activation-transport.js';
 
 export async function configuredEnvironment(binary: string, directory: string, branch = 'acceptance-issue-39') {
@@ -51,6 +51,10 @@ export async function configuredEnvironment(binary: string, directory: string, b
       snapshots.set(commit, { ...snapshots.get(current), ...files });
       if (branch === 'main') journalHead = commit;
       else head = commit;
+      if (mode === 'registration' && files[STATE_PATH]) {
+        mode = '';
+        throw new PublicationWriteError(commit, 'registration response lost');
+      }
       return commit;
     },
   };

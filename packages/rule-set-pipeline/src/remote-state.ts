@@ -27,6 +27,7 @@ export interface ManualOperation {
   previousActivationId?: string;
   candidateId: string;
   candidateEvidenceUrl: string;
+  activationDigest: string;
   historicalActivationCommit?: string;
   notCommitted?: true;
 }
@@ -73,7 +74,7 @@ function validate(value: unknown): asserts value is RemoteJournal {
         || !Number.isSafeInteger(op.generation) || op.generation < 1 || op.generation > value.generation
         || !sha(op.expectedHead) || op.previousActivationId !== undefined && typeof op.previousActivationId !== 'string'
         || typeof op.candidateId !== 'string' || !/^[a-f0-9-]+$/.test(op.candidateId)
-        || typeof op.candidateEvidenceUrl !== 'string'
+        || !digest(op.activationDigest) || typeof op.candidateEvidenceUrl !== 'string'
         || !sha(op.candidateEvidenceUrl.split('/')[5])
         || op.candidateEvidenceUrl !== immutableUrl(op.candidateEvidenceUrl.split('/')[5], `candidates/${op.candidateId}/readback.json`)
         || (op.kind === 'rollback' ? !sha(op.historicalActivationCommit) : op.historicalActivationCommit !== undefined)

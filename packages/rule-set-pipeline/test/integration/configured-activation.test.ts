@@ -89,7 +89,7 @@ for (const fault of ['wrong-set', 'duplicate-ids', 'missing', 'extra', 'evidence
   }));
 }
 
-for (const mode of ['applied', 'not-applied', 'unknown', 'superseded', 'readback', 'receipt', 'rejected']) {
+for (const mode of ['applied', 'not-applied', 'unknown', 'superseded', 'readback', 'receipt', 'rejected', 'registration']) {
   test(`提交中断 ${mode} 可从远端核实且不重复切换`, { skip: !binary }, async () => isolated(async (env, directory) => {
     const candidates = await env.candidates(), id = env.ids[0];
     const options = env.options(id, candidates[id].evidenceUrl!);
@@ -103,7 +103,7 @@ for (const mode of ['applied', 'not-applied', 'unknown', 'superseded', 'readback
       if (mode === 'superseded') assert.notEqual(result.commit, env.head());
     } else {
       const code = { 'not-applied': 'ACTIVATION_UNKNOWN', unknown: 'ACTIVATION_UNKNOWN', readback: 'ACTIVATION_APPLIED_READBACK_PENDING',
-        receipt: 'ACTIVATION_APPLIED_LOCAL_RECEIPT_PENDING', rejected: 'ACTIVATION_NOT_APPLIED' }[mode]!;
+        receipt: 'ACTIVATION_APPLIED_LOCAL_RECEIPT_PENDING', rejected: 'ACTIVATION_NOT_APPLIED', registration: 'MANUAL_REGISTRATION_FAILED' }[mode]!;
       await assert.rejects(activateRules(options), new RegExp(`${code}:.*[a-f0-9-]{36}`));
     }
     // Simulate a fresh process without the original state directory or a receipt.
@@ -120,10 +120,11 @@ for (const mode of ['applied', 'not-applied', 'unknown', 'superseded', 'readback
     }
     env.fail('');
     status = await readStatus();
-    const expected = mode === 'rejected' ? 'not-committed' : mode === 'not-applied' ? 'pending' : 'committed';
+    const neverSwitched = mode === 'rejected' || mode === 'registration';
+    const expected = neverSwitched ? 'not-committed' : mode === 'not-applied' ? 'pending' : 'committed';
     assert.equal(status.manualOperations[0].status, expected);
     assert.equal(env.head(), before);
-    assert.equal(env.writes(), mode === 'rejected' ? 0 : 1);
+    assert.equal(env.writes(), neverSwitched ? 0 : 1);
   }));
 }
 

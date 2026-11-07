@@ -14,6 +14,12 @@ export function manualControl(operation: Pick<ManualOperation, 'id' | 'kind'>) {
   };
 }
 
+export function manualActivationDigest(record: Record<string, unknown>) {
+  // On a shared branch the registration itself becomes the switch parent.
+  const { expectedHead: _parent, ...activation } = record;
+  return sha256(JSON.stringify(activation));
+}
+
 export interface ManualWriteReservation {
   operationId: string;
   journalHead: string;
@@ -36,7 +42,7 @@ export async function authorizeManualWrite(repository: PublicationRepository, br
     || record.candidateId !== operation.candidateId || record.candidateEvidenceUrl !== operation.candidateEvidenceUrl
     || record.operation !== (operation.kind === 'rollback' ? 'rollback' : undefined)
     || record.historicalActivationCommit !== operation.historicalActivationCommit
-    || !isDeepStrictEqual(record.control, manualControl(operation))
+    || !isDeepStrictEqual(record.control, manualControl(operation)) || manualActivationDigest(record) !== operation.activationDigest
     || !ruleFiles.length || !isDeepStrictEqual(Object.keys(record.files ?? {}).sort(), ruleFiles.sort())
     || ruleFiles.some(path => {
       const expected = record.files[path];
@@ -64,26 +70,29 @@ export async function registerManualActivation(session: Awaited<ReturnType<typeo
   const { repository, snapshot, journal } = session;
   await guardRemoteState(repository, snapshot.head, journal);
   const registered = { ...journal, manualOperations: { ...journal.manualOperations, [operation.id]: operation } };
+  async function markNotCommitted() {
+    const current = await readRemoteState(repository);
+    const registeredOperation = current.journal.manualOperations?.[operation.id];
+    if (!registeredOperation || registeredOperation.notCommitted) return;
+    await guardRemoteState(repository, current.snapshot.head, journal);
+    const manualOperations = { ...current.journal.manualOperations, [operation.id]: { ...registeredOperation, notCommitted: true as const } };
+    await commitRemoteState(repository, current.snapshot.head, { ...current.journal, manualOperations }, {},
+      `记录未提交的人工规则操作 ${operation.id}`);
+  }
   let head: string;
   try {
     head = await commitRemoteState(repository, snapshot.head, registered, {}, `登记人工规则操作 ${operation.id}`);
   } catch (error) {
-    // No stable write is attempted when registration is uncertain.
-    throw new Error(`MANUAL_REGISTRATION_FAILED: operation ${operation.id}; ${String(error)}`, { cause: error });
+    // The stable request was never sent. If registration is visible, close it.
+    let checkpointFailure = '';
+    try { await markNotCommitted(); }
+    catch (checkpointError) { checkpointFailure = `; outcome checkpoint failed: ${String(checkpointError)}`; }
+    throw new Error(`MANUAL_REGISTRATION_FAILED: operation ${operation.id}; ${String(error)}${checkpointFailure}`, { cause: error });
   }
   return {
     expectedHead: repository.branch === journal.targetBranch ? head : operation.expectedHead,
-    // Maintenance must drain the durable reservation before rewriting either ref.
     write: { operationId: operation.id, journalHead: head } satisfies ManualWriteReservation,
-    async markNotCommitted() {
-      const current = await readRemoteState(repository);
-      await guardRemoteState(repository, current.snapshot.head, journal);
-      const registeredOperation = current.journal.manualOperations?.[operation.id];
-      if (!registeredOperation) return;
-      const manualOperations = { ...current.journal.manualOperations, [operation.id]: { ...registeredOperation, notCommitted: true as const } };
-      await commitRemoteState(repository, current.snapshot.head, { ...current.journal, manualOperations }, {},
-        `记录未提交的人工规则操作 ${operation.id}`);
-    },
+    markNotCommitted,
   };
 }
 
@@ -117,7 +126,9 @@ export async function readManualOperationResults(repository: PublicationReposito
         commit = await repository.lastChange?.(stable.head, operation.recordPath);
         const containingCommit = commit ?? stable.head;
         const record = JSON.parse((await download(immutableUrl(containingCommit, operation.recordPath))).toString());
-        if (record.id !== operation.id) throw new Error('Commit does not contain the registered activation');
+        if (record.id !== operation.id || manualActivationDigest(record) !== operation.activationDigest) {
+          throw new Error('Commit does not contain the registered activation');
+        }
         for (const [path, expected] of Object.entries(current.files)) {
           const bytes = await download(immutableUrl(containingCommit, path));
           if (bytes.length !== expected.byteLength || sha256(bytes) !== expected.sha256) throw new Error(`Committed bytes mismatch: ${path}`);

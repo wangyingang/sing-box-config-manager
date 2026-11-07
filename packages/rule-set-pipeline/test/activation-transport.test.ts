@@ -10,19 +10,21 @@ const journalHead = 'f'.repeat(40), operationId = 'b53efb87-d1ab-4661-a689-e65a4
 const recordPath = 'stable/ai-openai/activation.json', rulePath = 'stable/ai-openai/domains.srs';
 const candidateId = '1234', candidateEvidenceUrl = immutableUrl('d'.repeat(40), `candidates/${candidateId}/readback.json`);
 const statePath = 'pipeline/state.json';
+const rule = Buffer.from('rule');
+const activation = { schemaVersion: 1, id: operationId, logicalId: 'ai-openai', candidateId, candidateEvidenceUrl,
+  history: [], subscription: { schemaVersion: 2, systemRuleSetId: 'ai-openai' },
+  files: { [rulePath]: { byteLength: rule.length, sha256: sha256(rule) } },
+  control: { revision: operationId, reason: 'manual-activation', pauseAutomaticActivation: true, pauseAutomaticRetry: false } };
 const operation = { id: operationId, kind: 'activate', logicalId: 'ai-openai', recordPath, generation: 1,
-  expectedHead: oldHead, candidateId, candidateEvidenceUrl };
+  expectedHead: oldHead, candidateId, candidateEvidenceUrl, activationDigest: sha256(JSON.stringify(activation)) };
 const identity = { schemaVersion: 1, id: 'test', targetBranch: 'main' };
 const journal = { ...identity, generation: 1, maintenance: 'open',
   state: { schemaVersion: 1, pinned: {}, processed: {}, candidates: {} }, manualOperations: { [operationId]: operation } };
-const rule = Buffer.from('rule');
-const stableFiles = { [rulePath]: rule, [recordPath]: Buffer.from(JSON.stringify({ schemaVersion: 1, ...operation,
-  operation: undefined, files: { [rulePath]: { byteLength: rule.length, sha256: sha256(rule) } },
-  control: { revision: operationId, reason: 'manual-activation', pauseAutomaticActivation: true, pauseAutomaticRetry: false } })) };
+const stableFiles = { [rulePath]: rule, [recordPath]: Buffer.from(JSON.stringify({ ...activation, expectedHead: oldHead })) };
 const reservation = { operationId, journalHead };
 
 function github(options: { branch?: string; head?: string; private?: boolean; missing?: boolean; patchError?: Error;
-  managedRecord?: boolean; maintenance?: boolean; onPatch?: () => Promise<void> } = {}) {
+  managedRecord?: string; maintenance?: boolean; onPatch?: () => Promise<void> } = {}) {
   const branch = options.branch ?? 'main';
   const calls: { args: string[]; input: any }[] = [];
   const root = `repos/${ARTIFACT_REPOSITORY}`;
@@ -36,7 +38,7 @@ function github(options: { branch?: string; head?: string; private?: boolean; mi
     }
     if (path === `${root}/git/commits/${oldHead}`) return { tree: { sha: 'b'.repeat(40) } };
     if (path === `${root}/git/trees/${'b'.repeat(40)}?recursive=1`) {
-      return { tree: options.managedRecord ? [{ path: recordPath, type: 'blob', mode: '100644' }] : [] };
+      return { tree: options.managedRecord ? [{ path: options.managedRecord, type: 'blob', mode: '100644' }] : [] };
     }
     if (path === `${root}/git/ref/heads/candidates`) return { object: { sha: journalHead } };
     if (path === `${root}/git/commits/${journalHead}`) return { tree: { sha: '2'.repeat(40) } };
@@ -216,7 +218,7 @@ test('允许旧 v1 入口更新既有格式，拒绝它覆盖配置化规则集�
   const legacy = github();
   await legacy.transport.commit(oldHead, { 'stable/v2fly/category-ai-not-cn/domains.srs': rule, 'stable/activation.json': Buffer.from('{}') }, '旧单集');
   assert.ok(legacy.calls.some(call => call.args.includes('PATCH')));
-  const managed = github({ managedRecord: true });
+  const managed = github({ managedRecord: recordPath });
   await assert.rejects(managed.transport.commit(oldHead, { [rulePath]: rule, 'stable/activation.json': Buffer.from('{}') }, '覆盖固定版本'),
     /owned by another rule set/);
   assert.ok(!managed.calls.some(call => call.args.includes('PATCH')));
@@ -245,3 +247,25 @@ test('配置化 PATCH 的明确服务端拒绝和超时分别处理', async () =
   const ambiguous = github({ patchError: new GitHubHttpError(504, 'Gateway timeout') });
   await assert.rejects(ambiguous.transport.commit(oldHead, stableFiles, '激活候选', reservation), ActivationWriteError);
 });
+
+
+test('登记绑定验证过的规则摘要与激活记录，拒绝同一候选名下提交其他字节', async () => {
+  const remote = github();
+  const other = Buffer.from('different rule');
+  const substituted = { ...activation, expectedHead: oldHead,
+    files: { [rulePath]: { byteLength: other.length, sha256: sha256(other) } } };
+  await assert.rejects(remote.transport.commit(oldHead, { [rulePath]: other, [recordPath]: Buffer.from(JSON.stringify(substituted)) },
+    '替换已验证载荷', reservation), /Invalid registered activation write set/);
+  assert.ok(!remote.calls.some(call => call.args.includes('PATCH')));
+});
+
+for (const managedRecord of ['stable/ai-openai/nested/activation.json', 'stable/ai-openai/activation.json']) {
+  test(`拒绝配置化规则集目录与 ${managedRecord} 上下重叠`, async () => {
+    const remote = github({ managedRecord });
+    const files = managedRecord === recordPath
+      ? { 'stable/ai-openai/nested/activation.json': stableFiles[recordPath], 'stable/ai-openai/nested/domains.srs': rule }
+      : stableFiles;
+    await assert.rejects(remote.transport.commit(oldHead, files, '重叠目录', reservation), /overlaps another rule set/);
+    assert.ok(!remote.calls.some(call => call.args.includes('PATCH')));
+  });
+}

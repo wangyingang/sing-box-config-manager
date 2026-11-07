@@ -83,7 +83,7 @@ pnpm --dir packages/rule-set-pipeline activate --state /absolute/path/to/rule-st
 
 `activation.control` 保存 `revision`、`reason`、`pauseAutomaticActivation` 和 `pauseAutomaticRetry`。人工指定的原因是 `manual-activation`，暂停自动激活。人工回滚的原因是 `manual-rollback`，同时暂停自动重试和自动激活。每次成功的人工操作都会生成新修订，即使所选候选已经是当前版本。候选发布和重建不会解除固定。旧激活记录仍可查询，其中没有 `control` 时表示尚未记录人工固定。
 
-激活先复验候选的固定 HTTPS 字节、Manifest、来源、构建身份和原生结果，再核对预期旧 head 中的该集契约和实际稳定文件。候选的不可变 HTTPS 字节还须与当前保留的 Git 文件一致。检查通过后，先在远端 journal 登记操作 ID、所选候选、原稳定 head 和维护代次，再提交选中集的规则文件与激活记录。生产布局在 `candidates` 登记，在 `main` 切换。隔离分支同时承担这两种用途，切换提交以登记提交为 parent。切换前复查已捕获的 journal head、代次和维护状态，以预期 parent 非强制更新稳定分支。Git API 的完整 tree/blob 用于判定旧激活记录是否存在，CDN 的 404 不作为首次激活依据。
+激活先复验候选的固定 HTTPS 字节、Manifest、来源、构建身份和原生结果，再核对预期旧 head 中的该集契约和实际稳定文件。候选的不可变 HTTPS 字节还须与当前保留的 Git 文件一致。检查通过后，先在远端 journal 登记操作 ID、所选候选、原稳定 head 和维护代次，登记同时绑定已验证的规则摘要和激活记录，再提交选中集的稳定文件。生产布局在 `candidates` 登记，在 `main` 切换。隔离分支同时承担这两种用途，切换提交以登记提交为 parent。切换前复查已捕获的 journal head、代次和维护状态，以预期 parent 非强制更新稳定分支。Git API 的完整 tree/blob 用于判定旧激活记录是否存在，CDN 的 404 不作为首次激活依据。
 
 `status` 中的 `activeRuleVersions` 按逻辑 ID 返回远端 `stablePath/activation.json` 及其当前字节核验结果，`state.candidates`／`state.configuredProcessed` 来自远端候选记录。`rollbackTargets` 仅列出必要证据仍保留且与当前订阅兼容的目标；不可用原因单独列在 `unavailableRollbackTargets`。本地激活回执仍独立保存，供诊断使用，不能覆盖远端事实。
 
@@ -92,7 +92,7 @@ pnpm --dir packages/rule-set-pipeline activate --state /absolute/path/to/rule-st
 | 状态 | 远端依据 |
 | --- | --- |
 | `committed` | 当前激活记录匹配本次操作，且稳定文件的固定 commit HTTPS 地址回读通过 |
-| `not-committed` | 切换在请求发出前已终止，或稳定分支已前进且仍保留原激活记录 |
+| `not-committed` | 切换请求从未发出、被明确拒绝，或稳定分支已前进且仍保留原激活记录 |
 | `pending` | 分支仍可能接受在途请求，或已知提交的回读尚未完成。有 `commit` 或 `containingCommit` 时，`activeRuleVersions` 仍显示 Git 记录的当前版本 |
 | `superseded` | 后续人工操作或维护已替代本次操作。历史中仍有本次激活时，附上包含该记录的 commit |
 

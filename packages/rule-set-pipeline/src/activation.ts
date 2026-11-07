@@ -11,7 +11,7 @@ import { decodedTerms, USAGES } from './projection.js';
 import { sha256 } from './release.js';
 import { ARTIFACT_REPOSITORY, immutableUrl } from './publication.js';
 import { retainedCandidateDownload } from './publication-repository.js';
-import { manualControl, openManualActivation, registerManualActivation } from './manual-activation.js';
+import { manualActivationDigest, manualControl, openManualActivation, registerManualActivation } from './manual-activation.js';
 import { ActivationWriteError, githubActivation, type ActivationTransport } from './activation-transport.js';
 
 const ajv = new Ajv({ strict: true });
@@ -271,21 +271,23 @@ async function performActivation(options: ActivationOptions | RollbackOptions) {
   }
   const id = randomUUID();
   const kind = historical ? 'rollback' as const : 'activate' as const;
-  const reservation = session && definition ? await registerManualActivation(session, {
-    id, kind, logicalId: definition.id, recordPath, generation: session.journal.generation,
-    expectedHead: options.expectedHead, ...(previous ? { previousActivationId: previous.id } : {}),
-    candidateId: candidate.candidateId, candidateEvidenceUrl: candidate.evidenceUrl,
-    ...(historical ? { historicalActivationCommit: historical.commit } : {}),
-  }) : undefined;
-  const expectedHead = reservation?.expectedHead ?? options.expectedHead;
   const activation = { schemaVersion: 1, id,
-    ...(reservation ? { control: manualControl({ id, kind }) } : {}),
+    ...(session ? { control: manualControl({ id, kind }) } : {}),
     ...(definition ? { logicalId: definition.id, history: previous ? [...previous.history,
       { commit: previousCommit, id: previous.id, candidateId: previous.candidateId }] : [] } : {}),
     ...(historical ? { operation: 'rollback' as const, historicalActivationCommit: historical.commit, historicalActivationId: historical.record.id } : {}), candidateId: candidate.candidateId,
     candidateEvidenceUrl: candidate.evidenceUrl, source: candidate.source, validation: candidate.validation,
-    expectedHead, subscription,
+    expectedHead: options.expectedHead, subscription,
     files: Object.fromEntries(Object.entries(files).map(([path, bytes]) => [path, { sha256: sha256(bytes), byteLength: bytes.length }])) };
+  const reservation = session && definition ? await registerManualActivation(session, {
+    id, kind, logicalId: definition.id, recordPath, generation: session.journal.generation,
+    expectedHead: options.expectedHead, ...(previous ? { previousActivationId: previous.id } : {}),
+    candidateId: candidate.candidateId, candidateEvidenceUrl: candidate.evidenceUrl,
+    activationDigest: manualActivationDigest(activation),
+    ...(historical ? { historicalActivationCommit: historical.commit } : {}),
+  }) : undefined;
+  const expectedHead = reservation?.expectedHead ?? options.expectedHead;
+  activation.expectedHead = expectedHead;
   files[recordPath] = encode(activation);
   let commit: string;
   try {
