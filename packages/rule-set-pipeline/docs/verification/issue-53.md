@@ -1,6 +1,6 @@
 # Issue #53 当前版本新发布基线验收
 
-[工单 #53](https://github.com/wangyingang/sing-box-config-manager/issues/53) 使用 `manageMaintenance({ action: 'prepare', ... })` 和 `maintenance-prepare` 验收准备阶段。测试通过公开更新、人工固定、维护和远端状态查询入口运行真实 sing-box 1.14.4。Git 和 HTTPS 在隔离的测试 transport 中模拟。
+[工单 #53](https://github.com/wangyingang/sing-box-config-manager/issues/53) 的准备阶段可通过 `maintenance-prepare` 或 `manageMaintenance({ action: 'prepare', ... })` 调用。测试通过模块的公开更新、人工固定、维护和远端状态查询入口运行真实 sing-box 1.14.4。Git 和 HTTPS 在隔离的测试 transport 中模拟。
 
 | 场景 | 验收结果 |
 | --- | --- |

@@ -1,9 +1,9 @@
 import { isDeepStrictEqual } from 'node:util';
-import { githubPublicationRepository, type PublicationSnapshot } from './publication-repository.js';
+import { createGitCommit, githubPublicationRepository, type PublicationSnapshot } from './publication-repository.js';
 import { ARTIFACT_REPOSITORY, ghJson, GitHubHttpError } from './publication.js';
 
 export interface BaselineTransport {
-  snapshot(ref: string): Promise<PublicationSnapshot>;
+  snapshot(ref: string): Promise<PublicationSnapshot | undefined>;
   /** Create an immutable scratch branch, or adopt the exact stage from a prior attempt. */
   stage(ref: string, parent: string | undefined, files: Record<string, Buffer>, message: string): Promise<string>;
 }
@@ -52,29 +52,38 @@ const scratchRef = /^maintenance-[a-f0-9-]{36}-(?:files|metadata|evidence|journa
 
 export function githubBaselineTransport(request: typeof ghJson = ghJson): BaselineTransport {
   const repository = githubPublicationRepository(undefined, request);
-  const api = (path: string, input?: unknown) => request(['api', `repos/${ARTIFACT_REPOSITORY}/git/${path}`,
+  const api = (path: string, input?: unknown) => request(['api', `repos/${ARTIFACT_REPOSITORY}/${path}`,
     ...(input === undefined ? [] : ['--method', 'POST', '--input', '-'])], input);
-  const snapshot = (ref: string) => {
+  const snapshot = async (ref: string) => {
     if (!scratchRef.test(ref)) throw new Error('Invalid maintenance scratch ref');
-    return repository.snapshot(ref);
+    try { return await repository.snapshot(ref); }
+    catch (error) {
+      if (error instanceof GitHubHttpError && error.status === 404) return undefined;
+      throw error;
+    }
   };
   return { snapshot,
     async stage(ref, parent, files, message) {
       if (!scratchRef.test(ref) || parent !== undefined && !fullCommit(parent)) throw new Error('Invalid baseline stage');
+      const base = parent ? await api(`git/commits/${parent}`) : undefined;
+      if (parent && !fullCommit(base?.tree?.sha)) throw new Error('Invalid baseline base tree');
       const adopt = async () => {
-        let current: PublicationSnapshot;
-        try { current = await snapshot(ref); }
-        catch (error) {
-          if (error instanceof GitHubHttpError && error.status === 404) return undefined;
-          throw error;
-        }
+        const current = await snapshot(ref);
+        if (!current) return undefined;
         if (!isDeepStrictEqual(current.parents, parent ? [parent] : [])) throw new Error(`Baseline parent conflict: ${ref}`);
         const expected = new Set(Object.keys(files));
-        if (parent) {
-          const base = await api(`commits/${parent}`);
-          const tree = await api(`trees/${base.tree.sha}?recursive=1`);
+        if (base) {
+          const tree = await api(`git/trees/${base.tree.sha}?recursive=1`);
           if (tree.truncated || !Array.isArray(tree.tree)) throw new Error('Incomplete baseline parent tree');
-          for (const entry of tree.tree) if (entry.type !== 'tree') expected.add(entry.path);
+          for (const entry of tree.tree) {
+            if (entry.type === 'tree') continue;
+            expected.add(entry.path);
+            if (Object.hasOwn(files, entry.path)) continue;
+            const inherited = current.entries.get(entry.path);
+            if (!inherited || inherited.type !== entry.type || inherited.mode !== entry.mode || inherited.sha !== entry.sha) {
+              throw new Error(`Baseline inherited content conflict: ${ref}/${entry.path}`);
+            }
+          }
         }
         if (!isDeepStrictEqual(new Set(filePaths(current.paths)), expected)) throw new Error(`Baseline tree conflict: ${ref}`);
         for (const [path, bytes] of Object.entries(files)) {
@@ -84,26 +93,15 @@ export function githubBaselineTransport(request: typeof ghJson = ghJson): Baseli
       };
       const existing = await adopt();
       if (existing) return existing;
-      const base = parent ? await api(`commits/${parent}`) : undefined;
-      if (parent && !fullCommit(base?.tree?.sha)) throw new Error('Invalid baseline base tree');
-      const tree = [];
-      for (const [path, bytes] of Object.entries(files)) {
-        const blob = await api('blobs', { content: bytes.toString('base64'), encoding: 'base64' });
-        if (!fullCommit(blob?.sha)) throw new Error('Invalid baseline blob');
-        tree.push({ path, mode: '100644', type: 'blob', sha: blob.sha });
-      }
-      const createdTree = tree.length ? await api('trees', { ...(base && { base_tree: base.tree.sha }), tree }) : base?.tree;
-      if (!fullCommit(createdTree?.sha)) throw new Error('Invalid baseline tree');
-      const commit = await api('commits', { message, tree: createdTree.sha, parents: parent ? [parent] : [] });
-      if (!fullCommit(commit?.sha)) throw new Error('Invalid baseline commit');
+      const commit = await createGitCommit(api, files, message, parent ? { head: parent, tree: base.tree.sha } : undefined);
       try {
-        await api('refs', { ref: `refs/heads/${ref}`, sha: commit.sha });
+        await api('git/refs', { ref: `refs/heads/${ref}`, sha: commit });
       } catch (error) {
         const recovered = await adopt();
         if (recovered) return recovered;
         throw error;
       }
-      return commit.sha;
+      return commit;
     },
   };
 }

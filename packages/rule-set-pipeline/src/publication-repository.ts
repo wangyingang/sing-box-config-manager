@@ -40,7 +40,7 @@ function checkBranch(branch: string) {
 interface TreeEntry { path: string; type: string; mode: string; sha: string }
 
 /** Reads control records from immutable Git objects, never from a potentially stale CDN. */
-export function githubPublicationRepository(branch = PUBLICATION_BRANCH, request: typeof ghJson = ghJson): PublicationRepository {
+export function githubPublicationRepository(branch = PUBLICATION_BRANCH, request: typeof ghJson = ghJson) {
   checkBranch(branch);
   const api = (path: string, input?: unknown) => request(['api', `repos/${ARTIFACT_REPOSITORY}${path ? `/${path}` : ''}`,
     ...(input === undefined ? [] : ['--method', 'POST', '--input', '-'])], input);
@@ -89,7 +89,7 @@ export function githubPublicationRepository(branch = PUBLICATION_BRANCH, request
       if (!Array.isArray(commits) || !fullCommit(commits[0]?.sha)) throw new Error(`Cannot identify commit for ${path}`);
       return commits[0].sha;
     },
-    async commit(expectedHead, files, message, maintenanceId) {
+    async commit(expectedHead, files, message, maintenanceId?: string) {
       if (!fullCommit(expectedHead)) throw new Error('Expected full old commit');
       const current = await snapshot();
       if (current.head !== expectedHead) throw new Error('PUBLICATION_CONFLICT: remote head changed');
@@ -134,23 +134,29 @@ export function githubPublicationRepository(branch = PUBLICATION_BRANCH, request
           }
         }
       }
-      const tree = [];
-      for (const [path, content] of Object.entries(files)) {
-        const blob = await api('git/blobs', { content: content.toString('base64'), encoding: 'base64' });
-        if (!fullCommit(blob?.sha)) throw new Error('Invalid created blob');
-        tree.push({ path, mode: '100644', type: 'blob', sha: blob.sha });
-      }
-      const createdTree = await api('git/trees', { base_tree: current.treeSha, tree });
-      if (!fullCommit(createdTree?.sha)) throw new Error('Invalid created tree');
-      const commit = await api('git/commits', { message, tree: createdTree.sha, parents: [expectedHead] });
-      if (!fullCommit(commit?.sha)) throw new Error('Invalid created commit');
+      const commit = await createGitCommit(api, files, message, { tree: current.treeSha, head: expectedHead });
       try {
         await request(['api', `repos/${ARTIFACT_REPOSITORY}/git/refs/heads/${branch}`, '--method', 'PATCH', '--input', '-'],
-          { sha: commit.sha, force: false });
+          { sha: commit, force: false });
       } catch (error) {
-        throw new PublicationWriteError(commit.sha, error);
+        throw new PublicationWriteError(commit, error);
       }
-      return commit.sha;
+      return commit;
     },
-  };
+  } satisfies PublicationRepository;
+}
+
+export async function createGitCommit(api: (path: string, input?: unknown) => Promise<any>,
+  files: Record<string, Buffer>, message: string, parent?: { tree: string; head: string }) {
+  const entries = [];
+  for (const [path, bytes] of Object.entries(files)) {
+    const blob = await api('git/blobs', { content: bytes.toString('base64'), encoding: 'base64' });
+    if (!fullCommit(blob?.sha)) throw new Error('Invalid created blob');
+    entries.push({ path, mode: '100644', type: 'blob', sha: blob.sha });
+  }
+  const tree = entries.length ? (await api('git/trees', { ...(parent && { base_tree: parent.tree }), tree: entries }))?.sha : parent?.tree;
+  if (!fullCommit(tree)) throw new Error('Invalid created tree');
+  const commit = await api('git/commits', { message, tree, parents: parent ? [parent.head] : [] });
+  if (!fullCommit(commit?.sha)) throw new Error('Invalid created commit');
+  return commit.sha;
 }

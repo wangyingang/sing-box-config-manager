@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -774,7 +774,9 @@ for (const branch of ['acceptance-issue-53', 'main']) {
         return stages.get(ref)!.head;
       },
       async snapshot(ref) {
-        const { head, parent, files } = stages.get(ref)!;
+        const stage = stages.get(ref);
+        if (!stage) return undefined;
+        const { head, parent, files } = stage;
         return { head, parents: parent ? [parent] : [], paths: Object.keys(files), async read(path) { return files[path]; } };
       },
     };
@@ -787,7 +789,7 @@ for (const branch of ['acceptance-issue-53', 'main']) {
         if (blockOld) throw new Error('Old artifact address blocked');
         return env.transport.download(url);
       }
-      if (failReadback) throw new Error('New HTTPS address temporarily unavailable');
+      if (failReadback && path.startsWith('stable/')) throw new Error('New HTTPS address temporarily unavailable');
       if (!stage.files[path]) throw new Error(`Readback HTTP 404: ${url}`);
       return stage.files[path];
     };
@@ -799,7 +801,10 @@ for (const branch of ['acceptance-issue-53', 'main']) {
     const missingTool = await manageMaintenance({ ...maintenance, binary: undefined, action: 'prepare' });
     assert.equal(missingTool.status, 'deferred');
     assert.equal(stages.size, 0);
-    const interrupted = await manageMaintenance({ ...maintenance, action: 'prepare' });
+    const alternateBinary = join(directory, 'sing-box-wrapper');
+    const wrapper = `#!/bin/sh\nexec '${binary!.replaceAll("'", "'\\''")}' "$@"\n`;
+    await writeFile(alternateBinary, wrapper, { mode: 0o700 });
+    const interrupted = await manageMaintenance({ ...maintenance, binary: alternateBinary, action: 'prepare' });
     assert.equal(interrupted.status, 'failed');
     assert.equal(env.head(), pausedHead);
     failReadback = false;
@@ -815,10 +820,10 @@ for (const branch of ['acceptance-issue-53', 'main']) {
     blockOld = true;
     assert.equal((await manageMaintenance({ ...maintenance, action: 'resume' })).status, 'prepared');
     assert.equal(env.head(), liveHead);
-    const { stable, journal } = prepared.run.baseline.stages;
+    const { stable, journal, evidence } = prepared.run.baseline.stages;
     assert.equal(stable.head === journal.head, branch !== 'main');
-    const newRepository = { ...env.repository, snapshot: (target = env.repository.branch) =>
-      baseline.snapshot(target === env.repository.branch ? journal.ref : stable.ref) };
+    const newRepository = { ...env.repository, snapshot: async (target = env.repository.branch) =>
+      (await baseline.snapshot(target === env.repository.branch ? journal.ref : stable.ref))! };
     const after = await readRemoteStatus({ ...maintenance, repository: newRepository });
     assert.deepEqual(after.pendingOperations, []);
     assert.deepEqual(after.state.latestChecks, live.state.latestChecks);
@@ -844,6 +849,11 @@ for (const branch of ['acceptance-issue-53', 'main']) {
     const pinnedBuildPath = `candidates/${pin.activation.candidateId}/build.json`;
     const oldBuild = await (await env.repository.snapshot()).read(pinnedBuildPath);
     assert.deepEqual(await (await newRepository.snapshot()).read(pinnedBuildPath), oldBuild);
+    const proof = JSON.parse((await (await baseline.snapshot(evidence.ref))!.read(
+      `candidates/${pin.activation.candidateId}/readback.json`))!.toString());
+    assert.equal(proof.tool.sha256, JSON.parse(oldBuild!.toString()).tool.sha256);
+    assert.equal(proof.revalidationTool.sha256, sha256(wrapper));
+    assert.notEqual(proof.revalidationTool.sha256, proof.tool.sha256);
     assert.equal(after.state.configuredProcessed?.[anthropic]['1'].evidenceUrl, undefined);
     assert.equal(after.state.configuredProcessed?.[anthropic]['1'].candidateId, live.state.configuredProcessed?.[anthropic]['1'].candidateId);
   }, branch));

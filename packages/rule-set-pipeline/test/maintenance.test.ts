@@ -100,3 +100,22 @@ test('GitHub 临时分支创建回复丢失后采用已有的无父提交，拒�
   await assert.rejects(transport.stage(ref, undefined, { [path]: Buffer.from('conflict') }, 'prepare'), /Baseline content conflict/);
   assert.equal(commitCount, 1);
 });
+
+test('重试拒绝父链相同但篡改继承文件的临时分支', async () => {
+  const ref = 'maintenance-941f6c16-53dc-49f6-89f9-6549d93723b2-metadata';
+  const parent = 'a'.repeat(40), commit = 'b'.repeat(40), baseTree = 'c'.repeat(40), tree = 'd'.repeat(40);
+  const inherited = { path: 'README.md', mode: '100644', type: 'blob', sha: 'e'.repeat(40) };
+  const transport = githubBaselineTransport(async args => {
+    const endpoint = args[1].replace('repos/wangyingang/sing-box-rule-artifacts', '');
+    switch (endpoint) {
+      case '': return { private: false };
+      case `/git/ref/heads/${ref}`: return { object: { sha: commit } };
+      case `/git/commits/${commit}`: return { tree: { sha: tree }, parents: [{ sha: parent }] };
+      case `/git/commits/${parent}`: return { tree: { sha: baseTree }, parents: [] };
+      case `/git/trees/${baseTree}?recursive=1`: return { tree: [inherited] };
+      case `/git/trees/${tree}?recursive=1`: return { tree: [{ ...inherited, sha: 'f'.repeat(40) }] };
+      default: throw new Error(`Unexpected endpoint: ${endpoint}`);
+    }
+  });
+  await assert.rejects(transport.stage(ref, parent, {}, 'prepare'), /Baseline inherited content conflict.*README.md/);
+});

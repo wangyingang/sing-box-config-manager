@@ -8,7 +8,7 @@ import { decodedTerms } from './projection.js';
 import type { PublicationRepository, PublicationSnapshot } from './publication-repository.js';
 import { ARTIFACT_REPOSITORY, immutableUrl, type PublicationTransport } from './publication.js';
 import { IDENTITY_PATH, STATE_PATH, type RemoteJournal } from './remote-state.js';
-import { activationRecord, readRemoteStatus } from './remote-status.js';
+import { activationRecord, candidateEvidenceFiles, readRemoteStatus } from './remote-status.js';
 import { sha256 } from './release.js';
 import type { Candidate, UpdateState } from './update.js';
 
@@ -63,7 +63,7 @@ export async function verifyPreparedBaseline(options: Verification, stages: Base
   const { transport, publication, repository, targetBranch, plan, binary } = options;
   const readStage = async (stage: BaselineStage, parent?: string) => {
     const snapshot = await transport.snapshot(stage.ref);
-    if (snapshot.head !== stage.head || !isDeepStrictEqual(snapshot.parents, parent ? [parent] : [])) {
+    if (!snapshot || snapshot.head !== stage.head || !isDeepStrictEqual(snapshot.parents, parent ? [parent] : [])) {
       throw new Error(`Baseline commit or parent mismatch: ${stage.ref}`);
     }
     return snapshot;
@@ -118,7 +118,8 @@ export async function prepareBaseline(options: Verification & {
   const metadata: Record<string, Buffer> = {};
   const ids = new Set(plan.retain.active.map(({ record }) => record.candidateId));
   for (const id of ids) {
-    for (const file of ['domains.json', 'domains.srs', 'manifest.json', 'build.json', 'source.json', 'conversion-report.json']) {
+    for (const file of candidateEvidenceFiles) {
+      if (file === 'readback.json') continue;
       const path = `candidates/${id}/${file}`;
       (file.startsWith('domains.') ? assets : metadata)[path] = await required(source, path);
     }
@@ -141,6 +142,7 @@ export async function prepareBaseline(options: Verification & {
   // A cleanup can discard candidates even when no stable version exists.
   const metadataStage = await stage('metadata', files, metadata);
   const evidence: Record<string, Buffer> = {};
+  const priorEvidence = await transport.snapshot(stageRef(runId, 'evidence'));
   for (const id of ids) {
     const prefix = `candidates/${id}/`;
     const readbacks = [];
@@ -156,9 +158,21 @@ export async function prepareBaseline(options: Verification & {
       throw new Error(`Baseline native bytes or tool changed: ${id}`);
     }
     const build = JSON.parse(metadata[prefix + 'build.json'].toString());
-    evidence[prefix + 'readback.json'] = encode({ schemaVersion: 1, candidateId: id, status: 'remote-verified',
+    const record = { schemaVersion: 1, candidateId: id, status: 'remote-verified',
       filesCommit: files.head, metadataCommit: metadataStage.head, buildId: build.buildId, readback: readbacks,
-      native: { status: native.validation.status, semanticRoundTrip: native.validation.semanticRoundTrip }, tool: build.tool });
+      native: { status: native.validation.status, semanticRoundTrip: native.validation.semanticRoundTrip }, tool: build.tool };
+    const path = prefix + 'readback.json';
+    if (priorEvidence) {
+      const bytes = await required(priorEvidence, path);
+      const { revalidationTool, ...prior } = JSON.parse(bytes.toString());
+      if (!isDeepStrictEqual(record, prior) || revalidationTool?.version !== '1.14.4'
+        || !/^[a-f0-9]{64}$/.test(revalidationTool.sha256)) throw new Error(`Invalid prior baseline readback: ${path}`);
+      evidence[path] = bytes;
+    } else {
+      // The original tool is part of build identity. Record the tool that
+      // actually checked these new addresses separately, including after a move to another host.
+      evidence[path] = encode({ ...record, revalidationTool: { version: native.tool.version, sha256: native.tool.sha256 } });
+    }
   }
   const evidenceStage = await stage('evidence', metadataStage, evidence);
   const evidenceUrls = new Map([...ids].map(id => [id, immutableUrl(evidenceStage.head, `candidates/${id}/readback.json`)]));
