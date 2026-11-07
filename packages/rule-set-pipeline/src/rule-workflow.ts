@@ -76,8 +76,9 @@ function reportMaintenance(result: Awaited<ReturnType<typeof manageMaintenance>>
   const plan = 'plan' in result ? result.plan : result.run?.plan;
   return {
     status: result.status, schedule: result.schedule, generation: result.generation, maintenance: result.maintenance,
-    maintenanceId: 'maintenanceId' in result ? result.maintenanceId : result.run?.id,
-    phase: 'phase' in result ? result.phase : result.run?.phase,
+    run: result.run && { id: result.run.id, phase: result.run.phase },
+    maintenanceId: 'maintenanceId' in result ? result.maintenanceId : undefined,
+    phase: 'phase' in result ? result.phase : undefined,
     reason: 'reason' in result ? result.reason : undefined,
     error: 'error' in result ? result.error : undefined,
     blockers: 'blockers' in result ? result.blockers : undefined,
