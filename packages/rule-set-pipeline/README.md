@@ -93,10 +93,10 @@ pnpm --dir packages/rule-set-pipeline activate --state /absolute/path/to/rule-st
 | --- | --- |
 | `committed` | 当前激活记录匹配本次操作，且稳定文件的固定 commit HTTPS 地址回读通过 |
 | `not-committed` | 切换在请求发出前已终止，或稳定分支已前进且仍保留原激活记录 |
-| `pending` | 分支仍可能接受在途请求，或已知提交的回读尚未完成。有 `commit` 时，`activeRuleVersions` 仍显示 Git 记录的当前版本 |
+| `pending` | 分支仍可能接受在途请求，或已知提交的回读尚未完成。有 `commit` 或 `containingCommit` 时，`activeRuleVersions` 仍显示 Git 记录的当前版本 |
 | `superseded` | 后续人工操作或维护已替代本次操作。历史中仍有本次激活时，附上包含该记录的 commit |
 
-登记和切换之间中断时，预期父提交仍为当前 head 只能说明结果待核实。该分支尚未隔离在途请求时，维护须延期。后续维护流程应先阻止新登记，再核实已登记操作。若无法核实，只有在稳定分支的预期 head 已失效、旧请求无法再提交后，才能继续重建历史。
+登记和切换之间中断时，预期父提交仍为当前 head 只能说明结果待核实。该分支尚未隔离在途请求时，维护须延期。在生产双分支布局下，登记仍可能写入 `main` 时，协调仓库会拒绝改变维护状态或代次。维护流程可在旧请求结束或其稳定 head 失效后重试。
 
 ## 正常更新与候选发布
 
@@ -192,7 +192,7 @@ pnpm --dir packages/rule-set-pipeline activate \
   --binary /absolute/path/to/sing-box-1.14.4
 ```
 
-默认目标为产物仓库 `main`。隔离验收可指定 `--branch acceptance-<name>`，分支须事先建立。创建隔离分支、执行 CLI 均不替代生产切换授权；[#19 历史验收](docs/verification/issue-19.md)只使用 `acceptance-issue-19`。本入口保留首个 `category-ai-!cn` 纯域名交付切片，配置化规则集的稳定文件路径留给配置化入口；拒绝其他系统规则集、目标 IP 投影和未知能力，不猜测兼容。既有 Manifest 的 `v2fly:category-ai-!cn` 映射到订阅契约中的 `v2fly:domain-list-community:category-ai-!cn`。
+默认目标为产物仓库 `main`。隔离验收可指定 `--branch acceptance-<name>`，分支须事先建立。创建隔离分支、执行 CLI 均不替代生产切换授权；[#19 历史验收](docs/verification/issue-19.md)只使用 `acceptance-issue-19`。本入口保留首个 `category-ai-!cn` 纯域名交付切片，受配置化规则集占用的稳定路径由对应逻辑 ID 管理；拒绝其他系统规则集、目标 IP 投影和未知能力，不猜测兼容。既有 Manifest 的 `v2fly:category-ai-!cn` 映射到订阅契约中的 `v2fly:domain-list-community:category-ai-!cn`。
 
 激活重新下载候选的六份文件并核对回读链、来源、Conversion Report、构建身份、实际摘要／字节数／非空 term 数、用途映射及能力。重新用指定 1.14.4 编译、解码、加载实际 JSON，并逐字节比对 SRS。本地 `verified`、单独的 `passed` 或 `build.json` 不能放行。明确标识 `kind: synthetic`、description 和 revision 的合成候选只可进入 `acceptance-*` 分支。
 
@@ -208,7 +208,7 @@ Git 提交保持文件与记录一起更新，但 GitHub 缓存和客户端轮�
 
 | 结果 | 已知状态与后续处理 |
 | --- | --- |
-| `ACTIVATION_NOT_APPLIED` | 配置化切换未发出 ref 更新请求。对旧单集，远端仍为预期旧 head |
+| `ACTIVATION_NOT_APPLIED` | 配置化切换在发出 ref 更新前终止，或 GitHub 明确拒绝了更新。对旧单集，远端仍为预期旧 head |
 | `ACTIVATION_UNKNOWN` | 无法确认是否已切换，先用 `status` 核实远端状态 |
 | `ACTIVATION_CONFLICT_OR_SUPERSEDED` | 远端是其他提交；可能发生冲突或本次提交已被后续操作替代，须核对当前激活记录 |
 | `ACTIVATION_APPLIED_READBACK_PENDING` | 提交已生效，但完整 commit HTTPS 地址的逐字节回读尚未完成；错误保留该 commit，不能声称旧规则未变 |

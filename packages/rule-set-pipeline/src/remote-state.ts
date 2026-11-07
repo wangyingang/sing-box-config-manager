@@ -241,7 +241,7 @@ export async function openRemoteSession(publication: PublicationTransport, direc
         if (error instanceof Error && error.message.startsWith('PUBLICATION_CONFLICT')) stopped = true;
         throw error;
       }
-      const head = await commitRemoteState(repository, expected, journal, files, message);
+      const head = await repository.commit(expected, { ...files, [STATE_PATH]: next }, message);
       expectedHead = head;
       await cache();
       return head;

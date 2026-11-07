@@ -12,7 +12,7 @@ import { sha256 } from './release.js';
 import { ARTIFACT_REPOSITORY, immutableUrl } from './publication.js';
 import { retainedCandidateDownload } from './publication-repository.js';
 import { manualControl, openManualActivation, registerManualActivation } from './manual-activation.js';
-import { ActivationWriteError, githubActivation, isConfiguredActivationPath, type ActivationTransport } from './activation-transport.js';
+import { ActivationWriteError, githubActivation, type ActivationTransport } from './activation-transport.js';
 
 const ajv = new Ajv({ strict: true });
 const validateManifest = ajv.compile(manifestSchema);
@@ -227,7 +227,7 @@ async function performActivation(options: ActivationOptions | RollbackOptions) {
       requireThat(endpoint.url.startsWith(urlPrefix), 'Unapproved stable subscription host or branch');
       const path = endpoint.url.slice(urlPrefix.length);
       requireThat(/^stable\/[a-z0-9/_.-]+\.(srs|json)$/.test(path) && !path.split('/').includes('..') && path !== recordPath, 'Invalid stable rule path');
-      requireThat(configured || !isConfiguredActivationPath(path), 'Legacy subscription cannot write a configured rule endpoint');
+      requireThat(configured || !path.endsWith('/activation.json'), 'Legacy subscription cannot write a configured activation record');
       const signature = JSON.stringify([format, [...endpoint.requiredCapabilities].sort()]);
       requireThat(!endpointSignatures.has(path) || endpointSignatures.get(path) === signature, 'Conflicting stable endpoint declarations');
       endpointSignatures.set(path, signature);
@@ -265,6 +265,10 @@ async function performActivation(options: ActivationOptions | RollbackOptions) {
       requireThat(bytes.length === metadata.byteLength && sha256(bytes) === metadata.sha256, 'Previous stable file integrity mismatch');
     }
   }
+  let previousCommit = options.expectedHead;
+  if (session && previous?.control && session.repository.lastChange) {
+    previousCommit = await session.repository.lastChange(options.expectedHead, recordPath);
+  }
   const id = randomUUID();
   const kind = historical ? 'rollback' as const : 'activate' as const;
   const reservation = session && definition ? await registerManualActivation(session, {
@@ -277,7 +281,7 @@ async function performActivation(options: ActivationOptions | RollbackOptions) {
   const activation = { schemaVersion: 1, id,
     ...(reservation ? { control: manualControl({ id, kind }) } : {}),
     ...(definition ? { logicalId: definition.id, history: previous ? [...previous.history,
-      { commit: options.expectedHead, id: previous.id, candidateId: previous.candidateId }] : [] } : {}),
+      { commit: previousCommit, id: previous.id, candidateId: previous.candidateId }] : [] } : {}),
     ...(historical ? { operation: 'rollback' as const, historicalActivationCommit: historical.commit, historicalActivationId: historical.record.id } : {}), candidateId: candidate.candidateId,
     candidateEvidenceUrl: candidate.evidenceUrl, source: candidate.source, validation: candidate.validation,
     expectedHead, subscription,
@@ -285,9 +289,8 @@ async function performActivation(options: ActivationOptions | RollbackOptions) {
   files[recordPath] = encode(activation);
   let commit: string;
   try {
-    await reservation?.guard();
     commit = await transport.commit(expectedHead, files,
-      `${historical ? '回滚到历史规则候选' : '激活规则候选'} ${candidate.candidateId}`, reservation?.guard);
+      `${historical ? '回滚到历史规则候选' : '激活规则候选'} ${candidate.candidateId}`, reservation?.write);
   }
   catch (error) {
     // No second write. Resolve a lost PATCH reply using its known immutable identity.

@@ -130,6 +130,10 @@ for (const mode of ['applied', 'not-applied', 'unknown', 'superseded', 'readback
 test('新的人工决定使旧操作被替代，即使固定的是同一候选', { skip: !binary }, async () => isolated(async env => {
   const candidates = await env.candidates(), id = env.ids[0];
   const first = await activateRules(env.options(id, candidates[id].evidenceUrl!));
+  const sibling = env.ids[1];
+  await activateRules(env.options(sibling, candidates[sibling].evidenceUrl!));
+  const before = await readRemoteStatus({ repository: env.repository, activation: env.transport });
+  assert.equal(before.manualOperations.find(operation => operation.id === first.activation.id)?.commit, first.commit);
   const next = await activateRules(env.options(id, candidates[id].evidenceUrl!));
   const status = await readRemoteStatus({ repository: env.repository, activation: env.transport });
   const byId = new Map(status.manualOperations.map(operation => [operation.id, operation]));

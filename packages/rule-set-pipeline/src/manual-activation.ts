@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import type { ActivationTransport } from './activation-transport.js';
 import type { PublicationRepository, PublicationSnapshot } from './publication-repository.js';
 import { immutableUrl } from './publication.js';
@@ -11,6 +12,39 @@ export function manualControl(operation: Pick<ManualOperation, 'id' | 'kind'>) {
     pauseAutomaticActivation: true as const,
     pauseAutomaticRetry: operation.kind === 'rollback',
   };
+}
+
+export interface ManualWriteReservation {
+  operationId: string;
+  journalHead: string;
+}
+
+export async function authorizeManualWrite(repository: PublicationRepository, branch: string, expectedHead: string,
+  files: Record<string, Buffer>, reservation: ManualWriteReservation) {
+  const { snapshot, journal } = await readRemoteState(repository);
+  const operation = journal.manualOperations?.[reservation.operationId];
+  if (snapshot.head !== reservation.journalHead || journal.targetBranch !== branch || journal.maintenance !== 'open'
+    || !operation || operation.notCommitted || operation.generation !== journal.generation
+    || expectedHead !== (repository.branch === branch ? snapshot.head : operation.expectedHead)) {
+    throw new Error('PUBLICATION_CONFLICT: registration, head, generation or maintenance changed');
+  }
+  const recordBytes = files[operation.recordPath];
+  const record = recordBytes && JSON.parse(recordBytes.toString());
+  const directory = operation.recordPath.slice(0, -'activation.json'.length);
+  const ruleFiles = Object.keys(files).filter(path => path !== operation.recordPath);
+  if (record?.schemaVersion !== 1 || record.id !== operation.id || record.logicalId !== operation.logicalId || record.expectedHead !== expectedHead
+    || record.candidateId !== operation.candidateId || record.candidateEvidenceUrl !== operation.candidateEvidenceUrl
+    || record.operation !== (operation.kind === 'rollback' ? 'rollback' : undefined)
+    || record.historicalActivationCommit !== operation.historicalActivationCommit
+    || !isDeepStrictEqual(record.control, manualControl(operation))
+    || !ruleFiles.length || !isDeepStrictEqual(Object.keys(record.files ?? {}).sort(), ruleFiles.sort())
+    || ruleFiles.some(path => {
+      const expected = record.files[path];
+      return (path !== directory + 'domains.srs' && path !== directory + 'domains.json')
+        || expected?.byteLength !== files[path].length || expected?.sha256 !== sha256(files[path]);
+    })) {
+    throw new Error('Invalid registered activation write set');
+  }
 }
 
 export async function openManualActivation(transport: ActivationTransport, expectedHead: string) {
@@ -40,7 +74,7 @@ export async function registerManualActivation(session: Awaited<ReturnType<typeo
   return {
     expectedHead: repository.branch === journal.targetBranch ? head : operation.expectedHead,
     // Maintenance must drain the durable reservation before rewriting either ref.
-    guard: () => guardRemoteState(repository, head, journal),
+    write: { operationId: operation.id, journalHead: head } satisfies ManualWriteReservation,
     async markNotCommitted() {
       const current = await readRemoteState(repository);
       await guardRemoteState(repository, current.snapshot.head, journal);
@@ -61,9 +95,10 @@ export interface ObservedActivation {
   history?: { id: string; commit: string }[];
 }
 
-interface ManualOperationResult extends ManualOperation {
+export interface ManualOperationResult extends ManualOperation {
   status: 'committed' | 'not-committed' | 'pending' | 'superseded';
   commit?: string;
+  containingCommit?: string;
   error?: string;
 }
 
@@ -74,22 +109,26 @@ export async function readManualOperationResults(repository: PublicationReposito
   return Promise.all(operations.map(async (operation): Promise<ManualOperationResult> => {
     const current = currentByPath.get(operation.recordPath);
     if (current?.id === operation.id) {
-      const commit = stable.head;
+      let commit: string | undefined;
       try {
         if (current.candidateId !== operation.candidateId || current.candidateEvidenceUrl !== operation.candidateEvidenceUrl) {
           throw new Error('Committed candidate does not match the registered operation');
         }
+        commit = await repository.lastChange?.(stable.head, operation.recordPath);
+        const containingCommit = commit ?? stable.head;
+        const record = JSON.parse((await download(immutableUrl(containingCommit, operation.recordPath))).toString());
+        if (record.id !== operation.id) throw new Error('Commit does not contain the registered activation');
         for (const [path, expected] of Object.entries(current.files)) {
-          const bytes = await download(immutableUrl(commit, path));
+          const bytes = await download(immutableUrl(containingCommit, path));
           if (bytes.length !== expected.byteLength || sha256(bytes) !== expected.sha256) throw new Error(`Committed bytes mismatch: ${path}`);
         }
-        return { ...operation, status: 'committed', commit };
+        return { ...operation, status: 'committed', ...(commit ? { commit } : { containingCommit }) };
       } catch (error) {
-        return { ...operation, status: 'pending', commit, error: String(error) };
+        return { ...operation, status: 'pending', ...(commit ? { commit } : { containingCommit: stable.head }), error: String(error) };
       }
     }
     if (operation.notCommitted) return { ...operation, status: 'not-committed' };
-    if (operation.generation !== journal.generation || current?.id !== operation.previousActivationId) {
+    if (current?.id !== operation.previousActivationId) {
       const commit = current?.history?.find(entry => entry.id === operation.id)?.commit;
       return { ...operation, status: 'superseded', ...(commit ? { commit } : {}) };
     }
@@ -99,6 +138,6 @@ export async function readManualOperationResults(repository: PublicationReposito
     if (shared ? !stable.parent || stable.parent === operation.expectedHead : stable.head === operation.expectedHead) {
       return { ...operation, status: 'pending' };
     }
-    return { ...operation, status: 'not-committed' };
+    return { ...operation, status: operation.generation !== journal.generation ? 'superseded' : 'not-committed' };
   }));
 }

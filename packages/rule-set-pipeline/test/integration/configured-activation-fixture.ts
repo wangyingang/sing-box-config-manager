@@ -3,6 +3,7 @@ import { updateRules } from '../../src/update.js';
 import { sha256 } from '../../src/release.js';
 import { immutableUrl, type PublicationTransport } from '../../src/publication.js';
 import type { PublicationRepository } from '../../src/publication-repository.js';
+import { authorizeManualWrite } from '../../src/manual-activation.js';
 import { initializeRemoteState } from '../../src/remote-state.js';
 import { ActivationWriteError, type ActivationTransport } from '../../src/activation-transport.js';
 
@@ -38,6 +39,10 @@ export async function configuredEnvironment(binary: string, directory: string, b
       const tree = { ...(target === coordinationBranch ? retained : {}), ...snapshots.get(fixed) };
       return { head: fixed, parent: parents.get(fixed), paths: Object.keys(tree), async read(path) { return tree[path]; } };
     },
+    async lastChange(at, path) {
+      while (parents.has(at) && snapshots.get(at)?.[path] === snapshots.get(parents.get(at)!)?.[path]) at = parents.get(at)!;
+      return at;
+    },
     async commit(expected, files) {
       const current = branch === 'main' ? journalHead : head;
       if (current !== expected) throw new Error('PUBLICATION_CONFLICT');
@@ -53,10 +58,10 @@ export async function configuredEnvironment(binary: string, directory: string, b
   let beforeSwitch: (() => Promise<void>) | undefined;
   const transport: ActivationTransport = {
     branch, repository, async head() { if (mode === 'unknown-head') throw new Error('offline'); return head; }, download,
-    async commit(expected, files, _message, beforeWrite) {
+    async commit(expected, files, _message, reservation) {
       if (mode === 'rejected') throw new Error('Server rejected before requesting the ref update');
       await beforeSwitch?.();
-      await beforeWrite?.();
+      if (reservation) await authorizeManualWrite(repository, branch, expected, files, reservation);
       // No await between compare and update: model the remote atomic ref operation.
       if (head !== expected) throw new Error('ACTIVATION_CONFLICT');
       writes++;

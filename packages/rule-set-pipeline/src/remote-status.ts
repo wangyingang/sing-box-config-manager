@@ -253,7 +253,7 @@ export async function readRemoteStatus(options: {
   const manualOperations = await readManualOperationResults(options.repository, journal, stable, currentByPath, url => activation.download(url));
   for (const operation of manualOperations) {
     if (operation.status === 'pending') pendingOperations.push({ id: operation.id, logicalId: operation.logicalId,
-      candidateId: operation.candidateId, status: operation.commit ? 'activated-readback-pending' : 'manual-commit-pending',
+      candidateId: operation.candidateId, status: (operation.commit || operation.containingCommit) ? 'activated-readback-pending' : 'manual-commit-pending',
       ...(operation.error ? { error: operation.error } : {}) });
   }
   return { authority: 'remote' as const, head: snapshot.head, stableHead: stable.head, generation: journal.generation,

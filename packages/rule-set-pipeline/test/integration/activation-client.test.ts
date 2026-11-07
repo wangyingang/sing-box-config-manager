@@ -12,6 +12,7 @@ import { promisify } from 'node:util';
 import test from 'node:test';
 import { renderSubscription, type RuleSubscription } from '../../../config-compiler/src/index.js';
 import { activateRules, rollbackRules } from '../../src/activation.js';
+import { authorizeManualWrite } from '../../src/manual-activation.js';
 import { initializeRemoteState } from '../../src/remote-state.js';
 import type { PublicationRepository } from '../../src/publication-repository.js';
 import type { ActivationTransport } from '../../src/activation-transport.js';
@@ -116,8 +117,8 @@ test('只发布一次 v2 Recipe，换源 A/B 与回滚 A 后同一进程通过�
       if (!content) throw new Error(`Readback HTTP 404: ${address}`);
       return content;
     },
-    async commit(expectedHead, files, _message, beforeWrite) {
-      await beforeWrite?.();
+    async commit(expectedHead, files, _message, reservation) {
+      if (reservation) await authorizeManualWrite(repository, branch, expectedHead, files, reservation);
       assert.equal(expectedHead, head, 'CAS must reject stale activations');
       head = (++count).toString(16).padStart(40, '0');
       for (const [path, content] of Object.entries(files)) {
