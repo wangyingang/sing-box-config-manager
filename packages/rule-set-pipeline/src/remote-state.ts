@@ -6,6 +6,7 @@ import { immutableUrl, type PublicationTransport } from './publication.js';
 import type { PublicationRepository } from './publication-repository.js';
 import { PublicationWriteError } from './publication-repository.js';
 import type { UpdateState } from './update.js';
+import type { MaintenanceRun } from './maintenance.js';
 import { parseBuildConfiguration } from './configured-build.js';
 
 export const STATE_PATH = 'pipeline/state.json';
@@ -14,6 +15,8 @@ const encode = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2) + 
 export interface RemoteJournal {
   schemaVersion: 1; id: string; generation: number; maintenance: 'open' | 'maintenance'; targetBranch: string;
   state: UpdateState;
+  maintenanceRun?: MaintenanceRun;
+  lastCleanupAt?: string;
   manualOperations?: Record<string, ManualOperation>;
   automaticOperations?: Record<string, ActivationOperation>;
   resumes?: Record<string, ResumeDecision>;
@@ -35,7 +38,7 @@ export interface ManualOperation extends ActivationOperation {
 export interface ActivationOperation {
   id: string;
   kind: 'activate' | 'rollback' | 'automatic';
-  logicalId: string;
+  logicalId?: string;
   recordPath: string;
   generation: number;
   expectedHead: string;
@@ -78,17 +81,43 @@ function validatePin(pin: unknown, id: string) {
   }
 }
 
+function validMaintenancePlan(value: unknown) {
+  if (!object(value) || !object(value.retain) || !object(value.retain.progress) || !object(value.discard)) return false;
+  const { retain, discard, otherRefs } = value;
+  const strings = (entries: unknown) => Array.isArray(entries) && entries.every(entry => typeof entry === 'string');
+  return strings(retain.journalPaths) && Array.isArray(retain.active) && retain.active.every(entry =>
+    object(entry) && typeof entry.recordPath === 'string' && object(entry.record) && strings(entry.candidatePaths))
+    && strings(retain.progress.pinnedReleaseIds) && strings(retain.progress.processedReleaseIds)
+    && object(retain.progress.configuredProcessedReleaseIds) && Object.values(retain.progress.configuredProcessedReleaseIds).every(strings)
+    && object(retain.progress.latestChecks) && object(retain.progress.resumes) && strings(discard.candidateIds) && strings(discard.completedOperationIds)
+    && object(discard.activations) && Object.values(discard.activations).every(entries => Array.isArray(entries) && entries.every(entry =>
+      object(entry) && typeof entry.id === 'string' && typeof entry.candidateId === 'string' && sha(entry.commit)))
+    && Array.isArray(otherRefs) && otherRefs.every(ref => object(ref) && typeof ref.ref === 'string' && ref.ref.startsWith('refs/') && sha(ref.head));
+}
+
 function validate(value: unknown): asserts value is RemoteJournal {
   if (!object(value) || value.schemaVersion !== 1 || typeof value.id !== 'string' || !value.id
     || !Number.isSafeInteger(value.generation) || value.generation < 1 || !['open', 'maintenance'].includes(value.maintenance)
     || !branch(value.targetBranch) || !object(value.state)) throw new Error('REMOTE_STATE_CORRUPT');
+  const run = value.maintenanceRun;
+  if (run !== undefined && (!object(run) || value.maintenance !== 'maintenance' || !operationId(run.id)
+    || run.generation !== value.generation || !object(run.oldHeads) || !sha(run.oldHeads.journal) || !sha(run.oldHeads.stable)
+    || (run.phase === 'isolated' ? run.isolatedHead !== undefined || run.plan !== undefined
+      : run.phase !== 'ready' || !sha(run.isolatedHead) || !validMaintenancePlan(run.plan)))) {
+    throw new Error('REMOTE_STATE_CORRUPT: maintenance run');
+  }
+  if (value.lastCleanupAt !== undefined && (typeof value.lastCleanupAt !== 'string' || !Number.isFinite(Date.parse(value.lastCleanupAt)))) {
+    throw new Error('REMOTE_STATE_CORRUPT: last cleanup date');
+  }
   for (const [operations, kinds] of [[value.manualOperations, ['activate', 'rollback']], [value.automaticOperations, ['automatic']]] as const) {
     if (operations === undefined) continue;
     if (!object(operations)) throw new Error('REMOTE_STATE_CORRUPT: activation operations');
     for (const [id, op] of Object.entries(operations)) {
       if (!object(op) || !/^[a-f0-9-]{36}$/.test(id) || op.id !== id || !kinds.some(kind => kind === op.kind)
-        || typeof op.logicalId !== 'string' || !/^[a-z][a-z0-9-]*$/.test(op.logicalId)
-        || typeof op.recordPath !== 'string' || !/^stable\/(?:[a-z0-9][a-z0-9._-]*\/)+activation\.json$/.test(op.recordPath)
+        || (op.recordPath === 'stable/activation.json'
+          ? op.logicalId !== undefined || op.kind === 'automatic'
+          : typeof op.logicalId !== 'string' || !/^[a-z][a-z0-9-]*$/.test(op.logicalId)
+            || typeof op.recordPath !== 'string' || !/^stable\/(?:[a-z0-9][a-z0-9._-]*\/)+activation\.json$/.test(op.recordPath))
         || !Number.isSafeInteger(op.generation) || op.generation < 1 || op.generation > value.generation
         || !sha(op.expectedHead) || op.previousActivationId !== undefined && typeof op.previousActivationId !== 'string'
         || typeof op.candidateId !== 'string' || !/^[a-f0-9-]+$/.test(op.candidateId)
@@ -127,7 +156,7 @@ function validate(value: unknown): asserts value is RemoteJournal {
       || !Number.isSafeInteger(candidate.releaseId) || !state.pinned[String(candidate.releaseId)]
       || candidate.tag !== state.pinned[String(candidate.releaseId)].identity.tag
       || !['building', 'publishing', 'verified', 'failed'].includes(candidate.status)
-      || candidate.generation !== value.generation || typeof candidate.retained !== 'boolean'
+      || !Number.isSafeInteger(candidate.generation) || candidate.generation < 1 || candidate.generation > value.generation || typeof candidate.retained !== 'boolean'
       || typeof candidate.operationId !== 'string' || !/^[a-f0-9-]+$/.test(candidate.operationId)
       || !['update', 'rebuild'].includes(candidate.operation)
       || !['registered', 'files', 'metadata', 'evidence', 'complete'].includes(candidate.phase)
@@ -140,7 +169,7 @@ function validate(value: unknown): asserts value is RemoteJournal {
       || ['evidence', 'complete'].includes(candidate.phase) && !sha(candidate.metadataCommit)
       || candidate.phase === 'complete' && !sha(candidate.evidenceCommit)
       || candidate.logicalId !== undefined && (typeof candidate.logicalId !== 'string' || !/^[a-z][a-z0-9-]*$/.test(candidate.logicalId) || !candidate.definition)
-      || candidate.phase !== 'complete' && candidate.retained && !operationIds.has(candidate.operationId)) {
+      || candidate.phase !== 'complete' && candidate.retained && (candidate.generation !== value.generation || !operationIds.has(candidate.operationId))) {
       throw new Error('REMOTE_STATE_CORRUPT: candidate progress or operation');
     }
     if (candidate.manifestUrl !== undefined && (!candidate.metadataCommit
@@ -182,7 +211,8 @@ function validate(value: unknown): asserts value is RemoteJournal {
   }
   for (const op of operations) {
     if (!object(op) || typeof op.id !== 'string' || !/^[a-f0-9-]+$/.test(op.id) || !['update', 'rebuild', 'check'].includes(op.kind)
-      || op.generation !== value.generation || !Number.isSafeInteger(op.releaseId) || !/^[0-9]{14}$/.test(op.tag)
+      || !Number.isSafeInteger(op.generation) || op.generation < 1 || op.generation > value.generation
+      || op.status === 'pending' && op.generation !== value.generation || !Number.isSafeInteger(op.releaseId) || !/^[0-9]{14}$/.test(op.tag)
       || !sha(op.expectedHead) || !Array.isArray(op.candidateIds) || new Set(op.candidateIds).size !== op.candidateIds.length
       || !state.pinned[String(op.releaseId)] || op.tag !== state.pinned[String(op.releaseId)].identity.tag
       || !['pending', 'complete'].includes(op.status)) throw new Error('REMOTE_STATE_CORRUPT: operation');
@@ -265,9 +295,9 @@ export async function guardRemoteState(repository: PublicationRepository, expect
 }
 
 export function commitRemoteState(repository: PublicationRepository, expectedHead: string, journal: RemoteJournal,
-  files: Record<string, Buffer>, message: string) {
+  files: Record<string, Buffer>, message: string, maintenanceId?: string) {
   validate(journal);
-  return repository.commit(expectedHead, { ...files, [STATE_PATH]: encode(journal) }, message);
+  return repository.commit(expectedHead, { ...files, [STATE_PATH]: encode(journal) }, message, maintenanceId);
 }
 
 /** The captured head and generation are never refreshed to make an old write succeed. */

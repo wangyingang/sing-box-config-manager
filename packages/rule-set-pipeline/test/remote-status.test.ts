@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readRemoteStatus } from '../src/remote-status.js';
+import { manageMaintenance } from '../src/maintenance.js';
 import type { PublicationRepository } from '../src/publication-repository.js';
 import type { PublicationTransport } from '../src/publication.js';
 import { immutableUrl } from '../src/publication.js';
@@ -362,4 +363,57 @@ test('远端候选证据摘要损坏时不声称候选可用', async () => {
   assert.equal(result.candidateAvailability.a1.status, 'verification-pending');
   assert.match(result.candidateAvailability.a1.error!, /evidence mismatch/);
   assert.equal(result.pendingOperations[0].candidateId, 'a1');
+});
+
+test('维护预览跨所有稳定入口保留 v1 与 v2 当前证据，不按年龄排除固定版本', async () => {
+  const env = remote(), configured = addCandidate(env, 'aa'), legacy = addCandidate(env, 'bb', false);
+  const completedUnactivated = addCandidate(env, 'cc');
+  const genesis = '0'.repeat(40), legacyPath = 'stable/v2fly/category-ai-not-cn';
+  configured.activation.history.push({ commit: 'e'.repeat(40), id: 'recent-activation', candidateId: 'cc' });
+  Object.assign(configured.activation, { control: {
+    revision: configured.activation.id, reason: 'manual-activation', pauseAutomaticActivation: true, pauseAutomaticRetry: false,
+  } });
+  activate(env, configured);
+  const record = legacyActivation(legacy, genesis, legacyPath);
+  // v1 identifies formats through the subscription, independently of the file suffix.
+  const binaryPath = `${legacyPath}/domains.srs`, sourcePath = `${legacyPath}/domains.json`;
+  for (const usage of ['route', 'dns-query'] as const) {
+    const { formats } = record.subscription.projections[usage];
+    [formats.binary.url, formats.source.url] = [formats.source.url, formats.binary.url];
+  }
+  [record.files[binaryPath], record.files[sourcePath]] = [record.files[sourcePath], record.files[binaryPath]];
+  env.stable.set('stable/activation.json', encode(record));
+  env.stable.set(binaryPath, legacy.contents['domains.json']);
+  env.stable.set(sourcePath, legacy.contents['domains.srs']);
+  env.journal.state.latestChecks = {
+    'ai-openai': { operationId: 'ae879b98-1814-4a6e-8ce6-e1f95df2e304', status: 'unchanged', checkedAt: '2026-11-07T01:00:00Z' },
+  };
+  env.saveJournal();
+  const evidencePath = `candidates/${completedUnactivated.activation.candidateId}/readback.json`;
+  const repository = { ...env.repository, async lastChange(_head: string, path: string) {
+    assert.equal(path, evidencePath);
+    return completedUnactivated.activation.candidateEvidenceUrl.split('/')[5];
+  } };
+  const inspect = () => manageMaintenance({ ...env, repository, action: 'preview', manual: true, refs: async () => [], activation: {
+    async download(url) {
+      if (url === immutableUrl(genesis, 'stable/activation.json')) throw new Error(`Readback HTTP 404: ${url}`);
+      return env.publication.download(url);
+    },
+  } });
+  const preview = await inspect();
+  assert.equal(preview.status, 'ready');
+  assert.ok('plan' in preview);
+  assert.deepEqual(preview.plan.retain.active.map(entry => entry.record.candidateId).sort(), ['aa', 'bb']);
+  assert.deepEqual(preview.plan.retain.active.find(entry => entry.record.candidateId === 'aa')!.record.control,
+    Reflect.get(configured.activation, 'control'));
+  assert.deepEqual(Object.keys(preview.plan.retain.progress.latestChecks), ['ai-openai']);
+  assert.deepEqual(preview.plan.discard.candidateIds, [completedUnactivated.activation.candidateId]);
+  assert.deepEqual(preview.plan.discard.activations['stable/ai-openai/activation.json'], configured.activation.history);
+
+  env.history.delete(completedUnactivated.activation.candidateEvidenceUrl);
+  const deferred = await inspect();
+  assert.equal(deferred.status, 'deferred');
+  assert.ok('plan' in deferred);
+  assert.deepEqual(deferred.plan.discard.candidateIds, []);
+  assert.ok(deferred.blockers.some(blocker => blocker.candidateId === 'cc' && blocker.status === 'candidate-completion-unverified'));
 });

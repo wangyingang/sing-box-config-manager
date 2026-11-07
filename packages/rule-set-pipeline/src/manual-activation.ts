@@ -52,6 +52,7 @@ export async function authorizeActivationWrite(repository: PublicationRepository
     const stable = repository.branch === branch ? snapshot : await repository.snapshot(branch);
     const previousBytes = await stable.read(operation.recordPath);
     const previous = previousBytes && JSON.parse(previousBytes.toString());
+    if (!operation.logicalId) throw new Error('PUBLICATION_CONFLICT: automatic activation requires a logical ID');
     const control = effectiveControl(journal, operation.logicalId, previous);
     if (stable.head !== expectedHead || check?.kind !== 'check' || check.status !== 'pending' || check.id !== operation.checkOperationId
       || previous?.id !== operation.previousActivationId || control?.pauseAutomaticActivation
@@ -63,15 +64,16 @@ export async function authorizeActivationWrite(repository: PublicationRepository
   const record = recordBytes && JSON.parse(recordBytes.toString());
   const directory = operation.recordPath.slice(0, -'activation.json'.length);
   const ruleFiles = Object.keys(files).filter(path => path !== operation.recordPath);
+  const configured = operation.logicalId !== undefined;
   if (record?.schemaVersion !== 1 || record.id !== operation.id || record.logicalId !== operation.logicalId || record.expectedHead !== expectedHead
     || record.candidateId !== operation.candidateId || record.candidateEvidenceUrl !== operation.candidateEvidenceUrl
     || record.operation !== (operation.kind === 'activate' ? undefined : operation.kind)
     || record.historicalActivationCommit !== operation.historicalActivationCommit
-    || !isDeepStrictEqual(record.control, operation.kind === 'automatic' ? undefined : manualControl({ id: operation.id, kind: operation.kind })) || activationDigest(record) !== operation.activationDigest
+    || !isDeepStrictEqual(record.control, operation.kind === 'automatic' || !configured ? undefined : manualControl({ id: operation.id, kind: operation.kind })) || activationDigest(record) !== operation.activationDigest
     || !ruleFiles.length || !isDeepStrictEqual(Object.keys(record.files ?? {}).sort(), ruleFiles.sort())
     || ruleFiles.some(path => {
       const expected = record.files[path];
-      return (path !== directory + 'domains.srs' && path !== directory + 'domains.json')
+      return (configured ? path !== directory + 'domains.srs' && path !== directory + 'domains.json' : !/\.(srs|json)$/.test(path))
         || expected?.byteLength !== files[path].length || expected?.sha256 !== sha256(files[path]);
     })) {
     throw new Error('Invalid registered activation write set');

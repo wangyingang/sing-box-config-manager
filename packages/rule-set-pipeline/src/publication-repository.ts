@@ -13,7 +13,7 @@ export interface PublicationRepository {
   lastChange?(head: string, path: string): Promise<string>;
   snapshot(branch?: string): Promise<PublicationSnapshot>;
   /** The supplied head is the only parent; a conflict never rebases this write. */
-  commit(expectedHead: string, files: Record<string, Buffer>, message: string): Promise<string>;
+  commit(expectedHead: string, files: Record<string, Buffer>, message: string, maintenanceId?: string): Promise<string>;
 }
 
 export class PublicationWriteError extends Error {
@@ -84,7 +84,7 @@ export function githubPublicationRepository(branch = PUBLICATION_BRANCH, request
       if (!Array.isArray(commits) || !fullCommit(commits[0]?.sha)) throw new Error(`Cannot identify commit for ${path}`);
       return commits[0].sha;
     },
-    async commit(expectedHead, files, message) {
+    async commit(expectedHead, files, message, maintenanceId) {
       if (!fullCommit(expectedHead)) throw new Error('Expected full old commit');
       const current = await snapshot();
       if (current.head !== expectedHead) throw new Error('PUBLICATION_CONFLICT: remote head changed');
@@ -103,24 +103,29 @@ export function githubPublicationRepository(branch = PUBLICATION_BRANCH, request
           if (ancestor && (ancestor.type !== 'tree' || ancestor.mode !== '040000')) throw new Error('Invalid publication parent path');
         }
       }
-      // A production manual switch registers on candidates before touching main.
-      // Keep the maintenance gate and generation in place until the registered
-      // main parent is fenced or the writer records a definite rejection.
-      if (branch === PUBLICATION_BRANCH && files['pipeline/state.json']) {
-        const previous = await current.read('pipeline/state.json');
-        if (previous) {
-          const journal: RemoteJournal = JSON.parse(previous.toString());
-          const next: RemoteJournal = JSON.parse(files['pipeline/state.json'].toString());
-          if (journal.targetBranch === 'main' && (next.maintenance !== journal.maintenance
-            || next.generation !== journal.generation || next.id !== journal.id)) {
-            const active = [...Object.values(journal.manualOperations ?? {}), ...Object.values(journal.automaticOperations ?? {})].filter(operation =>
-              !operation.notCommitted && operation.generation === journal.generation);
-            if (active.length) {
-              const stable = await snapshot('main');
-              if (active.some(operation => operation.expectedHead === stable.head)) {
-                throw new Error('MANUAL_OPERATION_PENDING: stable head can still accept a registered write');
-              }
-            }
+      // The journal and candidate bytes share the same expected parent.
+      const previous = await current.read('pipeline/state.json');
+      if (previous) {
+        const journal: RemoteJournal = JSON.parse(previous.toString());
+        const state = files['pipeline/state.json'];
+        if (journal.maintenance === 'maintenance' && (!maintenanceId || journal.maintenanceRun?.id !== maintenanceId
+          || Object.keys(files).length !== 1 || !state)) {
+          throw new Error('REPOSITORY_MAINTENANCE');
+        }
+        if (!state) throw new Error('Unregistered publication write: missing remote state');
+        const next: RemoteJournal = JSON.parse(state.toString());
+        // A registered stable update might already have passed its final
+        // journal check. Its expected stable parent must be fenced before
+        // the separate journal branch may change generation or open the gate.
+        if (branch === PUBLICATION_BRANCH && journal.targetBranch === 'main' && (next.maintenance !== journal.maintenance
+          || next.generation !== journal.generation || next.id !== journal.id)) {
+          const stable = await snapshot('main');
+          const oldHeads = (next.maintenanceRun ?? journal.maintenanceRun)?.oldHeads;
+          if (oldHeads && stable.head !== oldHeads.stable) throw new Error('PUBLICATION_CONFLICT: stable head changed');
+          const active = [...Object.values(journal.manualOperations ?? {}), ...Object.values(journal.automaticOperations ?? {})];
+          if (active.some(operation => !operation.notCommitted && operation.generation === journal.generation
+            && operation.expectedHead === stable.head)) {
+            throw new Error('MANUAL_OPERATION_PENDING: stable head can still accept a registered write');
           }
         }
       }

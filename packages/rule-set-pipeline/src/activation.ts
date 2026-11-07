@@ -206,8 +206,16 @@ async function performActivation(options: ActivationOptions | RollbackOptions, a
   const { configured, definition, recordPath } = activationContext(options, transport);
   requireThat(!automatic || definition, 'Automatic activation requires a configured rule set');
   const subscription = activationSubscription(options.subscription, transport.branch, definition);
+  // Legacy fixtures may use a fresh, unmanaged isolation branch. On an
+  // initialized target, v1 uses the same write reservation as v2.
+  const session = definition || transport.repository
+    ? await openManualActivation(transport, options.expectedHead).catch(error => {
+      if (!definition && transport.branch.startsWith('acceptance-') && error instanceof Error
+        && error.message.startsWith('REMOTE_NOT_INITIALIZED:')) return undefined;
+      throw error;
+    })
+    : undefined;
   requireThat(await transport.head() === options.expectedHead, 'ACTIVATION_CONFLICT: remote head changed');
-  const session = definition ? await openManualActivation(transport, options.expectedHead) : undefined;
   requireThat(!automatic || session?.snapshot.head === automatic.journalHead, 'PUBLICATION_CONFLICT: coordination head changed');
   let historical: { commit: string; record: any } | undefined;
   let candidateEvidenceUrl: string;
@@ -293,7 +301,7 @@ async function performActivation(options: ActivationOptions | RollbackOptions, a
   }
   const id = randomUUID();
   const kind = historical ? 'rollback' as const : 'activate' as const;
-  const control = !automatic && session ? manualControl({ id, kind }) : undefined;
+  const control = !automatic && session && definition ? manualControl({ id, kind }) : undefined;
   const activation = { schemaVersion: 1, id,
     ...control && { control },
     ...(automatic ? { operation: 'automatic' as const } : {}),
@@ -303,8 +311,8 @@ async function performActivation(options: ActivationOptions | RollbackOptions, a
     candidateEvidenceUrl: candidate.evidenceUrl, source: candidate.source, validation: candidate.validation,
     expectedHead: options.expectedHead, subscription,
     files: Object.fromEntries(Object.entries(files).map(([path, bytes]) => [path, { sha256: sha256(bytes), byteLength: bytes.length }])) };
-  const operation = session && definition ? {
-    id, kind, logicalId: definition.id, recordPath, generation: session.journal.generation,
+  const operation = session ? {
+    id, kind, ...(definition ? { logicalId: definition.id } : {}), recordPath, generation: session.journal.generation,
     expectedHead: options.expectedHead, ...(previous ? { previousActivationId: previous.id } : {}),
     candidateId: candidate.candidateId, candidateEvidenceUrl: candidate.evidenceUrl,
     activationDigest: activationDigest(activation),

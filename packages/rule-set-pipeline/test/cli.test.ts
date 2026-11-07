@@ -197,6 +197,10 @@ export async function readRemoteStatus(options) {
   return { authority: 'remote', head: 'a'.repeat(40), generation: 7, maintenance: 'open',
     activeRuleVersions: { 'ai-openai': { candidateId: 'remote-version' } }, pendingOperations: [] };
 }
+export async function manageMaintenance({ repository, ...options }) {
+  await writeFile(${JSON.stringify(calls)}, JSON.stringify({ branch: repository.branch, ...options }));
+  return { status: 'ready' };
+}
 export async function initializeRemoteState(repository, targetBranch) {
   await writeFile(${JSON.stringify(calls)}, JSON.stringify({ operation: 'initialize', branch: repository.branch, targetBranch }));
   ${failure ? `throw new Error(${JSON.stringify(failure)});` : ''}
@@ -206,12 +210,32 @@ export async function initializeRemoteState(repository, targetBranch) {
 import { pathToFileURL } from 'node:url';
 globalThis.fetch = async () => { throw new Error('External network is disabled'); };
 registerHooks({ resolve(specifier, context, nextResolve) {
-  if (context.parentURL?.endsWith('/src/cli.ts') && ['./remote-status.js', './remote-state.js', './publication.js'].includes(specifier))
+  if (context.parentURL?.endsWith('/src/cli.ts') && ['./remote-status.js', './remote-state.js', './publication.js', './maintenance.js'].includes(specifier))
     return { url: pathToFileURL(${JSON.stringify(module)}).href, shortCircuit: true };
   return nextResolve(specifier, context);
 } });`);
   return { calls, run: (...args: string[]) => exec(process.execPath, ['--import', 'tsx', '--import', preload, 'src/cli.ts', ...args]) };
 }
+
+test('维护 CLI 校验稳定目标和周期参数，按显式隔离分支路由', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'rule-maintenance-cli-'));
+  try {
+    const fixture = await remoteStateCli(directory);
+    for (const args of [['maintenance-enter', '--branch', 'candidates', '--manual'],
+      ['maintenance-enter', '--branch', '', '--manual'], ['maintenance-enter', '--period-days', '7'],
+      ['maintenance-abort', '--branch', 'acceptance-issue-52']]) {
+      await assert.rejects(fixture.run(...args), (error: { code?: number }) => error.code === 1);
+    }
+    await assert.rejects(stat(fixture.calls), { code: 'ENOENT' });
+    const startAt = '2026-11-01T00:00:00Z';
+    const { stdout } = await fixture.run('maintenance-preview', '--branch', 'acceptance-issue-52',
+      '--period-days', '7', '--start-at', startAt);
+    assert.equal(JSON.parse(stdout).status, 'ready');
+    assert.deepEqual(JSON.parse(await readFile(fixture.calls, 'utf8')), {
+      action: 'preview', branch: 'acceptance-issue-52', schedule: { periodDays: 7, startAt },
+    });
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
 
 test('CLI status 默认查询远端 candidates，忽略过期本地状态且无需本地目录', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'rule-remote-status-cli-'));

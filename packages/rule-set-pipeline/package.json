@@ -28,6 +28,10 @@
     ".": {
       "types": "./dist/src/index.d.ts",
       "import": "./dist/src/index.js"
+    },
+    "./maintenance": {
+      "types": "./dist/src/maintenance.d.ts",
+      "import": "./dist/src/maintenance.js"
     }
   },
   "engines": {
