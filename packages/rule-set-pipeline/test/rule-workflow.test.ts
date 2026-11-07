@@ -81,3 +81,15 @@ test('a previous switch still awaiting verification fails the workflow', async (
   });
   assert.equal(await result, 1);
 });
+
+test('manual cleanup reports pending remote verification as a failure while deferring writes', async () => {
+  const deferred = { status: 'deferred', blockers: [{ id: 'operation', status: 'activated-readback-pending' }] };
+  const { result, reports } = run({ operation: 'cleanup', cleanupEnabled: true }, {
+    maintenance: async request => {
+      assert.equal(request.action, 'enter');
+      return deferred;
+    },
+  });
+  assert.equal(await result, 1);
+  assert.deepEqual(reports['进入维护'], deferred);
+});

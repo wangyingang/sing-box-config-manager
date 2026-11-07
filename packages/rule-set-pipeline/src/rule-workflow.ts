@@ -16,11 +16,18 @@ interface MaintenanceOutcome {
   status: string;
   maintenance?: 'open' | 'maintenance';
   run?: { id: string; phase: string };
+  blockers?: { status: string }[];
 }
 
 export interface WorkflowOperations {
   check(): Promise<{ exitCode: number }>;
   maintenance(request: MaintenanceRequest): Promise<MaintenanceOutcome>;
+}
+
+function maintenanceFailed(result: MaintenanceOutcome | undefined) {
+  return !result || result.status === 'failed' || (result.maintenance === 'maintenance' && !result.run)
+    || result.blockers?.some(({ status }) => /(?:^|-)verification-pending$|-commit-pending$|-readback-pending$/.test(status)
+      || status === 'current-evidence-mismatch' || status === 'candidate-completion-unverified');
 }
 
 export async function runRuleWorkflow(options: WorkflowOptions, operations: WorkflowOperations,
@@ -59,17 +66,15 @@ export async function runRuleWorkflow(options: WorkflowOptions, operations: Work
   const entered = await attempt('进入维护', () => operations.maintenance({
     action: 'enter', ...(operation === 'cleanup' ? { manual: true } : schedule ? { schedule } : {}),
   }));
-  if (!entered || entered.status === 'failed'
-    || (entered.maintenance === 'maintenance' && !entered.run)) return 1;
+  if (!entered || maintenanceFailed(entered)) return 1;
   if (entered.status !== 'isolated') return failed ? 1 : 0;
   if (!entered.run || entered.run.phase !== 'ready') throw new Error('Maintenance retention plan is missing');
   const maintenanceId = entered.run.id;
   const prepared = await attempt('准备基线', () => operations.maintenance({ action: 'prepare', maintenanceId }));
-  if (!prepared || prepared.status === 'failed') return 1;
+  if (!prepared || maintenanceFailed(prepared)) return 1;
   if (prepared.status !== 'prepared') return failed ? 1 : 0;
   const switched = await attempt('切换基线', () => operations.maintenance({ action: 'switch', maintenanceId }));
-  return !switched || switched.status === 'failed'
-    || (switched.maintenance === 'maintenance' && !switched.run) || failed ? 1 : 0;
+  return maintenanceFailed(switched) || failed ? 1 : 0;
 }
 
 function reportMaintenance(result: Awaited<ReturnType<typeof manageMaintenance>>) {
@@ -130,7 +135,7 @@ async function main() {
     const binary = env.SING_BOX_BINARY ?? '';
     const period = env.RULE_CLEANUP_PERIOD_DAYS;
     const startAt = env.RULE_CLEANUP_START_AT;
-    const schedule = period || startAt ? { periodDays: Number(period), startAt: startAt ?? '' } : undefined;
+    const schedule = period ? { periodDays: Number(period), startAt: startAt ?? '' } : undefined;
     const requireToken = () => {
       if (!token) throw new Error('Missing RULE_ARTIFACT_TOKEN');
     };
