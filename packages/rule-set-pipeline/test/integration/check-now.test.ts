@@ -149,16 +149,17 @@ for (const branch of ['acceptance-issue-50', 'main']) {
     const selectedIds = ['ai-openai'];
     const first = options(env, join(directory, 'first'), upstream(1));
     env.fail('unknown');
-    const pending = await checkRules({ ...first, selectedIds });
-    assert.equal(pending.exitCode, 1);
-    assert.equal(pending.results[0].status, 'verification-pending');
-    assert.equal(pending.results[0].current?.candidateId, pending.results[0].candidateId);
+    const resolved = await checkRules({ ...first, selectedIds });
+    assert.equal(resolved.exitCode, 0);
+    assert.equal(resolved.results[0].status, 'activated');
+    assert.equal(resolved.results[0].current?.candidateId, resolved.results[0].candidateId);
+    assert.equal(resolved.results[0].current?.commit, env.head());
     env.fail('');
     const common = options(env, join(directory, 'second'), upstream(2));
     const recovered = await checkRules({ ...common, selectedIds, fetch: async () => { throw new Error('Must recover the known commit before reading upstream'); } });
     assert.equal(recovered.exitCode, 0);
     assert.equal(recovered.results[0].status, 'activated');
-    assert.equal(recovered.results[0].candidateId, pending.results[0].candidateId);
+    assert.equal(recovered.results[0].candidateId, resolved.results[0].candidateId);
     assert.equal(env.writes(), 1);
   }, branch));
 
@@ -238,3 +239,59 @@ test('完整候选的证据已提交但进程断线，换机复验候选并补�
   const after = await readRemoteStatus({ ...common, repository: env.repository });
   assert.deepEqual(Object.keys(after.state.candidates), [candidateId]);
 }));
+
+test('一个当前记录损坏，未激活的兄弟集仍可首次交付', { skip: !binary }, async () => isolated(async (env, directory) => {
+  await env.repository.commit(env.head(), { 'stable/ai-openai/activation.json': Buffer.from('{') }, 'Corrupt one activation');
+  const result = await checkRules(options(env, directory, upstream(1)));
+  assert.equal(result.exitCode, 1);
+  assert.deepEqual(result.results.map(entry => entry.status), ['failed', 'activated', 'activated']);
+  assert.equal(result.results[0].current, undefined);
+  assert.deepEqual(result.results[1].rollbackTargets, []);
+  assert.equal(env.writes(), 2);
+}));
+
+test('已提交但 HTTPS 回读失败时报告当前版本和已知提交，换机后只补核实', { skip: !binary }, async () => isolated(async (env, directory) => {
+  const selectedIds = ['ai-openai'];
+  const first = options(env, join(directory, 'first'), upstream(1));
+  let blockReadback = false;
+  const activation = { ...env.transport, async commit(...args: Parameters<typeof env.transport.commit>) {
+    const commit = await env.transport.commit(...args);
+    blockReadback = true;
+    return commit;
+  }, async download(url: string) {
+    if (blockReadback && url.endsWith('/stable/ai-openai/domains.srs')) throw new Error('HTTPS unavailable');
+    return env.transport.download(url);
+  } };
+  const pending = await checkRules({ ...first, selectedIds, activation });
+  assert.equal(pending.exitCode, 1);
+  assert.equal(pending.results[0].status, 'verification-pending');
+  assert.equal(pending.results[0].current?.candidateId, pending.results[0].candidateId);
+  assert.ok(pending.results[0].current?.commit);
+  assert.equal(pending.results[0].pendingOperation?.commit, pending.results[0].current?.commit);
+  blockReadback = false;
+  const common = options(env, join(directory, 'second'), upstream(2));
+  const recovered = await checkRules({ ...common, selectedIds, fetch: async () => { throw new Error('Only readback should be retried'); } });
+  assert.equal(recovered.exitCode, 0);
+  assert.equal(recovered.results[0].status, 'activated');
+  assert.equal(recovered.results[0].current?.commit, pending.results[0].current?.commit);
+  assert.equal(env.writes(), 1);
+}, 'main'));
+
+test('稳定切换登记后发生人工固定，旧自动切换在提交前被拒绝', { skip: !binary }, async () => isolated(async (env, directory) => {
+  const existing = await env.candidates();
+  let manualId: string | undefined;
+  let injected = false;
+  env.beforeSwitch(async () => {
+    if (injected) return;
+    injected = true;
+    const manual = await activateRules(env.options('ai-openai', existing['ai-openai'].evidenceUrl!));
+    manualId = manual.activation.id;
+  });
+  const first = options(env, join(directory, 'first'), upstream(1));
+  const result = await checkRules({ ...first, selectedIds: ['ai-openai'] });
+  assert.equal(result.exitCode, 1);
+  assert.ok(manualId);
+  assert.equal(result.results[0].current?.id, manualId);
+  assert.equal(result.results[0].control?.pauseAutomaticActivation, true);
+  assert.equal(env.writes(), 1);
+}, 'main'));

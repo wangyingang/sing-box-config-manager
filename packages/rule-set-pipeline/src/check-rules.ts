@@ -8,6 +8,7 @@ import { verifyRetainedCandidate } from './candidate-recovery.js';
 import { buildConfiguredRelease, configuredBuildTools, parseBuildConfiguration, type RuleDefinition } from './configured-build.js';
 import { publishConfiguredCandidate, type ConfiguredUpdateOptions } from './configured-update.js';
 import { readActivationOperationResults, type ObservedActivation } from './manual-activation.js';
+import { inspectBinary } from './native.js';
 import { githubPublication } from './publication.js';
 import { retainedCandidateDownload, type PublicationSnapshot } from './publication-repository.js';
 import { sha256 } from './release.js';
@@ -30,12 +31,14 @@ type Active = ObservedActivation & {
   subscription: unknown;
   control?: { revision: string; reason: string; pauseAutomaticActivation: boolean; pauseAutomaticRetry: boolean };
   source: { releaseId?: number; tag?: string };
-  validation: { tool: { sha256: string } };
+  validation: { buildId: string; tool: { sha256: string } };
   operation?: string;
   history: { commit: string; id: string; candidateId: string }[];
 };
-type CheckResult = CheckRecord & { id: string; current?: { id: string; candidateId: string; releaseId?: number; tag?: string };
-  control?: Active['control']; rollbackTargets?: { commit: string; id: string; candidateId: string }[] };
+type Delivery = { id: string; candidateId: string; releaseId?: number; tag?: string; commit?: string; containingCommit?: string };
+type CheckResult = CheckRecord & { id: string; current?: Delivery; lastObserved?: Delivery;
+  control?: Active['control']; pendingOperation?: { id: string; status: string; commit?: string; containingCommit?: string };
+  rollbackTargets?: { commit: string; id: string; candidateId: string }[] };
 type Built = Awaited<ReturnType<typeof buildConfiguredRelease>>;
 type SuccessfulBuild = Extract<Built['results'][number], { status: 'built-validated' }>;
 type CheckOperation = NonNullable<UpdateState['pendingOperation']>;
@@ -53,14 +56,27 @@ async function readActive(snapshot: PublicationSnapshot, definition: RuleDefinit
   return record as Active;
 }
 
-function summary(id: string, record: CheckRecord, active: Active | undefined): CheckResult {
-  return { id, ...record, ...(active ? { current: { id: active.id, candidateId: active.candidateId,
-    releaseId: active.source?.releaseId, tag: active.source?.tag }, control: active.control } : {}) };
+function delivery(active: Active): Delivery {
+  return { id: active.id, candidateId: active.candidateId, releaseId: active.source?.releaseId, tag: active.source?.tag };
+}
+
+async function readRetainedBuild(snapshot: PublicationSnapshot, candidateId: string, buildId: string | undefined) {
+  const bytes = await snapshot.read(`candidates/${candidateId}/build.json`);
+  const build = bytes && JSON.parse(bytes.toString());
+  if (!build || build.buildId !== buildId || build.candidateId !== candidateId) {
+    throw new Error('CANDIDATE_UNAVAILABLE: retained build identity is missing or inconsistent');
+  }
+  return build;
 }
 
 async function sameDelivery(result: SuccessfulBuild, built: Built, active: Active, snapshot: PublicationSnapshot,
   publication: NonNullable<CheckOptions['publication']>, binary: string) {
   if (active.validation?.tool?.sha256 !== result.native.tool.sha256) return false;
+  // Old builds can use a different projection implementation. Establish
+  // comparability before attempting to reproduce their bytes with today's tools.
+  const previous = await readRetainedBuild(snapshot, active.candidateId, active.validation.buildId);
+  if (previous.tool?.sha256 !== result.native.tool.sha256 || !isDeepStrictEqual(previous.definition, result.definition)
+    || !isDeepStrictEqual(previous.tools, built.tools)) return false;
   const retained = retainedCandidateDownload(snapshot, active.candidateId, url => publication.download(url));
   const candidate = await verifyActivationCandidate({ candidateEvidenceUrl: active.candidateEvidenceUrl, binary },
     { branch: built.configuration.target.branch, download: retained }, result.definition, 'rollback');
@@ -120,22 +136,31 @@ export async function checkRules(options: CheckOptions) {
     const expectedStableHead = () => shared ? session.head : stableHead;
     const activeById = new Map<string, Active>();
     const errors = new Map<string, string>();
+    const paths = new Set(definitions.map(recordPath));
+    const stableIdentities = new Map<string, string>();
+    for (const path of stable.paths.filter(path => path.endsWith('/activation.json'))) {
+      try {
+        const bytes = await stable.read(path);
+        const id = bytes && JSON.parse(bytes.toString()).logicalId;
+        if (typeof id === 'string') stableIdentities.set(id, path);
+      } catch {
+        // readActive reports corruption for the configured owner. A sibling
+        // with a different stable directory can still proceed.
+      }
+    }
     const subscriptionHashes = Object.fromEntries(definitions.map(rule => [rule.id, sha256(JSON.stringify(options.subscriptions[rule.id]) ?? '')]));
     for (const rule of definitions) {
       try {
         const active = await readActive(stable, rule, branch);
         if (active) activeById.set(rule.id, active);
-        else {
-          // A new directory cannot silently relocate an already-delivered ID.
-          for (const path of stable.paths.filter(path => path !== recordPath(rule) && path.endsWith('/activation.json'))) {
-            const bytes = await stable.read(path);
-            if (bytes && JSON.parse(bytes.toString()).logicalId === rule.id) throw new Error('Existing stable path cannot change during check');
-          }
-        }
+        else if (stableIdentities.has(rule.id)) throw new Error('Existing stable path cannot change during check');
         if (active?.control?.pauseAutomaticRetry) continue;
         const subscription = activationSubscription(options.subscriptions[rule.id], branch, rule);
         if (active && !isDeepStrictEqual(active.subscription, subscription)) throw new Error('Existing subscription contract cannot change during check');
-      } catch (error) { errors.set(rule.id, message(error)); }
+      } catch (error) {
+        if (!activeById.has(rule.id)) paths.delete(recordPath(rule));
+        errors.set(rule.id, message(error));
+      }
     }
 
     let operation = state.pendingOperation?.status === 'pending' ? state.pendingOperation : undefined;
@@ -154,27 +179,57 @@ export async function checkRules(options: CheckOptions) {
       latestChecks[id] = value;
       results.set(id, value);
     };
+    const knownApplied = new Map<string, string>();
     const report = async (failure?: unknown) => {
       let remoteStatus: Awaited<ReturnType<typeof readRemoteStatus>> | undefined;
       let statusError: string | undefined;
       try {
-        remoteStatus = await readRemoteStatus({ repository: repo, publication, activation });
+        remoteStatus = await readRemoteStatus({ repository: repo, publication, activation, recordPaths: paths });
       } catch (error) { statusError = message(error); }
-      const ordered = definitions.map(({ id }) => {
+      let reconciledSwitch = false;
+      const ordered = definitions.map(rule => {
+        const { id } = rule;
         const entry = results.get(id) ?? {
           operationId, checkedAt, status: uncertain(failure) ? 'verification-pending' as const : 'failed' as const,
           ...(operation ? { releaseId: operation.releaseId, tag: operation.tag } : {}), error: message(failure),
         };
-        const current = remoteStatus ? remoteStatus.activeRuleVersions[id]?.activation as Active | undefined : activeById.get(id);
+        const observed = activeById.get(id);
+        const remote = remoteStatus?.activeRuleVersions[id];
+        const current = remoteStatus ? remote?.activation as Active | undefined : knownApplied.has(id) ? observed : undefined;
+        const automatic = remoteStatus?.automaticOperations.find(value => value.id === current?.id);
         const pending = remoteStatus?.pendingOperations.find(value => value.logicalId === id
           && ['activated-readback-pending', 'activated-verification-pending', 'automatic-commit-pending', 'manual-commit-pending'].includes(value.status));
-        return { ...summary(id, { ...entry, ...(pending && entry.status !== 'failed' ? {
-          status: 'verification-pending' as const, error: entry.error ?? pending.error ?? pending.status,
-        } : {}) }, current), ...(remoteStatus ? { rollbackTargets: remoteStatus.rollbackTargets[id] ?? [] } : {}) };
+        const pendingSwitch = pending && (remoteStatus?.automaticOperations.find(value => value.id === pending.id)
+          ?? remoteStatus?.manualOperations.find(value => value.id === pending.id));
+        const result: CheckResult = { id, ...entry };
+        if (current) {
+          result.current = { ...delivery(current), commit: automatic?.commit ?? knownApplied.get(id),
+            containingCommit: automatic?.containingCommit ?? remote?.commit };
+          result.control = current.control;
+        } else if (statusError && observed) result.lastObserved = delivery(observed);
+        if (pending) {
+          result.pendingOperation = { id: pending.id, status: pending.status, commit: pendingSwitch?.commit,
+            containingCommit: pendingSwitch?.containingCommit };
+          if (result.status !== 'failed') {
+            result.status = 'verification-pending';
+            result.error ??= pending.error ?? pending.status;
+          }
+        } else if (automatic?.status === 'committed' && automatic.checkOperationId === operationId
+          && automatic.candidateId === entry.candidateId && entry.status === 'verification-pending'
+          && /ACTIVATION_(UNKNOWN|APPLIED_READBACK_PENDING|CONFLICT_OR_SUPERSEDED)/.test(entry.error ?? '')) {
+          result.status = 'activated';
+          delete result.error;
+          reconciledSwitch = true;
+        }
+        if (remoteStatus && paths.has(recordPath(rule))) result.rollbackTargets = remoteStatus.rollbackTargets[id] ?? [];
+        return result;
       });
-      return { exitCode: failure || statusError || ordered.some(result => result.status === 'failed' || result.status === 'verification-pending') ? 1 : 0,
+      const switchFailureReconciled = reconciledSwitch
+        && /ACTIVATION_(UNKNOWN|APPLIED_READBACK_PENDING|CONFLICT_OR_SUPERSEDED)/.test(message(failure));
+      const unresolvedFailure = switchFailureReconciled ? undefined : failure;
+      return { exitCode: unresolvedFailure || statusError || ordered.some(result => result.status === 'failed' || result.status === 'verification-pending') ? 1 : 0,
         ...(operation ? { releaseId: operation.releaseId, tag: operation.tag } : {}), results: ordered,
-        ...(failure ? { error: message(failure) } : {}), ...(statusError ? { statusError } : {}),
+        ...(unresolvedFailure ? { error: message(unresolvedFailure) } : {}), ...(statusError ? { statusError } : {}),
         ...(session.cacheWarning ? { cacheWarning: session.cacheWarning } : {}) };
     };
 
@@ -302,10 +357,11 @@ export async function checkRules(options: CheckOptions) {
         const active = activeById.get(id);
         if ('candidate' in result) {
           candidate = result.candidate;
-          const { verified } = await verify(candidate, definition);
-          if (!isDeepStrictEqual(verified.build.tools, checkTools) || verified.build.tool.sha256 !== verified.validation.tool.sha256) {
+          const previous = await readRetainedBuild(session.snapshot, candidate.id, candidate.buildId);
+          if (!isDeepStrictEqual(previous.tools, checkTools) || previous.tool?.sha256 !== (await inspectBinary(options.binary)).sha256) {
             throw new Error('RECOVERY_BUILD_CHANGED: original tool and build identity required');
           }
+          await verify(candidate, definition);
         } else {
           if (result.status === 'failed') throw new Error(`${result.error}: ${JSON.stringify(result.report.diagnostics)}`);
           if (active && await sameDelivery(result, built!, active, session.snapshot, publication, options.binary)) {
@@ -353,6 +409,7 @@ export async function checkRules(options: CheckOptions) {
             applied(parent, commit, current) {
               session.acceptStableCommit(parent, commit);
               stableHead = commit;
+              knownApplied.set(id, commit);
               activeById.set(id, activationRecord(current, recordPath(definition), branch).record as Active);
             },
           });
@@ -360,10 +417,17 @@ export async function checkRules(options: CheckOptions) {
         }
         await session.save();
       } catch (error) {
-        const pending = uncertain(error) || candidate?.phase === 'evidence' && !message(error).startsWith('RECOVERY_BUILD_CHANGED');
+        const coordinationStopped = /PUBLICATION_(PENDING|CONFLICT)|ACTIVATION_(UNKNOWN|CONFLICT_OR_SUPERSEDED)/.test(message(error));
+        if (results.get(id)?.status === 'activated') {
+          if (coordinationStopped) return report(error);
+          // A definite checkpoint failure does not undo a verified switch.
+          // The next guarded save can include the same check outcome.
+          continue;
+        }
+        const pending = uncertain(error) || candidate?.phase === 'evidence' && !/^(RECOVERY_BUILD_CHANGED|CANDIDATE_UNAVAILABLE)/.test(message(error));
         record(id, pending ? 'verification-pending' : 'failed', { ...release, error: message(error),
           ...(candidate ? { candidateId: candidate.id } : {}) });
-        if (/PUBLICATION_(PENDING|CONFLICT)|ACTIVATION_(UNKNOWN|CONFLICT_OR_SUPERSEDED)/.test(message(error))) return report(error);
+        if (coordinationStopped) return report(error);
         if (!pending) abandonIncomplete(id);
         try { await session.save(); }
         catch (checkpoint) { return report(checkpoint); }

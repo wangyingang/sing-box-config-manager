@@ -96,6 +96,8 @@ export async function readRemoteStatus(options: {
   repository: PublicationRepository; binary?: string; publication?: PublicationTransport;
   /** Injected only for isolated reads; production distinguishes Git absence from CDN errors. */
   activation?: Pick<ActivationTransport, 'download'>;
+  /** Limit delivery and switch verification to these stable activation paths. */
+  recordPaths?: ReadonlySet<string>;
 }) {
   const { snapshot, journal } = await readRemoteState(options.repository);
   const publication = options.publication ?? githubPublication();
@@ -164,7 +166,7 @@ export async function readRemoteStatus(options: {
   const historyComplete: Record<string, boolean> = {};
   const historyErrors: Record<string, { commit?: string; error: string }[]> = {};
   const currentByPath = new Map<string, ObservedActivation>();
-  const paths = stable.paths.filter(path => /^stable\/(?:[a-z0-9._-]+\/)*activation\.json$/.test(path));
+  const paths = stable.paths.filter(path => (!options.recordPaths || options.recordPaths.has(path)) && /^stable\/(?:[a-z0-9._-]+\/)*activation\.json$/.test(path));
   for (const path of paths) {
     const bytes = await stable.read(path);
     requireThat(bytes, `Missing activation record: ${path}`);
@@ -240,7 +242,7 @@ export async function readRemoteStatus(options: {
       }
     }
   }
-  for (const candidate of Object.values(journal.state.candidates)) {
+  for (const candidate of options.recordPaths ? [] : Object.values(journal.state.candidates)) {
     const availability = await inspectCandidate(candidate.id);
     if (candidate.retained && (candidate.phase !== 'complete' || availability.status !== 'available')) {
       pendingOperations.push({ id: candidate.id, candidateId: candidate.id, logicalId: candidate.logicalId,
@@ -251,7 +253,8 @@ export async function readRemoteStatus(options: {
   const operation = journal.state.pendingOperation;
   if (operation?.status === 'pending') pendingOperations.unshift({ id: operation.id, status: 'pending' });
   const operations = await readActivationOperationResults(options.repository, journal, stable, currentByPath,
-    url => activation.download(url), [...Object.values(journal.manualOperations ?? {}), ...Object.values(journal.automaticOperations ?? {})]);
+    url => activation.download(url), [...Object.values(journal.manualOperations ?? {}), ...Object.values(journal.automaticOperations ?? {})]
+      .filter(operation => !options.recordPaths || options.recordPaths.has(operation.recordPath)));
   const manualOperations = operations.filter(operation => operation.kind !== 'automatic');
   const automaticOperations = operations.filter(operation => operation.kind === 'automatic');
   for (const operation of operations) {

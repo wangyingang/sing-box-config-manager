@@ -11,7 +11,7 @@ import { decodedTerms, USAGES } from './projection.js';
 import { sha256 } from './release.js';
 import { ARTIFACT_REPOSITORY, immutableUrl } from './publication.js';
 import { retainedCandidateDownload } from './publication-repository.js';
-import { manualActivationDigest, manualControl, openManualActivation, registerManualActivation, type ManualWriteReservation, type ObservedActivation } from './manual-activation.js';
+import { activationDigest, manualControl, openManualActivation, registerManualActivation, type ActivationWriteReservation, type ObservedActivation } from './manual-activation.js';
 import type { ActivationOperation } from './remote-state.js';
 import { ActivationWriteError, githubActivation, type ActivationTransport } from './activation-transport.js';
 
@@ -191,7 +191,7 @@ export function activationSubscription(input: unknown, branch: string, definitio
 interface AutomaticActivation {
   journalHead: string;
   register(operation: ActivationOperation): Promise<{
-    expectedHead: string; write: ManualWriteReservation; markNotCommitted(): Promise<void>;
+    expectedHead: string; write: ActivationWriteReservation; markNotCommitted(): Promise<void>;
   }>;
   applied(parent: string, commit: string, activation: ObservedActivation & Record<string, unknown>): void;
 }
@@ -307,7 +307,7 @@ async function performActivation(options: ActivationOptions | RollbackOptions, a
     id, kind, logicalId: definition.id, recordPath, generation: session.journal.generation,
     expectedHead: options.expectedHead, ...(previous ? { previousActivationId: previous.id } : {}),
     candidateId: candidate.candidateId, candidateEvidenceUrl: candidate.evidenceUrl,
-    activationDigest: manualActivationDigest(activation),
+    activationDigest: activationDigest(activation),
     ...(historical ? { historicalActivationCommit: historical.commit } : {}),
   } : undefined;
   const reservation = operation && (automatic ? await automatic.register({ ...operation, kind: 'automatic' })
