@@ -17,7 +17,8 @@ export interface ActivationTransport {
 }
 
 const configuredRecord = /^stable\/(?:[a-z0-9][a-z0-9._-]*\/)+activation\.json$/;
-const configuredRule = /^stable\/.+\/domains\.(?:srs|json)$/;
+const configuredRule = /^stable\/.+\/(?:domains|route)\.(?:srs|json)$/;
+const configuredFilename = /^(?:domains|route)\.(?:srs|json)$/;
 const legacyRecordPath = 'stable/activation.json';
 const recordDirectory = (path: string) => path.slice(0, -'activation.json'.length);
 
@@ -84,7 +85,7 @@ export function githubActivation(branch = 'main', request: typeof ghJson = ghJso
       }
       for (const path of paths) {
         if (existingPaths.has(path) && existingPaths.get(path) !== 'blob'
-          || ownedDirectories.some(directory => path === directory + 'domains.srs' || path === directory + 'domains.json')) {
+          || ownedDirectories.some(directory => path.startsWith(directory) && configuredFilename.test(path.slice(directory.length)))) {
           throw new Error(`Stable path is owned by another rule set or is not a file: ${path}`);
         }
       }

@@ -1,3 +1,4 @@
+import { configuredLayout } from './configuration.js';
 import { isDeepStrictEqual } from 'node:util';
 import { Ajv } from 'ajv';
 import manifestSchema from '../contracts/artifact-manifest.schema.json' with { type: 'json' };
@@ -49,24 +50,27 @@ export function activationRecord(value: unknown, path: string, targetBranch: str
   const subscription: any = value.subscription;
   requireThat(subscription.systemRuleSetId === (configured ? value.logicalId : 'v2fly:domain-list-community:category-ai-!cn'),
     'Remote subscription identity mismatch');
-  requireThat(subscription.projections['dns-response'].unavailable === 'empty'
-    && subscription.projections.route.formats && subscription.projections['dns-query'].formats, 'Remote subscription usage mismatch');
-  if (configured) requireThat(isDeepStrictEqual(subscription.projections.route.formats, subscription.projections['dns-query'].formats),
+  const git = configured && value.source?.kind === 'github-commit';
+  const { stem, dns, unavailable } = configuredLayout(git ? 'cidr-text' : 'plain-yaml');
+  requireThat(subscription.projections[unavailable].unavailable === 'empty'
+    && subscription.projections.route.formats && subscription.projections[dns].formats, 'Remote subscription usage mismatch');
+  if (configured) requireThat(isDeepStrictEqual(subscription.projections.route.formats, subscription.projections[dns].formats),
     'Remote subscription file reuse mismatch');
   const directory = path.slice(0, -'/activation.json'.length);
   const prefix = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${targetBranch}/`;
   const expected = new Map<string, { signature: string; candidateFile: string }>();
-  for (const usage of ['route', 'dns-query']) {
+  for (const usage of ['route', dns]) {
     for (const [format, endpoint] of Object.entries(subscription.projections[usage].formats) as [string, any][]) {
       requireThat(endpoint.url.startsWith(prefix), 'Unapproved remote subscription host or branch');
       const file = endpoint.url.slice(prefix.length);
       requireThat(/^stable\/[a-z0-9/_.-]+\.(srs|json)$/.test(file) && file !== path
         && !file.split('/').some((part: string) => !part || part === '.' || part === '..'), 'Invalid remote subscription stable path');
-      if (configured) requireThat(file === `${directory}/${format === 'binary' ? 'domains.srs' : 'domains.json'}`
+      const candidateFile = `${stem}.${format === 'binary' ? 'srs' : 'json'}`;
+      if (configured) requireThat(file === `${directory}/${candidateFile}`
         && endpoint.requiredCapabilities.length === 0, 'Remote subscription stable path or capability mismatch');
       const signature = JSON.stringify([format, [...endpoint.requiredCapabilities].sort()]);
       requireThat(!expected.has(file) || expected.get(file)?.signature === signature, 'Conflicting remote subscription endpoint declarations');
-      expected.set(file, { signature, candidateFile: format === 'binary' ? 'domains.srs' : 'domains.json' });
+      expected.set(file, { signature, candidateFile });
     }
   }
   requireThat(isDeepStrictEqual(Object.keys(value.files).sort(), [...expected.keys()].sort()), 'Invalid remote activation file set');

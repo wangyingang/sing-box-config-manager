@@ -206,7 +206,9 @@ for (const recordPath of ['stable/openai/activation.json', 'stable/providers/ai_
 
 test('低层激活 transport 拒绝直接修改配置化稳定文件，也拒绝伪造登记', async () => {
   const remote = github();
-  await assert.rejects(remote.transport.commit(oldHead, { [rulePath]: rule }, '绕过登记'), /requires a registered write/);
+  for (const file of [rulePath, 'stable/china-ip/route.srs']) {
+    await assert.rejects(remote.transport.commit(oldHead, { [file]: rule }, '绕过登记'), /requires a registered write/);
+  }
   assert.equal(remote.calls.length, 0);
   await assert.rejects(remote.transport.commit(oldHead, stableFiles, '伪造登记', { ...reservation, operationId: 'unregistered' }),
     /PUBLICATION_CONFLICT/);
@@ -217,10 +219,12 @@ test('允许旧 v1 入口更新既有格式，拒绝它覆盖配置化规则集�
   const legacy = github({ branch: 'acceptance-issue-19' });
   await legacy.transport.commit(oldHead, { 'stable/v2fly/category-ai-not-cn/domains.srs': rule, 'stable/activation.json': Buffer.from('{}') }, '旧单集');
   assert.ok(legacy.calls.some(call => call.args.includes('PATCH')));
-  const managed = github({ branch: 'acceptance-issue-19', managedRecord: recordPath });
-  await assert.rejects(managed.transport.commit(oldHead, { [rulePath]: rule, 'stable/activation.json': Buffer.from('{}') }, '覆盖固定版本'),
-    /owned by another rule set/);
-  assert.ok(!managed.calls.some(call => call.args.includes('PATCH')));
+  for (const [record, file] of [[recordPath, rulePath], ['stable/china-ip/activation.json', 'stable/china-ip/route.srs']]) {
+    const managed = github({ branch: 'acceptance-issue-19', managedRecord: record });
+    await assert.rejects(managed.transport.commit(oldHead, { [file]: rule, 'stable/activation.json': Buffer.from('{}') }, '覆盖固定版本'),
+      /owned by another rule set/);
+    assert.ok(!managed.calls.some(call => call.args.includes('PATCH')));
+  }
 });
 
 test('已协调目标的 v1 写入也必须登记', async () => {

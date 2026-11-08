@@ -2,7 +2,7 @@
 
 包名：`@sing-box-config-manager/rule-set-pipeline`。管理者需要更新系统维护的规则集合时，本模块从官方来源生成 sing-box 可加载的规则文件，验证并上传为候选。管理者可显式激活候选，检查流程也可自动激活符合条件的规则。客户端随后通过稳定地址取得当前规则；构建成功、候选验证成功、稳定入口切换和客户端加载完成是不同的状态。
 
-当前 `update` 可发布 V2Fly `domain-list-community` 官方 Release 中 `dlc.dat_plain.yml` 的 `category-ai-!cn`，也可按管理者的 YAML 配置从同一 Release 发布多个列表。本地 `build` 同样支持配置驱动的多集构建。`activate` 与 `rollback` 均可通过 `--config ... --id ...` 按逻辑 ID 独立操作。输出包括 JSON 源规则文件和 SRS 二进制规则文件，目标版本固定为 sing-box **1.14.4**，JSON Source Format 固定为 **4**。`china-ip` 可从固定的 GitHub commit 构建双栈规则，显式发布、查询和重建候选。稳定激活、自动更新和当前版本的维护流程适用于 V2Fly Release。
+当前 `update` 可发布 V2Fly `domain-list-community` 官方 Release 中 `dlc.dat_plain.yml` 的 `category-ai-!cn`，也可按管理者的 YAML 配置从同一 Release 发布多个列表。本地 `build` 同样支持配置驱动的多集构建。`activate` 与 `rollback` 均可通过 `--config ... --id ...` 按逻辑 ID 独立操作。输出包括 JSON 源规则文件和 SRS 二进制规则文件，目标版本固定为 sing-box **1.14.4**，JSON Source Format 固定为 **4**。`china-ip` 可从固定的 GitHub commit 构建双栈规则，显式发布、查询和重建候选，也支持人工指定和回滚。自动更新和当前版本的历史清理适用于 V2Fly Release。
 
 ## 操作分别产生什么结果
 
@@ -188,6 +188,21 @@ pnpm rebuild --config "$config" --id china-ip --commit "$commit" --state "$state
 首次 `update` 解析 `ip-lists`，在下载 `china46.txt` 前将完整 commit SHA 和文件地址写入远端操作日志。中断后可换一个 `--state` 目录运行原命令。已有操作继续使用登记的 commit，输入下载成功后记录并核对 SHA-256 和字节数。已有完整回读证据的候选可以直接复验，复验无需访问上游。
 
 `status` 通过候选的 `sourceKey` 在 `state.commitPins` 中查到固定来源和输入摘要，并在 `candidateAvailability` 报告候选的可用性。`--binary` 同时启用原生复验。`rebuild --commit` 要求该 SHA 已按相同定义成功处理且原候选证据仍可核验。原输入或证据缺失时重建失败。两个命令只追加候选及其进度，稳定入口由独立的激活流程管理。
+
+### 指定和回滚 `china-ip` 的交付版本
+
+沿用上节的隔离配置。用 `status` 获取当前 `stableHead`、候选的 `evidenceUrl` 和 `rollbackTargets.china-ip` 中的历史提交。每次操作前重新读取 `stableHead`：
+
+```sh
+pnpm activate --config "$config" --id china-ip --state "$state" --binary "$binary" \
+  --candidate "$evidence_url" --expected-head "$stable_head"
+pnpm rollback --config "$config" --id china-ip --state "$state" --binary "$binary" \
+  --activation "$historical_commit" --expected-head "$stable_head"
+```
+
+两种操作都复验已登记的候选和实际规则文件，将 `stable/china-ip/route.json`、`route.srs` 和激活记录一起提交。Route 与 DNS Response 可以在同一个 v2 绑定中使用 `usages: [route, dns-response]`，共用一个稳定 SRS URL；DNS Query 绑定会在编译时报错。重新指定当前候选也会记录新的人工固定；指定暂停自动激活，回滚同时暂停自动重试。暂不支持对 `china-ip` 执行自动检查、单集恢复或历史清理。
+
+提交回复丢失或读回失败时，先通过 `status` 查看 `manualOperations`。用错误中的操作 ID 区分已提交、未提交、待核实或已被替代的操作。客户端按自己的周期更新；后续下载或加载失败时继续使用已加载的规则，离线重启需要有效的持久缓存。
 
 ## 预览清理与维护隔离
 

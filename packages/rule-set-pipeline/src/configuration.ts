@@ -8,6 +8,12 @@ import { V2FLY_RELEASE_INPUT, type ReleaseInput } from './release.js';
 
 type SourceInput = ReleaseInput | CommitInput;
 type ConfiguredUsage = { artifact: 'domains' | 'route' } | { unavailable: 'empty' };
+
+export function configuredLayout(format: SourceInput['input']['format']) {
+  return format === 'cidr-text'
+    ? { stem: 'route', dns: 'dns-response', unavailable: 'dns-query' } as const
+    : { stem: 'domains', dns: 'dns-query', unavailable: 'dns-response' } as const;
+}
 export interface RuleDefinition { id: string; source: string; list: string; stablePath: string; usages: Record<Usage, ConfiguredUsage> }
 export interface BuildConfiguration {
   schemaVersion: 2;
@@ -44,13 +50,13 @@ export function parseRuleDefinition(input: unknown, format: SourceInput['input']
     throw new Error(`Invalid stable path: ${String(path)}`);
   }
   const declared = exact(usages, [...USAGES], 'usages');
+  const layout = configuredLayout(format);
   function usage(key: Usage): ConfiguredUsage {
-    const isCidr = format === 'cidr-text';
-    if (key === (isCidr ? 'dns-query' : 'dns-response')) {
+    if (key === layout.unavailable) {
       if (exact(declared[key], ['unavailable'], key).unavailable !== 'empty') throw new Error(`Invalid ${format} usage: ${key}`);
       return { unavailable: 'empty' };
     }
-    const artifact = isCidr ? 'route' : 'domains';
+    const artifact = layout.stem;
     if (exact(declared[key], ['artifact'], key).artifact !== artifact) throw new Error(`Invalid ${format} usage: ${key}`);
     return { artifact };
   }
