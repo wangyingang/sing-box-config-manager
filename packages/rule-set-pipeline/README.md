@@ -64,7 +64,7 @@ pnpm --dir packages/rule-set-pipeline build:release --binary /absolute/path/to/s
 
 ### 配置驱动的多规则集构建
 
-CLI 的多集命令和规则维护 Actions 共用正式配置 [`config/rulesets.yml`](config/rulesets.yml)（`schemaVersion: 2`）。正式配置包含 V2Fly 的 `openai`、`anthropic`、`google-deepmind` 和 Git 来源的 `china-ip`，通过 `usages` 声明各集用途。V2Fly 三集共享 Release 的 YAML 和摘要。示例见 [`samples/rulesets.example.yml`](samples/rulesets.example.yml)。
+CLI 的多集命令和规则维护 Actions 共用正式配置 [`config/rulesets.yml`](config/rulesets.yml)（`schemaVersion: 2`）。正式配置包含 V2Fly 的 `openai`、`anthropic`、`google-deepmind` 和 Git 来源的 `china-ip`，通过 `usages` 声明各集用途。V2Fly 三集共享 Release 的 YAML 和摘要。示例见 [`samples/rulesets.example.yml`](samples/rulesets.example.yml)。独立的 [`config/china-ip.yml`](config/china-ip.yml) 保留供既有单集调用使用。
 
 在隔离目标试用时，从空的 `acceptance-*` 分支初始化新状态，并把配置复制到分支专用文件，再修改 `target.branch`。旧命名的三集 YAML 和记录不能用于初始化或恢复新配置。生产启用及现有客户端迁移需单独安排。
 

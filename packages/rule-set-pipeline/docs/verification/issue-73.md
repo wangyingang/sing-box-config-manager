@@ -1,6 +1,6 @@
 # #73 四集工作流与隔离验收
 
-[工单 #73](https://github.com/wangyingang/sing-box-config-manager/issues/73) 对应 [Spec #66](https://github.com/wangyingang/sing-box-config-manager/issues/66) 的 A20，并汇总 A1–A19 的验证入口。工作流和 CLI 共用 [正式配置](../../config/rulesets.yml)：`openai`、`anthropic`、`google-deepmind` 和 `china-ip`。隔离运行只更改目标分支。日常入口检查四集，然后按计划评估维护；手动入口可分别检查和清理。每次运行的逐集结果和维护摘要保存在 GitHub Actions Summary 和 `rule-maintenance-summary` artifact 中。
+[工单 #73](https://github.com/wangyingang/sing-box-config-manager/issues/73) 对应 [Spec #66](https://github.com/wangyingang/sing-box-config-manager/issues/66) 的 A20，并汇总 A1–A19 的验证入口。工作流和 CLI 共用 [正式配置](../../config/rulesets.yml)：`openai`、`anthropic`、`google-deepmind` 和 `china-ip`。隔离运行写入专用目标分支及其维护引用。日常入口检查四集，然后按计划评估维护；手动入口可分别检查和清理。执行步骤开始后，GitHub Actions Summary 记录实际执行的操作；生成的摘要另存为 `rule-maintenance-summary` artifact。
 
 | 证据 | 验证范围 |
 | --- | --- |
