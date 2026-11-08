@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { readFile, writeFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import test from 'node:test';
 import { updateRules, readUpdateState } from '../../src/update.js';
 import { sha256 } from '../../src/release.js';
+import { releaseConfiguration } from '../fixtures/release-configuration.js';
 
 const directory = process.env.RULE_CONFIGURED_PUBLICATION_STATE;
 const evidenceFile = process.env.RULE_CONFIGURED_PUBLICATION_EVIDENCE;
@@ -15,8 +16,7 @@ test('固定官方三集在隔离分支发布候选并核验 HTTPS 字节', {
   skip: !directory || !evidenceFile || !branch || !binary, timeout: 240_000,
 }, async () => {
   assert.match(branch!, /^acceptance-[a-zA-Z0-9._-]+$/);
-  const sample = await readFile(new URL('../../config/rulesets.yml', import.meta.url), 'utf8');
-  const configuration = sample.replace('branch: main', `branch: ${branch}`);
+  const configuration = releaseConfiguration(branch);
   const token = process.env.GITHUB_TOKEN ?? (await promisify(execFile)('gh', ['auth', 'token'])).stdout.trim();
   const requests: string[] = [];
   const fetcher: typeof fetch = async (url, init) => { requests.push(String(url)); return fetch(url, init); };

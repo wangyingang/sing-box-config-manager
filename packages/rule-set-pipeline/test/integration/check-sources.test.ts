@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test, { type TestContext } from 'node:test';
 import { activateRules, checkRules, readRemoteStatus, resumeRules } from '../../src/index.js';
+import { workflowRules } from '../../src/rule-workflow.js';
 import { PublicationWriteError } from '../../src/publication-repository.js';
-import { configuredSubscriptions, parseBuildConfiguration } from '../../src/configuration.js';
+import { parseBuildConfiguration } from '../../src/configuration.js';
 import { configuredEnvironment, upstream } from './configured-activation-fixture.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
@@ -20,11 +21,8 @@ async function fixture(t: TestContext, branch = 'acceptance-issue-71') {
   t.after(() => rm(directory, { recursive: true, force: true }));
   const env = await configuredEnvironment(binary!, directory, branch);
   const publication = { repository: env.repository, commit: env.publish, download: env.transport.download };
-  const cidr = parseBuildConfiguration(await readFile(new URL('../../config/china-ip.yml', import.meta.url), 'utf8'));
-  const domains = parseBuildConfiguration(env.configuration);
-  const config = { ...domains, sources: { ...domains.sources, ...cidr.sources }, ruleSets: [...domains.ruleSets, ...cidr.ruleSets] };
-  const subscriptions = configuredSubscriptions(config);
-  const options = (name: string, source: ReturnType<typeof sources>) => ({ configuration: JSON.stringify(config), subscriptions,
+  const rules = workflowRules(branch);
+  const options = (name: string, source: ReturnType<typeof sources>) => ({ ...rules,
     publication, fetch: source.fetcher, binary: binary!, stateDirectory: join(directory, name), activation: env.transport });
   const status = () => readRemoteStatus({ repository: env.repository, activation: env.transport, publication });
   return { ...env, options, optionsFor: env.options, status };

@@ -1,11 +1,12 @@
-import { readFile } from 'node:fs/promises';
+import { readOfficialConfiguration } from '../src/configuration.js';
+import { releaseConfiguration } from './fixtures/release-configuration.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { sha256 } from '../src/release.js';
 import { buildConfiguredRelease, parseBuildConfiguration } from '../src/configured-build.js';
 
 const tag = '20261104112839';
-const configuration = await readFile(new URL('../config/rulesets.yml', import.meta.url), 'utf8');
+const configuration = releaseConfiguration();
 const yaml = JSON.stringify({ lists: [
   { name: 'openai', length: 1, rules: ['domain:openai.com'] },
   { name: 'anthropic', length: 1, rules: ['domain:anthropic.com'] },
@@ -28,6 +29,7 @@ function upstream(input = yaml, checksum = sha256(input)) {
 }
 
 test('配置在写入前拒绝旧格式、无效来源、用途、身份和目标', () => {
+  const configuration = readOfficialConfiguration();
   assert.throws(() => parseBuildConfiguration('schemaVersion: 1\nsource: v2fly/domain-list-community\ntarget: {}\nruleSets: []'));
   for (const invalid of [
     configuration.replace('format: plain-yaml', 'format: unknown'),

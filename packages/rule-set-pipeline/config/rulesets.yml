@@ -10,6 +10,13 @@ sources:
       format: plain-yaml
       asset: dlc.dat_plain.yml
       checksum: dlc.dat_plain.yml.sha256sum
+  china-operator-ip:
+    repository: gaoyifan/china-operator-ip
+    version: git-branch
+    branch: ip-lists
+    input:
+      format: cidr-text
+      path: china46.txt
 ruleSets:
   - id: openai
     source: dlc
@@ -35,3 +42,11 @@ ruleSets:
       route: { artifact: domains }
       dns-query: { artifact: domains }
       dns-response: { unavailable: empty }
+  - id: china-ip
+    source: china-operator-ip
+    list: all
+    stablePath: stable/china-ip
+    usages:
+      route: { artifact: route }
+      dns-query: { unavailable: empty }
+      dns-response: { artifact: route }

@@ -1,4 +1,3 @@
-import { readFile } from 'node:fs/promises';
 import { updateRules } from '../../src/update.js';
 import { sha256 } from '../../src/release.js';
 import { immutableUrl, type PublicationTransport } from '../../src/publication.js';
@@ -8,9 +7,10 @@ import { initializeRemoteState, STATE_PATH } from '../../src/remote-state.js';
 import type { BaselineTransport } from '../../src/maintenance-baseline-transport.js';
 import { branchRef, type MaintenanceRefTransport } from '../../src/maintenance-refs.js';
 import { ActivationWriteError, type ActivationTransport } from '../../src/activation-transport.js';
+import { releaseConfiguration } from '../fixtures/release-configuration.js';
 
 export async function configuredEnvironment(binary: string, directory: string, branch = 'acceptance-issue-39') {
-  const configuration = (await readFile(new URL('../../config/rulesets.yml', import.meta.url), 'utf8')).replace('branch: main', `branch: ${branch}`);
+  const configuration = releaseConfiguration(branch);
   const ids = ['openai', 'anthropic', 'google-deepmind'];
   let sequence = 0, head = 'a'.repeat(40), mode = '', revision = 0, writes = 0;
   let journalHead = branch === 'main' ? 'b'.repeat(40) : head;

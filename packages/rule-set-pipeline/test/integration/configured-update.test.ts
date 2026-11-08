@@ -8,10 +8,11 @@ import test from 'node:test';
 import { rebuildRules, updateRules, readUpdateState } from '../../src/update.js';
 import { sha256 } from '../../src/release.js';
 import type { PublicationTransport } from '../../src/publication.js';
+import { releaseConfiguration } from '../fixtures/release-configuration.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
 const tag = '20261104112839';
-const configuration = await readFile(new URL('../../config/rulesets.yml', import.meta.url), 'utf8');
+const configuration = releaseConfiguration();
 
 function fixture() {
   let lists = [

@@ -78,4 +78,15 @@ jobs:
           GH_TOKEN: ${{ secrets.RULE_ARTIFACT_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
           RULE_STATE_DIRECTORY: ${{ runner.temp }}/rule-state
-        run: node --import tsx src/rule-workflow.ts
+        shell: bash
+        run: |
+          trap 'cp "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/rule-maintenance-summary.md"' EXIT
+          node --import tsx src/rule-workflow.ts
+      - name: Preserve rule maintenance summary
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: rule-maintenance-summary
+          path: ${{ runner.temp }}/rule-maintenance-summary.md
+          retention-days: 14
+          if-no-files-found: warn
