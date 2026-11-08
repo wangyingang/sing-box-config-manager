@@ -10,7 +10,7 @@ import type { SourceRecord } from './types.js';
 import { githubPublication, immutableUrl, type PublicationTransport } from './publication.js';
 import { processConfiguredUpdate, type ConfiguredRebuildOptions, type ConfiguredUpdateOptions } from './configured-update.js';
 import { publishCandidate } from './candidate-publication.js';
-import type { RuleDefinition } from './configured-build.js';
+import type { BuildConfiguration, RuleDefinition } from './configuration.js';
 import { openRemoteSession, selectRemoteOperation, type RemoteOperation } from './remote-state.js';
 import type { CheckRecord } from './check-rules.js';
 import { verifyRetainedCandidate } from './candidate-recovery.js';
@@ -21,6 +21,10 @@ export type ReleaseReference = { releaseId: number; tag: string; sourceKey?: nev
 type CommitReference = { sourceKey: string; releaseId?: never; tag?: never };
 export type SourceReference = ReleaseReference | CommitReference;
 export const sourceReferenceKey = (reference: SourceReference) => reference.sourceKey ?? String(reference.releaseId);
+
+export function ruleDefinitionSha256(definition: RuleDefinition, target: BuildConfiguration['target']) {
+  return sha256(JSON.stringify({ definition, target }));
+}
 
 export type Candidate = SourceReference & {
   id: string;

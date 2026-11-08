@@ -2,7 +2,7 @@
 
 包名：`@sing-box-config-manager/rule-set-pipeline`。管理者需要更新系统维护的规则集合时，本模块从官方来源生成 sing-box 可加载的规则文件，验证并上传为候选。管理者可显式激活候选，检查流程也可自动激活符合条件的规则。客户端随后通过稳定地址取得当前规则；构建成功、候选验证成功、稳定入口切换和客户端加载完成是不同的状态。
 
-当前 `update` 可发布 V2Fly `domain-list-community` 官方 Release 中 `dlc.dat_plain.yml` 的 `category-ai-!cn`，也可按管理者的 YAML 配置从同一 Release 发布多个列表。本地 `build` 同样支持配置驱动的多集构建。`activate` 与 `rollback` 均可通过 `--config ... --id ...` 按逻辑 ID 独立操作。输出包括 JSON 源规则文件和 SRS 二进制规则文件，目标版本固定为 sing-box **1.14.4**，JSON Source Format 固定为 **4**。`china-ip` 可从固定的 GitHub commit 构建双栈规则，显式发布、查询和重建候选，也支持人工指定和回滚。`check-now` 支持同时检查两类来源；`resume` 可恢复任一规则集。正式 Actions 的四集接入留待 [#73](https://github.com/wangyingang/sing-box-config-manager/issues/73)。存在当前 CIDR 规则集的目标会延期清理。
+当前 `update` 可发布 V2Fly `domain-list-community` 官方 Release 中 `dlc.dat_plain.yml` 的 `category-ai-!cn`，也可按管理者的 YAML 配置从同一 Release 发布多个列表。本地 `build` 同样支持配置驱动的多集构建。`activate` 与 `rollback` 均可通过 `--config ... --id ...` 按逻辑 ID 独立操作。输出包括 JSON 源规则文件和 SRS 二进制规则文件，目标版本固定为 sing-box **1.14.4**，JSON Source Format 固定为 **4**。`china-ip` 可从固定的 GitHub commit 构建双栈规则，显式发布、查询和重建候选，也支持人工指定和回滚。`check-now` 支持同时检查两类来源；`resume` 可恢复任一规则集。正式 Actions 的四集接入留待 [#73](https://github.com/wangyingang/sing-box-config-manager/issues/73)。历史维护可保留两类来源的当前交付及人工固定。
 
 ## 操作分别产生什么结果
 
@@ -205,13 +205,13 @@ pnpm rollback --config "$config" --id china-ip --state "$state" --binary "$binar
   --activation "$historical_commit" --expected-head "$stable_head"
 ```
 
-两种操作都复验已登记的候选和实际规则文件，将 `stable/china-ip/route.json`、`route.srs` 和激活记录一起提交。Route 与 DNS Response 可以在同一个 v2 绑定中使用 `usages: [route, dns-response]`，共用一个稳定 SRS URL；DNS Query 绑定会在编译时报错。重新指定当前候选也会记录新的人工固定；指定暂停自动激活，回滚同时暂停自动重试。`check-now --id china-ip` 只检查该集；`resume --id china-ip` 解除该集的限制并立即检查最新来源。含已激活 CIDR 规则集的目标会在进入维护隔离前延期清理。
+两种操作都复验已登记的候选和实际规则文件，将 `stable/china-ip/route.json`、`route.srs` 和激活记录一起提交。Route 与 DNS Response 可以在同一个 v2 绑定中使用 `usages: [route, dns-response]`，共用一个稳定 SRS URL；DNS Query 绑定会在编译时报错。重新指定当前候选也会记录新的人工固定；指定暂停自动激活，回滚同时暂停自动重试。`check-now --id china-ip` 只检查该集；`resume --id china-ip` 解除该集的限制并立即检查最新来源。
 
 提交回复丢失或读回失败时，先通过 `status` 查看 `manualOperations`。用错误中的操作 ID 区分已提交、未提交、待核实或已被替代的操作。客户端按自己的周期更新；后续下载或加载失败时继续使用已加载的规则，离线重启需要有效的持久缓存。
 
 ## 预览清理与维护隔离
 
-用 `maintenance-preview` 查看当前稳定入口、人工控制、候选证据、处理进度、拟清理范围和可能保留旧历史的其他 Git 引用。预览只读取远端。保留集合覆盖配置化规则集和仍受支持的 v1 入口，当前版本的使用时长不影响保留。非当前历史和已完成的未激活候选可进入清理范围，没有最低保留天数。
+用 `maintenance-preview` 查看当前稳定入口、人工控制、候选证据、处理进度、拟清理范围和可能保留旧历史的其他 Git 引用。预览只读取远端。保留集合覆盖配置化规则集（包括 `china-ip`）和仍受支持的 v1 入口，当前版本的使用时长不影响保留。Git 候选的 `sourceKey` 对应远端登记的固定 commit，`candidatePaths` 列出需要保留和核验的证据文件。非当前历史和已完成的未激活候选可进入清理范围，没有最低保留天数。
 
 ```sh
 node --import tsx src/cli.ts maintenance-preview --branch acceptance-example \
@@ -235,7 +235,7 @@ node --import tsx src/cli.ts maintenance-abort --branch acceptance-example --mai
 node --import tsx src/cli.ts maintenance-prepare --branch acceptance-example --binary "$sing_box_binary"
 ```
 
-使用 sing-box 1.14.4 的绝对路径。命令从远端复制当前规则字节、原规则定义和构建记录，为新提交重写 Manifest 及内部证据地址，并对新地址执行 HTTPS 回读和原生验证。处理记录仍可说明某个 Release 已处理。只有保留的候选才有证据地址。稳定订阅继续使用原 URL，固定原因和控制修订保持。
+使用 sing-box 1.14.4 的绝对路径。命令从产物仓库复制每集的当前规则字节、固定来源和构建记录。它不会向上游请求最新版本。命令为新提交重写 Manifest、内部证据地址和 Git 候选的登记摘要，并对新地址执行 HTTPS 回读和原生验证。处理记录仍可说明某个 Release 或 Git commit 已处理。只有保留的候选才有证据地址。稳定订阅继续使用原 URL，固定原因和控制修订保持。
 
 准备命令以 `maintenance-<维护 ID>-<阶段>` 创建临时分支。准备成功后，`status: prepared` 的 `baseline.stages` 列出临时分支及不可变提交，`journal` 和 `stable` 是待切换的两个 heads，单分支目标共用同一个 head。记录包含验证时间与工具摘要。准备中断后，在任意新目录重跑 `maintenance-prepare`。成功后可带同一版本的 binary 运行 `maintenance-resume`，只用新产物地址复验。当前证据或 binary 缺失会延期；准备写入或回读失败会报告失败并保持隔离。
 
@@ -254,7 +254,7 @@ node --import tsx src/cli.ts maintenance-resume --branch acceptance-example --bi
 
 核验成功后，Pipeline 先持久记录核验结果，再用租约删除本次维护拥有且 head 仍匹配的临时引用。清理中断可再次恢复。核验已经持久化时，恢复清理无需 binary。最终 `status: completed` 表示普通写入已恢复，`otherRefs` 列出仍存在的其他引用。其他引用和 GitHub 对旧对象的保留可能延长旧 SHA 的可读时间。
 
-稳定 URL、规则字节、版本身份和人工固定状态跨清理保留。清理保留的当前版本日后被替换时，可用 `status` 列出的历史提交回滚。后续清理移除该版本后，旧 SHA 和依赖已清理证据的重建会明确失败。使用原状态目录运行检查或更新时，Pipeline 从远端代次恢复候选状态。复现步骤见 [#54 验收记录](docs/verification/issue-54.md)。
+稳定 URL、规则字节、版本身份和人工固定状态跨清理保留。清理保留的当前版本日后被替换时，可用 `status` 列出的历史提交回滚。后续清理移除该版本后，旧 SHA 和依赖已清理证据的重建会明确失败。使用原状态目录运行检查或更新时，Pipeline 从远端代次恢复候选状态。复现步骤见 [#54 验收记录](docs/verification/issue-54.md)和[双来源清理验收记录](docs/verification/issue-72.md)。
 
 ## 立即检查并激活
 

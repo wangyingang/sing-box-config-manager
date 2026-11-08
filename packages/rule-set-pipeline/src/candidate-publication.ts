@@ -1,14 +1,25 @@
 import type { RuleDefinition } from './configuration.js';
+import type { SourceReference } from './update.js';
 import { buildNative, type NativeBuild } from './native.js';
 import { decodedTerms } from './projection.js';
 import { immutableUrl, type PublicationTransport } from './publication.js';
 import { sha256 } from './release.js';
 import { isDeepStrictEqual } from 'node:util';
 
-export function candidateFiles(definition?: RuleDefinition) {
+export function candidateArtifactFiles(definition?: RuleDefinition) {
   const route = definition?.usages.route;
   const stem = route && 'artifact' in route ? route.artifact : 'domains';
-  return [`${stem}.json`, `${stem}.srs`, 'manifest.json', 'source.json', 'conversion-report.json', 'build.json', 'readback.json'];
+  return { source: `${stem}.json`, binary: `${stem}.srs` };
+}
+
+export function candidateFiles(definition?: RuleDefinition) {
+  const { source, binary } = candidateArtifactFiles(definition);
+  return [source, binary, 'manifest.json', 'source.json', 'conversion-report.json', 'build.json', 'readback.json'];
+}
+
+/** The journal binds Git candidates to the exact bytes of their readback record. */
+export function candidateEvidenceSha256(candidate: SourceReference, evidence: Buffer | undefined) {
+  return evidence && candidate.sourceKey !== undefined ? sha256(evidence) : undefined;
 }
 
 export interface PublicationCandidate {

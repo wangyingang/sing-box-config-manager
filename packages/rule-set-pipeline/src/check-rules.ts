@@ -15,7 +15,7 @@ import { retainedCandidateDownload, type PublicationSnapshot } from './publicati
 import { lookupRelease, sha256 } from './release.js';
 import { checkSourceId, checkSourceReference, openRemoteSession, selectRemoteOperation, type RemoteOperation } from './remote-state.js';
 import { activationRecord, readRemoteStatus, verifyStableFiles } from './remote-status.js';
-import { sourceReferenceKey, type Candidate, type SourceReference } from './update.js';
+import { ruleDefinitionSha256, sourceReferenceKey, type Candidate, type SourceReference } from './update.js';
 
 export interface CheckOptions extends Omit<ConfiguredUpdateOptions, 'sampleTag' | 'retryRelease'> {
   /** Trusted, complete v2 Rule Subscription for each selected logical ID. */
@@ -590,7 +590,7 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
         const processed = state.configuredProcessed ??= {};
         if (!Object.hasOwn(processed, id)) processed[id] = {};
         processed[id][sourceReferenceKey(candidate)] = { candidateId: candidate.id, tag: candidate.tag, evidenceUrl: candidate.evidenceUrl!,
-          definitionSha256: sha256(JSON.stringify({ definition, target: configuration.target })) };
+          definitionSha256: ruleDefinitionSha256(definition, configuration.target) };
         await session.save();
         if (controlFor(id)?.pauseAutomaticActivation) {
           recordCheckOutcome(id, 'paused', { ...checked, candidateId: candidate.id });
