@@ -1,0 +1,21 @@
+schemaVersion: 2
+target:
+  repository: wangyingang/sing-box-rule-artifacts
+  branch: acceptance-example
+sources:
+  dlc:
+    repository: v2fly/domain-list-community
+    version: latest-release
+    input:
+      format: plain-yaml
+      asset: dlc.dat_plain.yml
+      checksum: dlc.dat_plain.yml.sha256sum
+ruleSets:
+  - id: openai
+    source: dlc
+    list: openai
+    stablePath: stable/openai
+    usages:
+      route: { artifact: domains }
+      dns-query: { artifact: domains }
+      dns-response: { unavailable: empty }

@@ -18,7 +18,7 @@ test('隔离分支依次激活官方三集，再分别切换可区分候选并�
   skip: !binary || !branch || !directory || !evidenceFile, timeout: 1_200_000,
 }, async () => {
   assert.match(branch!, /^acceptance-[a-zA-Z0-9._-]+$/);
-  const configuration = (await readFile(new URL('../../samples/three-ai-rule-sets.yml', import.meta.url), 'utf8')).replace('branch: main', `branch: ${branch}`);
+  const configuration = (await readFile(new URL('../../config/rulesets.yml', import.meta.url), 'utf8')).replace('branch: main', `branch: ${branch}`);
   const config = parseBuildConfiguration(configuration);
   const transport = githubActivation(branch!);
   const publication = githubPublication(undefined, branch!);

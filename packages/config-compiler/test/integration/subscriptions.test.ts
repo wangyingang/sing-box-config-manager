@@ -20,7 +20,7 @@ test('one Recipe publishes and delivers three v2 logical subscriptions with real
     const published = success(await publishRecipe(request, { binary, directory }));
     assert.deepEqual(await readPublication(directory), published);
     const delivered = success(await renderSubscription(published, request.params));
-    const ids = ['ai-openai', 'ai-anthropic', 'ai-google-deepmind'];
+    const ids = ['openai', 'anthropic', 'google-deepmind'];
     assert.deepEqual(published.body.recipeSource?.subscriptions?.map(s => s.systemRuleSetId), ids);
     assert.deepEqual(published.body.compiled.subscriptions?.map(s => s.systemRuleSetId), ids);
     assert.deepEqual((delivered.route as any).rule_set.map((set: any) => [set.tag, set.url]),

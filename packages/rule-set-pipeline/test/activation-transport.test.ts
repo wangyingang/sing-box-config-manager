@@ -7,15 +7,15 @@ import { sha256 } from '../src/release.js';
 
 const oldHead = 'a'.repeat(40), newCommit = 'e'.repeat(40);
 const journalHead = 'f'.repeat(40), operationId = 'b53efb87-d1ab-4661-a689-e65a4b327fea';
-const recordPath = 'stable/ai-openai/activation.json', rulePath = 'stable/ai-openai/domains.srs';
+const recordPath = 'stable/openai/activation.json', rulePath = 'stable/openai/domains.srs';
 const candidateId = '1234', candidateEvidenceUrl = immutableUrl('d'.repeat(40), `candidates/${candidateId}/readback.json`);
 const statePath = 'pipeline/state.json';
 const rule = Buffer.from('rule');
-const activation = { schemaVersion: 1, id: operationId, logicalId: 'ai-openai', candidateId, candidateEvidenceUrl,
-  history: [], subscription: { schemaVersion: 2, systemRuleSetId: 'ai-openai' },
+const activation = { schemaVersion: 1, id: operationId, logicalId: 'openai', candidateId, candidateEvidenceUrl,
+  history: [], subscription: { schemaVersion: 2, systemRuleSetId: 'openai' },
   files: { [rulePath]: { byteLength: rule.length, sha256: sha256(rule) } },
   control: { revision: operationId, reason: 'manual-activation', pauseAutomaticActivation: true, pauseAutomaticRetry: false } };
-const operation = { id: operationId, kind: 'activate', logicalId: 'ai-openai', recordPath, generation: 1,
+const operation = { id: operationId, kind: 'activate', logicalId: 'openai', recordPath, generation: 1,
   expectedHead: oldHead, candidateId, candidateEvidenceUrl, activationDigest: sha256(JSON.stringify(activation)) };
 const identity = { schemaVersion: 1, id: 'test', targetBranch: 'main' };
 const journal = { ...identity, generation: 1, maintenance: 'open',
@@ -195,7 +195,7 @@ for (const options of [{ pathMode: '120000' }, { blobEncoding: 'utf-8' }, { blob
   });
 }
 
-for (const recordPath of ['stable/ai-openai/activation.json', 'stable/providers/ai_openai.v2/activation.json']) {
+for (const recordPath of ['stable/openai/activation.json', 'stable/providers/ai_openai.v2/activation.json']) {
   test(`多集旧记录 ${recordPath} 从完整 Git tree/blob 读取，不依赖 CDN 404`, async () => {
     const remote = activationRecord({ recordPath });
     assert.deepEqual(await remote.transport.download(recordUrl.replace('stable/activation.json', recordPath)), remote.content);
@@ -268,11 +268,11 @@ test('登记绑定验证过的规则摘要与激活记录，拒绝同一候选�
   assert.ok(!remote.calls.some(call => call.args.includes('PATCH')));
 });
 
-for (const managedRecord of ['stable/ai-openai/nested/activation.json', 'stable/ai-openai/activation.json']) {
+for (const managedRecord of ['stable/openai/nested/activation.json', 'stable/openai/activation.json']) {
   test(`拒绝配置化规则集目录与 ${managedRecord} 上下重叠`, async () => {
     const remote = github({ managedRecord });
     const files = managedRecord === recordPath
-      ? { 'stable/ai-openai/nested/activation.json': stableFiles[recordPath], 'stable/ai-openai/nested/domains.srs': rule }
+      ? { 'stable/openai/nested/activation.json': stableFiles[recordPath], 'stable/openai/nested/domains.srs': rule }
       : stableFiles;
     await assert.rejects(remote.transport.commit(oldHead, files, '重叠目录', reservation), /overlaps another rule set/);
     assert.ok(!remote.calls.some(call => call.args.includes('PATCH')));

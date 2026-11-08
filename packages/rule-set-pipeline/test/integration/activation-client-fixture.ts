@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { RuleDefinition } from '../../src/configured-build.js';
+import { CONFIGURED_BUILD_RECORD, type RuleDefinition } from '../../src/configured-build.js';
 import { buildNative } from '../../src/native.js';
 import { immutableUrl } from '../../src/publication.js';
 import { sha256 } from '../../src/release.js';
@@ -14,9 +14,9 @@ export async function syntheticCandidate(binary: string, revision: string, domai
   const native = await buildNative([{ type: 'domain', value: domain }], binary);
   const source = { kind: 'synthetic', description: `Controlled synthetic origin ${revision}`, revision };
   const tools = { conversionPolicy: 'synthetic-issue-19' };
-  const contracts = { artifactManifest: 1, sourceFormat: 4, buildRecord: 1 };
+  const contracts = { artifactManifest: 1, sourceFormat: 4, buildRecord: CONFIGURED_BUILD_RECORD };
   const buildId = sha256(JSON.stringify(configured ? { ...configured, source, tools, nativeBuildId: native.buildId,
-    contracts: { sourceFormat: 4, buildRecord: 1 } } : { source, tools, nativeBuildId: native.buildId }));
+    contracts: { sourceFormat: 4, buildRecord: CONFIGURED_BUILD_RECORD } } : { source, tools, nativeBuildId: native.buildId }));
   const logicalId = configured?.definition.id ?? 'v2fly:category-ai-!cn';
   const files = Object.fromEntries(native.artifacts.map(a => [`${prefix}/${a.file}`, a.content]));
   const filesCommit = await publish(files);

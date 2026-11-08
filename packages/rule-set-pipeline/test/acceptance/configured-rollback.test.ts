@@ -18,7 +18,7 @@ test('隔离分支通过 CLI 逐集回滚真实三集，恢复历史字节且兄
   skip: !binary || !branch || !directory || !evidenceFile, timeout: 1_200_000,
 }, async () => {
   assert.match(branch!, /^acceptance-[a-zA-Z0-9._-]+$/);
-  const configuration = (await readFile(new URL('../../samples/three-ai-rule-sets.yml', import.meta.url), 'utf8')).replace('branch: main', `branch: ${branch}`);
+  const configuration = (await readFile(new URL('../../config/rulesets.yml', import.meta.url), 'utf8')).replace('branch: main', `branch: ${branch}`);
   const config = parseBuildConfiguration(configuration);
   const transport = githubActivation(branch!), publication = githubPublication(undefined, branch!);
   const productionBefore = await githubActivation().head();

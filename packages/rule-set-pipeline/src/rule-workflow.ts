@@ -1,8 +1,8 @@
-import { appendFileSync, readFileSync } from 'node:fs';
+import { appendFileSync } from 'node:fs';
 import { checkRules } from './check-rules.js';
-import { parseBuildConfiguration } from './configured-build.js';
+import { configuredSubscriptions, parseBuildConfiguration, readOfficialConfiguration } from './configuration.js';
 import { manageMaintenance, type MaintenanceRequest, type MaintenanceSchedule } from './maintenance.js';
-import { ARTIFACT_REPOSITORY, githubPublication } from './publication.js';
+import { githubPublication } from './publication.js';
 
 export interface WorkflowOptions {
   operation: 'daily' | 'check' | 'cleanup';
@@ -103,20 +103,9 @@ function reportMaintenance(result: Awaited<ReturnType<typeof manageMaintenance>>
 }
 
 export function workflowRules(target: string) {
-  const base = parseBuildConfiguration(readFileSync(new URL('../samples/three-ai-rule-sets.yml', import.meta.url), 'utf8'));
-  const configuration = JSON.stringify({ ...base, target: { ...base.target, branch: target } });
-  const subscriptions = Object.fromEntries(base.ruleSets.map(({ id, stablePath }) => {
-    const prefix = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${target}/${stablePath}`;
-    const formats = {
-      binary: { url: `${prefix}/domains.srs`, requiredCapabilities: [] },
-      source: { url: `${prefix}/domains.json`, requiredCapabilities: [] },
-    };
-    return [id, {
-      schemaVersion: 2, systemRuleSetId: id, targetVersion: '1.14.4', sourceFormatVersion: 4,
-      projections: { route: { formats }, 'dns-query': { formats }, 'dns-response': { unavailable: 'empty' } },
-    }];
-  }));
-  return { configuration, subscriptions };
+  const base = parseBuildConfiguration(readOfficialConfiguration());
+  const configuration = parseBuildConfiguration(JSON.stringify({ ...base, target: { ...base.target, branch: target } }));
+  return { configuration: JSON.stringify(configuration), subscriptions: configuredSubscriptions(configuration) };
 }
 
 async function main() {

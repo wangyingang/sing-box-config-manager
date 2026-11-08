@@ -181,7 +181,7 @@ test('successful version stdout is accepted while pnpm and binary stderr warning
   }
 }));
 
-test('full verification runs ordered checks, captures separate suites and client evidence, and selects only the read-only Release test', () => fixture(async ({ root, launch }) => {
+test('full verification runs ordered checks, captures separate suites and client evidence, and selects only the read-only Release tests', () => fixture(async ({ root, launch }) => {
   const launcher = await pnpm(root, 'pinned.cjs', `
     const fs = require('node:fs');
     if (process.argv[2] === '--version') console.log('10.33.2');
@@ -203,6 +203,7 @@ test('full verification runs ordered checks, captures separate suites and client
   const acceptance = join(root, 'packages/rule-set-pipeline/test/acceptance');
   await mkdir(acceptance, { recursive: true });
   await writeFile(join(acceptance, 'release.test.ts'), `import test from 'node:test'; test('fixed Release fixture', () => {});`);
+  await writeFile(join(acceptance, 'configured-release.test.ts'), `import test from 'node:test'; test('configured Release fixture', () => {});`);
   // A wildcard acceptance command would execute this opt-in remote-write sentinel and fail.
   await writeFile(join(acceptance, 'publication.test.ts'), `throw new Error('Publication must not execute');`);
   const output = join(root, 'evidence');
@@ -218,7 +219,7 @@ test('full verification runs ordered checks, captures separate suites and client
   assert.equal(summary.scope, 'check-native-release');
   assert.deepEqual(summary.steps.map(step => step.name), ['check', 'integration', 'release']);
   assert.deepEqual(summary.steps[0].suites.map(suite => suite.pass), [2, 3]);
-  assert.equal(summary.steps[2].suites[0].pass, 1);
+  assert.equal(summary.steps[2].suites[0].pass, 2);
   await assert.rejects(readFile(outside), { code: 'ENOENT' });
   const files = JSON.parse(await readFile(join(output, 'files.json'), 'utf8')).files;
   assert.ok(files.some(file => file.path === 'client-update-rollback.json'));

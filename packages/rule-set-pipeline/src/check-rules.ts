@@ -5,13 +5,14 @@ import { isDeepStrictEqual } from 'node:util';
 import { activateAutomatically, activationSubscription, verifyActivationCandidate } from './activation.js';
 import { githubActivation, type ActivationTransport } from './activation-transport.js';
 import { verifyRetainedCandidate } from './candidate-recovery.js';
+import { configuredReleaseInput } from './configuration.js';
 import { buildConfiguredRelease, configuredBuildTools, parseBuildConfiguration, type RuleDefinition } from './configured-build.js';
 import { publishConfiguredCandidate, type ConfiguredUpdateOptions } from './configured-update.js';
 import { applicableResume, effectiveControl, readActivationOperationResults, type ObservedActivation } from './manual-activation.js';
 import { inspectBinary } from './native.js';
 import { githubPublication } from './publication.js';
 import { retainedCandidateDownload, type PublicationSnapshot } from './publication-repository.js';
-import { sha256 } from './release.js';
+import { lookupRelease, sha256 } from './release.js';
 import { openRemoteSession, selectRemoteOperation, type RemoteOperation } from './remote-state.js';
 import { activationRecord, readRemoteStatus, verifyStableFiles } from './remote-status.js';
 import type { Candidate } from './update.js';
@@ -116,6 +117,7 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
   const ids = options.selectedIds ?? configuration.ruleSets.map(rule => rule.id);
   const definitions = configuration.ruleSets.filter(rule => ids.includes(rule.id));
   if (!definitions.length || definitions.length !== ids.length) throw new Error('Selected logical ID is duplicate or unknown');
+  const source = configuredReleaseInput(configuration, definitions);
   const { branch } = configuration.target;
   const publication = options.publication ?? githubPublication(undefined, branch === 'main' ? 'candidates' : branch);
   const activation = options.activation ?? githubActivation(branch);
@@ -419,12 +421,7 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
 
     async function buildLatestOrPinned() {
       const fetcher = options.fetch ?? fetch;
-      const response = await fetcher(`https://api.github.com/repos/v2fly/domain-list-community/releases/${operation?.releaseId ?? 'latest'}`, {
-        headers: { Accept: 'application/vnd.github+json', ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}) },
-        signal: AbortSignal.timeout(120_000),
-      });
-      if (!response.ok) throw new Error(`Release lookup HTTP ${response.status}`);
-      const release = await response.json() as Record<string, unknown>;
+      const release = await lookupRelease(source, String(operation?.releaseId ?? 'latest'), options);
       const { id: releaseId, tag_name: tag } = release;
       if (typeof releaseId !== 'number' || !Number.isSafeInteger(releaseId) || releaseId <= 0
         || typeof tag !== 'string' || !/^[0-9]{14}$/.test(tag)

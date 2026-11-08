@@ -17,7 +17,7 @@ test('固定官方 Release 增选与单集重建保留历史候选，稳定入�
   skip: !directory || !evidenceFile || !branch || !binary, timeout: 300_000,
 }, async () => {
   assert.match(branch!, /^acceptance-issue-38-[a-zA-Z0-9._-]+$/);
-  const sample = await readFile(new URL('../../samples/three-ai-rule-sets.yml', import.meta.url), 'utf8');
+  const sample = await readFile(new URL('../../config/rulesets.yml', import.meta.url), 'utf8');
   const configuration = sample.replace('branch: main', `branch: ${branch}`);
   const exec = promisify(execFile);
   const token = process.env.GITHUB_TOKEN ?? (await exec('gh', ['auth', 'token'])).stdout.trim();
@@ -25,20 +25,20 @@ test('固定官方 Release 增选与单集重建保留历史候选，稳定入�
   const fetcher: typeof fetch = async (url, init) => { requests.push(String(url)); return fetch(url, init); };
   const publication = githubPublication(undefined, branch!);
   const options = { stateDirectory: directory!, binary: binary!, configuration, token, fetch: fetcher, publication };
-  const first = await updateRules({ ...options, sampleTag: tag, selectedIds: ['ai-openai'] });
+  const first = await updateRules({ ...options, sampleTag: tag, selectedIds: ['openai'] });
   assert.equal(first.status, 'processed', 'Use a fresh issue-38 state directory');
   const original = first.results[0];
   assert.ok(original.status === 'processed');
-  const expanded = await updateRules({ ...options, sampleTag: tag, selectedIds: ['ai-openai', 'ai-anthropic'] });
-  assert.deepEqual(expanded.results.map(entry => [entry.id, entry.status]), [['ai-openai', 'skipped'], ['ai-anthropic', 'processed']]);
+  const expanded = await updateRules({ ...options, sampleTag: tag, selectedIds: ['openai', 'anthropic'] });
+  assert.deepEqual(expanded.results.map(entry => [entry.id, entry.status]), [['openai', 'skipped'], ['anthropic', 'processed']]);
   const anthropic = expanded.results[1];
   assert.ok(anthropic.status === 'processed');
   const before = await readUpdateState(directory!);
-  const failed = await rebuildRules({ ...options, binary: '/missing-issue-38-binary', selectedIds: ['ai-openai'], release: tag });
+  const failed = await rebuildRules({ ...options, binary: '/missing-issue-38-binary', selectedIds: ['openai'], release: tag });
   assert.equal(failed.status, 'failed');
   assert.deepEqual((await readUpdateState(directory!)).state.configuredProcessed, before.state.configuredProcessed);
   const requestStart = requests.length;
-  const rebuilt = await rebuildRules({ ...options, selectedIds: ['ai-openai'], release: tag });
+  const rebuilt = await rebuildRules({ ...options, selectedIds: ['openai'], release: tag });
   assert.equal(rebuilt.status, 'processed');
   const repeated = rebuilt.results[0];
   assert.ok(repeated.status === 'processed');
@@ -77,13 +77,13 @@ test('固定官方 Release 增选与单集重建保留历史候选，稳定入�
       const file = readback.find(item => item.url === artifact.url)!;
       assert.equal(file.sha256, artifact.sha256);
       assert.equal(file.byteLength, artifact.byteLength);
-      assert.equal(artifact.termCount, entry.id === 'ai-openai' ? 25 : 19);
+      assert.equal(artifact.termCount, entry.id === 'openai' ? 25 : 19);
     }
     evidence.push({ id: entry.id, candidate: entry.candidate, manifest, build, readback });
   }
   // This adapter fixes the official latest response to the sample; it does not
   // claim this historical Release is currently latest.
-  const skipped = await updateRules({ ...options, selectedIds: ['ai-openai', 'ai-anthropic'],
+  const skipped = await updateRules({ ...options, selectedIds: ['openai', 'anthropic'],
     fetch: async (url, init) => {
       assert.ok(String(url).endsWith('/latest'), 'skip must not fetch source assets');
       return fetch(`https://api.github.com/repos/v2fly/domain-list-community/releases/${first.releaseId}`, init);

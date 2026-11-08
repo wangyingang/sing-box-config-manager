@@ -15,7 +15,7 @@ test('真实原生候选仅激活SRS后，远端status核验当前版本与历�
   const directory = await mkdtemp(join(tmpdir(), 'remote-binary-status-'));
   try {
     const env = await configuredEnvironment(binary!, directory);
-    const first = await env.candidates(), second = await env.candidates(), id = 'ai-openai';
+    const first = await env.candidates(), second = await env.candidates(), id = 'openai';
     const subscription: any = env.subscription(id);
     delete subscription.projections.route.formats.source;
     delete subscription.projections['dns-query'].formats.source;

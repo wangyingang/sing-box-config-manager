@@ -64,24 +64,28 @@ pnpm --dir packages/rule-set-pipeline build:release --binary /absolute/path/to/s
 
 ### 配置驱动的多规则集构建
 
-多规则集构建使用版本化 YAML。样本见 [`samples/three-ai-rule-sets.yml`](samples/three-ai-rule-sets.yml)，其中逻辑 ID 分别选择上游完整的 `openai`、`anthropic` 和 `google-deepmind` 列表。`target` 只能是可信产物仓库的 `main` 或 `acceptance-*` 分支；每个 `stablePath` 必须是互不重叠的 `stable/` 相对路径，不能占用 `stable/activation.json`。本地构建只记录这些发布意图，不写入目标分支。
+CLI 的多集命令和规则维护 Actions 共用正式配置 [`config/rulesets.yml`](config/rulesets.yml)（`schemaVersion: 2`）。`sources` 声明可信仓库、Release 选择方式、输入格式和资产。每集引用来源并选择完整的上游列表；`usages` 声明 Route 与 DNS Query 共享 `domains.json`／`domains.srs`，DNS Response 不可用。示例单独见 [`samples/rulesets.example.yml`](samples/rulesets.example.yml)。
+
+三集逻辑 ID 和稳定目录分别为 `openai`、`anthropic` 和 `google-deepmind`。在隔离目标试用时，从空的 `acceptance-*` 分支初始化新状态，并把正式配置复制到分支专用文件，再修改 `target.branch`。旧三集 YAML 和已保存的旧三集记录不能用于初始化或恢复新配置。生产启用及现有客户端迁移需单独安排。
+
+`target` 只能是可信产物仓库的 `main` 或 `acceptance-*` 分支；每个 `stablePath` 必须是互不重叠的 `stable/` 相对路径，不能占用 `stable/activation.json`。本地构建只记录这些发布意图，不写入目标分支。
 
 ```sh
-pnpm --dir packages/rule-set-pipeline build:release --binary /absolute/path/to/sing-box-1.14.4 --release 20261104112839 --config samples/three-ai-rule-sets.yml --out /tmp/three-ai-rules
-pnpm --dir packages/rule-set-pipeline build:release --binary /absolute/path/to/sing-box-1.14.4 --release 20261104112839 --config samples/three-ai-rule-sets.yml --id ai-anthropic --out /tmp/anthropic-only
+pnpm --dir packages/rule-set-pipeline build:release --binary /absolute/path/to/sing-box-1.14.4 --release 20261104112839 --config config/rulesets.yml --out /tmp/three-ai-rules
+pnpm --dir packages/rule-set-pipeline build:release --binary /absolute/path/to/sing-box-1.14.4 --release 20261104112839 --config config/rulesets.yml --id anthropic --out /tmp/anthropic-only
 ```
 
 一次调用只下载并校验一份完整 YAML 和一份摘要文件，解析一次 YAML；随后按所选逻辑 ID 分别转换和原生验证。共同摘要或 YAML 文档错误使整批失败，且不创建输出目录。单个列表缺失、非法或原生验证失败时，其他列表仍可完成，CLI 返回非零。输出根目录的 `source.json` 和 `batch.json` 记录共同来源、规范化配置和逐集结果；每个逻辑 ID 子目录保存转换报告，成功时还保存规则文件及包含目标分支的构建记录，失败时保存 `failure.json`。`buildId` 包含规则定义、目标仓库与分支、实际列表、固定来源及工具身份；相同列表内容也不会混同两个逻辑 ID。
 
 ## 按逻辑 ID 显式激活
 
-管理者提供与候选一致的可信配置、一个逻辑 ID，以及由可信宿主装配的 Rule Subscription v2 JSON。订阅的 `systemRuleSetId` 必须匹配逻辑 ID；Route 与 DNS 请求复用相同文件，DNS 响应不可用，能力要求为空。稳定 URL 必须指向配置的目标分支及该集的 `stablePath/domains.srs`，可同时提供 `domains.json`。v2 订阅示例见 [`contracts/rule-subscription-v2.example.json`](contracts/rule-subscription-v2.example.json)，使用前将示例域名替换为可信产物仓库的实际地址。
+管理者提供与候选一致的可信配置和一个逻辑 ID。CLI 按配置生成 Rule Subscription v2；也可用 `--subscription` 显式传入该集的订阅 JSON。订阅的 `systemRuleSetId` 必须匹配逻辑 ID；Route 与 DNS 请求复用相同文件，DNS 响应不可用，能力要求为空。稳定 URL 必须指向配置的目标分支及该集的 `stablePath/domains.srs`，可同时提供 `domains.json`。v2 订阅示例见 [`contracts/rule-subscription-v2.example.json`](contracts/rule-subscription-v2.example.json)，使用前将示例域名替换为可信产物仓库的实际地址。
 
 ```sh
-pnpm --dir packages/rule-set-pipeline activate --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config samples/three-ai-rule-sets.yml --id ai-openai --subscription /absolute/path/to/openai-subscription-v2.json --candidate https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/FULL_COMMIT/candidates/CANDIDATE_ID/readback.json --expected-head FULL_OLD_HEAD
+pnpm --dir packages/rule-set-pipeline activate --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config config/rulesets.yml --id openai --candidate https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/FULL_COMMIT/candidates/CANDIDATE_ID/readback.json --expected-head FULL_OLD_HEAD
 ```
 
-隔离验收时同时使用目标为 `acceptance-*` 的配置、对应订阅和 `--branch`。配置化激活和回滚要求[显式初始化远端状态](#正常更新与候选发布)。`--expected-head` 使用 `status` 返回的 `stableHead`。一次成功切换只提交选中集的稳定规则文件及 `stablePath/activation.json`。该记录保存候选、来源、验证、订阅、历史激活引用和人工控制。其他集的字节、控制和历史保留。
+隔离验收时使用目标为 `acceptance-*` 的配置。显式传入的 `--branch` 和订阅 URL 必须与配置一致。配置化激活和回滚要求[显式初始化远端状态](#正常更新与候选发布)。`--expected-head` 使用 `status` 返回的 `stableHead`。一次成功切换只提交选中集的稳定规则文件及 `stablePath/activation.json`。该记录保存候选、来源、验证、订阅、历史激活引用和人工控制。其他集的字节、控制和历史保留。
 
 `activation.control` 保存 `revision`、`reason`、`pauseAutomaticActivation` 和 `pauseAutomaticRetry`。人工指定的原因是 `manual-activation`，暂停自动激活。人工回滚的原因是 `manual-rollback`，同时暂停自动重试和自动激活。每次成功的人工操作都会生成新修订，即使所选候选已经是当前版本。候选发布和重建不会解除固定。旧激活记录仍可查询，其中没有 `control` 时表示尚未记录人工固定。
 
@@ -117,10 +121,10 @@ pnpm --dir packages/rule-set-pipeline status
 配置驱动的多集候选发布传入同一份版本化 YAML；`--id` 可只处理指定逻辑 ID。首次发布先使用目标为 `acceptance-*` 的配置初始化并验收。`--state` 是可重建的本地缓存目录：
 
 ```sh
-pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config samples/three-ai-rule-sets.yml
-pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config samples/three-ai-rule-sets.yml --id ai-anthropic
-pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config samples/three-ai-rule-sets.yml --id ai-anthropic --release 20261104112839
-pnpm --dir packages/rule-set-pipeline status --config samples/three-ai-rule-sets.yml --binary /absolute/path/to/sing-box-1.14.4
+pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config config/rulesets.yml
+pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config config/rulesets.yml --id anthropic
+pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config config/rulesets.yml --id anthropic --release 20261104112839
+pnpm --dir packages/rule-set-pipeline status --config config/rulesets.yml --binary /absolute/path/to/sing-box-1.14.4
 ```
 
 一次批量调用共享一份已固定、校验的 YAML 和摘要，随后逐集构建、原生验证并发布。共同输入损坏停止整批；单集缺表、非法条目或回读失败保留兄弟集结果。`results` 分别报告 `processed`、`skipped`、`failed`，失败项携带候选进度和已知 commit；任一集失败时 CLI 退出码为 1。`update`／`rebuild` 只写候选和恢复记录，不修改 `stable/`。
@@ -202,12 +206,11 @@ node --import tsx src/cli.ts maintenance-resume --branch acceptance-example --bi
 
 ## 立即检查并激活
 
-`check-now` 使用版本化配置、目标分支已初始化的远端状态和可信宿主维护的 Rule Subscription v2。订阅 JSON 文件以逻辑 ID 为键，值是该集的[完整 v2 订阅对象](contracts/rule-subscription-v2.example.json)。其中的稳定 URL 必须指向配置的目标分支和对应的 `stablePath`。以下命令用于预先创建并初始化的 `acceptance-*` 目标：
+`check-now` 使用版本化配置和目标分支已初始化的远端状态。CLI 默认按配置的 `usages`、`stablePath` 和目标分支生成 Rule Subscription v2。若需显式提供订阅，可以用 `--subscription` 传入以逻辑 ID 为键的 JSON 映射；每个值是[完整 v2 订阅对象](contracts/rule-subscription-v2.example.json)，其用途和稳定 URL 必须符合配置。以下命令用于预先创建并初始化的 `acceptance-*` 目标：
 
 ```sh
 pnpm --dir packages/rule-set-pipeline check-now \
   --config /absolute/path/to/acceptance-rule-sets.yml \
-  --subscription /absolute/path/to/subscriptions-by-id.json \
   --binary /absolute/path/to/sing-box-1.14.4 \
   --state /absolute/path/to/rule-state
 ```
@@ -230,10 +233,9 @@ pnpm --dir packages/rule-set-pipeline check-now \
 ```sh
 pnpm --dir packages/rule-set-pipeline resume \
   --config /absolute/path/to/acceptance-rule-sets.yml \
-  --subscription /absolute/path/to/subscriptions.json \
   --state /absolute/path/to/state \
   --binary /absolute/path/to/sing-box \
-  --id ai-openai
+  --id openai
 ```
 
 - 首次检查直接读取最新官方 Release。暂停期间的中间 Release 不补跑。最新 Release 如果曾被回滚，仍可以在验证通过后采用。
@@ -257,7 +259,7 @@ pnpm --dir packages/rule-set-pipeline rebuild \
 # 配置驱动的重建必须同时指定配置和逻辑 ID；可重复 --id 选择多集。
 pnpm --dir packages/rule-set-pipeline rebuild \
   --state /absolute/path/to/rule-state \
-  --config samples/three-ai-rule-sets.yml --id ai-openai \
+  --config config/rulesets.yml --id openai \
   --release 20261104112839 \
   --binary /absolute/path/to/sing-box-1.14.4
 ```
@@ -322,9 +324,9 @@ pnpm --dir packages/rule-set-pipeline rollback \
   --binary /absolute/path/to/sing-box
 ```
 
-配置化回滚同时添加 `--config /absolute/path/to/rule-sets.yml --id ai-openai`，一次只回滚一集。历史记录的逻辑 ID、候选归属及 v2 订阅必须与所选集一致。来源列表可以与当前配置不同；历史构建按原定义复核，稳定路径与目标分支仍须匹配当前配置。该集恢复历史规则字节、追加回滚记录并暂停自动重试和自动激活。其他集的稳定文件、控制、当前版本及历史保持不变。
+配置化回滚同时添加 `--config /absolute/path/to/rule-sets.yml --id openai`，一次只回滚一集。历史记录的逻辑 ID、候选归属及 v2 订阅必须与所选集一致。来源列表可以与当前配置不同；历史构建按原定义复核，稳定路径与目标分支仍须匹配当前配置。CLI 默认使用配置生成订阅；显式传入的订阅须符合配置。该集恢复历史规则字节、追加回滚记录并暂停自动重试和自动激活。其他集的稳定文件、控制、当前版本及历史保持不变。
 
-隔离环境显式添加 `--branch acceptance-<name>`，契约入口须属于该分支。公开 API 为 `rollbackRules({ historicalActivationCommit, subscription, binary, expectedHead, transport?, configuration?, logicalId?, stateDirectory? })`。配置化回滚同时提供 `configuration` 与 `logicalId`；提供 `stateDirectory` 时保存该集本地回执。
+单列表回滚在隔离环境中需显式添加 `--branch acceptance-<name>`；配置化回滚从配置读取目标。订阅入口须属于该目标。公开 API 为 `rollbackRules({ historicalActivationCommit, subscription, binary, expectedHead, transport?, configuration?, logicalId?, stateDirectory? })`。配置化回滚同时提供 `configuration` 与 `logicalId`；提供 `stateDirectory` 时保存该集本地回执。
 
 回滚读取历史激活记录，核对当前完整订阅契约，重新执行正常激活的所有候选门禁，并比对历史稳定文件的实际字节及记录摘要。缺失、损坏、空内容或不兼容均在写入前拒绝。成功时只新增一次稳定入口提交，记录 `operation: rollback`、`historicalActivationCommit` 和 `historicalActivationId`；候选、Manifest、原验证记录及 `update-state.json` 均不改写。
 

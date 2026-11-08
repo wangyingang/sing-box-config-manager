@@ -101,7 +101,7 @@ test('控制记录不是普通文件或 blob 长度损坏时读取失败', async
 });
 
 test('仅允许恢复状态和候选路径，不得更新 stable 或通过路径穿越写入', async () => {
-  for (const path of ['stable/ai-openai/domains.json', 'pipeline/other.json', 'candidates/abc/../state.json',
+  for (const path of ['stable/openai/domains.json', 'pipeline/other.json', 'candidates/abc/../state.json',
     'candidates/abc/../../stable/domains.srs', 'candidates/abc/.']) {
     const remote = github();
     await assert.rejects(remote.repository.commit(oldHead, { [path]: Buffer.from('invalid') }, 'invalid path'), /Invalid publication path/);

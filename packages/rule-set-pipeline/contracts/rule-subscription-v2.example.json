@@ -1,17 +1,17 @@
 {
   "schemaVersion": 2,
-  "systemRuleSetId": "ai-openai",
+  "systemRuleSetId": "openai",
   "targetVersion": "1.14.4",
   "sourceFormatVersion": 4,
   "projections": {
     "route": {
       "formats": {
         "binary": {
-          "url": "https://rules.example.invalid/stable/ai-openai/domains.srs",
+          "url": "https://rules.example.invalid/stable/openai/domains.srs",
           "requiredCapabilities": []
         },
         "source": {
-          "url": "https://rules.example.invalid/stable/ai-openai/domains.json",
+          "url": "https://rules.example.invalid/stable/openai/domains.json",
           "requiredCapabilities": []
         }
       }
@@ -19,11 +19,11 @@
     "dns-query": {
       "formats": {
         "binary": {
-          "url": "https://rules.example.invalid/stable/ai-openai/domains.srs",
+          "url": "https://rules.example.invalid/stable/openai/domains.srs",
           "requiredCapabilities": []
         },
         "source": {
-          "url": "https://rules.example.invalid/stable/ai-openai/domains.json",
+          "url": "https://rules.example.invalid/stable/openai/domains.json",
           "requiredCapabilities": []
         }
       }

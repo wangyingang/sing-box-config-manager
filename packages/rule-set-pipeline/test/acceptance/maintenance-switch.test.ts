@@ -43,7 +43,7 @@ test('GitHub 隔离分支切换和 HTTPS 回读中断后从远端完成收尾', 
   const publication = githubPublication(request, target);
   const repository = publication.repository!;
   const activation = githubActivation(target, request);
-  const logicalId = 'ai-anthropic';
+  const logicalId = 'anthropic';
   const prefix = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${target}/stable/${logicalId}`;
   const formats = {
     binary: { url: `${prefix}/domains.srs`, requiredCapabilities: [] },
@@ -61,7 +61,7 @@ test('GitHub 隔离分支切换和 HTTPS 回读中断后从远端完成收尾', 
   });
   await api('git/refs', { ref: branchRef(target), sha: root });
   await initializeRemoteState(repository, target);
-  const configuration = (await readFile(new URL('../../samples/three-ai-rule-sets.yml', import.meta.url), 'utf8'))
+  const configuration = (await readFile(new URL('../../config/rulesets.yml', import.meta.url), 'utf8'))
     .replace('branch: main', `branch: ${target}`);
   const options = { binary, configuration, publication, activation, selectedIds: [logicalId],
     subscriptions: { [logicalId]: subscription }, stateDirectory: join(directory, 'before') };

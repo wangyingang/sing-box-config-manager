@@ -10,8 +10,8 @@ import { branchRef, type MaintenanceRefTransport } from '../../src/maintenance-r
 import { ActivationWriteError, type ActivationTransport } from '../../src/activation-transport.js';
 
 export async function configuredEnvironment(binary: string, directory: string, branch = 'acceptance-issue-39') {
-  const configuration = (await readFile(new URL('../../samples/three-ai-rule-sets.yml', import.meta.url), 'utf8')).replace('branch: main', `branch: ${branch}`);
-  const ids = ['ai-openai', 'ai-anthropic', 'ai-google-deepmind'];
+  const configuration = (await readFile(new URL('../../config/rulesets.yml', import.meta.url), 'utf8')).replace('branch: main', `branch: ${branch}`);
+  const ids = ['openai', 'anthropic', 'google-deepmind'];
   let sequence = 0, head = 'a'.repeat(40), mode = '', revision = 0, writes = 0;
   let journalHead = branch === 'main' ? 'b'.repeat(40) : head;
   const parents = new Map<string, string>();

@@ -1,25 +1,11 @@
+import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { sha256 } from '../src/release.js';
 import { buildConfiguredRelease, parseBuildConfiguration } from '../src/configured-build.js';
 
 const tag = '20261104112839';
-const configuration = `schemaVersion: 1
-source: v2fly/domain-list-community
-target:
-  repository: wangyingang/sing-box-rule-artifacts
-  branch: main
-ruleSets:
-  - id: ai-openai
-    list: openai
-    stablePath: stable/ai-openai
-  - id: ai-anthropic
-    list: anthropic
-    stablePath: stable/ai-anthropic
-  - id: ai-google-deepmind
-    list: google-deepmind
-    stablePath: stable/ai-google-deepmind
-`;
+const configuration = await readFile(new URL('../config/rulesets.yml', import.meta.url), 'utf8');
 const yaml = JSON.stringify({ lists: [
   { name: 'openai', length: 1, rules: ['domain:openai.com'] },
   { name: 'anthropic', length: 1, rules: ['domain:anthropic.com'] },
@@ -41,12 +27,17 @@ function upstream(input = yaml, checksum = sha256(input)) {
   return { fetcher, requests };
 }
 
-test('配置在写入前拒绝重复 ID、路径冲突和越界目标', () => {
+test('配置在写入前拒绝旧格式、无效来源、用途、身份和目标', () => {
+  assert.throws(() => parseBuildConfiguration('schemaVersion: 1\nsource: v2fly/domain-list-community\ntarget: {}\nruleSets: []'));
   for (const invalid of [
-    configuration.replace('id: ai-anthropic', 'id: ai-openai'),
-    configuration.replace('stable/ai-anthropic', 'stable/ai-openai'),
-    configuration.replace('stable/ai-anthropic', 'stable/../outside'),
-    configuration.replace('stable/ai-anthropic', 'stable/activation.json'),
+    configuration.replace('format: plain-yaml', 'format: unknown'),
+    configuration.replace('source: dlc', 'source: missing'),
+    configuration.replace('usages:', 'projections:'),
+    configuration.replace('dns-query: { artifact: domains }', 'dns-query: { unavailable: empty }'),
+    configuration.replace('id: anthropic', 'id: openai'),
+    configuration.replace('stable/anthropic', 'stable/openai'),
+    configuration.replace('stable/anthropic', 'stable/../outside'),
+    configuration.replace('stable/anthropic', 'stable/activation.json'),
     configuration.replace('branch: main', 'branch: other'),
     configuration.replace('wangyingang/sing-box-rule-artifacts', 'other/repository'),
   ]) assert.throws(() => parseBuildConfiguration(invalid));
@@ -56,7 +47,7 @@ test('一份固定来源构建三集，单选只构建目标集；同内容定�
   const remote = upstream();
   const options = { configuration, release: { tag, fetch: remote.fetcher }, binary: process.env.SING_BOX_TEST_BINARY! };
   const built = await buildConfiguredRelease(options);
-  assert.deepEqual(built.results.map(result => result.id), ['ai-openai', 'ai-anthropic', 'ai-google-deepmind']);
+  assert.deepEqual(built.results.map(result => result.id), ['openai', 'anthropic', 'google-deepmind']);
   assert.equal(remote.requests.filter(path => path.endsWith('/assets/11')).length, 1);
   assert.equal(remote.requests.filter(path => path.endsWith('/assets/12')).length, 1);
   for (const result of built.results) {
@@ -68,8 +59,15 @@ test('一份固定来源构建三集，单选只构建目标集；同内容定�
     assert.deepEqual(result.native.artifacts.map(artifact => artifact.file), ['domains.json', 'domains.srs']);
     assert.ok(result.native.artifacts.every(artifact => artifact.requiredCapabilities.length === 0));
   }
-  const selected = await buildConfiguredRelease({ ...options, selectedIds: ['ai-anthropic'] });
-  assert.deepEqual(selected.results.map(result => result.id), ['ai-anthropic']);
+  const aliases = parseBuildConfiguration(configuration);
+  aliases.sources['dlc-alias'] = aliases.sources.dlc;
+  aliases.ruleSets[1].source = 'dlc-alias';
+  const shared = upstream();
+  const withAlias = await buildConfiguredRelease({ ...options, configuration: JSON.stringify(aliases), release: { tag, fetch: shared.fetcher } });
+  assert.ok(withAlias.results.every(result => result.status === 'built-validated'));
+  assert.equal(shared.requests.filter(path => path.endsWith('/assets/11')).length, 1);
+  const selected = await buildConfiguredRelease({ ...options, selectedIds: ['anthropic'] });
+  assert.deepEqual(selected.results.map(result => result.id), ['anthropic']);
   const repeated = await buildConfiguredRelease(options);
   const ids = (results: typeof built.results) => results.map(result => result.status === 'built-validated' ? result.buildId : assert.fail(result.error));
   assert.deepEqual(ids(built.results), ids(repeated.results));

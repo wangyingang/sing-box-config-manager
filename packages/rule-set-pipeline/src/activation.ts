@@ -1,14 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { saveActivationReceipt } from './activation-receipt.js';
-import { parseBuildConfiguration, type RuleDefinition } from './configured-build.js';
+import { CONFIGURED_BUILD_RECORD } from './configured-build.js';
+import { configuredProjections, parseBuildConfiguration, parseRuleDefinition, type RuleDefinition } from './configuration.js';
 import { Ajv } from 'ajv';
 import manifestSchema from '../contracts/artifact-manifest.schema.json' with { type: 'json' };
 import subscriptionSchema from '../contracts/rule-subscription.schema.json' with { type: 'json' };
 import subscriptionV2Schema from '../contracts/rule-subscription-v2.schema.json' with { type: 'json' };
 import { buildNative } from './native.js';
 import { decodedTerms, USAGES } from './projection.js';
-import { sha256 } from './release.js';
+import { sha256, validReleaseAssetIdentities, V2FLY_RELEASE_INPUT } from './release.js';
 import { ARTIFACT_REPOSITORY, immutableUrl } from './publication.js';
 import { retainedCandidateDownload } from './publication-repository.js';
 import { activationDigest, effectiveControl, manualControl, openManualActivation, registerManualActivation, type ActivationWriteReservation, type ObservedActivation } from './manual-activation.js';
@@ -72,13 +73,10 @@ export async function verifyActivationCandidate(options: Pick<ActivationOptions,
     requireThat(typeof source.description === 'string' && source.description.length > 0 && typeof source.revision === 'string' && source.revision.length > 0,
       'Synthetic candidate must identify its controlled origin');
   } else {
-    requireThat(source.repository === 'v2fly/domain-list-community' && Number.isSafeInteger(source.releaseId) && source.releaseId > 0
+    requireThat(source.repository === V2FLY_RELEASE_INPUT.repository && Number.isSafeInteger(source.releaseId) && source.releaseId > 0
       && /^[a-f0-9]{40}$/.test(source.commit) && /^[0-9]{14}$/.test(source.tag)
       && /^[a-f0-9]{64}$/.test(source.inputSha256) && Number.isSafeInteger(source.inputBytes) && source.inputBytes > 0 && /^[a-f0-9]{64}$/.test(source.checksumSha256), 'Incomplete official source');
-    for (const [key, name] of [['yaml', 'dlc.dat_plain.yml'], ['checksum', 'dlc.dat_plain.yml.sha256sum']] as const) {
-      requireThat(source[key]?.name === name && Number.isSafeInteger(source[key].id) && source[key].id > 0
-        && source[key].url === `https://github.com/v2fly/domain-list-community/releases/download/${source.tag}/${name}`, 'Incomplete source asset identity');
-    }
+    requireThat(validReleaseAssetIdentities(source), 'Incomplete source asset identity');
   }
   requireThat(equal(build.source, source) && build.status === 'built-validated' && build.validation?.status === 'passed'
     && build.validation.semanticRoundTrip === true && Array.isArray(build.validation.steps) && build.validation.steps.length >= 4
@@ -90,20 +88,19 @@ export async function verifyActivationCandidate(options: Pick<ActivationOptions,
   if (build.contracts !== undefined) {
     requireThat(build.contracts !== null && typeof build.contracts === 'object' && !Array.isArray(build.contracts)
       && Object.keys(build.contracts).length === 3 && build.contracts.artifactManifest === 1
-      && build.contracts.sourceFormat === 4 && build.contracts.buildRecord === 1, 'Unsupported build contracts');
+      && build.contracts.sourceFormat === 4 && build.contracts.buildRecord === (definition ? CONFIGURED_BUILD_RECORD : 1), 'Unsupported build contracts');
   }
   if (definition) {
     // A rollback retains its original source selection. Validate that definition
     // and build identity independently, while keeping today's delivery identity.
-    const expectedDefinition = operation === 'rollback' ? parseBuildConfiguration(JSON.stringify({ schemaVersion: 1,
-      source: 'v2fly/domain-list-community', target: build.target, ruleSets: [build.definition] })).ruleSets[0] : definition;
+    const expectedDefinition = operation === 'rollback' ? parseRuleDefinition(build.definition) : definition;
     requireThat(equal(build.definition, expectedDefinition) && expectedDefinition.id === definition.id
       && expectedDefinition.stablePath === definition.stablePath && build.id === definition.id && build.candidateId === location.id
       && build.target?.repository === ARTIFACT_REPOSITORY && build.target?.branch === transport.branch
       && build.contracts !== undefined, 'Configured build identity or target mismatch');
   }
   const configuredIdentity = { definition: build.definition, target: build.target, source, tools: build.tools, nativeBuildId: build.nativeBuildId,
-    contracts: { sourceFormat: 4, buildRecord: 1 } };
+    contracts: { sourceFormat: 4, buildRecord: CONFIGURED_BUILD_RECORD } };
   requireThat(build.buildId === evidence.buildId && build.buildId === sha256(JSON.stringify(
     definition ? configuredIdentity : build.contracts === undefined ? identity : { ...identity, contracts: build.contracts })), 'Build identity mismatch');
   requireThat(['inputCount', 'convertedCount', 'invalidCount', 'unsupportedCount', 'duplicateCount', 'outputTermCount']
@@ -177,14 +174,20 @@ export function activationSubscription(input: unknown, branch: string, definitio
   const subscription = input as any;
   requireThat(subscription.systemRuleSetId === (definition?.id ?? 'v2fly:domain-list-community:category-ai-!cn'), 'System rule set identity mismatch');
   if (definition) {
-    requireThat(subscription.projections['dns-response'].unavailable === 'empty', 'Subscription usage availability mismatch');
-    const expectedFormats = subscription.projections.route.formats;
-    requireThat(expectedFormats && equal(expectedFormats, subscription.projections['dns-query'].formats), 'Subscription file reuse mismatch');
-    for (const [format, endpoint] of Object.entries(expectedFormats) as [string, any][]) {
-      const file = format === 'binary' ? 'domains.srs' : 'domains.json';
-      requireThat(endpoint.url === `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${branch}/${definition.stablePath}/${file}`
-        && equal(endpoint.requiredCapabilities, []), 'Subscription stable path or capability mismatch');
+    const expected = configuredProjections(definition, branch);
+    for (const usage of USAGES) {
+      const projection = subscription.projections[usage], declared = expected[usage];
+      if ('unavailable' in declared) {
+        requireThat(equal(projection, declared), 'Subscription usage availability mismatch');
+      } else {
+        requireThat(projection.formats, 'Subscription usage availability mismatch');
+        for (const format of ['binary', 'source'] as const) {
+          if (projection.formats[format] === undefined) continue;
+          requireThat(equal(projection.formats[format], declared.formats[format]), 'Subscription stable path or capability mismatch');
+        }
+      }
     }
+    requireThat(equal(subscription.projections.route.formats, subscription.projections['dns-query'].formats), 'Subscription file reuse mismatch');
   }
   return subscription;
 }
