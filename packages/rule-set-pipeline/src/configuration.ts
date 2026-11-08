@@ -3,13 +3,15 @@ import { isDeepStrictEqual } from 'node:util';
 import { isMap, parseDocument, visit } from 'yaml';
 import { USAGES, type Usage } from './projection.js';
 import { ARTIFACT_REPOSITORY } from './publication.js';
+import { CHINA_IP_INPUT, type CommitInput } from './github-commit.js';
 import { V2FLY_RELEASE_INPUT, type ReleaseInput } from './release.js';
 
-type ConfiguredUsage = { artifact: 'domains' } | { unavailable: 'empty' };
+type SourceInput = ReleaseInput | CommitInput;
+type ConfiguredUsage = { artifact: 'domains' | 'route' } | { unavailable: 'empty' };
 export interface RuleDefinition { id: string; source: string; list: string; stablePath: string; usages: Record<Usage, ConfiguredUsage> }
 export interface BuildConfiguration {
   schemaVersion: 2;
-  sources: Record<string, ReleaseInput>;
+  sources: Record<string, SourceInput>;
   target: { repository: typeof ARTIFACT_REPOSITORY; branch: string };
   ruleSets: RuleDefinition[];
 }
@@ -31,27 +33,32 @@ function exact(value: unknown, fields: string[], label: string) {
   return record;
 }
 
-export function parseRuleDefinition(input: unknown): RuleDefinition {
+export function parseRuleDefinition(input: unknown, format: SourceInput['input']['format'] = 'plain-yaml'): RuleDefinition {
   const { id, source, list, stablePath: path, usages } = exact(input, ['id', 'source', 'list', 'stablePath', 'usages'], 'rule definition');
   if (typeof id !== 'string' || !logicalId.test(id)) throw new Error(`Invalid logical ID: ${String(id)}`);
   if (typeof source !== 'string' || !logicalId.test(source)) throw new Error(`Invalid source ID: ${String(source)}`);
-  if (typeof list !== 'string' || !/^[a-z0-9][a-z0-9!._-]*$/.test(list)) throw new Error(`Invalid plain YAML list: ${String(list)}`);
+  if (typeof list !== 'string' || (format === 'cidr-text' ? list !== 'all' : !/^[a-z0-9][a-z0-9!._-]*$/.test(list))) {
+    throw new Error(`Invalid ${format} list: ${String(list)}`);
+  }
   if (typeof path !== 'string' || !stablePath.test(path) || path === 'stable/activation.json' || path.startsWith('stable/activation.json/')) {
     throw new Error(`Invalid stable path: ${String(path)}`);
   }
   const declared = exact(usages, [...USAGES], 'usages');
   function usage(key: Usage): ConfiguredUsage {
-    if (key === 'dns-response') {
-      if (exact(declared[key], ['unavailable'], key).unavailable !== 'empty') throw new Error(`Invalid plain YAML usage: ${key}`);
+    const isCidr = format === 'cidr-text';
+    if (key === (isCidr ? 'dns-query' : 'dns-response')) {
+      if (exact(declared[key], ['unavailable'], key).unavailable !== 'empty') throw new Error(`Invalid ${format} usage: ${key}`);
       return { unavailable: 'empty' };
     }
-    if (exact(declared[key], ['artifact'], key).artifact !== 'domains') throw new Error(`Invalid plain YAML usage: ${key}`);
-    return { artifact: 'domains' };
+    const artifact = isCidr ? 'route' : 'domains';
+    if (exact(declared[key], ['artifact'], key).artifact !== artifact) throw new Error(`Invalid ${format} usage: ${key}`);
+    return { artifact };
   }
   return { id, source, list, stablePath: path, usages: { route: usage('route'), 'dns-query': usage('dns-query'), 'dns-response': usage('dns-response') } };
 }
 
-function parseSource(input: unknown): ReleaseInput {
+function parseSource(input: unknown): SourceInput {
+  if (isDeepStrictEqual(input, CHINA_IP_INPUT)) return structuredClone(CHINA_IP_INPUT);
   const source = exact(input, ['repository', 'version', 'input'], 'source');
   const file = exact(source.input, ['format', 'asset', 'checksum'], 'source input');
   const trusted = V2FLY_RELEASE_INPUT;
@@ -83,9 +90,10 @@ export function parseBuildConfiguration(input: string): BuildConfiguration {
   if (!Array.isArray(raw.ruleSets) || !raw.ruleSets.length) throw new Error('ruleSets must be a nonempty sequence');
   const ids = new Set<string>(), paths = new Set<string>();
   const ruleSets = raw.ruleSets.map(entry => {
-    const rule = parseRuleDefinition(entry);
+    const { source } = mapping(entry, 'rule definition');
+    if (typeof source !== 'string' || !Object.hasOwn(sources, source)) throw new Error(`Unknown source: ${String(source)}`);
+    const rule = parseRuleDefinition(entry, sources[source].input.format);
     if (ids.has(rule.id)) throw new Error(`Duplicate logical ID: ${rule.id}`);
-    if (!Object.hasOwn(sources, rule.source)) throw new Error(`Unknown source: ${rule.source}`);
     const path = rule.stablePath;
     if ([...paths].some(other => other === path || other.startsWith(`${path}/`) || path.startsWith(`${other}/`))) {
       throw new Error(`Conflicting stable path: ${path}`);
@@ -96,13 +104,19 @@ export function parseBuildConfiguration(input: string): BuildConfiguration {
   return { schemaVersion: 2, sources, target: { repository: target.repository, branch: target.branch }, ruleSets };
 }
 
-export function configuredReleaseInput(configuration: BuildConfiguration, definitions: readonly RuleDefinition[]) {
+export function configuredInput(configuration: BuildConfiguration, definitions: readonly RuleDefinition[]) {
   const first = definitions[0];
   if (!first) throw new Error('Select at least one rule set');
   const source = configuration.sources[first.source];
   if (definitions.some(rule => !isDeepStrictEqual(source, configuration.sources[rule.source]))) {
-    throw new Error('Select rule sets from one Release source');
+    throw new Error('Select rule sets from one source');
   }
+  return source;
+}
+
+export function configuredReleaseInput(configuration: BuildConfiguration, definitions: readonly RuleDefinition[]): ReleaseInput {
+  const source = configuredInput(configuration, definitions);
+  if (source.version !== 'latest-release') throw new Error('Select rule sets from one Release source');
   return source;
 }
 

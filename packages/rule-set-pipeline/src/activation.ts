@@ -156,6 +156,9 @@ function activationContext(options: Pick<ActivationOptions, 'configuration' | 'l
   const configuration = configured ? parseBuildConfiguration(options.configuration ?? '') : undefined;
   const definition = configuration?.ruleSets.find(rule => rule.id === options.logicalId);
   if (configured) requireThat(definition && configuration?.target.branch === transport.branch, 'Unknown logical ID or activation target mismatch');
+  if (definition && configuration?.sources[definition.source].version === 'git-branch') {
+    throw new Error('Git commit sources are supported only by local build');
+  }
   return { configured, definition, recordPath: definition ? `${definition.stablePath}/activation.json` : RECORD_PATH };
 }
 

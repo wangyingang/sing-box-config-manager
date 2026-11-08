@@ -15,7 +15,7 @@ import { readRemoteStatus } from './remote-status.js';
 import { sha256 } from './release.js';
 import { buildRelease, buildNative, decodedTerms, NativeBuildError, type SourceRecord } from './index.js';
 import { checkRules, resumeRules } from './check-rules.js';
-import { buildConfiguredRelease } from './configured-build.js';
+import { buildConfiguredCommit, buildConfiguredRelease } from './configured-build.js';
 import { configuredSubscriptions, parseBuildConfiguration } from './configuration.js';
 
 async function sourceToken() {
@@ -27,13 +27,16 @@ async function sourceToken() {
 async function main(): Promise<number> {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
-    options: { state: { type: 'string' }, release: { type: 'string' }, out: { type: 'string' }, config: { type: 'string' }, id: { type: 'string', multiple: true }, 'expected-source': { type: 'string' }, binary: { type: 'string' }, candidate: { type: 'string' }, activation: { type: 'string' }, subscription: { type: 'string' }, 'expected-head': { type: 'string' }, branch: { type: 'string' },
+    options: { state: { type: 'string' }, release: { type: 'string' }, commit: { type: 'string' }, out: { type: 'string' }, config: { type: 'string' }, id: { type: 'string', multiple: true }, 'expected-source': { type: 'string' }, binary: { type: 'string' }, candidate: { type: 'string' }, activation: { type: 'string' }, subscription: { type: 'string' }, 'expected-head': { type: 'string' }, branch: { type: 'string' },
       'period-days': { type: 'string' }, 'start-at': { type: 'string' }, manual: { type: 'boolean' },
       'maintenance-id': { type: 'string' }, help: { type: 'boolean' } },
   });
   if (values.help) {
-    console.log('Usage: build --release <fixed-tag> --out <new-directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...]] [--expected-source <source.json>] | update --state <directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...] [--release <pinned-tag>]] | check-now --state <directory> --binary <absolute-1.14.4-path> --config <versioned-yaml> [--subscription <v2-contract-map.json>] [--id <logical-id> ...] | resume --state <directory> --binary <absolute-1.14.4-path> --config <versioned-yaml> [--subscription <v2-contract-map.json>] --id <logical-id> | initialize/status [--config <yaml> | --branch <target>] | maintenance-preview/maintenance-enter/maintenance-prepare/maintenance-switch/maintenance-resume/maintenance-abort | rebuild/activate/rollback (see package README)');
+    console.log('Usage: build --release <fixed-tag> --out <new-directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...]] [--expected-source <source.json>] | build --config <git-source-yaml> [--id <logical-id> ...] [--commit <full-sha>] --out <new-directory> --binary <absolute-1.14.4-path> | update --state <directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...] [--release <pinned-tag>]] | check-now --state <directory> --binary <absolute-1.14.4-path> --config <versioned-yaml> [--subscription <v2-contract-map.json>] [--id <logical-id> ...] | resume --state <directory> --binary <absolute-1.14.4-path> --config <versioned-yaml> [--subscription <v2-contract-map.json>] --id <logical-id> | initialize/status [--config <yaml> | --branch <target>] | maintenance-preview/maintenance-enter/maintenance-prepare/maintenance-switch/maintenance-resume/maintenance-abort | rebuild/activate/rollback (see package README)');
     return 0;
+  }
+  if (values.commit !== undefined && (positionals.length !== 1 || positionals[0] !== 'build' || !values.config || values.release !== undefined)) {
+    throw new Error('--commit requires build with --config and is incompatible with --release');
   }
   const maintenanceAction = positionals.length === 1 ? /^maintenance-(preview|enter|prepare|switch|resume|abort)$/.exec(positionals[0])?.[1] : undefined;
   if (maintenanceAction) {
@@ -108,7 +111,11 @@ async function main(): Promise<number> {
   if (positionals.length === 1 && ['initialize', 'status'].includes(positionals[0])) {
     if (values.release || values.out || values['expected-source'] || values.activation || values.candidate || values.subscription
       || values['expected-head'] || values.id || (positionals[0] === 'initialize' && values.binary)) throw new Error('Invalid remote state options');
-    const target = values.config ? parseBuildConfiguration(await readFile(values.config, 'utf8')).target.branch : values.branch ?? 'main';
+    const configuration = values.config ? parseBuildConfiguration(await readFile(values.config, 'utf8')) : undefined;
+    if (positionals[0] === 'initialize' && configuration?.ruleSets.some(rule => configuration.sources[rule.source].version === 'git-branch')) {
+      throw new Error('Git commit sources are supported only by local build');
+    }
+    const target = configuration?.target.branch ?? values.branch ?? 'main';
     if (values.config && values.branch && target !== values.branch) throw new Error('Configuration and branch disagree');
     const publication = githubPublication(undefined, target === 'main' ? 'candidates' : target);
     const result = positionals[0] === 'initialize'
@@ -139,8 +146,12 @@ async function main(): Promise<number> {
     }
     return 0;
   }
-  if (positionals.length !== 1 || positionals[0] !== 'build' || !values.release || !values.out) {
-    throw new Error('必须使用 build --release <fixed-tag> --out <new-directory>');
+  if (positionals.length !== 1 || positionals[0] !== 'build' || !values.out ||
+      (values.release === undefined ? !values.config : !values.release)) {
+    throw new Error('build requires --out and either --release <fixed-tag> or --config <git-source-yaml>');
+  }
+  if (values['expected-source'] && !values.release) {
+    throw new Error('--expected-source requires --release');
   }
   const expectedSource = values['expected-source']
     ? JSON.parse(await readFile(values['expected-source'], 'utf8')) as SourceRecord : undefined;
@@ -150,9 +161,10 @@ async function main(): Promise<number> {
   const out = resolve(values.out);
   if (values.id && !values.config) throw new Error('--id requires --config');
   if (values.config) {
-    const configuration = await readFile(values.config, 'utf8');
-    const built = await buildConfiguredRelease({ configuration, selectedIds: values.id,
-      release: { tag: values.release, expectedSource, token: process.env.GITHUB_TOKEN }, binary: values.binary ?? '' });
+    const options = { configuration: await readFile(values.config, 'utf8'), selectedIds: values.id, binary: values.binary ?? '' };
+    const built = values.release
+      ? await buildConfiguredRelease({ ...options, release: { tag: values.release, expectedSource, token: process.env.GITHUB_TOKEN } })
+      : await buildConfiguredCommit({ ...options, github: { commit: values.commit, token: await sourceToken() } });
     await mkdir(out);
     const writeJson = (path: string, value: unknown) => writeFile(path, JSON.stringify(value, null, 2) + '\n', { flag: 'wx' });
     await writeJson(join(out, 'source.json'), built.source);
@@ -181,7 +193,7 @@ async function main(): Promise<number> {
   // Exclusive directory creation prevents overwriting a previous build, including
   // when a later attempt fails. The parent directory must already exist.
   await mkdir(out);
-  const result = await buildRelease({ tag: values.release, expectedSource, token: process.env.GITHUB_TOKEN });
+  const result = await buildRelease({ tag: values.release!, expectedSource, token: process.env.GITHUB_TOKEN });
   const writeJson = (file: string, value: unknown) => writeFile(join(out, file), JSON.stringify(value, null, 2) + '\n', { flag: 'wx' });
   await writeJson('conversion-report.json', result.report);
   if (result.source) await writeJson('source.json', result.source);

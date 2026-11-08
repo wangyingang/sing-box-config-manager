@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import test from 'node:test';
-import { buildNative, convertRules, readTargetList, NativeBuildError, type BuildTerm, type NativeBuild } from '../../src/index.js';
+import { buildConfiguredCommit, buildNative, convertRules, readTargetList, NativeBuildError, type BuildTerm, type NativeBuild } from '../../src/index.js';
 import { sha256 } from '../../src/release.js';
 
 const exec = promisify(execFile);
@@ -79,6 +79,49 @@ test('fixed official sample independently builds identical JSON/SRS and actual b
   console.log(JSON.stringify({ sample: '20261102130044', buildId: first.buildId, tool: first.tool,
     artifacts: first.artifacts.map(({ content: _content, ...metadata }) => metadata), usages: first.usages,
     validation: first.validation }));
+});
+
+test('固定 china46.txt 构建可重复的双栈规则，Route 与 DNS Response 共用文件', async () => {
+  const configuration = await readFile(new URL('../../config/china-ip.yml', import.meta.url), 'utf8');
+  const commit = 'a'.repeat(40);
+  const branchUrl = 'https://api.github.com/repos/gaoyifan/china-operator-ip/branches/ip-lists';
+  const rawUrl = `https://raw.githubusercontent.com/gaoyifan/china-operator-ip/${commit}/china46.txt`;
+  const newHead = 'b'.repeat(40);
+  const compareUrl = `https://api.github.com/repos/gaoyifan/china-operator-ip/compare/${commit}...${newHead}?per_page=1`;
+  const bytes = Buffer.from('\uFEFF  # dual stack\r\n\r\n 192.0.2.7/24 \t\r\n2001:0DB8::1/32\n192.0.2.0/24\n::203.0.113.7/128\n');
+  const requests: string[] = [];
+  const fetcher: typeof fetch = async url => {
+    requests.push(String(url));
+    if (url === branchUrl) return Response.json({ name: 'ip-lists', commit: { sha: requests.length === 1 ? commit : newHead } });
+    if (url === compareUrl) return Response.json({ merge_base_commit: { sha: commit } });
+    if (url === rawUrl) return new Response(new Uint8Array(bytes));
+    throw new Error(`Unexpected source request: ${String(url)}`);
+  };
+  const options = { configuration, binary, selectedIds: ['china-ip'] };
+  const first = await buildConfiguredCommit({ ...options, github: { fetch: fetcher } });
+  const second = await buildConfiguredCommit({ ...options, github: { fetch: fetcher, commit } });
+  assert.deepEqual(requests, [branchUrl, rawUrl, branchUrl, compareUrl, rawUrl]);
+  assert.deepEqual(first.source, {
+    kind: 'github-commit', repository: 'gaoyifan/china-operator-ip', branch: 'ip-lists', commit,
+    file: { path: 'china46.txt', url: rawUrl }, inputSha256: sha256(bytes), inputBytes: bytes.length,
+  });
+  assert.deepEqual(second.source, first.source);
+  const [a] = first.results, [b] = second.results;
+  assert.equal(a.status, 'built-validated', JSON.stringify(a.report.diagnostics));
+  assert.equal(b.status, 'built-validated', JSON.stringify(b.report.diagnostics));
+  assert.equal(a.buildId, b.buildId);
+  assert.deepEqual(a.native.artifacts, b.native.artifacts);
+  assert.deepEqual(a.report.usageCounts, { route: 3, 'dns-query': 0, 'dns-response': 3 });
+  assert.equal(a.report.duplicateCount, 1);
+  assert.deepEqual(a.native.usages.route, { artifactFiles: ['route.json', 'route.srs'] });
+  assert.deepEqual(a.native.usages['dns-response'], a.native.usages.route);
+  assert.deepEqual(a.native.usages['dns-query'], { status: 'unavailable', reason: 'empty' });
+  assert.equal(a.native.validation.semanticRoundTrip, true);
+  const json = a.native.artifacts.find(artifact => artifact.file === 'route.json')!;
+  assert.deepEqual(JSON.parse(json.content.toString()), { version: 4, rules: [{ ip_cidr: ['192.0.2.0/24', '2001:db8::/32', '::cb00:7107/128'] }] });
+  await matches(a.native, [['route', '192.0.2.1', true], ['route', '192.0.3.1', false],
+    ['dns-response', '2001:db8::1', true], ['dns-response', '2001:db9::1', false],
+    ['route', '::cb00:7107', true], ['route', '203.0.113.7', false]]);
 });
 
 test('pure IP and mixed synthetic IR use only applicable predicates and deduplicate physical files', async () => {

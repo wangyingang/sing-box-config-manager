@@ -275,6 +275,16 @@ for (const operation of ['initialize', 'status']) {
   });
 }
 
+test('CLI initialize 拒绝使用仅供本地构建的 Git 来源配置', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'rule-remote-local-config-'));
+  try {
+    const fixture = await remoteStateCli(directory);
+    await assert.rejects(fixture.run('initialize', '--config', 'config/china-ip.yml'), (error: { code?: number; stderr?: string }) =>
+      error.code === 1 && /only by local build/.test(error.stderr ?? ''));
+    await assert.rejects(stat(fixture.calls), { code: 'ENOENT' });
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
 test('CLI status 显式 binary 交给远端验证入口', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'rule-remote-native-cli-'));
   try {
