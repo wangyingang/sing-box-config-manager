@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { runRuleWorkflow, type WorkflowOptions, type WorkflowOperations } from '../src/rule-workflow.js';
+import { workflowRules, runRuleWorkflow, type WorkflowOptions, type WorkflowOperations } from '../src/rule-workflow.js';
 
 function run(options: Partial<WorkflowOptions>, operations: Partial<WorkflowOperations> = {}) {
   const reports: Record<string, unknown> = {};
@@ -14,6 +14,23 @@ function run(options: Partial<WorkflowOptions>, operations: Partial<WorkflowOper
   return { result, reports };
 }
 
+test('正式配置为三集生成新稳定 URL，并按用途复用规则文件', () => {
+  const { subscriptions } = workflowRules('acceptance-issue-67');
+  assert.deepEqual(Object.keys(subscriptions), ['openai', 'anthropic', 'google-deepmind']);
+  for (const [id, value] of Object.entries(subscriptions)) {
+    assert.equal(value.systemRuleSetId, id);
+    const route = value.projections.route;
+    assert.ok('formats' in route);
+    const prefix = `https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-67/stable/${id}`;
+    assert.deepEqual(route.formats, {
+      binary: { url: `${prefix}/domains.srs`, requiredCapabilities: [] },
+      source: { url: `${prefix}/domains.json`, requiredCapabilities: [] },
+    });
+    assert.deepEqual(value.projections['dns-query'], route);
+    assert.deepEqual(value.projections['dns-response'], { unavailable: 'empty' });
+  }
+});
+
 test('daily and manual operations keep production writes disabled by default', async () => {
   for (const operation of ['daily', 'check', 'cleanup'] as const) {
     const { result, reports } = run({ operation });
@@ -24,9 +41,9 @@ test('daily and manual operations keep production writes disabled by default', a
 
 test('daily and manual check publish the same per-set result and report pending verification as failure', async () => {
   const update = { exitCode: 1, results: [
-    { id: 'ai-openai', status: 'paused', control: { reason: 'manual-rollback' } },
-    { id: 'ai-anthropic', status: 'activated', current: { id: 'new-version' } },
-    { id: 'ai-google-deepmind', status: 'verification-pending', error: 'Readback pending' },
+    { id: 'openai', status: 'paused', control: { reason: 'manual-rollback' } },
+    { id: 'anthropic', status: 'activated', current: { id: 'new-version' } },
+    { id: 'google-deepmind', status: 'verification-pending', error: 'Readback pending' },
   ] };
   for (const operation of ['daily', 'check'] as const) {
     const { result, reports } = run({ operation, target: 'acceptance-example' }, {

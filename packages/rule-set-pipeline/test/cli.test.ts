@@ -34,7 +34,8 @@ test('CLI 在创建输出目录前拒绝不可信的多集配置', async () => {
   const temporary = await mkdtemp(join(tmpdir(), 'rule-config-cli-'));
   try {
     const config = join(temporary, 'bad.yml'), out = join(temporary, 'out');
-    await writeFile(config, `schemaVersion: 1\nsource: v2fly/domain-list-community\ntarget:\n  repository: other/repository\n  branch: main\nruleSets:\n  - id: ai-openai\n    list: openai\n    stablePath: stable/ai-openai\n`);
+    const official = await readFile(new URL('../config/rulesets.yml', import.meta.url), 'utf8');
+    await writeFile(config, official.replace('wangyingang/sing-box-rule-artifacts', 'other/repository'));
     await assert.rejects(exec(process.execPath, ['--import', 'tsx', 'src/cli.ts', 'build', '--release', '20261104112839',
       '--config', config, '--out', out, '--binary', '/unused']), (error: { code?: number; stderr?: string }) =>
       error.code === 1 && !!error.stderr?.includes('trusted publication target'));
@@ -58,12 +59,12 @@ test('CLI 批次与逐集记录保留已校验目标分支', { skip: !process.en
   if (path.endsWith('/assets/12')) return new Response(${JSON.stringify(checksum + '  dlc.dat_plain.yml\n')});
   throw new Error('unexpected source request ' + path);
 };`);
-    const sample = await readFile(new URL('../samples/three-ai-rule-sets.yml', import.meta.url), 'utf8');
+    const sample = await readFile(new URL('../config/rulesets.yml', import.meta.url), 'utf8');
     await writeFile(config, sample.replace('branch: main', 'branch: acceptance-issue-36'));
     await exec(process.execPath, ['--import', 'tsx', '--import', preload, 'src/cli.ts', 'build', '--release', tag,
-      '--config', config, '--id', 'ai-anthropic', '--out', out, '--binary', process.env.SING_BOX_TEST_BINARY!]);
+      '--config', config, '--id', 'anthropic', '--out', out, '--binary', process.env.SING_BOX_TEST_BINARY!]);
     const batch = JSON.parse(await readFile(join(out, 'batch.json'), 'utf8'));
-    const record = JSON.parse(await readFile(join(out, 'ai-anthropic', 'build.json'), 'utf8'));
+    const record = JSON.parse(await readFile(join(out, 'anthropic', 'build.json'), 'utf8'));
     assert.deepEqual(batch.configuration.target, { repository: 'wangyingang/sing-box-rule-artifacts', branch: 'acceptance-issue-36' });
     assert.deepEqual(record.target, batch.configuration.target);
     assert.equal(record.buildId, batch.results[0].buildId);
@@ -154,12 +155,12 @@ test(`CLI ${operation} 报告逐集失败并返回非零`, async () => {
   try {
     const config = join(directory, 'config.yml'), state = join(directory, 'state');
     const module = join(directory, 'update.mjs'), preload = join(directory, 'preload.mjs');
-    await writeFile(config, await readFile(new URL('../samples/three-ai-rule-sets.yml', import.meta.url), 'utf8'));
+    await writeFile(config, await readFile(new URL('../config/rulesets.yml', import.meta.url), 'utf8'));
     await writeFile(module, `async function process(options) {
-  if (!options.configuration.includes('ai-anthropic') || options.selectedIds?.[0] !== 'ai-anthropic' ||
+  if (!options.configuration.includes('anthropic') || options.selectedIds?.[0] !== 'anthropic' ||
       options.${operation === 'update' ? 'retryRelease' : 'release'} !== '20261104112839') throw new Error('configuration missing');
-  return { status: 'partial', results: [{ id: 'ai-anthropic', status: 'failed', error: 'readback failed' },
-    { id: 'ai-openai', status: 'processed' }] };
+  return { status: 'partial', results: [{ id: 'anthropic', status: 'failed', error: 'readback failed' },
+    { id: 'openai', status: 'processed' }] };
 }
 export const updateRules = process;
 export const rebuildRules = process;`);
@@ -172,10 +173,10 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 } });`);
     const run = (operation: string, extra: string[] = []) => exec(process.execPath, ['--import', 'tsx', '--import', preload,
       'src/cli.ts', operation, '--state', state, ...extra]);
-    await assert.rejects(run(operation, ['--config', config, '--id', 'ai-anthropic', '--release', '20261104112839', '--binary', '/unused']),
+    await assert.rejects(run(operation, ['--config', config, '--id', 'anthropic', '--release', '20261104112839', '--binary', '/unused']),
       (error: { code?: number; stdout?: string }) => {
         assert.equal(error.code, 1);
-        assert.equal(JSON.parse(error.stdout ?? '{}').results[0].id, 'ai-anthropic');
+        assert.equal(JSON.parse(error.stdout ?? '{}').results[0].id, 'anthropic');
         return true;
       });
   } finally { await rm(directory, { recursive: true, force: true }); }
@@ -195,7 +196,7 @@ export async function readRemoteStatus(options) {
   await writeFile(${JSON.stringify(calls)}, JSON.stringify({ operation: 'status', branch: options.repository.branch, binary: options.binary }));
   ${failure ? `throw new Error(${JSON.stringify(failure)});` : ''}
   return { authority: 'remote', head: 'a'.repeat(40), generation: 7, maintenance: 'open',
-    activeRuleVersions: { 'ai-openai': { candidateId: 'remote-version' } }, pendingOperations: [] };
+    activeRuleVersions: { 'openai': { candidateId: 'remote-version' } }, pendingOperations: [] };
 }
 export async function manageMaintenance({ repository, ...options }) {
   await writeFile(${JSON.stringify(calls)}, JSON.stringify({ branch: repository.branch, ...options }));
@@ -246,7 +247,7 @@ test('CLI status 默认查询远端 candidates，忽略过期本地状态且无�
       const { stdout } = await fixture.run('status', ...extra), result = JSON.parse(stdout);
       assert.equal(result.authority, 'remote');
       assert.equal(result.generation, 7);
-      assert.equal(result.activeRuleVersions['ai-openai'].candidateId, 'remote-version');
+      assert.equal(result.activeRuleVersions['openai'].candidateId, 'remote-version');
       assert.deepEqual(JSON.parse(await readFile(fixture.calls, 'utf8')), { operation: 'status', branch: 'candidates' });
     }
     await assert.rejects(stat(join(directory, 'missing')), { code: 'ENOENT' });
@@ -260,7 +261,7 @@ for (const operation of ['initialize', 'status']) {
     try {
       const fixture = await remoteStateCli(directory), config = join(directory, 'config.yml');
       const branch = 'acceptance-issue-48-cli';
-      await writeFile(config, (await readFile(new URL('../samples/three-ai-rule-sets.yml', import.meta.url), 'utf8')).replace('branch: main', `branch: ${branch}`));
+      await writeFile(config, (await readFile(new URL('../config/rulesets.yml', import.meta.url), 'utf8')).replace('branch: main', `branch: ${branch}`));
       for (const args of [[], ['--branch', 'main'], ['--branch', branch], ['--config', config], ['--config', config, '--branch', branch]]) {
         const target = args.length && !args.includes('main') ? branch : 'main';
         const { stdout } = await fixture.run(operation, ...args);
@@ -289,8 +290,8 @@ for (const operation of ['initialize', 'status']) {
     const directory = await mkdtemp(join(tmpdir(), 'rule-remote-options-cli-'));
     try {
       const fixture = await remoteStateCli(directory), config = join(directory, 'config.yml');
-      await writeFile(config, await readFile(new URL('../samples/three-ai-rule-sets.yml', import.meta.url), 'utf8'));
-      const invalid = [['--config', config, '--branch', 'acceptance-other'], ['--id', 'ai-openai'], ['--release', '20261104112839'], ['--expected-head', 'a'.repeat(40)],
+      await writeFile(config, await readFile(new URL('../config/rulesets.yml', import.meta.url), 'utf8'));
+      const invalid = [['--config', config, '--branch', 'acceptance-other'], ['--id', 'openai'], ['--release', '20261104112839'], ['--expected-head', 'a'.repeat(40)],
         ...(operation === 'initialize' ? [['--binary', '/unused']] : [])];
       for (const args of invalid) await assert.rejects(fixture.run(operation, ...args), (error: { code?: number }) => error.code === 1);
       await assert.rejects(stat(fixture.calls), { code: 'ENOENT' });
@@ -310,22 +311,22 @@ for (const operation of ['initialize', 'status']) {
   });
 }
 
-test('CLI 立即检查和恢复需要可信配置和订阅映射，并返回逐集结果和退出码', async () => {
+test('CLI 从可信配置生成订阅，也接受显式订阅映射并返回逐集结果', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'rule-check-cli-'));
   try {
     const config = join(directory, 'config.yml'), subscriptions = join(directory, 'subscriptions.json');
     const preload = join(directory, 'preload.mjs'), implementation = join(directory, 'check.mjs');
-    await writeFile(config, await readFile(new URL('../samples/three-ai-rule-sets.yml', import.meta.url), 'utf8'));
-    await writeFile(subscriptions, '{"ai-anthropic":{"schemaVersion":2}}');
+    await writeFile(config, await readFile(new URL('../config/rulesets.yml', import.meta.url), 'utf8'));
+    await writeFile(subscriptions, '{"anthropic":{"schemaVersion":2}}');
     await writeFile(implementation, `export async function checkRules(options) {
-      if (!options.configuration.includes('ai-anthropic') || options.subscriptions['ai-anthropic'].schemaVersion !== 2) {
+      if (!options.configuration.includes('anthropic') || options.subscriptions['anthropic'].schemaVersion !== 2) {
         throw new Error('Missing trusted inputs');
       }
       const status = options.selectedIds?.length ? 'verification-pending' : 'paused';
-      return { exitCode: status === 'paused' ? 0 : 1, results: [{ id: 'ai-anthropic', status }] };
+      return { exitCode: status === 'paused' ? 0 : 1, results: [{ id: 'anthropic', status }] };
     }
     export async function resumeRules(options) {
-      if (options.logicalId !== 'ai-anthropic' || !options.configuration.includes(options.logicalId)
+      if (options.logicalId !== 'anthropic' || !options.configuration.includes(options.logicalId)
         || options.subscriptions[options.logicalId].schemaVersion !== 2) throw new Error('Missing trusted resume inputs');
       return { exitCode: 1, results: [{ id: options.logicalId, status: 'failed', control: { reason: 'manual-resume' } }] };
     }`);
@@ -339,18 +340,19 @@ registerHooks({ resolve(specifier, context, nextResolve) {
     const run = (command: string, ...args: string[]) => exec(process.execPath, ['--import', 'tsx', '--import', preload, 'src/cli.ts', command,
       '--state', directory, '--binary', '/unused', '--config', config, ...args],
       { env: { ...process.env, GITHUB_TOKEN: 'controlled-cli-fixture' } });
-    await assert.rejects(run('check-now'), { code: 1 });
+    const configured = await run('check-now');
+    assert.equal(JSON.parse(configured.stdout).results[0].status, 'paused');
     const paused = await run('check-now', '--subscription', subscriptions);
     assert.equal(JSON.parse(paused.stdout).results[0].status, 'paused');
-    await assert.rejects(run('check-now', '--subscription', subscriptions, '--id', 'ai-anthropic'), (error: { code?: number; stdout?: string }) =>
+    await assert.rejects(run('check-now', '--subscription', subscriptions, '--id', 'anthropic'), (error: { code?: number; stdout?: string }) =>
       error.code === 1 && JSON.parse(error.stdout ?? '').results[0].status === 'verification-pending');
-    for (const selection of [[], ['--id', 'ai-anthropic', '--id', 'ai-openai']]) {
+    for (const selection of [[], ['--id', 'anthropic', '--id', 'openai']]) {
       await assert.rejects(run('resume', '--subscription', subscriptions, ...selection),
         (error: { code?: number; stderr?: string }) => error.code === 1 && /exactly one --id/.test(error.stderr ?? ''));
     }
-    await assert.rejects(run('resume', '--subscription', subscriptions, '--id', 'ai-anthropic'), (error: { code?: number; stdout?: string }) => {
+    await assert.rejects(run('resume', '--subscription', subscriptions, '--id', 'anthropic'), (error: { code?: number; stdout?: string }) => {
       assert.equal(error.code, 1);
-      assert.deepEqual(JSON.parse(error.stdout ?? '').results, [{ id: 'ai-anthropic', status: 'failed', control: { reason: 'manual-resume' } }]);
+      assert.deepEqual(JSON.parse(error.stdout ?? '').results, [{ id: 'anthropic', status: 'failed', control: { reason: 'manual-resume' } }]);
       return true;
     });
   } finally { await rm(directory, { recursive: true, force: true }); }

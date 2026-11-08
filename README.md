@@ -49,7 +49,7 @@ pnpm install --frozen-lockfile
 pnpm check
 ```
 
-本地完整验证使用 `node scripts/verify.mjs --out <新证据目录> --binary <1.14.4绝对路径>`。入口按根 `package.json` 核对 pnpm 版本，并让嵌套脚本使用同一启动器；版本不符时在执行检查前失败。可用 `--pnpm <启动器绝对路径>` 指定已安装的匹配版本。`--check-only` 只运行常规检查；`--release` 另运行固定官方 Release 的下载与重复构建验收，不执行远程写入。
+本地完整验证使用 `node scripts/verify.mjs --out <新证据目录> --binary <1.14.4绝对路径>`。入口按根 `package.json` 核对 pnpm 版本，并让嵌套脚本使用同一启动器；版本不符时在执行检查前失败。可用 `--pnpm <启动器绝对路径>` 指定已安装的匹配版本。`--check-only` 只运行常规检查；`--release` 另运行固定官方 Release 的单列表与正式三集配置构建验收，不执行远程写入。
 
 每次运行保留工具身份、Git 状态、命令、退出码、测试统计、日志及文件摘要。证据目录必须不存在，已有证据不覆盖；用于阶段收尾的证据应在清理 worktree 前归档。Spec #14 的最终验收证据见 [docs/verification/spec-14-final/](docs/verification/spec-14-final/)。历史测试数量只属于记录中的提交和日期，不能表述为当前提交已经重新执行通过。
 

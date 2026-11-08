@@ -23,7 +23,7 @@ test('CLI rebuild 必须显式提供固定 Release、状态目录及 binary；up
     ['rebuild', '--state', '/unused', '--release', 'latest', '--binary', '/unused'],
     ['rebuild', '--state', '/unused', '--release', 'fixed'], ['update', '--state', '/unused', '--release', 'fixed'],
     ['rebuild', '--state', '/unused', '--release', 'fixed', '--binary', '/unused', '--config', '/unused'],
-    ['rebuild', '--state', '/unused', '--release', 'fixed', '--binary', '/unused', '--id', 'ai-openai'],
+    ['rebuild', '--state', '/unused', '--release', 'fixed', '--binary', '/unused', '--id', 'openai'],
   ]) await assert.rejects(promisify(execFile)(process.execPath, ['--import', 'tsx', 'src/cli.ts', ...args]),
     (error: { code?: number; stderr?: string }) => error.code === 1 && !!error.stderr?.includes('requires'));
 });

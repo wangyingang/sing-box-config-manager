@@ -12,9 +12,9 @@
       "ruleSets": [
         {
           "kind": "subscription",
-          "tag": "ai-openai",
+          "tag": "openai",
           "subscriptionRef": {
-            "systemRuleSetId": "ai-openai",
+            "systemRuleSetId": "openai",
             "usages": [
               "route",
               "dns-query"
@@ -23,9 +23,9 @@
         },
         {
           "kind": "subscription",
-          "tag": "ai-anthropic",
+          "tag": "anthropic",
           "subscriptionRef": {
-            "systemRuleSetId": "ai-anthropic",
+            "systemRuleSetId": "anthropic",
             "usages": [
               "route",
               "dns-query"
@@ -34,9 +34,9 @@
         },
         {
           "kind": "subscription",
-          "tag": "ai-google-deepmind",
+          "tag": "google-deepmind",
           "subscriptionRef": {
-            "systemRuleSetId": "ai-google-deepmind",
+            "systemRuleSetId": "google-deepmind",
             "usages": [
               "route",
               "dns-query"
@@ -47,46 +47,46 @@
     },
     "dnsSteps": [
       {
-        "id": "dns-ai-openai",
+        "id": "dns-openai",
         "rule": {
-          "rule_set": "ai-openai",
+          "rule_set": "openai",
           "server": "local"
         }
       },
       {
-        "id": "dns-ai-anthropic",
+        "id": "dns-anthropic",
         "rule": {
-          "rule_set": "ai-anthropic",
+          "rule_set": "anthropic",
           "server": "local"
         }
       },
       {
-        "id": "dns-ai-google-deepmind",
+        "id": "dns-google-deepmind",
         "rule": {
-          "rule_set": "ai-google-deepmind",
+          "rule_set": "google-deepmind",
           "server": "local"
         }
       }
     ],
     "routeSteps": [
       {
-        "id": "route-ai-openai",
+        "id": "route-openai",
         "rule": {
-          "rule_set": "ai-openai",
+          "rule_set": "openai",
           "outbound": "direct"
         }
       },
       {
-        "id": "route-ai-anthropic",
+        "id": "route-anthropic",
         "rule": {
-          "rule_set": "ai-anthropic",
+          "rule_set": "anthropic",
           "outbound": "direct"
         }
       },
       {
-        "id": "route-ai-google-deepmind",
+        "id": "route-google-deepmind",
         "rule": {
-          "rule_set": "ai-google-deepmind",
+          "rule_set": "google-deepmind",
           "outbound": "direct"
         }
       }
@@ -130,18 +130,18 @@
     "subscriptions": [
       {
         "schemaVersion": 2,
-        "systemRuleSetId": "ai-openai",
+        "systemRuleSetId": "openai",
         "targetVersion": "1.14.4",
         "sourceFormatVersion": 4,
         "projections": {
           "route": {
             "formats": {
               "binary": {
-                "url": "https://rules.example.invalid/stable/ai-openai/domains.srs",
+                "url": "https://rules.example.invalid/stable/openai/domains.srs",
                 "requiredCapabilities": []
               },
               "source": {
-                "url": "https://rules.example.invalid/stable/ai-openai/domains.json",
+                "url": "https://rules.example.invalid/stable/openai/domains.json",
                 "requiredCapabilities": []
               }
             }
@@ -149,11 +149,11 @@
           "dns-query": {
             "formats": {
               "binary": {
-                "url": "https://rules.example.invalid/stable/ai-openai/domains.srs",
+                "url": "https://rules.example.invalid/stable/openai/domains.srs",
                 "requiredCapabilities": []
               },
               "source": {
-                "url": "https://rules.example.invalid/stable/ai-openai/domains.json",
+                "url": "https://rules.example.invalid/stable/openai/domains.json",
                 "requiredCapabilities": []
               }
             }
@@ -165,18 +165,18 @@
       },
       {
         "schemaVersion": 2,
-        "systemRuleSetId": "ai-anthropic",
+        "systemRuleSetId": "anthropic",
         "targetVersion": "1.14.4",
         "sourceFormatVersion": 4,
         "projections": {
           "route": {
             "formats": {
               "binary": {
-                "url": "https://rules.example.invalid/stable/ai-anthropic/domains.srs",
+                "url": "https://rules.example.invalid/stable/anthropic/domains.srs",
                 "requiredCapabilities": []
               },
               "source": {
-                "url": "https://rules.example.invalid/stable/ai-anthropic/domains.json",
+                "url": "https://rules.example.invalid/stable/anthropic/domains.json",
                 "requiredCapabilities": []
               }
             }
@@ -184,11 +184,11 @@
           "dns-query": {
             "formats": {
               "binary": {
-                "url": "https://rules.example.invalid/stable/ai-anthropic/domains.srs",
+                "url": "https://rules.example.invalid/stable/anthropic/domains.srs",
                 "requiredCapabilities": []
               },
               "source": {
-                "url": "https://rules.example.invalid/stable/ai-anthropic/domains.json",
+                "url": "https://rules.example.invalid/stable/anthropic/domains.json",
                 "requiredCapabilities": []
               }
             }
@@ -200,18 +200,18 @@
       },
       {
         "schemaVersion": 2,
-        "systemRuleSetId": "ai-google-deepmind",
+        "systemRuleSetId": "google-deepmind",
         "targetVersion": "1.14.4",
         "sourceFormatVersion": 4,
         "projections": {
           "route": {
             "formats": {
               "binary": {
-                "url": "https://rules.example.invalid/stable/ai-google-deepmind/domains.srs",
+                "url": "https://rules.example.invalid/stable/google-deepmind/domains.srs",
                 "requiredCapabilities": []
               },
               "source": {
-                "url": "https://rules.example.invalid/stable/ai-google-deepmind/domains.json",
+                "url": "https://rules.example.invalid/stable/google-deepmind/domains.json",
                 "requiredCapabilities": []
               }
             }
@@ -219,11 +219,11 @@
           "dns-query": {
             "formats": {
               "binary": {
-                "url": "https://rules.example.invalid/stable/ai-google-deepmind/domains.srs",
+                "url": "https://rules.example.invalid/stable/google-deepmind/domains.srs",
                 "requiredCapabilities": []
               },
               "source": {
-                "url": "https://rules.example.invalid/stable/ai-google-deepmind/domains.json",
+                "url": "https://rules.example.invalid/stable/google-deepmind/domains.json",
                 "requiredCapabilities": []
               }
             }

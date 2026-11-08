@@ -26,8 +26,8 @@ const exec = promisify(execFile);
 const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const branch = 'acceptance-issue-40-client';
 const domain = 'updated.issue19.test';
-const url = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${branch}/stable/ai-openai/domains.srs`;
-const subscription: RuleSubscription = { schemaVersion: 2, systemRuleSetId: 'ai-openai',
+const url = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${branch}/stable/openai/domains.srs`;
+const subscription: RuleSubscription = { schemaVersion: 2, systemRuleSetId: 'openai',
   targetVersion: '1.14.4', sourceFormatVersion: 4, projections: {
     route: { formats: { binary: { url, requiredCapabilities: [] } } },
     'dns-query': { formats: { binary: { url, requiredCapabilities: [] } } }, 'dns-response': { unavailable: 'empty' },
@@ -207,13 +207,13 @@ test('只发布一次 v2 Recipe，同一进程通过原 URL 观察换源、固�
     const rolledBack = await rollbackRules({ historicalActivationCommit: activeA.commit, ...current, expectedHead: env.head() });
     const restored = await observe('route-fallback-A', '192.0.2.10');
     const source = upstream(3, { anthropic: `domain:${domain}` });
-    const check = { configuration: configurationB, subscriptions: { 'ai-openai': subscription }, binary,
+    const check = { configuration: configurationB, subscriptions: { 'openai': subscription }, binary,
       activation: transport, publication: { repository, commit: publish, download: transport.download }, fetch: source.fetcher };
-    const paused = await checkRules({ ...check, stateDirectory: join(directory, 'paused'), selectedIds: ['ai-openai'] });
+    const paused = await checkRules({ ...check, stateDirectory: join(directory, 'paused'), selectedIds: ['openai'] });
     assert.equal(paused.results[0].status, 'paused');
     assert.deepEqual(source.requests, []);
     const stillPinned = await observe('route-fallback-A', '192.0.2.10');
-    const resumed = await resumeRules({ ...check, stateDirectory: join(directory, 'resume'), logicalId: 'ai-openai' });
+    const resumed = await resumeRules({ ...check, stateDirectory: join(directory, 'resume'), logicalId: 'openai' });
     assert.equal(resumed.results[0].status, 'activated', JSON.stringify(resumed));
     assert.equal(resumed.results[0].control?.pauseAutomaticActivation, false);
     const following = await observe('route-matched-B', '192.0.2.20');
@@ -232,7 +232,7 @@ test('只发布一次 v2 Recipe，同一进程通过原 URL 观察换源、固�
     assert.deepEqual(rolledBack.activation.source, a.source);
     assert.ok(downloads.every(entry => entry.url === url));
     const deliveredHashes = downloads.map(entry => entry.sha256).filter((hash, i, all) => i === 0 || hash !== all[i - 1]);
-    const binaryPath = 'stable/ai-openai/domains.srs';
+    const binaryPath = 'stable/openai/domains.srs';
     assert.deepEqual(deliveredHashes.slice(0, 3), [activeA, activeB, rolledBack].map(result => result.activation.files[binaryPath].sha256));
     const resumedWrite = published.find(entry => entry.path === binaryPath && entry.commit === resumed.results[0].current?.commit);
     assert.ok(resumedWrite);

@@ -7,7 +7,7 @@ import { digest } from '../src/json.js';
 import example from '../examples/three-rule-subscriptions-v2.json' with { type: 'json' };
 import { success } from './helpers.js';
 
-const ids = ['ai-openai', 'ai-anthropic', 'ai-google-deepmind'] as const;
+const ids = ['openai', 'anthropic', 'google-deepmind'] as const;
 const profiles = ['windows-standalone', 'macos-standalone', 'macos-appstore', 'ios-appstore', 'android-google-play'] as const;
 const url = (id: string) => `https://rules.example.invalid/stable/${id}/domains.srs`;
 

@@ -11,22 +11,7 @@ import type { PublicationTransport } from '../../src/publication.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
 const tag = '20261104112839';
-const configuration = `schemaVersion: 1
-source: v2fly/domain-list-community
-target:
-  repository: wangyingang/sing-box-rule-artifacts
-  branch: acceptance-issue-37
-ruleSets:
-  - id: ai-openai
-    list: openai
-    stablePath: stable/ai-openai
-  - id: ai-anthropic
-    list: anthropic
-    stablePath: stable/ai-anthropic
-  - id: ai-google-deepmind
-    list: google-deepmind
-    stablePath: stable/ai-google-deepmind
-`;
+const configuration = await readFile(new URL('../../config/rulesets.yml', import.meta.url), 'utf8');
 
 function fixture() {
   let lists = [
@@ -80,15 +65,15 @@ const options = (directory: string, env: ReturnType<typeof fixture>) => ({
 });
 
 test('单独重建固定 Release 的成功集保留原候选、成功记录与激活回执', { skip: !binary }, async () => isolated(async (directory, env) => {
-  const first = await updateRules({ ...options(directory, env), selectedIds: ['ai-openai'] });
+  const first = await updateRules({ ...options(directory, env), selectedIds: ['openai'] });
   const original = first.results[0];
   assert.ok(original.status === 'processed');
-  const receipt = { logicalId: 'ai-openai', commit: 'b'.repeat(40), candidateId: original.candidate.id };
+  const receipt = { logicalId: 'openai', commit: 'b'.repeat(40), candidateId: original.candidate.id };
   await writeFile(join(directory, 'active-version.json'), JSON.stringify(receipt));
   const before = await readUpdateState(directory);
   const requestStart = env.requests.length;
   env.advanceLatest();
-  const rebuilt = await rebuildRules({ ...options(directory, env), selectedIds: ['ai-openai'], release: tag });
+  const rebuilt = await rebuildRules({ ...options(directory, env), selectedIds: ['openai'], release: tag });
   assert.equal(rebuilt.status, 'processed');
   const entry = rebuilt.results[0];
   assert.ok(entry.status === 'processed');
@@ -113,26 +98,26 @@ test('单独重建固定 Release 的成功集保留原候选、成功记录与�
   const status = await readUpdateState(directory);
   assert.equal(status.state.candidates[entry.candidate.id].operation, 'rebuild');
   assert.deepEqual(status.activeRuleVersion, receipt);
-  const skipped = await updateRules({ ...options(directory, env), selectedIds: ['ai-openai'], retryRelease: tag, binary: '/must-not-run' });
+  const skipped = await updateRules({ ...options(directory, env), selectedIds: ['openai'], retryRelease: tag, binary: '/must-not-run' });
   assert.ok(skipped.results[0].status === 'skipped');
   assert.equal(skipped.results[0].candidateId, original.candidate.id);
 }));
 
 test('重建回读失败仍保留原成功记录，修复后可重试且不影响兄弟集', { skip: !binary }, async () => isolated(async (directory, env) => {
-  await updateRules({ ...options(directory, env), selectedIds: ['ai-openai', 'ai-anthropic'] });
+  await updateRules({ ...options(directory, env), selectedIds: ['openai', 'anthropic'] });
   const before = await readUpdateState(directory);
   const publication: PublicationTransport = { ...env.publication, async download(url) {
     const bytes = await env.publication.download(url);
     return url.endsWith('/domains.srs') ? Buffer.concat([bytes, Buffer.from('bad')]) : bytes;
   } };
-  const failed = await rebuildRules({ ...options(directory, env), publication, selectedIds: ['ai-openai'], release: tag });
+  const failed = await rebuildRules({ ...options(directory, env), publication, selectedIds: ['openai'], release: tag });
   assert.equal(failed.status, 'failed');
   assert.ok(failed.results[0].status === 'failed');
   assert.match(failed.results[0].error, /Readback content mismatch/);
   const afterFailure = await readUpdateState(directory);
   assert.deepEqual(afterFailure.state.configuredProcessed, before.state.configuredProcessed);
   for (const [id, candidate] of Object.entries(before.state.candidates)) assert.deepEqual(afterFailure.state.candidates[id], candidate);
-  const retried = await rebuildRules({ ...options(directory, env), selectedIds: ['ai-openai'], release: tag });
+  const retried = await rebuildRules({ ...options(directory, env), selectedIds: ['openai'], release: tag });
   assert.ok(retried.results[0].status === 'processed');
   assert.notEqual(retried.results[0].candidate.id, failed.results[0].candidateId);
   assert.deepEqual((await readUpdateState(directory)).state.configuredProcessed, before.state.configuredProcessed);
@@ -143,19 +128,19 @@ test('重建回读失败仍保留原成功记录，修复后可重试且不影�
 
 test('重建要求所选定义已成功处理，update 会处理同一 Release 下变更的定义', { skip: !binary }, async () => isolated(async (directory, env) => {
   const base = { ...options(directory, env), release: tag };
-  await assert.rejects(rebuildRules({ ...base, selectedIds: ['ai-openai'] }), /previously pinned/);
-  await updateRules({ ...options(directory, env), selectedIds: ['ai-openai'] });
+  await assert.rejects(rebuildRules({ ...base, selectedIds: ['openai'] }), /previously pinned/);
+  await updateRules({ ...options(directory, env), selectedIds: ['openai'] });
   const count = env.requests.length, commits = env.commits.length;
   for (const extra of [
-    { selectedIds: ['ai-anthropic'] }, { selectedIds: [] }, { selectedIds: ['unknown'] },
-    { selectedIds: ['ai-openai', 'ai-openai'] },
-    { selectedIds: ['ai-openai'], configuration: configuration.replace('list: openai', 'list: anthropic') },
-    { selectedIds: ['ai-openai'], configuration: configuration.replace('stable/ai-openai', 'stable/new-openai') },
+    { selectedIds: ['anthropic'] }, { selectedIds: [] }, { selectedIds: ['unknown'] },
+    { selectedIds: ['openai', 'openai'] },
+    { selectedIds: ['openai'], configuration: configuration.replace('list: openai', 'list: anthropic') },
+    { selectedIds: ['openai'], configuration: configuration.replace('stable/openai', 'stable/new-openai') },
   ]) await assert.rejects(rebuildRules({ ...base, ...extra }));
-  for (const release of ['', 'latest', 'LATEST']) assert.throws(() => rebuildRules({ ...base, selectedIds: ['ai-openai'], release }), /fixed Release/);
+  for (const release of ['', 'latest', 'LATEST']) assert.throws(() => rebuildRules({ ...base, selectedIds: ['openai'], release }), /fixed Release/);
   assert.equal(env.requests.length, count);
   assert.equal(env.commits.length, commits);
-  const changed = { ...options(directory, env), selectedIds: ['ai-openai'],
+  const changed = { ...options(directory, env), selectedIds: ['openai'],
     configuration: configuration.replace('list: openai', 'list: anthropic') };
   const updated = await updateRules(changed);
   assert.ok(updated.results[0].status === 'processed');
@@ -166,7 +151,7 @@ test('重建要求所选定义已成功处理，update 会处理同一 Release �
 
 for (const changed of ['release', 'asset', 'commit', 'bytes']) {
   test(`重建拒绝固定来源 ${changed} 变化并保留成功记录`, { skip: !binary }, async () => isolated(async (directory, env) => {
-    await updateRules({ ...options(directory, env), selectedIds: ['ai-openai'] });
+    await updateRules({ ...options(directory, env), selectedIds: ['openai'] });
     const before = await readUpdateState(directory), commits = env.commits.length;
     if (changed === 'bytes') env.setLists([{ name: 'openai', length: 1, rules: ['domain:changed.example'] }]);
     const fetcher: typeof fetch = async (url, init) => {
@@ -180,7 +165,7 @@ for (const changed of ['release', 'asset', 'commit', 'bytes']) {
       if (changed === 'commit' && path.includes('/git/ref/tags/')) return Response.json({ object: { type: 'commit', sha: 'b'.repeat(40) } });
       return response;
     };
-    await assert.rejects(rebuildRules({ ...options(directory, env), fetch: fetcher, selectedIds: ['ai-openai'], release: tag }),
+    await assert.rejects(rebuildRules({ ...options(directory, env), fetch: fetcher, selectedIds: ['openai'], release: tag }),
       error => (error as { code?: string }).code === 'SOURCE_CHANGED' || /SOURCE_CHANGED/.test(String(error)));
     const after = await readUpdateState(directory);
     assert.deepEqual(after.state.configuredProcessed, before.state.configuredProcessed);
@@ -193,7 +178,7 @@ test('一次 update 共享固定输入，逐集发布独立候选并在新读取
   const result = await updateRules(options(directory, env));
   assert.equal(result.status, 'processed');
   assert.deepEqual(result.results.map(entry => [entry.id, entry.status]), [
-    ['ai-openai', 'processed'], ['ai-anthropic', 'processed'], ['ai-google-deepmind', 'processed'],
+    ['openai', 'processed'], ['anthropic', 'processed'], ['google-deepmind', 'processed'],
   ]);
   assert.equal(env.requests.filter(url => url.endsWith('/assets/11')).length, 1);
   assert.equal(env.requests.filter(url => url.endsWith('/assets/12')).length, 1);
@@ -213,7 +198,7 @@ test('一次 update 共享固定输入，逐集发布独立候选并在新读取
       assert.equal(artifact.termCount, 1);
     }
   }
-  assert.equal((await readFile(join(directory, 'update-state.json'), 'utf8')).includes('ai-google-deepmind'), true);
+  assert.equal((await readFile(join(directory, 'update-state.json'), 'utf8')).includes('google-deepmind'), true);
   assert.equal(env.commits.length, 9);
 }));
 
@@ -232,7 +217,7 @@ for (const failure of ['missing', 'invalid', 'readback']) {
     const first = await updateRules(options(directory, env));
     assert.equal(first.status, 'partial');
     assert.deepEqual(first.results.map(entry => [entry.id, entry.status]), [
-      ['ai-openai', 'processed'], ['ai-anthropic', 'failed'], ['ai-google-deepmind', 'processed'],
+      ['openai', 'processed'], ['anthropic', 'failed'], ['google-deepmind', 'processed'],
     ]);
     const failed = first.results[1];
     assert.ok(failed.status === 'failed');
@@ -241,16 +226,16 @@ for (const failure of ['missing', 'invalid', 'readback']) {
     const before = (await readUpdateState(directory)).state;
     assert.equal(before.candidates[failed.candidateId].status, 'failed');
     const status = await readUpdateState(directory);
-    assert.equal(status.state.candidates[failed.candidateId].logicalId, 'ai-anthropic');
-    assert.equal(status.state.configuredProcessed!['ai-openai']['42'].candidateId,
-      before.configuredProcessed!['ai-openai']['42'].candidateId);
+    assert.equal(status.state.candidates[failed.candidateId].logicalId, 'anthropic');
+    assert.equal(status.state.configuredProcessed!['openai']['42'].candidateId,
+      before.configuredProcessed!['openai']['42'].candidateId);
     assert.equal(env.commits.filter(files => Object.keys(files).some(path => path.startsWith('stable/'))).length, 0);
     if (failure === 'readback') {
       env.corruptReadback('');
-      const retry = await updateRules({ ...options(directory, env), selectedIds: ['ai-anthropic'] });
-      assert.deepEqual(retry.results.map(entry => [entry.id, entry.status]), [['ai-anthropic', 'processed']]);
+      const retry = await updateRules({ ...options(directory, env), selectedIds: ['anthropic'] });
+      assert.deepEqual(retry.results.map(entry => [entry.id, entry.status]), [['anthropic', 'processed']]);
       const after = (await readUpdateState(directory)).state;
-      for (const id of ['ai-openai', 'ai-google-deepmind']) {
+      for (const id of ['openai', 'google-deepmind']) {
         assert.deepEqual(after.configuredProcessed?.[id], before.configuredProcessed?.[id]);
         assert.ok(after.candidates[before.configuredProcessed![id]['42'].candidateId]);
       }
@@ -274,13 +259,13 @@ test('latest 前进后仍可按固定来源单独重试 Anthropic', { skip: !bin
   const before = (await readUpdateState(directory)).state;
   env.corruptReadback(''); env.advanceLatest();
   const requestCount = env.requests.length;
-  const retry = await updateRules({ ...options(directory, env), selectedIds: ['ai-anthropic'], retryRelease: tag });
-  assert.deepEqual(retry.results.map(entry => [entry.id, entry.status]), [['ai-anthropic', 'processed']]);
+  const retry = await updateRules({ ...options(directory, env), selectedIds: ['anthropic'], retryRelease: tag });
+  assert.deepEqual(retry.results.map(entry => [entry.id, entry.status]), [['anthropic', 'processed']]);
   assert.equal(retry.releaseId, 42);
   assert.ok(env.requests.slice(requestCount).some(url => url.endsWith('/releases/42')));
   assert.ok(!env.requests.slice(requestCount).some(url => url.endsWith('/latest')));
   const after = (await readUpdateState(directory)).state;
-  for (const id of ['ai-openai', 'ai-google-deepmind']) {
+  for (const id of ['openai', 'google-deepmind']) {
     assert.deepEqual(after.configuredProcessed?.[id], before.configuredProcessed?.[id]);
   }
 }));
@@ -293,21 +278,21 @@ test('共同 YAML 文档无效时不产生任何候选', { skip: !binary }, asyn
 }));
 
 test('同一 Release 后续增选只处理新集，来源摘要变化阻止失败集重试', { skip: !binary }, async () => isolated(async (directory, env) => {
-  const first = await updateRules({ ...options(directory, env), selectedIds: ['ai-openai'] });
-  assert.deepEqual(first.results.map(entry => [entry.id, entry.status]), [['ai-openai', 'processed']]);
+  const first = await updateRules({ ...options(directory, env), selectedIds: ['openai'] });
+  assert.deepEqual(first.results.map(entry => [entry.id, entry.status]), [['openai', 'processed']]);
   const expanded = await updateRules(options(directory, env));
   assert.deepEqual(expanded.results.map(entry => [entry.id, entry.status]), [
-    ['ai-openai', 'skipped'], ['ai-anthropic', 'processed'], ['ai-google-deepmind', 'processed'],
+    ['openai', 'skipped'], ['anthropic', 'processed'], ['google-deepmind', 'processed'],
   ]);
   const before = (await readUpdateState(directory)).state;
   env.setLists([{ name: 'anthropic', length: 1, rules: ['domain:changed.example'] }]);
-  await assert.rejects(updateRules({ ...options(directory, env), selectedIds: ['ai-anthropic'],
-    configuration: configuration.replace('stable/ai-anthropic', 'stable/ai-anthropic-new') }), { code: 'SOURCE_CHANGED' });
+  await assert.rejects(updateRules({ ...options(directory, env), selectedIds: ['anthropic'],
+    configuration: configuration.replace('stable/anthropic', 'stable/anthropic-new') }), { code: 'SOURCE_CHANGED' });
   assert.deepEqual((await readUpdateState(directory)).state.configuredProcessed, before.configuredProcessed);
 }));
 
 test('合法逻辑 ID constructor 的成功记录可跨进程持久化并跳过', { skip: !binary }, async () => isolated(async (directory, env) => {
-  const custom = configuration.replaceAll('ai-openai', 'constructor');
+  const custom = configuration.replace('id: openai', 'id: constructor').replace('stable/openai', 'stable/constructor');
   const selected = { ...options(directory, env), configuration: custom, selectedIds: ['constructor'] };
   const first = await updateRules(selected);
   assert.deepEqual(first.results.map(entry => [entry.id, entry.status]), [['constructor', 'processed']]);
@@ -324,8 +309,8 @@ test('最终状态落盘暂时失败后不留下错误的成功记录', { skip: 
   fsPromises.rename = async (from, to) => {
     if (!failedOnce && String(to) === join(directory, 'update-state.json')) {
       const state = JSON.parse(await readFile(from, 'utf8'));
-      if (state.configuredProcessed?.['ai-anthropic']?.['42'] &&
-          Object.values(state.candidates).some((candidate: any) => candidate.logicalId === 'ai-anthropic' && candidate.status === 'verified')) {
+      if (state.configuredProcessed?.['anthropic']?.['42'] &&
+          Object.values(state.candidates).some((candidate: any) => candidate.logicalId === 'anthropic' && candidate.status === 'verified')) {
         failedOnce = true;
         throw new Error('transient final checkpoint');
       }
@@ -334,13 +319,13 @@ test('最终状态落盘暂时失败后不留下错误的成功记录', { skip: 
   };
   syncBuiltinESMExports();
   try {
-    const first = await updateRules({ ...options(directory, env), selectedIds: ['ai-anthropic'] });
+    const first = await updateRules({ ...options(directory, env), selectedIds: ['anthropic'] });
     assert.equal(failedOnce, true);
     assert.deepEqual(first.results.map(entry => entry.status), ['failed']);
     const state = (await readUpdateState(directory)).state;
-    assert.equal(state.configuredProcessed?.['ai-anthropic']?.['42'], undefined);
+    assert.equal(state.configuredProcessed?.['anthropic']?.['42'], undefined);
     assert.equal(Object.values(state.candidates)[0].status, 'failed');
-    const retry = await updateRules({ ...options(directory, env), selectedIds: ['ai-anthropic'] });
+    const retry = await updateRules({ ...options(directory, env), selectedIds: ['anthropic'] });
     assert.deepEqual(retry.results.map(entry => entry.status), ['processed']);
   } finally {
     fsPromises.rename = originalRename;

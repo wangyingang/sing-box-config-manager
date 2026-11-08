@@ -5,7 +5,7 @@ import subscriptionSchema from '../contracts/rule-subscription.schema.json' with
 import subscriptionV2Schema from '../contracts/rule-subscription-v2.schema.json' with { type: 'json' };
 import { verifyActivationCandidate } from './activation.js';
 import { githubActivation, type ActivationTransport } from './activation-transport.js';
-import { parseBuildConfiguration, type RuleDefinition } from './configured-build.js';
+import { parseRuleDefinition, type RuleDefinition } from './configuration.js';
 import type { PublicationRepository } from './publication-repository.js';
 import { ARTIFACT_REPOSITORY, githubPublication, immutableUrl, type PublicationTransport } from './publication.js';
 import { readRemoteState } from './remote-state.js';
@@ -189,9 +189,8 @@ export async function readRemoteStatus(options: {
         && build.buildId === evidence.buildId && isDeepStrictEqual(build.source, source), 'Invalid retained candidate records');
       let definition: RuleDefinition | undefined;
       if (build.definition !== undefined) {
-        definition = parseBuildConfiguration(JSON.stringify({ schemaVersion: 1, source: 'v2fly/domain-list-community',
-          target: build.target, ruleSets: [build.definition] })).ruleSets[0];
-        requireThat(build.target.branch === journal.targetBranch && manifest.id === definition.id && build.id === definition.id,
+        definition = parseRuleDefinition(build.definition);
+        requireThat(build.target?.repository === ARTIFACT_REPOSITORY && build.target.branch === journal.targetBranch && manifest.id === definition.id && build.id === definition.id,
           'Candidate target or logical identity mismatch');
       }
       if (candidate) requireThat(source.releaseId === candidate.releaseId && source.tag === candidate.tag

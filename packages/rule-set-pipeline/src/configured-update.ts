@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { buildConfiguredRelease, parseBuildConfiguration } from './configured-build.js';
+import { configuredReleaseInput } from './configuration.js';
+import { buildConfiguredRelease, CONFIGURED_BUILD_RECORD, parseBuildConfiguration } from './configured-build.js';
 import { publishCandidate } from './candidate-publication.js';
 import { githubPublication, immutableUrl, type PublicationTransport } from './publication.js';
-import { sha256 } from './release.js';
+import { lookupRelease, sha256 } from './release.js';
 import type { SourceRecord } from './types.js';
 import { readUpdateState, type Candidate, type UpdateState } from './update.js';
 import { openRemoteSession, selectRemoteOperation, type RemoteOperation } from './remote-state.js';
@@ -45,6 +46,7 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, 
     throw new Error('Configured rebuild requires selected logical IDs and a fixed Release');
   }
   const definitions = selected ? configuration.ruleSets.filter(rule => selected.includes(rule.id)) : configuration.ruleSets;
+  const source = configuredReleaseInput(configuration, definitions);
   await mkdir(options.stateDirectory, { recursive: true });
   const lock = join(options.stateDirectory, 'update.lock');
   await mkdir(lock);
@@ -129,12 +131,7 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, 
     const fetcher = options.fetch ?? fetch;
     const endpoint = retryPin ? String(retryPin.identity!.releaseId)
       : options.sampleTag ? `tags/${encodeURIComponent(options.sampleTag)}` : 'latest';
-    const response = await fetcher(`https://api.github.com/repos/v2fly/domain-list-community/releases/${endpoint}`, {
-      headers: { Accept: 'application/vnd.github+json', ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}) },
-      signal: AbortSignal.timeout(120_000),
-    });
-    if (!response.ok) throw new Error(`Release lookup HTTP ${response.status}`);
-    const release = await response.json() as Record<string, unknown>;
+    const release = await lookupRelease(source, endpoint, options);
     if (!Number.isSafeInteger(release.id) || Number(release.id) <= 0 || typeof release.tag_name !== 'string' ||
         (options.sampleTag && release.tag_name !== options.sampleTag) ||
         (fixedTag && (release.id !== retryPin!.identity!.releaseId || release.tag_name !== fixedTag))) {
@@ -250,7 +247,7 @@ export async function publishConfiguredCandidate(result: Extract<Awaited<ReturnT
         [`${prefix}/conversion-report.json`]: encode(result.report),
         [`${prefix}/build.json`]: encode({ id: result.id, definition: result.definition, target, buildId: result.buildId,
           candidateId: candidate.id, operation: candidate.operation, previousCandidateId: candidate.previousCandidateId,
-          contracts: { artifactManifest: 1, sourceFormat: 4, buildRecord: 1 }, source, tools, nativeBuildId, ...validation,
+          contracts: { artifactManifest: 1, sourceFormat: 4, buildRecord: CONFIGURED_BUILD_RECORD }, source, tools, nativeBuildId, ...validation,
           artifacts: result.native.artifacts.map(({ content: _content, ...metadata }) => metadata) }),
       };
     } });

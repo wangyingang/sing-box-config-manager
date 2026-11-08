@@ -1,3 +1,4 @@
+import { parseBuildConfiguration } from '../../src/configuration.js';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -11,9 +12,8 @@ import { memoryRepository } from '../fixtures/publication-repository.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
 const tag = '20261104112839';
-const configuration = JSON.stringify({ schemaVersion: 1, source: 'v2fly/domain-list-community',
-  target: { repository: 'wangyingang/sing-box-rule-artifacts', branch: 'acceptance-recovery' },
-  ruleSets: [{ id: 'ai-openai', list: 'openai', stablePath: 'stable/ai-openai' }] });
+const official = parseBuildConfiguration(await readFile(new URL('../../config/rulesets.yml', import.meta.url), 'utf8'));
+const configuration = JSON.stringify({ ...official, target: { ...official.target, branch: 'acceptance-recovery' }, ruleSets: [official.ruleSets[0]] });
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
 const candidateWrites = (remote: ReturnType<typeof memoryRepository>) => remote.writes
   .flatMap(files => Object.keys(files).filter(path => path.startsWith('candidates/')));
@@ -151,7 +151,7 @@ for (const missing of ['retained', 'domains.srs', 'build.json', 'readback.json',
     const status = await readRemoteStatus({ repository: remote.repository, publication: remote.publication });
     assert.notEqual(status.candidateAvailability[candidateId].status, 'available');
     assert.equal(status.candidateAvailability[candidateId].evidenceUrl, undefined);
-    assert.equal(Object.keys(status.state.configuredProcessed!['ai-openai']).length, 1, 'Processed fact is retained separately from candidate availability');
+    assert.equal(Object.keys(status.state.configuredProcessed!['openai']).length, 1, 'Processed fact is retained separately from candidate availability');
   }));
 }
 

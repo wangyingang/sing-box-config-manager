@@ -80,7 +80,7 @@ async function main() {
   } });
   if (values.help) {
     console.log('Usage: node scripts/verify.mjs --out <new evidence directory> [--pnpm <absolute launcher>] [--binary <absolute sing-box path>] [--check-only] [--release]');
-    console.log('Runs check and native integration by default. --release adds only the fixed Release download/build test. Never installs dependencies or invokes publication/activation/rollback acceptance tests.');
+    console.log('Runs check and native integration by default. --release adds only the fixed Release download/build tests. Never installs dependencies or invokes publication/activation/rollback acceptance tests.');
     return;
   }
   if (!values.out) throw new Error('--out <new evidence directory> is required');
@@ -139,7 +139,7 @@ async function main() {
     }
     const steps = [{ name: 'check', command: [join(binDirectory, 'pnpm'), 'check'], cwd: root }];
     if (!values['check-only']) steps.push({ name: 'integration', command: [join(binDirectory, 'pnpm'), 'test:integration'], cwd: root });
-    if (values.release) steps.push({ name: 'release', command: [process.execPath, '--import', 'tsx', '--test', 'test/acceptance/release.test.ts'], cwd: join(root, 'packages/rule-set-pipeline') });
+    if (values.release) steps.push({ name: 'release', command: [process.execPath, '--import', 'tsx', '--test', 'test/acceptance/release.test.ts', 'test/acceptance/configured-release.test.ts'], cwd: join(root, 'packages/rule-set-pipeline') });
     for (const step of steps) {
       console.log(`Running ${step.name}; log: ${join(output, `${step.name}.log`)}`);
       const record = await runStep(step, env, output);

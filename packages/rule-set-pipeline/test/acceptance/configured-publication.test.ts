@@ -15,7 +15,7 @@ test('固定官方三集在隔离分支发布候选并核验 HTTPS 字节', {
   skip: !directory || !evidenceFile || !branch || !binary, timeout: 240_000,
 }, async () => {
   assert.match(branch!, /^acceptance-[a-zA-Z0-9._-]+$/);
-  const sample = await readFile(new URL('../../samples/three-ai-rule-sets.yml', import.meta.url), 'utf8');
+  const sample = await readFile(new URL('../../config/rulesets.yml', import.meta.url), 'utf8');
   const configuration = sample.replace('branch: main', `branch: ${branch}`);
   const token = process.env.GITHUB_TOKEN ?? (await promisify(execFile)('gh', ['auth', 'token'])).stdout.trim();
   const requests: string[] = [];
@@ -24,7 +24,7 @@ test('固定官方三集在隔离分支发布候选并核验 HTTPS 字节', {
     sampleTag: '20261104112839', token, fetch: fetcher });
   assert.equal(result.status, 'processed');
   assert.deepEqual(result.results.map(entry => [entry.id, entry.status]), [
-    ['ai-openai', 'processed'], ['ai-anthropic', 'processed'], ['ai-google-deepmind', 'processed'],
+    ['openai', 'processed'], ['anthropic', 'processed'], ['google-deepmind', 'processed'],
   ]);
   const persisted = await readUpdateState(directory!);
   const source = persisted.state.pinned[String(result.releaseId)].source!;

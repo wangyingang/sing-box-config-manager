@@ -9,7 +9,8 @@ import type { UpdateState } from './update.js';
 import { validBaseline } from './maintenance-baseline-transport.js';
 import { cleanupRefNames } from './maintenance-refs.js';
 import type { MaintenanceCleanup, MaintenanceRun } from './maintenance.js';
-import { parseBuildConfiguration } from './configured-build.js';
+import { parseBuildConfiguration, parseRuleDefinition } from './configuration.js';
+import { validReleaseAssetIdentities, V2FLY_RELEASE_INPUT } from './release.js';
 
 export const STATE_PATH = 'pipeline/state.json';
 export const BASELINE_PATH = 'pipeline/baseline.json';
@@ -64,16 +65,10 @@ function validatePin(pin: unknown, id: string) {
   if (!object(pin) || !object(pin.identity)) throw new Error('REMOTE_STATE_CORRUPT: source pin');
   const identity = pin.identity;
   if (!Number.isSafeInteger(identity.releaseId) || identity.releaseId <= 0 || String(identity.releaseId) !== id
-    || !/^[0-9]{14}$/.test(identity.tag) || !sha(identity.commit) || identity.repository !== 'v2fly/domain-list-community') {
+    || !/^[0-9]{14}$/.test(identity.tag) || !sha(identity.commit) || identity.repository !== V2FLY_RELEASE_INPUT.repository) {
     throw new Error('REMOTE_STATE_CORRUPT: source identity');
   }
-  for (const [key, name] of [['yaml', 'dlc.dat_plain.yml'], ['checksum', 'dlc.dat_plain.yml.sha256sum']] as const) {
-    const asset = identity[key];
-    if (!object(asset) || !Number.isSafeInteger(asset.id) || asset.id <= 0 || asset.name !== name
-      || asset.url !== `https://github.com/v2fly/domain-list-community/releases/download/${identity.tag}/${name}`) {
-      throw new Error('REMOTE_STATE_CORRUPT: source asset identity');
-    }
-  }
+  if (!validReleaseAssetIdentities(identity)) throw new Error('REMOTE_STATE_CORRUPT: source asset identity');
   if (pin.source !== undefined) {
     const source = pin.source;
     if (!object(source) || !digest(source.inputSha256) || !digest(source.checksumSha256)
@@ -193,8 +188,7 @@ function validate(value: unknown): asserts value is RemoteJournal {
       throw new Error('REMOTE_STATE_CORRUPT: candidate address');
     }
     if (candidate.definition !== undefined) {
-      const definition = parseBuildConfiguration(JSON.stringify({ schemaVersion: 1, source: 'v2fly/domain-list-community',
-        target: { repository: 'wangyingang/sing-box-rule-artifacts', branch: value.targetBranch }, ruleSets: [candidate.definition] })).ruleSets[0];
+      const definition = parseRuleDefinition(candidate.definition);
       if (candidate.logicalId !== definition.id) throw new Error('REMOTE_STATE_CORRUPT: candidate logical ID');
     }
   }

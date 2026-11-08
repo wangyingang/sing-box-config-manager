@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+import { parseBuildConfiguration } from '../../src/configuration.js';
 import assert from 'node:assert/strict';
 import { chmod, copyFile, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -11,9 +13,8 @@ import { readRemoteStatus } from '../../src/remote-status.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
 const tag = '20261104112839';
-const configuration = JSON.stringify({ schemaVersion: 1, source: 'v2fly/domain-list-community',
-  target: { repository: 'wangyingang/sing-box-rule-artifacts', branch: 'acceptance-recovery' },
-  ruleSets: [{ id: 'ai-openai', list: 'openai', stablePath: 'stable/ai-openai' }] });
+const official = parseBuildConfiguration(await readFile(new URL('../../config/rulesets.yml', import.meta.url), 'utf8'));
+const configuration = JSON.stringify({ ...official, target: { ...official.target, branch: 'acceptance-recovery' }, ruleSets: [official.ruleSets[0]] });
 function source(lists = [{ name: 'openai', length: 1, rules: ['domain:openai.com'] }]) {
   const requests: string[] = [];
   const input = JSON.stringify({ lists });
@@ -90,21 +91,21 @@ test('同批成功兄弟候选不重发，可从新目录选择失败集按固�
       { name: 'anthropic', length: 1, rules: ['domain:anthropic.com'] },
     ]);
     const config = JSON.parse(configuration);
-    config.ruleSets.push({ id: 'ai-anthropic', list: 'anthropic', stablePath: 'stable/ai-anthropic' });
+    config.ruleSets.push(official.ruleSets[1]);
     await initializeRemoteState(remote.repository, 'acceptance-recovery');
     remote.fault((files, applied) => {
       if (!applied && Object.entries(files).some(([path, bytes]) => path.endsWith('/manifest.json')
-        && JSON.parse(bytes.toString()).id === 'ai-anthropic')) throw new Error('Anthropic publication interrupted');
+        && JSON.parse(bytes.toString()).id === 'anthropic')) throw new Error('Anthropic publication interrupted');
     });
     const common = { binary: binary!, configuration: JSON.stringify(config), publication: remote.publication, fetch: upstream.fetcher };
     assert.equal((await updateRules({ ...common, stateDirectory: join(directory, 'first') })).status, 'partial');
     const before = (await readRemoteState(remote.repository)).journal.state;
-    const original = before.configuredProcessed!['ai-openai']['42'].candidateId;
+    const original = before.configuredProcessed!['openai']['42'].candidateId;
     remote.fault(undefined); upstream.advance();
-    const retry = await updateRules({ ...common, stateDirectory: join(directory, 'new'), selectedIds: ['ai-anthropic'], retryRelease: tag });
+    const retry = await updateRules({ ...common, stateDirectory: join(directory, 'new'), selectedIds: ['anthropic'], retryRelease: tag });
     assert.equal(retry.status, 'processed');
     const after = (await readRemoteState(remote.repository)).journal.state;
-    assert.equal(after.configuredProcessed!['ai-openai']['42'].candidateId, original);
+    assert.equal(after.configuredProcessed!['openai']['42'].candidateId, original);
     assert.equal(Object.keys(after.candidates).length, 2);
     assert.equal(after.pendingOperation!.status, 'complete');
   } finally { await rm(directory, { recursive: true, force: true }); }
