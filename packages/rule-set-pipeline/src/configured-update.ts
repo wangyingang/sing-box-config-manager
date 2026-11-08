@@ -1,14 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { configuredInput, ruleDefinitionSha256 } from './configuration.js';
+import { configuredInput } from './configuration.js';
 import { buildConfiguredCommit, buildConfiguredRelease, CONFIGURED_BUILD_RECORD, parseBuildConfiguration } from './configured-build.js';
 import { publishCandidate } from './candidate-publication.js';
 import { githubPublication, immutableUrl, type PublicationTransport } from './publication.js';
 import { lookupRelease, type ReleaseInput } from './release.js';
 import { commitSourceKey, fullGitCommit, resolveCommit, withCommitCheckpoint, type CommitInput, type CommitSourceRecord } from './github-commit.js';
 import type { SourceRecord } from './types.js';
-import { readUpdateState, sourceReferenceKey, type Candidate, type SourceReference, type UpdateState } from './update.js';
+import { readUpdateState, ruleDefinitionSha256, sourceReferenceKey, type Candidate, type SourceReference, type UpdateState } from './update.js';
 import { openRemoteSession, selectRemoteOperation, type RemoteOperation } from './remote-state.js';
 import { verifyRetainedCandidate } from './candidate-recovery.js';
 

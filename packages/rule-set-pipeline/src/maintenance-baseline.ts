@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { activationSubscription } from './activation.js';
 import { candidateArtifactFiles, candidateEvidenceSha256, candidateFiles } from './candidate-publication.js';
-import { ruleDefinitionSha256, type RuleDefinition } from './configuration.js';
+import type { RuleDefinition } from './configuration.js';
 import { filePaths, stageRef, type BaselineStage, type BaselineStages, type BaselineTransport, type PreparedBaseline } from './maintenance-baseline-transport.js';
 import type { MaintenancePlan } from './maintenance.js';
 import { buildNative, type NativeTool } from './native.js';
@@ -11,7 +11,7 @@ import { ARTIFACT_REPOSITORY, immutableUrl, type PublicationTransport } from './
 import { BASELINE_PATH, IDENTITY_PATH, STATE_PATH, type RemoteJournal } from './remote-state.js';
 import { activationRecord, readRemoteStatus } from './remote-status.js';
 import { sha256 } from './release.js';
-import { sourceReferenceKey, type Candidate, type UpdateState } from './update.js';
+import { ruleDefinitionSha256, sourceReferenceKey, type Candidate, type UpdateState } from './update.js';
 
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
 interface Verification {

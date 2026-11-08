@@ -4,7 +4,7 @@ import { isMap, parseDocument, visit } from 'yaml';
 import { USAGES, type Usage } from './projection.js';
 import { ARTIFACT_REPOSITORY } from './publication.js';
 import { CHINA_IP_INPUT, type CommitInput } from './github-commit.js';
-import { sha256, V2FLY_RELEASE_INPUT, type ReleaseInput } from './release.js';
+import { V2FLY_RELEASE_INPUT, type ReleaseInput } from './release.js';
 
 type SourceInput = ReleaseInput | CommitInput;
 type ConfiguredUsage = { artifact: 'domains' | 'route' } | { unavailable: 'empty' };
@@ -20,10 +20,6 @@ export interface BuildConfiguration {
   sources: Record<string, SourceInput>;
   target: { repository: typeof ARTIFACT_REPOSITORY; branch: string };
   ruleSets: RuleDefinition[];
-}
-
-export function ruleDefinitionSha256(definition: RuleDefinition, target: BuildConfiguration['target']) {
-  return sha256(JSON.stringify({ definition, target }));
 }
 
 const logicalId = /^[a-z][a-z0-9-]*$/;
