@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { readFile, writeFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import test from 'node:test';
 import { activateRules, parseBuildConfiguration, readUpdateState, updateRules } from '../../src/index.js';
@@ -8,6 +8,7 @@ import { githubActivation } from '../../src/activation-transport.js';
 import { githubPublication, ARTIFACT_REPOSITORY, immutableUrl } from '../../src/publication.js';
 import { sha256 } from '../../src/release.js';
 import { syntheticCandidate } from '../integration/activation-client-fixture.js';
+import { releaseConfiguration } from '../fixtures/release-configuration.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
 const branch = process.env.RULE_CONFIGURED_ROLLBACK_BRANCH;
@@ -18,7 +19,7 @@ test('隔离分支通过 CLI 逐集回滚真实三集，恢复历史字节且兄
   skip: !binary || !branch || !directory || !evidenceFile, timeout: 1_200_000,
 }, async () => {
   assert.match(branch!, /^acceptance-[a-zA-Z0-9._-]+$/);
-  const configuration = (await readFile(new URL('../../config/rulesets.yml', import.meta.url), 'utf8')).replace('branch: main', `branch: ${branch}`);
+  const configuration = releaseConfiguration(branch);
   const config = parseBuildConfiguration(configuration);
   const transport = githubActivation(branch!), publication = githubPublication(undefined, branch!);
   const productionBefore = await githubActivation().head();

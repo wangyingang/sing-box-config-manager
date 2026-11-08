@@ -1,6 +1,6 @@
 # Issue #67：正式配置和三集更名验收
 
-[工单 #67](https://github.com/wangyingang/sing-box-config-manager/issues/67) 对应 [Spec #66](https://github.com/wangyingang/sing-box-config-manager/issues/66) 的 A18、A19。正式配置从空状态初始化 `openai`、`anthropic`、`google-deepmind`。本验收不迁移旧配置、历史或客户端，不启用生产更新和清理。
+[工单 #67](https://github.com/wangyingang/sing-box-config-manager/issues/67) 对应 [Spec #66](https://github.com/wangyingang/sing-box-config-manager/issues/66) 的 A18、A19。正式配置从空状态初始化 `openai`、`anthropic`、`google-deepmind`。本验收不迁移旧配置、历史或客户端，不启用生产更新和清理。以下三集探针对应 #67 的源码版本；当前四集探针见 [#73](issue-73.md)。
 
 - **规则内容与用途：** 旧定义（`e144fff`）与正式配置使用 V2Fly Release `20261104112839` 和同一个 sing-box 1.14.4。比较三集的转换报告、用途映射和六个 JSON／SRS 文件。固定 Release 测试复核原 JSON 摘要，并验证新构建的 JSON／SRS 可重复。运行 `node scripts/verify.mjs --out <新目录> --binary <绝对路径> --release`，证据记录完整来源、工具身份及产物摘要。
 - **受控故障：** 原生集成测试使用受控 Release 和隔离 transport 验证错误摘要、单列表失败、人工与自动操作并发、发布中断后换目录、提交后回读中断和维护恢复。客户端测试使用真实 sing-box 验证稳定 URL 更新和缓存恢复。

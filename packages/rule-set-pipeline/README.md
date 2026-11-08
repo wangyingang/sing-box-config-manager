@@ -2,7 +2,7 @@
 
 包名：`@sing-box-config-manager/rule-set-pipeline`。管理者需要更新系统维护的规则集合时，本模块从官方来源生成 sing-box 可加载的规则文件，验证并上传为候选。管理者可显式激活候选，检查流程也可自动激活符合条件的规则。客户端随后通过稳定地址取得当前规则；构建成功、候选验证成功、稳定入口切换和客户端加载完成是不同的状态。
 
-当前 `update` 可发布 V2Fly `domain-list-community` 官方 Release 中 `dlc.dat_plain.yml` 的 `category-ai-!cn`，也可按管理者的 YAML 配置从同一 Release 发布多个列表。本地 `build` 同样支持配置驱动的多集构建。`activate` 与 `rollback` 均可通过 `--config ... --id ...` 按逻辑 ID 独立操作。输出包括 JSON 源规则文件和 SRS 二进制规则文件，目标版本固定为 sing-box **1.14.4**，JSON Source Format 固定为 **4**。`china-ip` 可从固定的 GitHub commit 构建双栈规则，显式发布、查询和重建候选，也支持人工指定和回滚。`check-now` 支持同时检查两类来源；`resume` 可恢复任一规则集。正式 Actions 的四集接入留待 [#73](https://github.com/wangyingang/sing-box-config-manager/issues/73)。历史维护可保留两类来源的当前交付及人工固定。
+当前 `update` 可发布 V2Fly `domain-list-community` 官方 Release 中 `dlc.dat_plain.yml` 的 `category-ai-!cn`，也可按管理者的 YAML 配置从同一 Release 发布多个列表。本地 `build` 同样支持配置驱动的多集构建。`activate` 与 `rollback` 均可通过 `--config ... --id ...` 按逻辑 ID 独立操作。输出包括 JSON 源规则文件和 SRS 二进制规则文件，目标版本固定为 sing-box **1.14.4**，JSON Source Format 固定为 **4**。`china-ip` 可从固定的 GitHub commit 构建双栈规则，显式发布、查询和重建候选，也支持人工指定和回滚。`check-now` 支持同时检查两类来源；`resume` 可恢复任一规则集。[维护工作流](docs/verification/issue-73.md)使用正式四集配置；清理保留两类来源的当前交付及人工固定。
 
 ## 操作分别产生什么结果
 
@@ -64,14 +64,14 @@ pnpm --dir packages/rule-set-pipeline build:release --binary /absolute/path/to/s
 
 ### 配置驱动的多规则集构建
 
-CLI 的多集命令和规则维护 Actions 共用正式配置 [`config/rulesets.yml`](config/rulesets.yml)（`schemaVersion: 2`）。当前正式配置包含 V2Fly 的 `openai`、`anthropic` 和 `google-deepmind`，共享 Release 的 YAML 与摘要。[`config/china-ip.yml`](config/china-ip.yml) 声明 Git 来源和 `china-ip` 的用途。示例见 [`samples/rulesets.example.yml`](samples/rulesets.example.yml)。
+CLI 的多集命令和规则维护 Actions 共用正式配置 [`config/rulesets.yml`](config/rulesets.yml)（`schemaVersion: 2`）。正式配置包含 V2Fly 的 `openai`、`anthropic`、`google-deepmind` 和 Git 来源的 `china-ip`，通过 `usages` 声明各集用途。V2Fly 三集共享 Release 的 YAML 和摘要。示例见 [`samples/rulesets.example.yml`](samples/rulesets.example.yml)。独立的 [`config/china-ip.yml`](config/china-ip.yml) 保留供既有单集调用使用。
 
 在隔离目标试用时，从空的 `acceptance-*` 分支初始化新状态，并把配置复制到分支专用文件，再修改 `target.branch`。旧命名的三集 YAML 和记录不能用于初始化或恢复新配置。生产启用及现有客户端迁移需单独安排。
 
 `target` 只能是可信产物仓库的 `main` 或 `acceptance-*` 分支；每个 `stablePath` 必须是互不重叠的 `stable/` 相对路径，不能占用 `stable/activation.json`。本地构建只记录这些发布意图，不写入目标分支。
 
 ```sh
-pnpm --dir packages/rule-set-pipeline build:release --binary /absolute/path/to/sing-box-1.14.4 --release 20261104112839 --config config/rulesets.yml --out /tmp/three-ai-rules
+pnpm --dir packages/rule-set-pipeline build:release --binary /absolute/path/to/sing-box-1.14.4 --release 20261104112839 --config config/rulesets.yml --id openai --id anthropic --id google-deepmind --out /tmp/three-ai-rules
 pnpm --dir packages/rule-set-pipeline build:release --binary /absolute/path/to/sing-box-1.14.4 --release 20261104112839 --config config/rulesets.yml --id anthropic --out /tmp/anthropic-only
 ```
 
@@ -83,16 +83,16 @@ pnpm --dir packages/rule-set-pipeline build:release --binary /absolute/path/to/s
 
 ```sh
 pnpm --dir packages/rule-set-pipeline build:release \
-  --config config/china-ip.yml --binary /absolute/path/to/sing-box-1.14.4 \
+  --config config/rulesets.yml --id china-ip --binary /absolute/path/to/sing-box-1.14.4 \
   --out /tmp/china-ip-first
 pnpm --dir packages/rule-set-pipeline build:release \
-  --config config/china-ip.yml --binary /absolute/path/to/sing-box-1.14.4 \
+  --config config/rulesets.yml --id china-ip --binary /absolute/path/to/sing-box-1.14.4 \
   --commit "$(jq -r .commit /tmp/china-ip-first/source.json)" --out /tmp/china-ip-repeat
 ```
 
 每个有效行包含一个带前缀长度的 IPv4 或 IPv6 CIDR。文件使用 UTF-8，允许开头的 BOM，接受 LF、CRLF 和 CR 换行。行首尾的空格和制表符会被移除。空行和以 `#` 开头的整行注释会被跳过。转换会规范化网络地址并去重，保留不同前缀。无效 UTF-8、非法 CIDR（包括带行尾注释的行）或空结果都会使构建失败。诊断记录文件名，非法 CIDR 同时记录行和列。
 
-输出在 `china-ip/` 子目录中。Route 和 DNS Response 共用 `route.json` 与 `route.srs`，DNS Query 标记为 `unavailable: empty`。验证包含编译、解码、比较 IP 匹配范围，以及加载两种格式。[`config/china-ip.yml`](config/china-ip.yml) 供本地构建、候选发布及人工指定和回滚使用。
+输出在 `china-ip/` 子目录中。Route 和 DNS Response 共用 `route.json` 与 `route.srs`，DNS Query 标记为 `unavailable: empty`。验证包含编译、解码、比较 IP 匹配范围，以及加载两种格式。
 
 ## 按逻辑 ID 显式激活
 
@@ -140,13 +140,13 @@ pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-stat
 pnpm --dir packages/rule-set-pipeline status
 ```
 
-配置驱动的多集候选发布传入版本化 YAML；`--id` 可只处理指定逻辑 ID。单次候选发布只处理一个来源。首次发布先使用目标为 `acceptance-*` 的配置初始化并验收。`--state` 是可重建的本地缓存目录：
+配置驱动的多集候选发布传入版本化 YAML；`--id` 可只处理指定逻辑 ID。单次候选发布只处理一个来源；使用四集配置时，用 `--id` 选择同一来源的规则集。首次发布先初始化隔离分支；下例的 `$config` 指向该分支的正式配置副本。`--state` 是可重建的本地缓存目录：
 
 ```sh
-pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config config/rulesets.yml
-pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config config/rulesets.yml --id anthropic
-pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config config/rulesets.yml --id anthropic --release 20261104112839
-pnpm --dir packages/rule-set-pipeline status --config config/rulesets.yml --binary /absolute/path/to/sing-box-1.14.4
+pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config "$config" --id openai --id anthropic --id google-deepmind
+pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config "$config" --id anthropic
+pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config "$config" --id anthropic --release 20261104112839
+pnpm --dir packages/rule-set-pipeline status --config "$config" --binary /absolute/path/to/sing-box-1.14.4
 ```
 
 一次批量调用共享一份已固定、校验的 YAML 和摘要，随后逐集构建、原生验证并发布。共同输入损坏停止整批；单集缺表、非法条目或回读失败保留兄弟集结果。`results` 分别报告 `processed`、`skipped`、`failed`，失败项携带候选进度和已知 commit；任一集失败时 CLI 退出码为 1。`update`／`rebuild` 只写候选和恢复记录，不修改 `stable/`。
@@ -181,7 +181,7 @@ Artifact Manifest（产物清单）记录某次不可变规则文件的固定地
 
 ### 发布和重建 `china-ip` 候选
 
-在预先创建的隔离分支使用一份 `config/china-ip.yml` 的副本，将 `target.branch` 设为该分支。以下命令在 `packages/rule-set-pipeline` 下运行，`$binary` 为 sing-box 1.14.4 的绝对路径：
+在预先创建的隔离分支使用一份 `config/rulesets.yml` 的副本，将 `target.branch` 设为该分支。以下命令在 `packages/rule-set-pipeline` 下运行，`$binary` 为 sing-box 1.14.4 的绝对路径：
 
 ```sh
 pnpm initialize --config "$config"
@@ -267,7 +267,7 @@ pnpm --dir packages/rule-set-pipeline check-now \
   --state /absolute/path/to/rule-state
 ```
 
-要在隔离目标检查四集，把 `config/china-ip.yml` 中的 `sources` 条目和 `ruleSets` 条目分别加到 `config/rulesets.yml` 的副本中，保留一个 `target` 并指向隔离分支。默认检查配置中全部逻辑 ID；可重复 `--id` 选择其中几集。定时工作流复用同一个 `checkRules({ configuration, subscriptions, binary, stateDirectory, selectedIds? })` 入口。
+要在隔离目标检查四集，只需将正式配置副本的 `target.branch` 改为已初始化的隔离分支。默认检查配置中全部逻辑 ID；可重复 `--id` 选择其中几集。定时工作流复用同一个 `checkRules({ configuration, subscriptions, binary, stateDirectory, selectedIds? })` 入口。
 
 - 新批次分别固定 V2Fly Release 和 Git commit。同一来源的所选规则集共用已核验的输入。共同输入失败只影响该来源，单列表失败只影响对应规则集。共享发布状态损坏或提交待核实时停止写入。
 - 定义、构建工具和订阅契约一致时，比较实际 JSON、SRS、用途映射和当前稳定文件。内容未变只更新 `state.latestChecks`，保留实际检查的 Release 或 Git commit。定义或工具变化时重新验证，已有订阅契约不兼容时拒绝切换。

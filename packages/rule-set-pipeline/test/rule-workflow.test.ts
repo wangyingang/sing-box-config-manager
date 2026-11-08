@@ -14,20 +14,22 @@ function run(options: Partial<WorkflowOptions>, operations: Partial<WorkflowOper
   return { result, reports };
 }
 
-test('正式配置为三集生成新稳定 URL，并按用途复用规则文件', () => {
+test('正式配置为四集生成稳定 URL，并按用途复用规则文件', () => {
   const { subscriptions } = workflowRules('acceptance-issue-67');
-  assert.deepEqual(Object.keys(subscriptions), ['openai', 'anthropic', 'google-deepmind']);
+  assert.deepEqual(Object.keys(subscriptions), ['openai', 'anthropic', 'google-deepmind', 'china-ip']);
   for (const [id, value] of Object.entries(subscriptions)) {
     assert.equal(value.systemRuleSetId, id);
     const route = value.projections.route;
     assert.ok('formats' in route);
     const prefix = `https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-67/stable/${id}`;
+    const ip = id === 'china-ip';
+    const stem = ip ? 'route' : 'domains';
     assert.deepEqual(route.formats, {
-      binary: { url: `${prefix}/domains.srs`, requiredCapabilities: [] },
-      source: { url: `${prefix}/domains.json`, requiredCapabilities: [] },
+      binary: { url: `${prefix}/${stem}.srs`, requiredCapabilities: [] },
+      source: { url: `${prefix}/${stem}.json`, requiredCapabilities: [] },
     });
-    assert.deepEqual(value.projections['dns-query'], route);
-    assert.deepEqual(value.projections['dns-response'], { unavailable: 'empty' });
+    assert.deepEqual(value.projections[ip ? 'dns-response' : 'dns-query'], route);
+    assert.deepEqual(value.projections[ip ? 'dns-query' : 'dns-response'], { unavailable: 'empty' });
   }
 });
 

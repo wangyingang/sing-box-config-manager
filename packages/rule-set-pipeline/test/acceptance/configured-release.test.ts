@@ -4,6 +4,7 @@ import test from 'node:test';
 import { buildConfiguredRelease } from '../../src/configured-build.js';
 
 // JSON from the original three definitions at e144fff, using this fixed Release.
+const domainIds = ['openai', 'anthropic', 'google-deepmind'];
 const baselineJsonSha256 = [
   'a70096077d78af43df6f56dbad775c27e8b0be7c92a81e36baaf8229b04de5d5',
   'c1020bf1d91791e2a886d618b5f0625972fa6077e52621f25b1a29b31ae683b7',
@@ -17,13 +18,13 @@ test('固定官方 Release 一次读取三集，分别原生验证且重复构�
     requests.push(String(input));
     return fetch(input, init);
   };
-  const options = { configuration,
+  const options = { configuration, selectedIds: domainIds,
     release: { tag: '20261104112839', fetch: fetcher, token: process.env.GITHUB_TOKEN },
     binary: process.env.SING_BOX_TEST_BINARY ?? '' };
   const first = await buildConfiguredRelease(options);
   assert.equal(requests.filter(url => url.endsWith('/assets/' + first.source.yaml.id)).length, 1);
   assert.equal(requests.filter(url => url.endsWith('/assets/' + first.source.checksum.id)).length, 1);
-  assert.deepEqual(first.results.map(result => result.id), ['openai', 'anthropic', 'google-deepmind']);
+  assert.deepEqual(first.results.map(result => result.id), domainIds);
   for (const [index, result] of first.results.entries()) {
     assert.equal(result.status, 'built-validated', JSON.stringify(result.report));
     if (result.status !== 'built-validated') continue;

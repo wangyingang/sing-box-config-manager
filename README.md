@@ -10,7 +10,7 @@
 
 | 模块 | 接收什么、完成什么 | 当前边界 |
 | --- | --- | --- |
-| [Rule Set Pipeline](packages/rule-set-pipeline/README.md) | 从官方规则来源构建 JSON／SRS，发布候选，激活后更新稳定规则入口 | 已实现 V2Fly Release 和 Git CIDR 来源的多集检查、候选发布、单集激活／回滚／恢复及同进程客户端更新验证；现有调度使用 V2Fly 正式配置 |
+| [Rule Set Pipeline](packages/rule-set-pipeline/README.md) | 从官方规则来源构建 JSON／SRS，发布候选，激活后更新稳定规则入口 | 已实现 V2Fly Release 和 Git CIDR 来源的多集检查、候选发布、单集激活／回滚／恢复及同进程客户端更新验证；CLI 和维护工作流共用双来源四集配置，生产更新和清理默认关闭 |
 | [Config Compiler](packages/config-compiler/README.md) | 将模板、配置选择、节点修订、规则元数据和客户端能力组合成完整配置，并检查错误 | 已实现纯内存编译、发布快照及 Node 本地发布适配器 |
 | [Configuration Manager Web App](apps/web/README.md) | 计划负责编辑、存储、管理授权、配置交付和订阅服务 | 当前只有工作区骨架及 Compiler 依赖，没有页面、HTTP API 或数据库 |
 
@@ -49,7 +49,7 @@ pnpm install --frozen-lockfile
 pnpm check
 ```
 
-本地完整验证使用 `node scripts/verify.mjs --out <新证据目录> --binary <1.14.4绝对路径>`。入口按根 `package.json` 核对 pnpm 版本，并让嵌套脚本使用同一启动器；版本不符时在执行检查前失败。可用 `--pnpm <启动器绝对路径>` 指定已安装的匹配版本。`--check-only` 只运行常规检查；`--release` 另运行固定官方 Release 的单列表与正式三集配置构建验收，不执行远程写入。
+本地完整验证使用 `node scripts/verify.mjs --out <新证据目录> --binary <1.14.4绝对路径>`。入口按根 `package.json` 核对 pnpm 版本，并让嵌套脚本使用同一启动器；版本不符时在执行检查前失败。可用 `--pnpm <启动器绝对路径>` 指定已安装的匹配版本。`--check-only` 只运行常规检查；`--release` 另运行固定官方 Release 的单列表与正式配置中的 V2Fly 三集构建验收，不执行远程写入。
 
 每次运行保留工具身份、Git 状态、命令、退出码、测试统计、日志及文件摘要。证据目录必须不存在，已有证据不覆盖；用于阶段收尾的证据应在清理 worktree 前归档。Spec #14 的最终验收证据见 [docs/verification/spec-14-final/](docs/verification/spec-14-final/)。历史测试数量只属于记录中的提交和日期，不能表述为当前提交已经重新执行通过。
 
