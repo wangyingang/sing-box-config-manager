@@ -2,7 +2,7 @@
 
 包名：`@sing-box-config-manager/rule-set-pipeline`。管理者需要更新系统维护的规则集合时，本模块从官方来源生成 sing-box 可加载的规则文件，验证并上传为候选。管理者可显式激活候选，检查流程也可自动激活符合条件的规则。客户端随后通过稳定地址取得当前规则；构建成功、候选验证成功、稳定入口切换和客户端加载完成是不同的状态。
 
-当前 `update` 可发布 V2Fly `domain-list-community` 官方 Release 中 `dlc.dat_plain.yml` 的 `category-ai-!cn`，也可按管理者的 YAML 配置从同一 Release 发布多个列表。本地 `build` 同样支持配置驱动的多集构建。`activate` 与 `rollback` 均可通过 `--config ... --id ...` 按逻辑 ID 独立操作。输出包括 JSON 源规则文件和 SRS 二进制规则文件，目标版本固定为 sing-box **1.14.4**，JSON Source Format 固定为 **4**。`china-ip` 可从固定的 GitHub commit 构建双栈规则，显式发布、查询和重建候选，也支持人工指定和回滚。`check-now` 支持同时检查两类来源；`resume` 可恢复任一规则集。正式 Actions 的四集接入留待 [#73](https://github.com/wangyingang/sing-box-config-manager/issues/73)。历史维护可保留两类来源的当前交付及人工固定。
+当前 `update` 可发布 V2Fly `domain-list-community` 官方 Release 中 `dlc.dat_plain.yml` 的 `category-ai-!cn`，也可按管理者的 YAML 配置从同一 Release 发布多个列表。本地 `build` 同样支持配置驱动的多集构建。`activate` 与 `rollback` 均可通过 `--config ... --id ...` 按逻辑 ID 独立操作。输出包括 JSON 源规则文件和 SRS 二进制规则文件，目标版本固定为 sing-box **1.14.4**，JSON Source Format 固定为 **4**。`china-ip` 可从固定的 GitHub commit 构建双栈规则，显式发布、查询和重建候选，也支持人工指定和回滚。`check-now` 支持同时检查两类来源；`resume` 可恢复任一规则集。[维护工作流](docs/verification/issue-73.md)使用正式四集配置；清理保留两类来源的当前交付及人工固定。
 
 ## 操作分别产生什么结果
 
@@ -140,13 +140,13 @@ pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-stat
 pnpm --dir packages/rule-set-pipeline status
 ```
 
-配置驱动的多集候选发布传入版本化 YAML；`--id` 可只处理指定逻辑 ID。单次候选发布只处理一个来源；使用四集配置时，用 `--id` 选择同一来源的规则集。首次发布先使用目标为 `acceptance-*` 的配置初始化并验收。`--state` 是可重建的本地缓存目录：
+配置驱动的多集候选发布传入版本化 YAML；`--id` 可只处理指定逻辑 ID。单次候选发布只处理一个来源；使用四集配置时，用 `--id` 选择同一来源的规则集。首次发布先初始化隔离分支；下例的 `$config` 指向该分支的正式配置副本。`--state` 是可重建的本地缓存目录：
 
 ```sh
-pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config config/rulesets.yml --id openai --id anthropic --id google-deepmind
-pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config config/rulesets.yml --id anthropic
-pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config config/rulesets.yml --id anthropic --release 20261104112839
-pnpm --dir packages/rule-set-pipeline status --config config/rulesets.yml --binary /absolute/path/to/sing-box-1.14.4
+pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config "$config" --id openai --id anthropic --id google-deepmind
+pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config "$config" --id anthropic
+pnpm --dir packages/rule-set-pipeline update --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config "$config" --id anthropic --release 20261104112839
+pnpm --dir packages/rule-set-pipeline status --config "$config" --binary /absolute/path/to/sing-box-1.14.4
 ```
 
 一次批量调用共享一份已固定、校验的 YAML 和摘要，随后逐集构建、原生验证并发布。共同输入损坏停止整批；单集缺表、非法条目或回读失败保留兄弟集结果。`results` 分别报告 `processed`、`skipped`、`failed`，失败项携带候选进度和已知 commit；任一集失败时 CLI 退出码为 1。`update`／`rebuild` 只写候选和恢复记录，不修改 `stable/`。
