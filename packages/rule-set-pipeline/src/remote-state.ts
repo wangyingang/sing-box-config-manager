@@ -5,11 +5,11 @@ import { isDeepStrictEqual } from 'node:util';
 import { immutableUrl, type PublicationTransport } from './publication.js';
 import type { PublicationRepository } from './publication-repository.js';
 import { PublicationWriteError } from './publication-repository.js';
-import type { UpdateState } from './update.js';
+import type { SourceReference, UpdateState } from './update.js';
 import { validBaseline } from './maintenance-baseline-transport.js';
 import { cleanupRefNames } from './maintenance-refs.js';
 import type { MaintenanceCleanup, MaintenanceRun } from './maintenance.js';
-import { parseBuildConfiguration, parseRuleDefinition } from './configuration.js';
+import { parseBuildConfiguration, parseRuleDefinition, type BuildConfiguration, type RuleDefinition } from './configuration.js';
 import { commitSourceKey, validCommitIdentity, validCommitSource } from './github-commit.js';
 import { sha256, validReleaseAssetIdentities, V2FLY_RELEASE_INPUT } from './release.js';
 
@@ -30,6 +30,18 @@ export interface RemoteJournal {
 }
 
 export type RemoteOperation = NonNullable<UpdateState['pendingOperation']>;
+
+/** Configuration aliases of the same trusted input share one checkpoint. */
+export function checkSourceId(configuration: BuildConfiguration, rule: RuleDefinition) {
+  return Object.keys(configuration.sources).sort().find(id => isDeepStrictEqual(configuration.sources[id], configuration.sources[rule.source]))!;
+}
+
+export function checkSourceReference(operation: RemoteOperation | undefined, sourceId: string): SourceReference | undefined {
+  if (operation?.sourcePins) return Object.hasOwn(operation.sourcePins, sourceId) ? operation.sourcePins[sourceId] : undefined;
+  if (operation?.sourceKey !== undefined) return { sourceKey: operation.sourceKey };
+  if (operation?.releaseId !== undefined) return { releaseId: operation.releaseId, tag: operation.tag };
+}
+
 
 export interface ResumeDecision {
   revision: string;
@@ -230,8 +242,8 @@ function validate(value: unknown): asserts value is RemoteJournal {
       if (!/^[a-z][a-z0-9-]*$/.test(id) || !object(check) || typeof check.operationId !== 'string'
         || !/^[a-f0-9-]{36}$/.test(check.operationId) || !['activated', 'unchanged', 'paused', 'failed', 'verification-pending'].includes(check.status)
         || typeof check.checkedAt !== 'string' || !Number.isFinite(Date.parse(check.checkedAt))
-        || (check.releaseId === undefined ? check.tag !== undefined : !Number.isSafeInteger(check.releaseId)
-          || state.pinned[String(check.releaseId)]?.identity?.tag !== check.tag || typeof check.tag !== 'string')
+        || (check.sourceKey !== undefined ? !validSourceReference(check) || check.sourceCommit !== state.commitPins[check.sourceKey].identity.commit
+          : check.sourceCommit !== undefined || (check.releaseId === undefined ? check.tag !== undefined : !validSourceReference(check)))
         || check.error !== undefined && typeof check.error !== 'string'
         || check.candidateId !== undefined && (typeof check.candidateId !== 'string' || !/^[a-f0-9-]+$/.test(check.candidateId))) {
         throw new Error('REMOTE_STATE_CORRUPT: latest check');
@@ -241,34 +253,41 @@ function validate(value: unknown): asserts value is RemoteJournal {
   for (const op of operations) {
     if (!object(op) || typeof op.id !== 'string' || !/^[a-f0-9-]+$/.test(op.id) || !['update', 'rebuild', 'check'].includes(op.kind)
       || !Number.isSafeInteger(op.generation) || op.generation < 1 || op.generation > value.generation
-      || op.status === 'pending' && op.generation !== value.generation || !validSourceReference(op)
+      || op.status === 'pending' && op.generation !== value.generation
+      || (op.sourcePins === undefined ? !validSourceReference(op) : op.kind !== 'check' || !object(op.sourcePins)
+        || op.sourceKey !== undefined || op.releaseId !== undefined || op.tag !== undefined)
       || !sha(op.expectedHead) || !Array.isArray(op.candidateIds) || new Set(op.candidateIds).size !== op.candidateIds.length
       || !['pending', 'complete'].includes(op.status)) throw new Error('REMOTE_STATE_CORRUPT: operation');
-    if (op.configuration !== undefined) {
-      if (typeof op.configuration !== 'string') throw new Error('REMOTE_STATE_CORRUPT: operation configuration');
-      const configuration = parseBuildConfiguration(op.configuration);
-      if (configuration.target.branch !== value.targetBranch || op.selectedIds !== undefined && (!Array.isArray(op.selectedIds)
-        || !op.selectedIds.length || new Set(op.selectedIds).size !== op.selectedIds.length
-        || op.selectedIds.some((id: unknown) => !configuration.ruleSets.some(rule => rule.id === id)))) throw new Error('REMOTE_STATE_CORRUPT: operation selection');
-    } else if (op.selectedIds !== undefined) throw new Error('REMOTE_STATE_CORRUPT: operation selection');
+    if (op.configuration !== undefined && typeof op.configuration !== 'string') throw new Error('REMOTE_STATE_CORRUPT: operation configuration');
     const configuration = op.configuration === undefined ? undefined : parseBuildConfiguration(op.configuration);
-    if (op.sourceKey !== undefined && (!configuration || configuration.ruleSets.some(rule =>
-      (!op.selectedIds || op.selectedIds.includes(rule.id)) && configuration.sources[rule.source].version !== 'git-branch'))) {
-      throw new Error('REMOTE_STATE_CORRUPT: Git operation source');
+    if (configuration && configuration.target.branch !== value.targetBranch || op.selectedIds !== undefined && (!configuration
+      || !Array.isArray(op.selectedIds) || !op.selectedIds.length || new Set(op.selectedIds).size !== op.selectedIds.length
+      || op.selectedIds.some((id: unknown) => !configuration.ruleSets.some(rule => rule.id === id)))) {
+      throw new Error('REMOTE_STATE_CORRUPT: operation selection');
     }
+    const selected = configuration?.ruleSets.filter(rule => !op.selectedIds || op.selectedIds.includes(rule.id));
     if (op.kind === 'check') {
-      if (op.sourceKey !== undefined || !configuration || !op.selectedIds || !object(op.controlRevisions) || !object(op.subscriptionHashes)
+      if (!configuration || !op.selectedIds || !object(op.controlRevisions) || !object(op.subscriptionHashes)
         || Object.keys(op.controlRevisions).length !== op.selectedIds.length || Object.keys(op.subscriptionHashes).length !== op.selectedIds.length
         || op.selectedIds.some((id: string) => !(op.controlRevisions[id] === null || typeof op.controlRevisions[id] === 'string')
           || !digest(op.subscriptionHashes[id]))) throw new Error('REMOTE_STATE_CORRUPT: check operation');
+      const sourceIds = new Set(selected!.map(rule => checkSourceId(configuration, rule)));
+      const pins = op.sourcePins ?? (sourceIds.size === 1 ? { [[...sourceIds][0]]: op } : {});
+      if (!Object.keys(pins).length || Object.entries(pins).some(([id, pin]) => !sourceIds.has(id) || !object(pin)
+        || !validSourceReference(pin) || (pin.sourceKey !== undefined) !== (configuration.sources[id].version === 'git-branch'))) {
+        throw new Error('REMOTE_STATE_CORRUPT: check source');
+      }
+    } else if (op.sourceKey !== undefined && (!selected || selected.some(rule => configuration!.sources[rule.source].version !== 'git-branch'))) {
+      throw new Error('REMOTE_STATE_CORRUPT: Git operation source');
     } else if (op.controlRevisions !== undefined || op.subscriptionHashes !== undefined) {
       throw new Error('REMOTE_STATE_CORRUPT: unexpected check operation fields');
     }
     for (const id of op.candidateIds) {
       const candidate = state.candidates[id];
       const definition = configuration?.ruleSets.find(rule => rule.id === candidate?.logicalId);
-      if (typeof id !== 'string' || !object(candidate) || candidate.operationId !== op.id || candidate.operation !== (op.kind === 'check' ? 'update' : op.kind)
-        || candidate.sourceKey !== op.sourceKey || candidate.releaseId !== op.releaseId || candidate.tag !== op.tag
+      const reference = op.sourcePins && definition ? op.sourcePins[checkSourceId(configuration!, definition)] : op;
+      if (typeof id !== 'string' || !object(candidate) || !reference || candidate.operationId !== op.id || candidate.operation !== (op.kind === 'check' ? 'update' : op.kind)
+        || candidate.sourceKey !== reference.sourceKey || candidate.releaseId !== reference.releaseId || candidate.tag !== reference.tag
         || (configuration ? !definition || op.selectedIds && !op.selectedIds.includes(definition.id)
           || !isDeepStrictEqual(candidate.definition, definition) : candidate.logicalId !== undefined || candidate.definition !== undefined)) {
         throw new Error('REMOTE_STATE_CORRUPT: operation candidate index');

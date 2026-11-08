@@ -69,7 +69,7 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, 
       && (entry.sourceKey !== undefined) === git
       && (!fixedTag || fixedTag === entry.tag) && (!rebuild?.commit || (entry.sourceKey && state.commitPins?.[entry.sourceKey]?.identity.commit === rebuild.commit));
     const recovery = session && selectRemoteOperation(session.journal, matches);
-    if (recovery && !matches(recovery) || !recovery && session?.journal.parkedOperations?.length) {
+    if (recovery && (recovery.sourcePins !== undefined || !matches(recovery)) || !recovery && session?.journal.parkedOperations?.length) {
       throw new Error('RECOVERY_REQUEST_MISMATCH: resume the registered operation with its original configuration and selection');
     }
     state.configuredProcessed ??= {};
@@ -77,6 +77,7 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, 
     const definitionHash = (definition: typeof definitions[number]) => sha256(JSON.stringify({ definition, target: configuration.target }));
     const operationFinished = () => {
       const operation = state.pendingOperation!;
+      if (operation.sourcePins !== undefined) throw new Error('Expected a single-source candidate operation');
       return configuration.ruleSets.filter(rule => !operation.selectedIds || operation.selectedIds.includes(rule.id)).every(rule => {
         const completed = Object.values(state.candidates).some(candidate => candidate.operationId === operation.id
           && candidate.logicalId === rule.id && candidate.retained && candidate.phase === 'complete' && candidate.status === 'verified');
