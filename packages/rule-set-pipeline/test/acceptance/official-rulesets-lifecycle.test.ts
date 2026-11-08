@@ -11,7 +11,7 @@ import { githubActivation } from '../../src/activation-transport.js';
 import { checkRules, resumeRules } from '../../src/check-rules.js';
 import { githubBaselineTransport } from '../../src/maintenance-baseline-transport.js';
 import { branchRef, gitMaintenanceRefs } from '../../src/maintenance-refs.js';
-import { manageMaintenance } from '../../src/maintenance.js';
+import { manageMaintenance, type MaintenanceRequest } from '../../src/maintenance.js';
 import { createGitCommit } from '../../src/publication-repository.js';
 import { ARTIFACT_REPOSITORY, GitHubHttpError, githubPublication, type ghJson } from '../../src/publication.js';
 import { sha256 } from '../../src/release.js';
@@ -134,31 +134,37 @@ test('从空的 GitHub 隔离分支使用正式配置完成四集双来源生命
   }
 
   const maintenance = { repository, binary, activation, publication, baseline: githubBaselineTransport(request), refTransport: refs };
-  async function workflow(operation: 'daily' | 'check' | 'cleanup', fetcher: typeof fetch, local: string) {
+  async function workflow(operation: 'daily' | 'check' | 'cleanup', input?: { fetcher: typeof fetch; directory: string }) {
     const observations: Record<string, unknown> = {};
+    const maintenanceResults: Partial<Record<MaintenanceRequest['action'], Awaited<ReturnType<typeof manageMaintenance>>>> = {};
     const code = await runRuleWorkflow({ operation, target, updateEnabled: false, cleanupEnabled: false }, {
-      check: () => checkRules({ ...check, fetch: fetcher, stateDirectory: join(root, local) }),
+      async check() {
+        assert.ok(input, 'Unexpected check during manual cleanup');
+        return checkRules({ ...check, fetch: input.fetcher, stateDirectory: join(root, input.directory) });
+      },
       async maintenance(request) {
         const result = await manageMaintenance({ ...maintenance, ...request });
         maintenanceId ??= result.run?.id;
+        maintenanceResults[request.action] = result;
         return result;
       },
     }, (name, result) => {
       observations[name] = result;
     });
     assert.equal(code, 0, JSON.stringify(observations));
-    return observations;
+    return { observations, maintenanceResults };
   }
 
-  const first = await workflow('daily', originalSource, 'first-check');
+  const { observations: first } = await workflow('daily', { fetcher: originalSource, directory: 'first-check' });
   const original = (await status()).activeRuleVersions;
   assert.deepEqual(Object.keys(original).sort(), [...ids].sort());
   for (const id of domains) assert.equal(original[id].activation.source.tag, originalTag);
   assert.equal(original[china].activation.source.commit, originalCommit);
   console.log(JSON.stringify({ first, active: Object.fromEntries(ids.map(id => [id, original[id].activation])) }));
 
-  const second = await workflow('check', updatedSource, 'second-check');
-  const changed = (await status()).activeRuleVersions;
+  const { observations: second } = await workflow('check', { fetcher: updatedSource, directory: 'second-check' });
+  const changedStatus = await status();
+  const changed = changedStatus.activeRuleVersions;
   assert.equal(changed.anthropic.activation.source.tag, updatedTag);
   assert.equal(changed[china].activation.source.commit, updatedCommit);
   assert.notDeepEqual(changed[china].activation.files, original[china].activation.files);
@@ -166,8 +172,12 @@ test('从空的 GitHub 隔离分支使用正式配置完成四集双来源生命
 
   const manual = { configuration, binary, transport: activation, logicalId: china,
     subscription: subscriptions[china], stateDirectory: join(root, 'manual') };
+  const originalRollback = changedStatus.rollbackTargets[china].find(entry => entry.id === original[china].activation.id);
+  assert.ok(originalRollback, 'The initial China IP activation must be available for rollback');
+  console.log(JSON.stringify({ second, changedSources: { anthropic: changed.anthropic.activation.source,
+    [china]: changed[china].activation.source }, originalRollback }));
   const rollback = await rollbackRules({ ...manual, expectedHead: await activation.head(),
-    historicalActivationCommit: original[china].commit });
+    historicalActivationCommit: originalRollback.commit });
   assert.deepEqual(rollback.activation.files, original[china].activation.files);
   const fresh = { ...check, stateDirectory: join(root, 'fresh'), fetch: updatedSource };
   const paused = await checkRules({ ...fresh, selectedIds: [china] });
@@ -182,14 +192,16 @@ test('从空的 GitHub 隔离分支使用正式配置完成四集双来源生命
   assert.equal(before.activeRuleVersions[china].control?.pauseAutomaticActivation, true);
   assert.equal(before.activeRuleVersions[china].control?.pauseAutomaticRetry, false);
   assert.deepEqual(before.activeRuleVersions[china].activation.files, original[china].activation.files);
-  console.log(JSON.stringify({ second, rollback: rollback.commit, paused, resumed, pin: pinned.commit }));
+  const discardedRollback = before.rollbackTargets[china].find(entry => entry.id === changed[china].activation.id);
+  assert.ok(discardedRollback, 'The superseded China IP activation must be retained before cleanup');
+  console.log(JSON.stringify({ rollback: rollback.commit, paused, resumed, pin: pinned.commit, discardedRollback }));
 
-  const cleanup = await workflow('cleanup', updatedSource, 'unused');
-  const entered = cleanup['进入维护'] as Awaited<ReturnType<typeof manageMaintenance>>;
-  assert.equal(entered.status, 'isolated');
+  const { observations: cleanup, maintenanceResults } = await workflow('cleanup');
+  const entered = maintenanceResults.enter;
+  assert.equal(entered?.status, 'isolated');
   assert.ok(entered.run?.plan?.discard.candidateIds.length);
   assert.ok(entered.run.plan.discard.activations[china]?.length);
-  assert.equal((cleanup['切换基线'] as { status: string }).status, 'completed');
+  assert.equal(maintenanceResults.switch?.status, 'completed');
   console.log(JSON.stringify({ maintenanceId, cleanup }));
 
   const after = await status();
@@ -209,7 +221,7 @@ test('从空的 GitHub 隔离分支使用正式配置完成四集双来源生命
     }
   }
   await assert.rejects(rollbackRules({ ...manual, stateDirectory: join(root, 'after-cleanup'), expectedHead: await activation.head(),
-    historicalActivationCommit: changed[china].commit }), /ROLLBACK_UNAVAILABLE/);
+    historicalActivationCommit: discardedRollback.commit }), /ROLLBACK_UNAVAILABLE/);
   const recovered = await checkRules({ ...fresh, stateDirectory: join(root, 'after-cleanup') });
   assert.equal(recovered.exitCode, 0, JSON.stringify(recovered));
   assert.deepEqual(recovered.results.map(result => [result.id, result.status]),
