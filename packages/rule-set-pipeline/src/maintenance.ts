@@ -61,15 +61,11 @@ async function scan(options: MaintenanceOptions) {
   const { targetBranch, snapshot, stable, currentByPath, historicalActivations, resumes } = status.inventory!;
   const blockers = [...status.pendingOperations];
   const active = [...currentByPath].map(([recordPath, record]) => {
-    const definition = status.state.candidates[record.candidateId]?.definition;
-    const candidatePaths = candidateFiles(definition).map(file => `candidates/${record.candidateId}/${file}`);
+    const candidate = status.state.candidates[record.candidateId];
+    const candidatePaths = candidateFiles(candidate?.definition).map(file => `candidates/${record.candidateId}/${file}`);
     const control = record.logicalId ? status.activeRuleVersions[record.logicalId].control : undefined;
-    // The Release baseline cannot yet rebase the evidence for an active CIDR candidate.
-    if (record.source?.kind === 'github-commit') {
-      blockers.push({ id: record.id, candidateId: record.candidateId, logicalId: record.logicalId,
-        status: 'unsupported-active-rule-format', error: `History cleanup does not yet support the active CIDR rule set: ${record.logicalId}` });
-    }
-    return { recordPath, record, candidatePaths, ...(control ? { control } : {}) };
+    return { recordPath, record, candidatePaths, ...(control ? { control } : {}),
+      ...(candidate?.sourceKey && { sourceKey: candidate.sourceKey }) };
   });
   const currentIds = new Set(active.map(({ record }) => record.candidateId));
   const candidateIds = new Set(snapshot.paths.flatMap(path => /^candidates\/([a-f0-9-]+)\//.exec(path)?.[1] ?? []));

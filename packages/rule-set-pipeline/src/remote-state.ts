@@ -98,7 +98,8 @@ function validMaintenancePlan(value: unknown) {
   const { retain, discard, otherRefs } = value;
   const strings = (entries: unknown) => Array.isArray(entries) && entries.every(entry => typeof entry === 'string');
   return strings(retain.journalPaths) && Array.isArray(retain.active) && retain.active.every(entry =>
-    object(entry) && typeof entry.recordPath === 'string' && object(entry.record) && strings(entry.candidatePaths))
+    object(entry) && typeof entry.recordPath === 'string' && object(entry.record) && strings(entry.candidatePaths)
+    && (entry.sourceKey === undefined || typeof entry.sourceKey === 'string'))
     && strings(retain.progress.pinnedReleaseIds) && strings(retain.progress.processedReleaseIds)
     && object(retain.progress.configuredProcessedReleaseIds) && Object.values(retain.progress.configuredProcessedReleaseIds).every(strings)
     && object(retain.progress.latestChecks) && object(retain.progress.resumes) && strings(discard.candidateIds) && strings(discard.completedOperationIds)

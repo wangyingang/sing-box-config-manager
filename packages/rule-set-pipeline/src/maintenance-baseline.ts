@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import { activationSubscription } from './activation.js';
+import { candidateArtifactFiles, candidateFiles } from './candidate-publication.js';
 import type { RuleDefinition } from './configured-build.js';
 import { filePaths, stageRef, type BaselineStage, type BaselineStages, type BaselineTransport, type PreparedBaseline } from './maintenance-baseline-transport.js';
 import type { MaintenancePlan } from './maintenance.js';
@@ -8,7 +9,7 @@ import { decodedTerms } from './projection.js';
 import type { PublicationRepository, PublicationSnapshot } from './publication-repository.js';
 import { ARTIFACT_REPOSITORY, immutableUrl, type PublicationTransport } from './publication.js';
 import { BASELINE_PATH, IDENTITY_PATH, STATE_PATH, type RemoteJournal } from './remote-state.js';
-import { activationRecord, candidateEvidenceFiles, readRemoteStatus } from './remote-status.js';
+import { activationRecord, readRemoteStatus } from './remote-status.js';
 import { sha256 } from './release.js';
 import type { Candidate, UpdateState } from './update.js';
 
@@ -116,12 +117,13 @@ export async function prepareBaseline(options: Verification & {
   };
   const assets: Record<string, Buffer> = { [BASELINE_PATH]: marker };
   const metadata: Record<string, Buffer> = {};
-  const ids = new Set(plan.retain.active.map(({ record }) => record.candidateId));
-  for (const id of ids) {
-    for (const file of candidateEvidenceFiles) {
+  const layouts = new Map(plan.retain.active.map(({ record: { candidateId: id } }) =>
+    [id, candidateArtifactFiles(journal.state.candidates[id]?.definition)]));
+  for (const [id, layout] of layouts) {
+    for (const file of candidateFiles(journal.state.candidates[id]?.definition)) {
       if (file === 'readback.json') continue;
       const path = `candidates/${id}/${file}`;
-      (file.startsWith('domains.') ? assets : metadata)[path] = await required(source, path);
+      (file === layout.source || file === layout.binary ? assets : metadata)[path] = await required(source, path);
     }
   }
   const copyOtherFiles = async (snapshot: PublicationSnapshot, output: Record<string, Buffer>) => {
@@ -131,11 +133,11 @@ export async function prepareBaseline(options: Verification & {
   };
   await copyOtherFiles(source, assets);
   const files = await stage('files', undefined, assets);
-  for (const id of ids) {
+  for (const [id, layout] of layouts) {
     const path = `candidates/${id}/manifest.json`;
     const manifest = JSON.parse(metadata[path].toString());
     for (const artifact of manifest.artifacts) {
-      artifact.url = immutableUrl(files.head, `candidates/${id}/domains.${artifact.format === 'source' ? 'json' : 'srs'}`);
+      artifact.url = immutableUrl(files.head, `candidates/${id}/${artifact.format === 'source' ? layout.source : layout.binary}`);
     }
     metadata[path] = encode(manifest);
   }
@@ -143,7 +145,7 @@ export async function prepareBaseline(options: Verification & {
   const metadataStage = await stage('metadata', files, metadata);
   const evidence: Record<string, Buffer> = {};
   const priorEvidence = await transport.snapshot(stageRef(runId, 'evidence'));
-  for (const id of ids) {
+  for (const [id, layout] of layouts) {
     const prefix = `candidates/${id}/`;
     const readbacks = [];
     for (const [path, bytes] of Object.entries(assets).filter(([path]) => path.startsWith(prefix))) {
@@ -152,16 +154,21 @@ export async function prepareBaseline(options: Verification & {
     for (const [path, bytes] of Object.entries(metadata).filter(([path]) => path.startsWith(prefix))) {
       readbacks.push(await readback(publication, immutableUrl(metadataStage.head, path), bytes));
     }
-    const native = await buildNative(decodedTerms(JSON.parse(assets[prefix + 'domains.json'].toString())), binary);
+    const native = await buildNative(decodedTerms(JSON.parse(assets[prefix + layout.source].toString())), binary);
     if (native.tool.sha256 !== tool.sha256 || native.artifacts.length !== 2
       || native.artifacts.some(artifact => !assets[prefix + artifact.file]?.equals(artifact.content))) {
       throw new Error(`Baseline native bytes or tool changed: ${id}`);
     }
     const build = JSON.parse(metadata[prefix + 'build.json'].toString());
+    const path = prefix + 'readback.json';
+    // Git candidates require the original validation steps as part of their build
+    // evidence. The new host is recorded separately after reproducing the bytes.
+    const originalNative = journal.state.candidates[id]?.sourceKey === undefined
+      ? { status: native.validation.status, semanticRoundTrip: native.validation.semanticRoundTrip }
+      : JSON.parse((await required(source, path)).toString()).native;
     const record = { schemaVersion: 1, candidateId: id, status: 'remote-verified',
       filesCommit: files.head, metadataCommit: metadataStage.head, buildId: build.buildId, readback: readbacks,
-      native: { status: native.validation.status, semanticRoundTrip: native.validation.semanticRoundTrip }, tool: build.tool };
-    const path = prefix + 'readback.json';
+      native: originalNative, tool: build.tool };
     if (priorEvidence) {
       const bytes = await required(priorEvidence, path);
       const { revalidationTool, ...prior } = JSON.parse(bytes.toString());
@@ -175,10 +182,11 @@ export async function prepareBaseline(options: Verification & {
     }
   }
   const evidenceStage = await stage('evidence', metadataStage, evidence);
-  const evidenceUrls = new Map([...ids].map(id => [id, immutableUrl(evidenceStage.head, `candidates/${id}/readback.json`)]));
-  const candidates = Object.fromEntries(Object.entries(journal.state.candidates).filter(([id]) => ids.has(id)).map(([id, original]) => {
+  const evidenceUrls = new Map([...layouts.keys()].map(id => [id, immutableUrl(evidenceStage.head, `candidates/${id}/readback.json`)]));
+  const candidates = Object.fromEntries(Object.entries(journal.state.candidates).filter(([id]) => layouts.has(id)).map(([id, original]) => {
     const { previousCandidateId: _previous, error: _error, ...candidate } = original;
     return [id, { ...candidate, filesCommit: files.head, metadataCommit: metadataStage.head, evidenceCommit: evidenceStage.head,
+      ...(candidate.sourceKey !== undefined && { evidenceSha256: sha256(evidence[`candidates/${id}/readback.json`]) }),
       manifestUrl: immutableUrl(metadataStage.head, `candidates/${id}/manifest.json`), evidenceUrl: evidenceUrls.get(id)! }];
   }));
   const shared = repository.branch === targetBranch;

@@ -5,10 +5,15 @@ import { immutableUrl, type PublicationTransport } from './publication.js';
 import { sha256 } from './release.js';
 import { isDeepStrictEqual } from 'node:util';
 
-export function candidateFiles(definition?: RuleDefinition) {
+export function candidateArtifactFiles(definition?: RuleDefinition) {
   const route = definition?.usages.route;
   const stem = route && 'artifact' in route ? route.artifact : 'domains';
-  return [`${stem}.json`, `${stem}.srs`, 'manifest.json', 'source.json', 'conversion-report.json', 'build.json', 'readback.json'];
+  return { source: `${stem}.json`, binary: `${stem}.srs` };
+}
+
+export function candidateFiles(definition?: RuleDefinition) {
+  const { source, binary } = candidateArtifactFiles(definition);
+  return [source, binary, 'manifest.json', 'source.json', 'conversion-report.json', 'build.json', 'readback.json'];
 }
 
 export interface PublicationCandidate {
