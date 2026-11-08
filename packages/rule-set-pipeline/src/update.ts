@@ -40,7 +40,8 @@ export interface UpdateState {
   configuredProcessed?: Record<string, Record<string, { candidateId: string; tag?: string; evidenceUrl?: string; definitionSha256: string }>>;
   candidates: Record<string, Candidate>;
   latestChecks?: Record<string, CheckRecord>;
-  pendingOperation?: SourceReference & { id: string; kind: 'update' | 'rebuild' | 'check'; generation: number;
+  pendingOperation?: (SourceReference & { kind: 'update' | 'rebuild' | 'check'; sourcePins?: never }
+    | { kind: 'check'; sourcePins: Record<string, SourceReference>; releaseId?: never; tag?: never; sourceKey?: never }) & { id: string; generation: number;
     status: 'pending' | 'complete'; expectedHead: string; candidateIds: string[]; configuration?: string; selectedIds?: string[]; controlRevisions?: Record<string, string | null>; subscriptionHashes?: Record<string, string> };
 }
 async function readJson(path: string): Promise<any> {

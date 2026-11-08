@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test, { type TestContext } from 'node:test';
 import { activateRules, rollbackRules } from '../../src/activation.js';
+import { checkRules, resumeRules } from '../../src/check-rules.js';
 import { manageMaintenance } from '../../src/maintenance.js';
 import { ARTIFACT_REPOSITORY } from '../../src/publication.js';
 import { readRemoteStatus } from '../../src/remote-status.js';
@@ -40,22 +41,26 @@ async function fixture(t: TestContext) {
   const configuration = (await readFile(new URL('../../config/china-ip.yml', import.meta.url), 'utf8'))
     .replace('branch: main', `branch: ${branch}`);
   const publication = { repository: env.repository, download: env.transport.download, commit: env.publish };
-  const upstream = async (index: number) => {
+  const upstreamFetch = (index: number): typeof fetch => async url => {
     const commit = String(index + 1).repeat(40);
-    const fetcher: typeof fetch = async url => {
-      if (String(url).endsWith('/branches/ip-lists')) return Response.json({ name: 'ip-lists', commit: { sha: commit } });
-      if (String(url) === `https://raw.githubusercontent.com/gaoyifan/china-operator-ip/${commit}/china46.txt`) return new Response(versionInputs[index]);
-      throw new Error(`Unexpected upstream request: ${String(url)}`);
-    };
-    const result = await updateRules({ configuration, selectedIds: [id], publication, fetch: fetcher,
+    if (String(url).endsWith('/branches/ip-lists')) return Response.json({ name: 'ip-lists', commit: { sha: commit } });
+    if (String(url) === `https://raw.githubusercontent.com/gaoyifan/china-operator-ip/${commit}/china46.txt`) return new Response(versionInputs[index]);
+    throw new Error(`Unexpected upstream request: ${String(url)}`);
+  };
+  const upstream = async (index: number) => {
+    const result = await updateRules({ configuration, selectedIds: [id], publication, fetch: upstreamFetch(index),
       stateDirectory: join(directory, `publish-${index}`), binary: binary! });
     const [entry] = result.results;
     if (entry.status !== 'processed') assert.fail(JSON.stringify(entry));
     return entry.candidate;
   };
+  const checkOptions = (fetch: typeof globalThis.fetch) => ({ configuration, publication, fetch, binary: binary!,
+    stateDirectory: join(directory, 'check'), subscriptions: { [id]: subscription }, activation: env.transport });
   const status = () => readRemoteStatus({ repository: env.repository, activation: env.transport, publication });
   const options = () => ({ configuration, logicalId: id, subscription, binary: binary!, transport: env.transport, expectedHead: env.head() });
   return { ...env, directory, upstream, status, options,
+    check: (index: number, fetch = upstreamFetch(index)) => checkRules(checkOptions(fetch)),
+    resume: (index: number) => resumeRules({ ...checkOptions(upstreamFetch(index)), logicalId: id }),
     activate: (candidateEvidenceUrl: string) => activateRules({ ...options(), candidateEvidenceUrl }),
     rollback: (historicalActivationCommit: string) => rollbackRules({ ...options(), historicalActivationCommit }),
   };
@@ -243,11 +248,13 @@ function dnsProbe(port: number, index: number) {
   });
 }
 
-test('同一份配置以真实客户端验证双栈 Route、DNS Response、固定、回滚和缓存恢复', { timeout: 70_000 }, async t => {
+test('同一真实客户端观察 china-ip 自动更新、固定、回滚、恢复和缓存恢复', { timeout: 70_000 }, async t => {
   const env = await fixture(t);
-  const a = await env.upstream(0);
-  const activeA = await env.activate(a.evidenceUrl!);
-  const b = await env.upstream(1);
+  const first = await env.check(0);
+  assert.equal(first.results[0].status, 'activated', JSON.stringify(first));
+  const firstCommit = first.results[0].current?.commit;
+  assert.ok(firstCommit);
+  const activeA = (await env.status()).activeRuleVersions[id];
 
   const clientDir = await mkdtemp(join(tmpdir(), 'china-ip-client-'));
   const servers: Server[] = [], sockets = new Set<Duplex>();
@@ -409,18 +416,32 @@ test('同一份配置以真实客户端验证双栈 Route、DNS Response、固�
   const observe = (version: number) => until(async () => { await probe(version); return true; }, `Expected CIDRs from version ${version}`);
   const pid = await start();
   await observe(0);
-  await env.activate(b.evidenceUrl!);
+  const automatic = await env.check(1);
+  assert.equal(automatic.results[0].status, 'activated', JSON.stringify(automatic));
   await observe(1);
-  await env.activate(b.evidenceUrl!);
+  const activeB = (await env.status()).activeRuleVersions[id].activation;
+  await env.activate(activeB.candidateEvidenceUrl);
   const fixed = (await env.status()).activeRuleVersions[id];
   assert.equal(fixed.control?.reason, 'manual-activation');
+  const paused = await env.check(0);
+  assert.equal(paused.results[0].status, 'paused', JSON.stringify(paused));
+  assert.equal(paused.results[0].current?.id, fixed.activation.id);
   const beforeFixedRefresh = deliveries;
   await until(() => deliveries > beforeFixedRefresh, 'Refresh the same URL while manually pinned');
   await probe(1);
-  await env.rollback(activeA.commit);
+  const rollback = await env.rollback(firstCommit);
   await observe(0);
-  await env.activate(b.evidenceUrl!);
+  let sourceRead = false;
+  const rolledBack = await env.check(1, async () => { sourceRead = true; throw new Error('Unexpected source access'); });
+  assert.equal(rolledBack.results[0].status, 'paused', JSON.stringify(rolledBack));
+  assert.equal(rolledBack.results[0].current?.id, rollback.activation.id);
+  assert.equal(sourceRead, false);
+  const resumed = await env.resume(1);
+  assert.equal(resumed.results[0].status, 'activated', JSON.stringify(resumed));
+  assert.equal(resumed.results[0].current?.candidateId, activeB.candidateId);
+  assert.equal(resumed.results[0].control?.reason, 'manual-resume');
   await observe(1);
+  assert.equal(child!.pid, pid);
   for (const [fault, pattern] of [['download-failure', /fetch rule-set china-ip:.*503/],
     ['load-failure', /fetch rule-set china-ip:.*invalid sing-box rule-set file/]] as const) {
     const before = log.length;
@@ -446,7 +467,7 @@ test('同一份配置以真实客户端验证双栈 Route、DNS Response、固�
     srs: [activeA.activation, fixed.activation].map(record => ({ commit: record.source.commit,
       inputSha256: record.source.inputSha256, artifact: record.files[`${path}/route.srs`] })),
     probes: addresses.map(({ literal }) => literal),
-    observed: ['A', 'B', 'fixed-B', 'rollback-A', 'B', 'HTTP-503-retains-B', 'invalid-SRS-retains-B', 'offline-cache-restores-B'],
+    observed: ['A', 'auto-B', 'fixed-B', 'rollback-A', 'resume-B', 'HTTP-503-retains-B', 'invalid-SRS-retains-B', 'offline-cache-restores-B'],
     cache: { sha256: sha256(cacheBytes), bytes: cacheBytes.length },
   } }));
 });

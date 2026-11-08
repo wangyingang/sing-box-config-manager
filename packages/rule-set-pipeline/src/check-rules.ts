@@ -5,17 +5,17 @@ import { isDeepStrictEqual } from 'node:util';
 import { activateAutomatically, activationSubscription, verifyActivationCandidate } from './activation.js';
 import { githubActivation, type ActivationTransport } from './activation-transport.js';
 import { verifyRetainedCandidate } from './candidate-recovery.js';
-import { configuredReleaseInput } from './configuration.js';
-import { buildConfiguredRelease, configuredBuildTools, parseBuildConfiguration, type RuleDefinition } from './configured-build.js';
+import { commitSourceKey, resolveCommit, withCommitCheckpoint } from './github-commit.js';
+import { buildConfiguredCommit, buildConfiguredRelease, configuredBuildTools, parseBuildConfiguration, type RuleDefinition } from './configured-build.js';
 import { publishConfiguredCandidate, type ConfiguredUpdateOptions } from './configured-update.js';
 import { applicableResume, effectiveControl, readActivationOperationResults, type ObservedActivation } from './manual-activation.js';
 import { inspectBinary } from './native.js';
 import { githubPublication } from './publication.js';
 import { retainedCandidateDownload, type PublicationSnapshot } from './publication-repository.js';
 import { lookupRelease, sha256 } from './release.js';
-import { openRemoteSession, selectRemoteOperation, type RemoteOperation } from './remote-state.js';
+import { checkSourceId, checkSourceReference, openRemoteSession, selectRemoteOperation, type RemoteOperation } from './remote-state.js';
 import { activationRecord, readRemoteStatus, verifyStableFiles } from './remote-status.js';
-import type { Candidate } from './update.js';
+import { sourceReferenceKey, type Candidate, type SourceReference } from './update.js';
 
 export interface CheckOptions extends Omit<ConfiguredUpdateOptions, 'sampleTag' | 'retryRelease'> {
   /** Trusted, complete v2 Rule Subscription for each selected logical ID. */
@@ -26,20 +26,20 @@ export interface CheckOptions extends Omit<ConfiguredUpdateOptions, 'sampleTag' 
 type CheckStatus = 'activated' | 'unchanged' | 'paused' | 'failed' | 'verification-pending';
 export interface CheckRecord {
   operationId: string; status: CheckStatus; checkedAt: string;
-  releaseId?: number; tag?: string; candidateId?: string; error?: string;
+  releaseId?: number; tag?: string; sourceKey?: string; sourceCommit?: string; candidateId?: string; error?: string;
 }
 type Active = ObservedActivation & {
   subscription: unknown;
-  source: { releaseId?: number; tag?: string };
+  source: { kind?: string; releaseId?: number; tag?: string; commit?: string };
   validation: { buildId: string; tool: { sha256: string } };
   operation?: string;
   history: { commit: string; id: string; candidateId: string }[];
 };
-type Delivery = { id: string; candidateId: string; releaseId?: number; tag?: string; commit?: string; containingCommit?: string };
+type Delivery = { id: string; candidateId: string; releaseId?: number; tag?: string; sourceCommit?: string; commit?: string; containingCommit?: string };
 type CheckResult = CheckRecord & { id: string; current?: Delivery; lastObserved?: Delivery;
   control?: ReturnType<typeof effectiveControl>; pendingOperation?: { id: string; status: string; commit?: string; containingCommit?: string };
   rollbackTargets?: { commit: string; id: string; candidateId: string }[] };
-type Built = Awaited<ReturnType<typeof buildConfiguredRelease>>;
+type Built = Awaited<ReturnType<typeof buildConfiguredRelease | typeof buildConfiguredCommit>>;
 type SuccessfulBuild = Extract<Built['results'][number], { status: 'built-validated' }>;
 const recordPath = (definition: RuleDefinition) => `${definition.stablePath}/activation.json`;
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
@@ -56,7 +56,8 @@ async function readActive(snapshot: PublicationSnapshot, definition: RuleDefinit
 }
 
 function delivery(active: Active): Delivery {
-  return { id: active.id, candidateId: active.candidateId, releaseId: active.source?.releaseId, tag: active.source?.tag };
+  return { id: active.id, candidateId: active.candidateId, releaseId: active.source?.releaseId, tag: active.source?.tag,
+    ...(active.source?.kind === 'github-commit' ? { sourceCommit: active.source.commit } : {}) };
 }
 
 async function readRetainedBuild(snapshot: PublicationSnapshot, candidateId: string, buildId: string | undefined) {
@@ -69,7 +70,7 @@ async function readRetainedBuild(snapshot: PublicationSnapshot, candidateId: str
 }
 
 async function sameDelivery(result: SuccessfulBuild, built: Built, active: Active, snapshot: PublicationSnapshot,
-  publication: NonNullable<CheckOptions['publication']>, binary: string) {
+  publication: NonNullable<CheckOptions['publication']>, binary: string, registered?: Candidate) {
   if (active.validation?.tool?.sha256 !== result.native.tool.sha256) return false;
   // Old builds can use a different projection implementation. Establish
   // comparability before attempting to reproduce their bytes with today's tools.
@@ -77,20 +78,11 @@ async function sameDelivery(result: SuccessfulBuild, built: Built, active: Activ
   if (previous.tool?.sha256 !== result.native.tool.sha256 || !isDeepStrictEqual(previous.definition, result.definition)
     || !isDeepStrictEqual(previous.tools, built.tools)) return false;
   const retained = retainedCandidateDownload(snapshot, active.candidateId, url => publication.download(url));
-  const candidate = await verifyActivationCandidate({ candidateEvidenceUrl: active.candidateEvidenceUrl, binary },
+  const candidate = await verifyActivationCandidate({ candidateEvidenceUrl: active.candidateEvidenceUrl, binary, evidenceSha256: registered?.evidenceSha256 },
     { branch: built.configuration.target.branch, download: retained }, result.definition, 'rollback');
   if (candidate.build.tool.sha256 !== result.native.tool.sha256
     || !isDeepStrictEqual(candidate.build.definition, result.definition) || !isDeepStrictEqual(candidate.build.tools, built.tools)) return false;
-  if (!result.native.artifacts.every(artifact => artifact.content.equals(candidate.bytesByFormat[artifact.format]))) return false;
-  const filenames = new Map(candidate.manifest.artifacts.map((artifact: { id: string; format: string }) =>
-    [artifact.id, artifact.format === 'source' ? 'domains.json' : 'domains.srs']));
-  for (const [usage, projection] of Object.entries(result.native.usages)) {
-    const previous = candidate.manifest.projections[usage];
-    if ('artifactFiles' in projection) {
-      if (!Array.isArray(previous.artifactIds) || !isDeepStrictEqual([...projection.artifactFiles].sort(),
-        previous.artifactIds.map((id: string) => filenames.get(id)).sort())) return false;
-    } else if (previous.unavailable !== 'empty') return false;
-  }
+  if (!sameArtifacts(result, candidate)) return false;
   for (const [path, file] of Object.entries(active.files)) {
     const artifact = result.native.artifacts.find(entry => path === `${result.definition.stablePath}/${entry.file}`);
     if (!artifact || artifact.sha256 !== file.sha256 || artifact.bytes !== file.byteLength) return false;
@@ -98,7 +90,21 @@ async function sameDelivery(result: SuccessfulBuild, built: Built, active: Activ
   return true;
 }
 
-/** Check the configured sets against one official Release and activate verified changes. */
+function sameArtifacts(result: SuccessfulBuild, candidate: Awaited<ReturnType<typeof verifyActivationCandidate>>) {
+  if (!result.native.artifacts.every(artifact => artifact.content.equals(candidate.bytesByFormat[artifact.format]))) return false;
+  const filenames = new Map(candidate.manifest.artifacts.map((artifact: { id: string; format: string }) =>
+    [artifact.id, result.native.artifacts.find(file => file.format === artifact.format)?.file]));
+  for (const [usage, projection] of Object.entries(result.native.usages)) {
+    const priorProjection = candidate.manifest.projections[usage];
+    if ('artifactFiles' in projection) {
+      if (!Array.isArray(priorProjection.artifactIds) || !isDeepStrictEqual([...projection.artifactFiles].sort(),
+        priorProjection.artifactIds.map((id: string) => filenames.get(id)).sort())) return false;
+    } else if (priorProjection.unavailable !== 'empty') return false;
+  }
+  return true;
+}
+
+/** Check the configured sources and activate verified changes independently per rule set. */
 export function checkRules(options: CheckOptions) {
   return runRulesCheck(options);
 }
@@ -117,7 +123,15 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
   const ids = options.selectedIds ?? configuration.ruleSets.map(rule => rule.id);
   const definitions = configuration.ruleSets.filter(rule => ids.includes(rule.id));
   if (!definitions.length || definitions.length !== ids.length) throw new Error('Selected logical ID is duplicate or unknown');
-  const source = configuredReleaseInput(configuration, definitions);
+  const sourceIdFor = (rule: RuleDefinition) => checkSourceId(configuration, rule);
+  const groups = new Map<string, RuleDefinition[]>();
+  for (const rule of definitions) {
+    const sourceId = sourceIdFor(rule);
+    const group = groups.get(sourceId);
+    if (group) group.push(rule);
+    else groups.set(sourceId, [rule]);
+  }
+  const soleSource = groups.size === 1 ? groups.keys().next().value : undefined;
   const { branch } = configuration.target;
   const publication = options.publication ?? githubPublication(undefined, branch === 'main' ? 'candidates' : branch);
   const activation = options.activation ?? githubActivation(branch);
@@ -152,11 +166,13 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
     const controlFor = (id: string) => effectiveControl(journal, id, activeById.get(id));
     const paths = new Set(definitions.map(recordPath));
     const stableIdentities = new Map<string, string>();
+    const stableActivations = new Map<string, ObservedActivation>();
     for (const path of stable.paths.filter(path => path.endsWith('/activation.json'))) {
       try {
         const bytes = await stable.read(path);
-        const id = bytes && JSON.parse(bytes.toString()).logicalId;
-        if (typeof id === 'string') stableIdentities.set(id, path);
+        const record = bytes && JSON.parse(bytes.toString());
+        if (typeof record?.logicalId === 'string') stableIdentities.set(record.logicalId, path);
+        if (typeof record?.id === 'string') stableActivations.set(path, activationRecord(record, path, branch).record);
       } catch {
         // readActive reports corruption for the configured owner. A sibling
         // with a different stable directory can still proceed.
@@ -180,6 +196,14 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
     const parked = journal.parkedOperations ?? [];
     let operation = state.pendingOperation?.status === 'pending' ? state.pendingOperation : undefined;
     const selectedIds = definitions.map(rule => rule.id);
+    const checkedSource = (reference: SourceReference | undefined) => {
+      if (!reference) return {};
+      if (reference.sourceKey === undefined) return { releaseId: reference.releaseId, tag: reference.tag };
+      return { sourceKey: reference.sourceKey, sourceCommit: state.commitPins![reference.sourceKey].identity.commit };
+    };
+    const referenceFor = (rule: RuleDefinition) => checkSourceReference(operation, sourceIdFor(rule));
+    const sourceFor = (reference: SourceReference) => reference.sourceKey === undefined
+      ? state.pinned[String(reference.releaseId)].source : state.commitPins![reference.sourceKey].source;
     const sameConfiguration = (entry: RemoteOperation | undefined) => entry?.kind === 'check' && entry.configuration
       && isDeepStrictEqual(parseBuildConfiguration(entry.configuration), configuration);
     const matchesRequest = (entry: RemoteOperation | undefined) => sameConfiguration(entry)
@@ -189,15 +213,18 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
       && entry.selectedIds?.some(id => id !== exceptId && selectedIds.includes(id)
         && entry.controlRevisions?.[id] === (controlFor(id)?.revision ?? null)));
     const requestMismatch = 'RECOVERY_REQUEST_MISMATCH: resume the registered operation with its original configuration, subscriptions and selection';
-    const hasNewerSiblingSource = (id: string, tag: string) => selectedIds.some(sibling => sibling !== id
-      && [activeById.get(sibling)?.source?.tag, state.latestChecks?.[sibling]?.tag].some(observed => observed && observed > tag));
+    const hasNewerSiblingSource = (rule: RuleDefinition, tag: string) => groups.get(sourceIdFor(rule))!.some(({ id }) => id !== rule.id
+      && [activeById.get(id)?.source?.tag, state.latestChecks?.[id]?.tag].some(observed => observed && observed > tag));
     const canExtendResumeCheck = (entry: RemoteOperation) => {
       const id = entry.selectedIds?.[0];
-      return sameConfiguration(entry) && entry.sourceKey === undefined && entry.selectedIds?.length === 1 && id && selectedIds.includes(id)
-        && entry.subscriptionHashes?.[id] === subscriptionHashes[id]
+      const rule = definitions.find(rule => rule.id === id);
+      if (!id || !rule || !sameConfiguration(entry) || entry.selectedIds?.length !== 1) return false;
+      const reference = checkSourceReference(entry, sourceIdFor(rule));
+      return reference && entry.subscriptionHashes?.[id] === subscriptionHashes[id]
         && Object.hasOwn(journal.resumes ?? {}, id)
         && entry.controlRevisions?.[id] === journal.resumes![id].revision
-        && !hasParkedCheck(id) && !hasNewerSiblingSource(id, entry.tag);
+        && !hasParkedCheck(id) && (reference.tag === undefined
+          ? groups.get(sourceIdFor(rule))!.length === 1 : !hasNewerSiblingSource(rule, reference.tag));
     };
     let extendResumeCheck = false;
     if (!resumeId) {
@@ -238,12 +265,15 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
       const superseded = remoteStatus !== undefined && remoteStatus.generation !== session.generation;
       const supersededError = 'PUBLICATION_CONFLICT: check belongs to an earlier maintenance generation';
       let reconciledSwitch = false;
+      const waitingForReadback = message(failure).startsWith('ACTIVATION_APPLIED_READBACK_PENDING');
       const ordered = definitions.map(rule => {
         const { id } = rule;
         const entry = superseded ? { operationId, checkedAt, status: 'failed' as const, error: supersededError }
           : results.get(id) ?? {
-          operationId, checkedAt, status: uncertain(failure) ? 'verification-pending' as const : 'failed' as const,
-          ...(operation ? { releaseId: operation.releaseId, tag: operation.tag } : {}), error: message(failure),
+          operationId, checkedAt,
+          status: uncertain(failure) && !waitingForReadback
+            ? 'verification-pending' as const : 'failed' as const,
+          ...checkedSource(referenceFor(rule)), error: waitingForReadback ? 'Check interrupted while an activation awaits readback' : message(failure),
         };
         const observed = activeById.get(id);
         const remote = remoteStatus?.activeRuleVersions[id];
@@ -264,9 +294,9 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
         if (pending) {
           result.pendingOperation = { id: pending.id, status: pending.status, commit: pendingSwitch?.commit,
             containingCommit: pendingSwitch?.containingCommit };
-          if (result.status !== 'failed') {
+          if (!superseded && (result.status !== 'failed' || !results.has(id))) {
             result.status = 'verification-pending';
-            result.error ??= pending.error ?? pending.status;
+            if (!results.has(id) || !result.error) result.error = pending.error ?? pending.status;
           }
         } else if (automatic?.status === 'committed' && automatic.checkOperationId === operationId
           && automatic.candidateId === entry.candidateId && entry.status === 'verification-pending'
@@ -284,7 +314,7 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
         && /ACTIVATION_(UNKNOWN|APPLIED_READBACK_PENDING|CONFLICT_OR_SUPERSEDED)/.test(message(failure));
       const unresolvedFailure = superseded ? supersededError : switchFailureReconciled ? undefined : failure;
       return { exitCode: unresolvedFailure || statusError || ordered.some(result => result.status === 'failed' || result.status === 'verification-pending') ? 1 : 0,
-        ...(operation ? { releaseId: operation.releaseId, tag: operation.tag } : {}), results: ordered,
+        ...(soleSource ? checkedSource(checkSourceReference(operation, soleSource)) : {}), results: ordered,
         ...(unresolvedFailure ? { error: message(unresolvedFailure) } : {}), ...(statusError ? { statusError } : {}),
         ...(session.cacheWarning ? { cacheWarning: session.cacheWarning } : {}) };
     };
@@ -294,12 +324,25 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
     const allSwitches = [...Object.values(journal.manualOperations ?? {}), ...Object.values(journal.automaticOperations ?? {})];
     const unfenced = allSwitches.filter(entry => !entry.notCommitted && entry.generation === session.generation
       && (shared ? stable.parent === entry.expectedHead : stable.head === entry.expectedHead)
-      && (entry.logicalId === undefined || activeById.get(entry.logicalId)?.id !== entry.id));
+      && stableActivations.get(entry.recordPath)?.id !== entry.id);
     if (unfenced.length) {
       try { if (shared) await session.save(); }
       catch (error) { return report(error); }
       return report(new Error('ACTIVATION_UNKNOWN: a registered switch must be reconciled before this check can write'));
     }
+
+    // A completed Git switch can still be awaiting HTTPS verification. Check
+    // registrations from all in-flight batches before allowing sibling writes.
+    const inFlight = new Set([state.pendingOperation, ...parked].filter(entry => entry?.status === 'pending').map(entry => entry!.id));
+    const recoveredSwitches = await readActivationOperationResults(repo, journal, stable, stableActivations,
+      url => activation.download(url), allSwitches.filter(entry => {
+        if (entry.kind !== 'automatic' || !entry.checkOperationId || !entry.logicalId) return false;
+        const check = latestChecks[entry.logicalId];
+        return inFlight.has(entry.checkOperationId) && stableActivations.get(entry.recordPath)?.id === entry.id
+          && !(check?.operationId === entry.checkOperationId && check.status === 'activated');
+      }));
+    const readbackPending = recoveredSwitches.find(outcome => outcome.status === 'pending');
+    if (readbackPending) return report(new Error(`ACTIVATION_APPLIED_READBACK_PENDING: ${readbackPending.error}`));
 
     if (resumeId) {
       const active = activeById.get(resumeId);
@@ -345,8 +388,14 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
     }
 
     if (extendResumeCheck && operation) {
-      // The normal batch recovers the selected set and uses its already fixed
-      // Release for newly included sets. Keep the original control revision.
+      // Siblings of the same source use the fixed version; other sources
+      // discover independently. Keep the original control revision.
+      if (!soleSource && !operation.sourcePins) {
+        const originalRule = definitions.find(rule => rule.id === operation!.selectedIds![0])!;
+        const sourceId = sourceIdFor(originalRule);
+        const { releaseId: _release, tag: _tag, sourceKey: _git, ...fields } = operation;
+        state.pendingOperation = operation = { ...fields, kind: 'check', sourcePins: { [sourceId]: checkSourceReference(operation, sourceId)! } };
+      }
       operation.selectedIds = selectedIds;
       operation.controlRevisions = { ...Object.fromEntries(selectedIds.map(id => [id, controlFor(id)?.revision ?? null])),
         ...operation.controlRevisions };
@@ -369,17 +418,12 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
       }
     }
     if (operation) {
-      const recovery = operation;
       for (const rule of definitions.filter(({ id }) => !results.has(id))) {
         const active = activeById.get(rule.id);
-        const pendingSwitch = allSwitches.find(entry => entry.kind === 'automatic' && entry.checkOperationId === operationId && entry.id === active?.id);
-        if (!active || !pendingSwitch) continue;
-        const [outcome] = await readActivationOperationResults(repo, journal, stable,
-          new Map([[recordPath(rule), active]]), url => activation.download(url), [pendingSwitch]);
-        recordCheckOutcome(rule.id, outcome.status === 'committed' ? 'activated' : 'verification-pending', {
-          releaseId: recovery.releaseId, tag: recovery.tag, candidateId: active.candidateId,
-          ...(outcome.error ? { error: outcome.error } : {}),
-        });
+        const outcome = recoveredSwitches.find(entry => entry.status === 'committed' && entry.checkOperationId === operationId && entry.id === active?.id);
+        if (active && outcome) {
+          recordCheckOutcome(rule.id, 'activated', { ...checkedSource(referenceFor(rule)), candidateId: active.candidateId });
+        }
       }
     }
     const remaining = definitions.filter(rule => !results.has(rule.id));
@@ -398,81 +442,112 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
       return report();
     }
 
-    const readyCandidates = remaining.flatMap(definition => {
-      const candidate = Object.values(state.candidates).find(entry => entry.operationId === operation?.id
-        && entry.logicalId === definition.id && entry.retained && (entry.phase === 'evidence' || entry.phase === 'complete'));
-      return candidate ? [{ id: definition.id, definition, candidate }] : [];
-    });
-    let built: Built | undefined;
-    try {
-      if (readyCandidates.length !== remaining.length) built = await buildLatestOrPinned();
-    } catch (error) {
-      if (/PUBLICATION_(PENDING|CONFLICT)/.test(message(error))) return report(error);
-      const fields = operation ? { releaseId: operation.releaseId, tag: operation.tag } : {};
-      for (const { id } of remaining) recordCheckOutcome(id, 'failed', { ...fields, error: message(error) });
-      if (operation) {
-        for (const rule of definitions) abandonIncomplete(rule.id);
-        if (![...results.values()].some(entry => entry.status === 'verification-pending')) operation.status = 'complete';
+    type Work = { result: Built['results'][number]; built: Built }
+      | { result: { id: string; definition: RuleDefinition; candidate: Candidate }; built?: undefined };
+    const work = new Map<string, Work>();
+    const controlRevisions = Object.fromEntries(definitions.map(({ id }) => [id, controlFor(id)?.revision ?? null]));
+
+    // Checkpoint every usable input before the first candidate write. A
+    // source failure is settled only for the rules using that input.
+    for (const [sourceId, rules] of groups) {
+      const toBuild = [];
+      for (const definition of rules) {
+        if (results.has(definition.id)) continue;
+        const candidate = Object.values(state.candidates).find(entry => entry.operationId === operation?.id
+          && entry.logicalId === definition.id && entry.retained && (entry.phase === 'evidence' || entry.phase === 'complete'));
+        if (candidate) work.set(definition.id, { result: { id: definition.id, definition, candidate } });
+        else toBuild.push(definition);
       }
-      try { await finishCheck(); }
-      catch (checkpoint) { return report(checkpoint); }
-      return report();
+      if (!toBuild.length) continue;
+      try {
+        const built = await buildLatestOrPinned(sourceId, toBuild.map(rule => rule.id));
+        for (const result of built.results) work.set(result.id, { result, built });
+      } catch (error) {
+        if (/PUBLICATION_(PENDING|CONFLICT)/.test(message(error))) return report(error);
+        for (const rule of toBuild) {
+          recordCheckOutcome(rule.id, 'failed', { ...checkedSource(referenceFor(rule)), error: message(error) });
+          abandonIncomplete(rule.id);
+        }
+        try { await session.save(); }
+        catch (checkpoint) { return report(checkpoint); }
+      }
     }
 
-    async function buildLatestOrPinned() {
-      const fetcher = options.fetch ?? fetch;
-      const release = await lookupRelease(source, String(operation?.releaseId ?? 'latest'), options);
+    async function savePin(sourceId: string, reference: SourceReference) {
+      if (!operation) {
+        state.pendingOperation = operation = { id: operationId, kind: 'check', generation: session.generation,
+          status: 'pending', expectedHead: session.head, candidateIds: [], configuration: options.configuration,
+          selectedIds, controlRevisions, subscriptionHashes,
+          ...(soleSource ? reference : { sourcePins: { [sourceId]: reference } }) };
+      } else if (operation.sourcePins) operation.sourcePins[sourceId] = reference;
+      await session.save();
+    }
+
+    async function buildLatestOrPinned(sourceId: string, ids: string[]): Promise<Built> {
+      const input = configuration.sources[sourceId];
+      const reference = checkSourceReference(operation, sourceId);
+      const network = { fetch: options.fetch, token: options.token };
+      const build = { configuration: options.configuration, binary: options.binary, selectedIds: ids };
+      if (input.version === 'git-branch') {
+        const pins = state.commitPins ??= {};
+        const identity = reference?.sourceKey ? pins[reference.sourceKey].identity : await resolveCommit(input, network);
+        const sourceKey = commitSourceKey(identity);
+        const pin = pins[sourceKey] ??= { identity };
+        await savePin(sourceId, { sourceKey });
+        return buildConfiguredCommit({ ...build, github: withCommitCheckpoint(network, {
+          identity, expectedSource: pin.source,
+          onSource: async source => { pin.source = source; await session.save(); },
+        }) });
+      }
+
+      const release = await lookupRelease(input, String(reference?.releaseId ?? 'latest'), options);
       const { id: releaseId, tag_name: tag } = release;
       if (typeof releaseId !== 'number' || !Number.isSafeInteger(releaseId) || releaseId <= 0
         || typeof tag !== 'string' || !/^[0-9]{14}$/.test(tag)
-        || operation && (operation.releaseId !== releaseId || operation.tag !== tag)
+        || reference && (reference.releaseId !== releaseId || reference.tag !== tag)
         || Object.values(state.pinned).some(pin => pin.identity?.tag === tag && pin.identity.releaseId !== releaseId)) {
         throw new Error('SOURCE_CHANGED: official Release identity changed or is invalid');
       }
       const pin = state.pinned[String(releaseId)] ?? {};
-      return buildConfiguredRelease({ configuration: options.configuration, binary: options.binary,
-        selectedIds: remaining.map(rule => rule.id),
-        release: { tag, releaseMetadata: release, fetch: fetcher, token: options.token, expectedSource: pin.source,
+      return buildConfiguredRelease({ ...build,
+        release: { ...network, tag, releaseMetadata: release, expectedSource: pin.source,
           onPinned: async identity => {
             if (pin.identity && !isDeepStrictEqual(pin.identity, identity)) throw new Error('SOURCE_CHANGED: pinned Release identity changed');
             pin.identity = identity;
             state.pinned[String(releaseId)] = pin;
-            if (!operation) {
-              const controlRevisions = Object.fromEntries(definitions.map(({ id }) => [id, controlFor(id)?.revision ?? null]));
-              state.pendingOperation = operation = { id: operationId, kind: 'check', generation: session.generation,
-                releaseId, tag, status: 'pending', expectedHead: session.head, candidateIds: [], configuration: options.configuration,
-                selectedIds, controlRevisions, subscriptionHashes };
-            }
-            await session.save();
+            await savePin(sourceId, { releaseId, tag });
           },
           onSource: async source => { pin.source = source; await session.save(); },
         } });
     }
 
-    if (!operation || operation.sourceKey !== undefined) throw new Error('Expected a registered Release check');
-    const release = { releaseId: operation.releaseId, tag: operation.tag };
-    const verify = (candidate: Candidate, definition: RuleDefinition) => verifyRetainedCandidate({
-      candidate, source: state.pinned[String(release.releaseId)]?.source, snapshot: session.snapshot, publication,
-      binary: options.binary, targetBranch: branch, definition, allowEvidence: true,
-    });
-    const checkTools = built?.tools ?? await configuredBuildTools();
-    for (const result of built?.results ?? readyCandidates) {
+    for (const rule of remaining) {
+      const task = work.get(rule.id);
+      if (!task) continue;
+      const { result, built } = task;
       const { id, definition } = result;
+      const reference = referenceFor(rule)!;
+      const checked = checkedSource(reference);
+      const verify = (candidate: Candidate) => verifyRetainedCandidate({
+        candidate, source: sourceFor(candidate), snapshot: session.snapshot, publication,
+        binary: options.binary, targetBranch: branch, definition, allowEvidence: true,
+      });
       let candidate: Candidate | undefined;
       try {
         const active = activeById.get(id);
+        const tools = built?.tools ?? await configuredBuildTools(configuration.sources[definition.source].input.format);
         if ('candidate' in result) {
           candidate = result.candidate;
           const previous = await readRetainedBuild(session.snapshot, candidate.id, candidate.buildId);
-          if (!isDeepStrictEqual(previous.tools, checkTools) || previous.tool?.sha256 !== (await inspectBinary(options.binary)).sha256) {
+          if (!isDeepStrictEqual(previous.tools, tools) || previous.tool?.sha256 !== (await inspectBinary(options.binary)).sha256) {
             throw new Error('RECOVERY_BUILD_CHANGED: original tool and build identity required');
           }
-          await verify(candidate, definition);
+          await verify(candidate);
         } else {
           if (result.status === 'failed') throw new Error(`${result.error}: ${JSON.stringify(result.report.diagnostics)}`);
-          if (active && await sameDelivery(result, built!, active, session.snapshot, publication, options.binary)) {
+          if (active && await sameDelivery(result, built!, active, session.snapshot, publication, options.binary, state.candidates[active.candidateId])) {
             abandonIncomplete(id);
-            recordCheckOutcome(id, controlFor(id)?.pauseAutomaticActivation ? 'paused' : 'unchanged', release);
+            recordCheckOutcome(id, controlFor(id)?.pauseAutomaticActivation ? 'paused' : 'unchanged', checked);
             await session.save();
             continue;
           }
@@ -480,27 +555,45 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
             ?? Object.values(state.candidates).find(entry =>
               entry.retained && entry.phase === 'complete' && entry.status === 'verified' && entry.logicalId === id && entry.buildId === result.buildId);
           if (candidate?.buildId && candidate.buildId !== result.buildId) throw new Error('RECOVERY_BUILD_CHANGED: original tool and build identity required');
+          // A pin can leave the latest verified candidate ahead of the
+          // delivered rule. A new source version with the same bytes needs
+          // only a check record; keep the candidate's original source identity.
+          let alreadyVerified = false;
+          const priorCheck = latestChecks[id];
+          if (!candidate && priorCheck?.status === 'paused' && priorCheck.candidateId) {
+            const prior = state.candidates[priorCheck.candidateId];
+            if (prior && prior.retained && prior.logicalId === id && prior.phase === 'complete' && prior.status === 'verified') {
+              const previous = await readRetainedBuild(session.snapshot, prior.id, prior.buildId);
+              if (isDeepStrictEqual(previous.definition, definition) && isDeepStrictEqual(previous.tools, tools)
+                && previous.tool?.sha256 === result.native.tool.sha256 && sameArtifacts(result, (await verify(prior)).verified)) {
+                candidate = prior;
+                alreadyVerified = true;
+              }
+            }
+          }
+
           if (!candidate) {
-            candidate = { id: randomUUID(), logicalId: id, ...release, status: 'building', operation: 'update',
+            candidate = { id: randomUUID(), logicalId: id, ...reference, status: 'building', operation: 'update',
               generation: session.generation, phase: 'registered', retained: true, definition, targetBranch: branch, operationId };
             state.candidates[candidate.id] = candidate;
             operation!.candidateIds.push(candidate.id);
             await session.save();
           }
-          if (candidate.phase === 'evidence' || candidate.phase === 'complete') await verify(candidate, definition);
-          else {
+          if (candidate.phase === 'evidence' || candidate.phase === 'complete') {
+            if (!alreadyVerified) await verify(candidate);
+          } else {
             candidate.buildId = result.buildId;
-            await publishConfiguredCandidate(result, candidate, built!.source, checkTools, configuration.target, session.publication, options.binary, session.save);
+            await publishConfiguredCandidate(result, candidate, built!.source, tools, configuration.target, session.publication, options.binary, session.save);
           }
         }
         candidate.phase = 'complete'; candidate.status = 'verified'; delete candidate.error;
         const processed = state.configuredProcessed ??= {};
         if (!Object.hasOwn(processed, id)) processed[id] = {};
-        processed[id][String(release.releaseId)] = { candidateId: candidate.id, tag: release.tag, evidenceUrl: candidate.evidenceUrl!,
+        processed[id][sourceReferenceKey(candidate)] = { candidateId: candidate.id, tag: candidate.tag, evidenceUrl: candidate.evidenceUrl!,
           definitionSha256: sha256(JSON.stringify({ definition, target: configuration.target })) };
         await session.save();
         if (controlFor(id)?.pauseAutomaticActivation) {
-          recordCheckOutcome(id, 'paused', { ...release, candidateId: candidate.id });
+          recordCheckOutcome(id, 'paused', { ...checked, candidateId: candidate.id });
         } else {
           await activateAutomatically({ configuration: options.configuration, logicalId: id, subscription: options.subscriptions[id],
             candidateEvidenceUrl: candidate.evidenceUrl!, binary: options.binary, expectedHead: expectedStableHead(), transport: activation }, {
@@ -519,7 +612,7 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
               activeById.set(id, activationRecord(current, recordPath(definition), branch).record as Active);
             },
           });
-          recordCheckOutcome(id, 'activated', { ...release, candidateId: candidate.id });
+          recordCheckOutcome(id, 'activated', { ...checked, candidateId: candidate.id });
         }
         await session.save();
       } catch (error) {
@@ -531,16 +624,16 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
           continue;
         }
         const pending = uncertain(error) || candidate?.phase === 'evidence' && !/^(RECOVERY_BUILD_CHANGED|CANDIDATE_UNAVAILABLE)/.test(message(error));
-        recordCheckOutcome(id, pending ? 'verification-pending' : 'failed', { ...release, error: message(error),
+        recordCheckOutcome(id, pending ? 'verification-pending' : 'failed', { ...checked, error: message(error),
           ...(candidate ? { candidateId: candidate.id } : {}) });
-        if (coordinationStopped) return report(error);
+        if (coordinationStopped || /ACTIVATION_APPLIED_READBACK_PENDING/.test(message(error))) return report(error);
         if (!pending) abandonIncomplete(id);
         try { await session.save(); }
         catch (checkpoint) { return report(checkpoint); }
       }
     }
     for (const { id } of definitions) if (results.get(id)?.status === 'failed' || results.get(id)?.status === 'paused') abandonIncomplete(id);
-    if (![...results.values()].some(result => result.status === 'verification-pending')) operation!.status = 'complete';
+    if (operation && ![...results.values()].some(result => result.status === 'verification-pending')) operation.status = 'complete';
     try { await finishCheck(); }
     catch (error) {
       return report(error);
