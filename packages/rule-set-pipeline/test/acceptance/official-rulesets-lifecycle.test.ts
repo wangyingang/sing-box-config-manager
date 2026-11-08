@@ -200,7 +200,7 @@ test('从空的 GitHub 隔离分支使用正式配置完成四集双来源生命
   const entered = maintenanceResults.enter;
   assert.equal(entered?.status, 'isolated');
   assert.ok(entered.run?.plan?.discard.candidateIds.length);
-  assert.ok(entered.run.plan.discard.activations[china]?.length);
+  assert.ok(entered.run.plan.discard.activations[`stable/${china}/activation.json`]?.length);
   assert.equal(maintenanceResults.switch?.status, 'completed');
   console.log(JSON.stringify({ maintenanceId, cleanup }));
 
