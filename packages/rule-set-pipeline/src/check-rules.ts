@@ -193,7 +193,7 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
       && [activeById.get(sibling)?.source?.tag, state.latestChecks?.[sibling]?.tag].some(observed => observed && observed > tag));
     const canExtendResumeCheck = (entry: RemoteOperation) => {
       const id = entry.selectedIds?.[0];
-      return sameConfiguration(entry) && entry.selectedIds?.length === 1 && id && selectedIds.includes(id)
+      return sameConfiguration(entry) && entry.sourceKey === undefined && entry.selectedIds?.length === 1 && id && selectedIds.includes(id)
         && entry.subscriptionHashes?.[id] === subscriptionHashes[id]
         && Object.hasOwn(journal.resumes ?? {}, id)
         && entry.controlRevisions?.[id] === journal.resumes![id].revision
@@ -449,7 +449,8 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
         } });
     }
 
-    const release = { releaseId: operation!.releaseId, tag: operation!.tag };
+    if (!operation || operation.sourceKey !== undefined) throw new Error('Expected a registered Release check');
+    const release = { releaseId: operation.releaseId, tag: operation.tag };
     const verify = (candidate: Candidate, definition: RuleDefinition) => verifyRetainedCandidate({
       candidate, source: state.pinned[String(release.releaseId)]?.source, snapshot: session.snapshot, publication,
       binary: options.binary, targetBranch: branch, definition, allowEvidence: true,

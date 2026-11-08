@@ -189,9 +189,12 @@ async function remoteStateCli(directory: string, failure?: string) {
   const calls = join(directory, 'remote-call.json');
   await writeFile(module, `import { writeFile } from 'node:fs/promises';
 export function githubPublication(_request, branch) {
-  return { repository: { branch }, async commit() { throw new Error('External writes are disabled'); },
+  return { repository: { branch, async snapshot() {
+    return { head: 'a'.repeat(40), paths: [], async read() { return undefined; } };
+  } }, async commit() { throw new Error('External writes are disabled'); },
     async download() { throw new Error('External reads are disabled'); } };
 }
+export function immutableUrl() { throw new Error('External reads are disabled'); }
 export async function readRemoteStatus(options) {
   await writeFile(${JSON.stringify(calls)}, JSON.stringify({ operation: 'status', branch: options.repository.branch, binary: options.binary }));
   ${failure ? `throw new Error(${JSON.stringify(failure)});` : ''}
@@ -211,11 +214,13 @@ export async function initializeRemoteState(repository, targetBranch) {
 import { pathToFileURL } from 'node:url';
 globalThis.fetch = async () => { throw new Error('External network is disabled'); };
 registerHooks({ resolve(specifier, context, nextResolve) {
-  if (context.parentURL?.endsWith('/src/cli.ts') && ['./remote-status.js', './remote-state.js', './publication.js', './maintenance.js'].includes(specifier))
+  if (context.parentURL?.endsWith('/src/cli.ts') && ['./remote-status.js', './remote-state.js', './publication.js', './maintenance.js'].includes(specifier)
+    || context.parentURL?.endsWith('/src/configured-update.ts') && specifier === './publication.js')
     return { url: pathToFileURL(${JSON.stringify(module)}).href, shortCircuit: true };
   return nextResolve(specifier, context);
 } });`);
-  return { calls, run: (...args: string[]) => exec(process.execPath, ['--import', 'tsx', '--import', preload, 'src/cli.ts', ...args]) };
+  return { calls, run: (...args: string[]) => exec(process.execPath, ['--import', 'tsx', '--import', preload, 'src/cli.ts', ...args],
+    { env: { ...process.env, GITHUB_TOKEN: 'controlled-cli-fixture' } }) };
 }
 
 test('维护 CLI 校验稳定目标和周期参数，按显式隔离分支路由', async () => {
@@ -275,13 +280,23 @@ for (const operation of ['initialize', 'status']) {
   });
 }
 
-test('CLI initialize 拒绝使用仅供本地构建的 Git 来源配置', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'rule-remote-local-config-'));
+test('CLI 从 Git 来源配置初始化候选仓库，并要求重建提供完整 commit', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'rule-remote-git-cli-'));
   try {
     const fixture = await remoteStateCli(directory);
-    await assert.rejects(fixture.run('initialize', '--config', 'config/china-ip.yml'), (error: { code?: number; stderr?: string }) =>
-      error.code === 1 && /only by local build/.test(error.stderr ?? ''));
-    await assert.rejects(stat(fixture.calls), { code: 'ENOENT' });
+    const config = ['--config', 'config/china-ip.yml'];
+    const { stdout } = await fixture.run('initialize', ...config);
+    assert.equal(JSON.parse(stdout).journal.targetBranch, 'main');
+    assert.deepEqual(JSON.parse(await readFile(fixture.calls, 'utf8')), { operation: 'initialize', branch: 'candidates', targetBranch: 'main' });
+    const rebuild = ['rebuild', ...config, '--id', 'china-ip', '--state', join(directory, 'state'), '--binary', '/unused'];
+    for (const [extra, expected] of [
+      [['--commit', 'abc'], /Expected a full lowercase commit SHA/],
+      [['--release', '20261104112839'], /fixed version matching the configured source/],
+      [['--commit', 'a'.repeat(40)], /REMOTE_NOT_INITIALIZED/],
+    ] as const) {
+      await assert.rejects(fixture.run(...rebuild, ...extra), (error: { code?: number; stderr?: string }) =>
+        error.code === 1 && expected.test(error.stderr ?? ''));
+    }
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 

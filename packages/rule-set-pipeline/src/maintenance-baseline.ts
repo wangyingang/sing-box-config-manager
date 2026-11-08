@@ -36,7 +36,7 @@ async function readback(publication: PublicationTransport, url: string, bytes: B
 }
 
 function rebaseProgress(state: UpdateState, candidates: Record<string, Candidate>, evidenceUrls: Map<string, string>): UpdateState {
-  const rebase = <T extends UpdateState['processed'][string]>(records: Record<string, T>) => Object.fromEntries(
+  const rebase = <T extends { candidateId: string; evidenceUrl?: string }>(records: Record<string, T>) => Object.fromEntries(
     Object.entries(records).map(([id, { evidenceUrl: _oldUrl, ...progress }]) => {
       const evidenceUrl = evidenceUrls.get(progress.candidateId);
       return [id, { ...progress, ...(evidenceUrl && { evidenceUrl }) }];
@@ -44,6 +44,7 @@ function rebaseProgress(state: UpdateState, candidates: Record<string, Candidate
   );
   return { schemaVersion: 1, pinned: state.pinned, candidates, processed: rebase(state.processed),
     configuredProcessed: Object.fromEntries(Object.entries(state.configuredProcessed ?? {}).map(([id, records]) => [id, rebase(records)])),
+    ...(state.commitPins && { commitPins: state.commitPins }),
     ...(state.latestChecks && { latestChecks: state.latestChecks }) };
 }
 
