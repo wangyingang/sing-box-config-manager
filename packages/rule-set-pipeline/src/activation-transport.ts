@@ -17,8 +17,11 @@ export interface ActivationTransport {
 }
 
 const configuredRecord = /^stable\/(?:[a-z0-9][a-z0-9._-]*\/)+activation\.json$/;
-const configuredRule = /^stable\/.+\/(?:domains|route)\.(?:srs|json)$/;
 const configuredFilename = /^(?:domains|route)\.(?:srs|json)$/;
+const configuredRule = (path: string) => {
+  const parts = path.split('/');
+  return parts[0] === 'stable' && parts.length >= 3 && configuredFilename.test(parts.at(-1)!);
+};
 const legacyRecordPath = 'stable/activation.json';
 const recordDirectory = (path: string) => path.slice(0, -'activation.json'.length);
 
@@ -62,7 +65,7 @@ export function githubActivation(branch = 'main', request: typeof ghJson = ghJso
         if (!/^stable\/[a-zA-Z0-9/_.-]+$/.test(path) || path.split('/').some(part => part === '.' || part === '..' || !part)) throw new Error('Invalid stable path');
       }
       if (!reservation && (paths.some(path => configuredRecord.test(path))
-        || paths.some(path => configuredRule.test(path)) && !paths.includes(legacyRecordPath))) {
+        || paths.some(configuredRule) && !paths.includes(legacyRecordPath))) {
         throw new Error('Configured activation requires a registered write');
       }
       // Recheck immediately before constructing the single-parent update.
@@ -74,8 +77,8 @@ export function githubActivation(branch = 'main', request: typeof ghJson = ghJso
       if (!reservation && (branch === 'main' || existingPaths.has(STATE_PATH) || existingPaths.has(IDENTITY_PATH))) {
         throw new Error('Managed activation requires a registered write');
       }
-      const ownedDirectories = [...existingPaths.keys()].filter(path => configuredRecord.test(path) && !paths.includes(path))
-        .map(recordDirectory);
+      const otherRecords = [...existingPaths.keys()].filter(path => configuredRecord.test(path) && !paths.includes(path));
+      const ownedDirectories = otherRecords.map(recordDirectory);
       const selectedRecord = paths.find(path => configuredRecord.test(path));
       if (selectedRecord) {
         const selectedDirectory = recordDirectory(selectedRecord);
@@ -84,10 +87,20 @@ export function githubActivation(branch = 'main', request: typeof ghJson = ghJso
         }
       }
       for (const path of paths) {
-        if (existingPaths.has(path) && existingPaths.get(path) !== 'blob'
-          || ownedDirectories.some(directory => path.startsWith(directory) && configuredFilename.test(path.slice(directory.length)))) {
-          throw new Error(`Stable path is owned by another rule set or is not a file: ${path}`);
+        if (existingPaths.has(path) && existingPaths.get(path) !== 'blob') {
+          throw new Error(`Stable path is not a file: ${path}`);
         }
+      }
+      for (const recordPath of otherRecords) {
+        const directory = recordDirectory(recordPath);
+        const overlaps = paths.filter(path => path.startsWith(directory) && configuredFilename.test(path.slice(directory.length)));
+        if (!overlaps.length) continue;
+        const record = JSON.parse((await this.download(immutableUrl(expectedHead, recordPath))).toString());
+        if (!record?.files || typeof record.files !== 'object' || Array.isArray(record.files) || !Object.keys(record.files).length) {
+          throw new Error(`Cannot establish stable path ownership: ${recordPath}`);
+        }
+        const owned = overlaps.find(path => Object.hasOwn(record.files, path));
+        if (owned) throw new Error(`Stable path is owned by another rule set: ${owned}`);
       }
       if (selectedRecord && existingPaths.has(legacyRecordPath)) {
         const legacy = JSON.parse((await this.download(immutableUrl(expectedHead, legacyRecordPath))).toString());

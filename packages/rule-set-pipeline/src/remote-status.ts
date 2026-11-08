@@ -1,4 +1,3 @@
-import { configuredLayout } from './configuration.js';
 import { isDeepStrictEqual } from 'node:util';
 import { Ajv } from 'ajv';
 import manifestSchema from '../contracts/artifact-manifest.schema.json' with { type: 'json' };
@@ -7,7 +6,7 @@ import subscriptionV2Schema from '../contracts/rule-subscription-v2.schema.json'
 import { candidateFiles } from './candidate-publication.js';
 import { verifyActivationCandidate, verifyCandidateEvidence } from './activation.js';
 import { githubActivation, type ActivationTransport } from './activation-transport.js';
-import { parseRuleDefinition, type RuleDefinition } from './configuration.js';
+import { configuredLayout, parseRuleDefinition, type RuleDefinition } from './configuration.js';
 import { retainedCandidateDownload, type PublicationRepository } from './publication-repository.js';
 import { ARTIFACT_REPOSITORY, githubPublication, immutableUrl, type PublicationTransport } from './publication.js';
 import { readRemoteState } from './remote-state.js';
@@ -56,6 +55,7 @@ export function activationRecord(value: unknown, path: string, targetBranch: str
     && subscription.projections.route.formats && subscription.projections[dns].formats, 'Remote subscription usage mismatch');
   if (configured) requireThat(isDeepStrictEqual(subscription.projections.route.formats, subscription.projections[dns].formats),
     'Remote subscription file reuse mismatch');
+  if (git) requireThat(subscription.projections.route.formats.source, 'Remote subscription source format is required');
   const directory = path.slice(0, -'/activation.json'.length);
   const prefix = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${targetBranch}/`;
   const expected = new Map<string, { signature: string; candidateFile: string }>();

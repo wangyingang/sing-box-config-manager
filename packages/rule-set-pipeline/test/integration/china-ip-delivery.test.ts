@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test, { type TestContext } from 'node:test';
 import { activateRules, rollbackRules } from '../../src/activation.js';
+import { manageMaintenance } from '../../src/maintenance.js';
 import { ARTIFACT_REPOSITORY } from '../../src/publication.js';
 import { readRemoteStatus } from '../../src/remote-status.js';
 import { sha256 } from '../../src/release.js';
@@ -91,6 +92,12 @@ test('经核验的 china-ip 候选和人工固定随同一组稳定文件提交�
 test('订阅用途不兼容、候选证据不符时保留当前版本', async t => {
   const env = await fixture(t);
   const a = await env.upstream(0);
+  const binaryOnly = { formats: { binary: formats.binary } };
+  const missingSource: RuleSubscription = { ...subscription, projections: { ...subscription.projections,
+    route: binaryOnly, 'dns-response': binaryOnly } };
+  await assert.rejects(activateRules({ ...env.options(), candidateEvidenceUrl: a.evidenceUrl!, subscription: missingSource }),
+    /Subscription source format is required/);
+  assert.equal(env.writes(), 0);
   const activeA = await env.activate(a.evidenceUrl!);
   const b = await env.upstream(1);
   const before = env.head();
@@ -407,6 +414,8 @@ test('同一份配置以真实客户端验证双栈 Route、DNS Response、固�
   await env.activate(b.evidenceUrl!);
   const fixed = (await env.status()).activeRuleVersions[id];
   assert.equal(fixed.control?.reason, 'manual-activation');
+  const beforeFixedRefresh = deliveries;
+  await until(() => deliveries > beforeFixedRefresh, 'Refresh the same URL while manually pinned');
   await probe(1);
   await env.rollback(activeA.commit);
   await observe(0);
@@ -458,4 +467,20 @@ test('仅创建 Git 对象但未切换稳定分支的版本不能作为 china-ip
   assert.equal(env.head(), before);
   assert.equal((await env.status()).activeRuleVersions[id].activation.id, activeA.activation.id);
   assert.equal((await env.rollback(activeA.commit)).activation.candidateId, a.id);
+});
+
+
+test('已有 china-ip 稳定版本时清理在进入维护隔离前延期', async t => {
+  const env = await fixture(t);
+  await env.upstream(0);
+  const b = await env.upstream(1);
+  const active = await env.activate(b.evidenceUrl!);
+  const result = await manageMaintenance({ action: 'enter', manual: true, repository: env.repository,
+    publication: { repository: env.repository, commit: env.publish, download: env.transport.download },
+    activation: env.transport, refs: env.refs.list });
+  assert.equal(result.status, 'deferred');
+  assert.equal(result.maintenance, 'open');
+  assert.ok('blockers' in result && result.blockers.some(blocker => blocker.status === 'unsupported-active-rule-format'));
+  assert.equal(env.head(), active.commit);
+  assert.equal((await env.status()).activeRuleVersions[id].activation.id, active.activation.id);
 });

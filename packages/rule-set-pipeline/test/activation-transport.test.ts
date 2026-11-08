@@ -24,7 +24,7 @@ const stableFiles = { [rulePath]: rule, [recordPath]: Buffer.from(JSON.stringify
 const reservation = { operationId, journalHead };
 
 function github(options: { branch?: string; head?: string; private?: boolean; missing?: boolean; patchError?: Error;
-  managedRecord?: string; maintenance?: boolean; onPatch?: () => Promise<void> } = {}) {
+  managedRecord?: string; managedFile?: string; maintenance?: boolean; onPatch?: () => Promise<void> } = {}) {
   const branch = options.branch ?? 'main';
   const calls: { args: string[]; input: any }[] = [];
   const root = `repos/${ARTIFACT_REPOSITORY}`;
@@ -38,7 +38,7 @@ function github(options: { branch?: string; head?: string; private?: boolean; mi
     }
     if (path === `${root}/git/commits/${oldHead}`) return { tree: { sha: 'b'.repeat(40) } };
     if (path === `${root}/git/trees/${'b'.repeat(40)}?recursive=1`) {
-      return { tree: options.managedRecord ? [{ path: options.managedRecord, type: 'blob', mode: '100644' }] : [] };
+      return { tree: options.managedRecord ? [{ path: options.managedRecord, sha: '5'.repeat(40), type: 'blob', mode: '100644' }] : [] };
     }
     if (path === `${root}/git/ref/heads/candidates`) return { object: { sha: journalHead } };
     if (path === `${root}/git/commits/${journalHead}`) return { tree: { sha: '2'.repeat(40) } };
@@ -50,6 +50,10 @@ function github(options: { branch?: string; head?: string; private?: boolean; mi
       const data = path.endsWith('3'.repeat(40)) ? { ...journal, ...(options.maintenance ? { maintenance: 'maintenance' } : {}) } : identity;
       const bytes = Buffer.from(JSON.stringify(data));
       return { content: bytes.toString('base64'), encoding: 'base64', size: bytes.length };
+    }
+    if (path === `${root}/git/blobs/${'5'.repeat(40)}` && options.managedFile) {
+      const data = Buffer.from(JSON.stringify({ files: { [options.managedFile]: {} } }));
+      return { content: data.toString('base64'), encoding: 'base64', size: data.length };
     }
     if (path === `${root}/git/blobs`) return { sha: 'c'.repeat(40) };
     if (path === `${root}/git/trees`) return { sha: 'd'.repeat(40) };
@@ -220,11 +224,14 @@ test('允许旧 v1 入口更新既有格式，拒绝它覆盖配置化规则集�
   await legacy.transport.commit(oldHead, { 'stable/v2fly/category-ai-not-cn/domains.srs': rule, 'stable/activation.json': Buffer.from('{}') }, '旧单集');
   assert.ok(legacy.calls.some(call => call.args.includes('PATCH')));
   for (const [record, file] of [[recordPath, rulePath], ['stable/china-ip/activation.json', 'stable/china-ip/route.srs']]) {
-    const managed = github({ branch: 'acceptance-issue-19', managedRecord: record });
+    const managed = github({ branch: 'acceptance-issue-19', managedRecord: record, managedFile: file });
     await assert.rejects(managed.transport.commit(oldHead, { [file]: rule, 'stable/activation.json': Buffer.from('{}') }, '覆盖固定版本'),
       /owned by another rule set/);
     assert.ok(!managed.calls.some(call => call.args.includes('PATCH')));
   }
+  const independent = github({ branch: 'acceptance-issue-19', managedRecord: recordPath, managedFile: rulePath });
+  await independent.transport.commit(oldHead, { 'stable/openai/route.srs': rule, 'stable/activation.json': Buffer.from('{}') }, '更新独立旧版路径');
+  assert.ok(independent.calls.some(call => call.args.includes('PATCH')));
 });
 
 test('已协调目标的 v1 写入也必须登记', async () => {

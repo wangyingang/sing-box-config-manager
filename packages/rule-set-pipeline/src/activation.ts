@@ -217,6 +217,7 @@ export function activationSubscription(input: unknown, branch: string, definitio
     }
     const sharedUsage = 'artifact' in definition.usages['dns-response'] ? 'dns-response' : 'dns-query';
     requireThat(equal(subscription.projections.route.formats, subscription.projections[sharedUsage].formats), 'Subscription file reuse mismatch');
+    if (sharedUsage === 'dns-response') requireThat(subscription.projections.route.formats.source, 'Subscription source format is required');
   }
   return subscription;
 }

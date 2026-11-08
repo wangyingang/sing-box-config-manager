@@ -11,7 +11,8 @@ import { gitMaintenanceRefs, type MaintenanceRefTransport, type Ref } from './ma
 import { finishMaintenance } from './maintenance-switch.js';
 export type { MaintenanceCleanup } from './maintenance-switch.js';
 import { inspectBinary } from './native.js';
-import { candidateEvidenceFiles, readRemoteStatus } from './remote-status.js';
+import { candidateFiles } from './candidate-publication.js';
+import { readRemoteStatus } from './remote-status.js';
 
 export interface MaintenanceSchedule { periodDays: number; startAt: string }
 interface Heads { journal: string; stable: string }
@@ -60,8 +61,14 @@ async function scan(options: MaintenanceOptions) {
   const { targetBranch, snapshot, stable, currentByPath, historicalActivations, resumes } = status.inventory!;
   const blockers = [...status.pendingOperations];
   const active = [...currentByPath].map(([recordPath, record]) => {
-    const candidatePaths = candidateEvidenceFiles.map(file => `candidates/${record.candidateId}/${file}`);
+    const definition = status.state.candidates[record.candidateId]?.definition;
+    const candidatePaths = candidateFiles(definition).map(file => `candidates/${record.candidateId}/${file}`);
     const control = record.logicalId ? status.activeRuleVersions[record.logicalId].control : undefined;
+    // The Release baseline cannot yet rebase the evidence for an active CIDR candidate.
+    if (record.source?.kind === 'github-commit') {
+      blockers.push({ id: record.id, candidateId: record.candidateId, logicalId: record.logicalId,
+        status: 'unsupported-active-rule-format', error: `History cleanup does not yet support the active CIDR rule set: ${record.logicalId}` });
+    }
     return { recordPath, record, candidatePaths, ...(control ? { control } : {}) };
   });
   const currentIds = new Set(active.map(({ record }) => record.candidateId));
