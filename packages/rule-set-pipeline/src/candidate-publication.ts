@@ -1,8 +1,15 @@
+import type { RuleDefinition } from './configuration.js';
 import { buildNative, type NativeBuild } from './native.js';
 import { decodedTerms } from './projection.js';
 import { immutableUrl, type PublicationTransport } from './publication.js';
 import { sha256 } from './release.js';
 import { isDeepStrictEqual } from 'node:util';
+
+export function candidateFiles(definition?: RuleDefinition) {
+  const route = definition?.usages.route;
+  const stem = route && 'artifact' in route ? route.artifact : 'domains';
+  return [`${stem}.json`, `${stem}.srs`, 'manifest.json', 'source.json', 'conversion-report.json', 'build.json', 'readback.json'];
+}
 
 export interface PublicationCandidate {
   id: string;
@@ -20,6 +27,16 @@ export async function publishCandidate(options: {
   const { candidate, native, buildId, binary, publication, save } = options;
   const prefix = `candidates/${candidate.id}`;
   const files = Object.fromEntries(native.artifacts.map(artifact => [`${prefix}/${artifact.file}`, artifact.content]));
+  // A previously committed stage must still have the same bytes in the
+  // retained tree. An old immutable URL can remain readable after tampering.
+  const retained = candidate.filesCommit ? await publication.repository?.snapshot() : undefined;
+  const verifyRetained = async (expected: Record<string, Buffer>) => {
+    if (!retained) return;
+    for (const [path, bytes] of Object.entries(expected)) {
+      if (!(await retained.read(path))?.equals(bytes)) throw new Error(`CANDIDATE_UNAVAILABLE: retained bytes differ at ${path}`);
+    }
+  };
+  await verifyRetained(files);
   candidate.status = 'publishing'; await save();
   const filesCommit = candidate.filesCommit ??= await publication.commit(files, `候选 ${candidate.id}：规则文件`);
   await save();
@@ -34,6 +51,7 @@ export async function publishCandidate(options: {
     const withoutLocation = (record: Record<string, any>) => ({ ...record, tool: { ...record.tool, path: undefined } });
     if (!isDeepStrictEqual(withoutLocation(expectedBuild), withoutLocation(originalBuild))) throw new Error('Remote build record mismatch');
     records[path] = original;
+    await verifyRetained(records);
   }
   const metadataCommit = candidate.metadataCommit ??= await publication.commit(records, `候选 ${candidate.id}：Manifest 与构建记录`);
   candidate.manifestUrl = immutableUrl(metadataCommit, `${prefix}/manifest.json`);
@@ -51,7 +69,8 @@ export async function publishCandidate(options: {
   const downloaded = new Map<string, Buffer>();
   for (const [path, bytes] of Object.entries(files)) downloaded.set(path, await verify(path, bytes, filesCommit));
   // Recompile, decompile and load actual HTTPS JSON, then compare downloaded SRS.
-  const json = downloaded.get(`${prefix}/domains.json`);
+  const route = native.usages.route;
+  const json = 'artifactFiles' in route && downloaded.get(`${prefix}/${route.artifactFiles[0]}`);
   if (!json) throw new Error('Remote native JSON is missing');
   const remoteNative = await buildNative(decodedTerms(JSON.parse(json.toString('utf8'))), binary);
   if (remoteNative.artifacts.length !== native.artifacts.length || remoteNative.artifacts.some(artifact =>

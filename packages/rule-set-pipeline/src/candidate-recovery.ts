@@ -1,25 +1,26 @@
 import { isDeepStrictEqual } from 'node:util';
+import { candidateFiles } from './candidate-publication.js';
 import { verifyActivationCandidate } from './activation.js';
 import type { RuleDefinition } from './configured-build.js';
 import { retainedCandidateDownload, type PublicationSnapshot } from './publication-repository.js';
 import type { PublicationTransport } from './publication.js';
 import { sha256 } from './release.js';
+import type { CommitSourceRecord } from './github-commit.js';
 import type { SourceRecord } from './types.js';
 import type { Candidate } from './update.js';
 
 /** Recover evidence only after proving the candidate is retained and usable now. */
 export async function verifyRetainedCandidate(options: {
-  candidate: Candidate | undefined; source: SourceRecord | undefined; snapshot: PublicationSnapshot;
+  candidate: Candidate | undefined; source: SourceRecord | CommitSourceRecord | undefined; snapshot: PublicationSnapshot;
   publication: PublicationTransport; binary: string; targetBranch: string; definition?: RuleDefinition; allowEvidence?: boolean;
 }) {
   const { candidate, snapshot, publication } = options;
   if (!candidate?.retained || !candidate.evidenceUrl || (candidate.phase !== 'complete' && !(options.allowEvidence && candidate.phase === 'evidence'))
-    || ['domains.json', 'domains.srs', 'manifest.json', 'source.json', 'conversion-report.json', 'build.json', 'readback.json']
-      .some(file => !snapshot.paths.includes(`candidates/${candidate.id}/${file}`))) {
-    throw new Error('CANDIDATE_UNAVAILABLE: processed Release no longer has a retained candidate');
+    || candidateFiles(candidate.definition).some(file => !snapshot.paths.includes(`candidates/${candidate.id}/${file}`))) {
+    throw new Error('CANDIDATE_UNAVAILABLE: fixed source no longer has a retained candidate');
   }
   const download = retainedCandidateDownload(snapshot, candidate.id, url => publication.download(url));
-  const verified = await verifyActivationCandidate({ candidateEvidenceUrl: candidate.evidenceUrl, binary: options.binary }, {
+  const verified = await verifyActivationCandidate({ candidateEvidenceUrl: candidate.evidenceUrl, binary: options.binary, evidenceSha256: candidate.evidenceSha256 }, {
     branch: options.targetBranch, download,
   }, options.definition);
   if (!isDeepStrictEqual(verified.source, options.source) || verified.validation.buildId !== candidate.buildId) {

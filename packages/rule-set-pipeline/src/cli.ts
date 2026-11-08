@@ -32,11 +32,11 @@ async function main(): Promise<number> {
       'maintenance-id': { type: 'string' }, help: { type: 'boolean' } },
   });
   if (values.help) {
-    console.log('Usage: build --release <fixed-tag> --out <new-directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...]] [--expected-source <source.json>] | build --config <git-source-yaml> [--id <logical-id> ...] [--commit <full-sha>] --out <new-directory> --binary <absolute-1.14.4-path> | update --state <directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...] [--release <pinned-tag>]] | check-now --state <directory> --binary <absolute-1.14.4-path> --config <versioned-yaml> [--subscription <v2-contract-map.json>] [--id <logical-id> ...] | resume --state <directory> --binary <absolute-1.14.4-path> --config <versioned-yaml> [--subscription <v2-contract-map.json>] --id <logical-id> | initialize/status [--config <yaml> | --branch <target>] | maintenance-preview/maintenance-enter/maintenance-prepare/maintenance-switch/maintenance-resume/maintenance-abort | rebuild/activate/rollback (see package README)');
+    console.log('Usage: build --release <fixed-tag> --out <new-directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...]] [--expected-source <source.json>] | build --config <git-source-yaml> [--id <logical-id> ...] [--commit <full-sha>] --out <new-directory> --binary <absolute-1.14.4-path> | update --state <directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...] [--release <pinned-tag>]] | check-now --state <directory> --binary <absolute-1.14.4-path> --config <versioned-yaml> [--subscription <v2-contract-map.json>] [--id <logical-id> ...] | resume --state <directory> --binary <absolute-1.14.4-path> --config <versioned-yaml> [--subscription <v2-contract-map.json>] --id <logical-id> | initialize/status [--config <yaml> | --branch <target>] | maintenance-preview/maintenance-enter/maintenance-prepare/maintenance-switch/maintenance-resume/maintenance-abort | rebuild --state <directory> --binary <absolute-1.14.4-path> (--release <fixed-tag> | --commit <full-sha>) [--config <versioned-yaml> --id <logical-id>] | activate/rollback (see package README)');
     return 0;
   }
-  if (values.commit !== undefined && (positionals.length !== 1 || positionals[0] !== 'build' || !values.config || values.release !== undefined)) {
-    throw new Error('--commit requires build with --config and is incompatible with --release');
+  if (values.commit !== undefined && (positionals.length !== 1 || !['build', 'rebuild'].includes(positionals[0]) || !values.config || values.release !== undefined)) {
+    throw new Error('--commit requires build or rebuild with --config and is incompatible with --release');
   }
   const maintenanceAction = positionals.length === 1 ? /^maintenance-(preview|enter|prepare|switch|resume|abort)$/.exec(positionals[0])?.[1] : undefined;
   if (maintenanceAction) {
@@ -112,9 +112,6 @@ async function main(): Promise<number> {
     if (values.release || values.out || values['expected-source'] || values.activation || values.candidate || values.subscription
       || values['expected-head'] || values.id || (positionals[0] === 'initialize' && values.binary)) throw new Error('Invalid remote state options');
     const configuration = values.config ? parseBuildConfiguration(await readFile(values.config, 'utf8')) : undefined;
-    if (positionals[0] === 'initialize' && configuration?.ruleSets.some(rule => configuration.sources[rule.source].version === 'git-branch')) {
-      throw new Error('Git commit sources are supported only by local build');
-    }
     const target = configuration?.target.branch ?? values.branch ?? 'main';
     if (values.config && values.branch && target !== values.branch) throw new Error('Configuration and branch disagree');
     const publication = githubPublication(undefined, target === 'main' ? 'candidates' : target);
@@ -128,16 +125,17 @@ async function main(): Promise<number> {
   if ((values.config || values.id) && !['build', 'update', 'rebuild'].includes(positionals[0])) throw new Error('--config and --id require build, update or rebuild');
   if (positionals.length === 1 && ['update', 'rebuild'].includes(positionals[0])) {
     const rebuild = positionals[0] === 'rebuild';
-    if (!values.state || values.out || values['expected-source'] || (rebuild ? !values.release || !values.binary || values.release.toLowerCase() === 'latest' :
+    const fixed = values.commit !== undefined ? { commit: values.commit } : { release: values.release! };
+    if (!values.state || values.out || values['expected-source'] || (rebuild ? (!values.release && !values.commit) || !values.binary || values.release?.toLowerCase() === 'latest' :
           values.release && (positionals[0] !== 'update' || !values.config || !values.id?.length || values.release.toLowerCase() === 'latest')) ||
-        (rebuild && (!!values.config !== !!values.id?.length)) || (positionals[0] === 'status' && (values.config || values.id)) ||
+        (rebuild && (!!values.config !== !!values.id?.length)) ||
         (positionals[0] === 'update' && (values.id && !values.config || values.config && !values.binary))) {
-      throw new Error('update/status requires --state; rebuild requires --state, --release <fixed-tag> and --binary');
+      throw new Error('update requires --state; rebuild requires --state, --binary and a fixed --release or --commit');
     }
     {
       const options = { stateDirectory: resolve(values.state), binary: values.binary ?? '', token: await sourceToken() };
       const result = rebuild ? values.config
-        ? await rebuildRules({ ...options, release: values.release!, configuration: await readFile(values.config, 'utf8'), selectedIds: values.id! })
+        ? await rebuildRules({ ...options, ...fixed, configuration: await readFile(values.config, 'utf8'), selectedIds: values.id! })
         : await rebuildRules({ ...options, release: values.release! }) : values.config
         ? await updateRules({ ...options, configuration: await readFile(values.config, 'utf8'), selectedIds: values.id, retryRelease: values.release })
         : await updateRules(options);

@@ -10,7 +10,8 @@ import { validBaseline } from './maintenance-baseline-transport.js';
 import { cleanupRefNames } from './maintenance-refs.js';
 import type { MaintenanceCleanup, MaintenanceRun } from './maintenance.js';
 import { parseBuildConfiguration, parseRuleDefinition } from './configuration.js';
-import { validReleaseAssetIdentities, V2FLY_RELEASE_INPUT } from './release.js';
+import { commitSourceKey, validCommitIdentity, validCommitSource } from './github-commit.js';
+import { sha256, validReleaseAssetIdentities, V2FLY_RELEASE_INPUT } from './release.js';
 
 export const STATE_PATH = 'pipeline/state.json';
 export const BASELINE_PATH = 'pipeline/baseline.json';
@@ -153,6 +154,18 @@ function validate(value: unknown): asserts value is RemoteJournal {
   for (const [id, pin] of Object.entries(state.pinned)) {
     validatePin(pin, id);
   }
+  if (state.commitPins !== undefined && !object(state.commitPins)) throw new Error('REMOTE_STATE_CORRUPT: Git source pins');
+  for (const [key, pin] of Object.entries(state.commitPins ?? {})) {
+    if (!object(pin) || !validCommitIdentity(pin.identity) || commitSourceKey(pin.identity) !== key
+      || pin.source !== undefined && (!validCommitSource(pin.source) || commitSourceKey(pin.source) !== key)) {
+      throw new Error('REMOTE_STATE_CORRUPT: Git source pin');
+    }
+  }
+  const validSourceReference = (reference: Record<string, any>) => reference.sourceKey === undefined
+    ? Number.isSafeInteger(reference.releaseId) && state.pinned[String(reference.releaseId)]?.identity?.tag === reference.tag
+      && typeof reference.tag === 'string'
+    : typeof reference.sourceKey === 'string' && Object.hasOwn(state.commitPins ?? {}, reference.sourceKey)
+      && reference.releaseId === undefined && reference.tag === undefined;
   const parked = value.parkedOperations === undefined ? [] : value.parkedOperations;
   if (!Array.isArray(parked) || parked.some(op => !object(op) || op.status !== 'pending')) {
     throw new Error('REMOTE_STATE_CORRUPT: parked operations');
@@ -162,8 +175,8 @@ function validate(value: unknown): asserts value is RemoteJournal {
   if (operationIds.size !== operations.length) throw new Error('REMOTE_STATE_CORRUPT: duplicate operation');
   for (const [id, candidate] of Object.entries(state.candidates)) {
     if (!object(candidate) || candidate.id !== id || !/^[a-f0-9-]+$/.test(id)
-      || !Number.isSafeInteger(candidate.releaseId) || !state.pinned[String(candidate.releaseId)]
-      || candidate.tag !== state.pinned[String(candidate.releaseId)].identity.tag
+      || !validSourceReference(candidate) || candidate.sourceKey !== undefined
+        && (!candidate.definition || !state.commitPins[candidate.sourceKey].source)
       || !['building', 'publishing', 'verified', 'failed'].includes(candidate.status)
       || !Number.isSafeInteger(candidate.generation) || candidate.generation < 1 || candidate.generation > value.generation || typeof candidate.retained !== 'boolean'
       || typeof candidate.operationId !== 'string' || !/^[a-f0-9-]+$/.test(candidate.operationId)
@@ -173,7 +186,8 @@ function validate(value: unknown): asserts value is RemoteJournal {
       || ['filesCommit', 'metadataCommit', 'evidenceCommit'].some(key => candidate[key] !== undefined && !sha(candidate[key]))) {
       throw new Error('REMOTE_STATE_CORRUPT: candidate');
     }
-    if (candidate.phase !== 'registered' && !digest(candidate.buildId)
+    if (candidate.sourceKey !== undefined && ['evidence', 'complete'].includes(candidate.phase) && !digest(candidate.evidenceSha256)
+      || candidate.phase !== 'registered' && !digest(candidate.buildId)
       || ['metadata', 'evidence', 'complete'].includes(candidate.phase) && !sha(candidate.filesCommit)
       || ['evidence', 'complete'].includes(candidate.phase) && !sha(candidate.metadataCommit)
       || candidate.phase === 'complete' && !sha(candidate.evidenceCommit)
@@ -188,21 +202,28 @@ function validate(value: unknown): asserts value is RemoteJournal {
       throw new Error('REMOTE_STATE_CORRUPT: candidate address');
     }
     if (candidate.definition !== undefined) {
-      const definition = parseRuleDefinition(candidate.definition);
+      const definition = parseRuleDefinition(candidate.definition, candidate.sourceKey === undefined ? 'plain-yaml' : 'cidr-text');
       if (candidate.logicalId !== definition.id) throw new Error('REMOTE_STATE_CORRUPT: candidate logical ID');
     }
   }
-  const processed = (records: unknown) => {
+  const processed = (records: unknown, logicalId?: string) => {
     if (!object(records)) throw new Error('REMOTE_STATE_CORRUPT: processed');
     for (const [releaseId, record] of Object.entries(records)) {
       if (!object(record) || typeof record.candidateId !== 'string' || !/^[a-f0-9-]+$/.test(record.candidateId)
-        || !/^[0-9]{14}$/.test(record.tag) || !/^[1-9][0-9]*$/.test(releaseId)
+        || (/^[1-9][0-9]*$/.test(releaseId) ? !/^[0-9]{14}$/.test(record.tag)
+          : !logicalId || !Object.hasOwn(state.commitPins ?? {}, releaseId) || record.tag !== undefined
+            || !digest(record.definitionSha256))
         || record.evidenceUrl !== undefined && typeof record.evidenceUrl !== 'string'
         || record.definitionSha256 !== undefined && !digest(record.definitionSha256)) throw new Error('REMOTE_STATE_CORRUPT: processed');
+      if (Object.hasOwn(state.commitPins ?? {}, releaseId)) {
+        const candidate = state.candidates[record.candidateId];
+        if (candidate ? candidate.sourceKey !== releaseId || candidate.logicalId !== logicalId || candidate.phase !== 'complete'
+          : record.evidenceUrl !== undefined) throw new Error('REMOTE_STATE_CORRUPT: processed Git candidate');
+      }
     }
   };
   processed(state.processed);
-  for (const records of Object.values(state.configuredProcessed ?? {})) processed(records);
+  for (const [id, records] of Object.entries(state.configuredProcessed ?? {})) processed(records, id);
   if (state.latestChecks !== undefined) {
     if (!object(state.latestChecks)) throw new Error('REMOTE_STATE_CORRUPT: latest checks');
     for (const [id, check] of Object.entries(state.latestChecks)) {
@@ -220,9 +241,8 @@ function validate(value: unknown): asserts value is RemoteJournal {
   for (const op of operations) {
     if (!object(op) || typeof op.id !== 'string' || !/^[a-f0-9-]+$/.test(op.id) || !['update', 'rebuild', 'check'].includes(op.kind)
       || !Number.isSafeInteger(op.generation) || op.generation < 1 || op.generation > value.generation
-      || op.status === 'pending' && op.generation !== value.generation || !Number.isSafeInteger(op.releaseId) || !/^[0-9]{14}$/.test(op.tag)
+      || op.status === 'pending' && op.generation !== value.generation || !validSourceReference(op)
       || !sha(op.expectedHead) || !Array.isArray(op.candidateIds) || new Set(op.candidateIds).size !== op.candidateIds.length
-      || !state.pinned[String(op.releaseId)] || op.tag !== state.pinned[String(op.releaseId)].identity.tag
       || !['pending', 'complete'].includes(op.status)) throw new Error('REMOTE_STATE_CORRUPT: operation');
     if (op.configuration !== undefined) {
       if (typeof op.configuration !== 'string') throw new Error('REMOTE_STATE_CORRUPT: operation configuration');
@@ -232,8 +252,12 @@ function validate(value: unknown): asserts value is RemoteJournal {
         || op.selectedIds.some((id: unknown) => !configuration.ruleSets.some(rule => rule.id === id)))) throw new Error('REMOTE_STATE_CORRUPT: operation selection');
     } else if (op.selectedIds !== undefined) throw new Error('REMOTE_STATE_CORRUPT: operation selection');
     const configuration = op.configuration === undefined ? undefined : parseBuildConfiguration(op.configuration);
+    if (op.sourceKey !== undefined && (!configuration || configuration.ruleSets.some(rule =>
+      (!op.selectedIds || op.selectedIds.includes(rule.id)) && configuration.sources[rule.source].version !== 'git-branch'))) {
+      throw new Error('REMOTE_STATE_CORRUPT: Git operation source');
+    }
     if (op.kind === 'check') {
-      if (!configuration || !op.selectedIds || !object(op.controlRevisions) || !object(op.subscriptionHashes)
+      if (op.sourceKey !== undefined || !configuration || !op.selectedIds || !object(op.controlRevisions) || !object(op.subscriptionHashes)
         || Object.keys(op.controlRevisions).length !== op.selectedIds.length || Object.keys(op.subscriptionHashes).length !== op.selectedIds.length
         || op.selectedIds.some((id: string) => !(op.controlRevisions[id] === null || typeof op.controlRevisions[id] === 'string')
           || !digest(op.subscriptionHashes[id]))) throw new Error('REMOTE_STATE_CORRUPT: check operation');
@@ -244,7 +268,7 @@ function validate(value: unknown): asserts value is RemoteJournal {
       const candidate = state.candidates[id];
       const definition = configuration?.ruleSets.find(rule => rule.id === candidate?.logicalId);
       if (typeof id !== 'string' || !object(candidate) || candidate.operationId !== op.id || candidate.operation !== (op.kind === 'check' ? 'update' : op.kind)
-        || candidate.releaseId !== op.releaseId || candidate.tag !== op.tag
+        || candidate.sourceKey !== op.sourceKey || candidate.releaseId !== op.releaseId || candidate.tag !== op.tag
         || (configuration ? !definition || op.selectedIds && !op.selectedIds.includes(definition.id)
           || !isDeepStrictEqual(candidate.definition, definition) : candidate.logicalId !== undefined || candidate.definition !== undefined)) {
         throw new Error('REMOTE_STATE_CORRUPT: operation candidate index');
@@ -399,10 +423,16 @@ export async function openRemoteSession(publication: PublicationTransport, direc
       if (!candidate || candidate.generation !== journal.generation || candidate.retained !== true
         || paths.some(path => !path.startsWith(`candidates/${id}/`))) throw new Error('Unregistered candidate write');
       const previousPhase = candidate.phase;
-      candidate.phase = paths.some(path => path.endsWith('/readback.json')) ? 'evidence'
+      const evidence = files[`candidates/${id}/readback.json`];
+      if (evidence && candidate.sourceKey !== undefined) candidate.evidenceSha256 = sha256(evidence);
+      candidate.phase = evidence ? 'evidence'
         : paths.some(path => path.endsWith('/manifest.json')) ? 'metadata' : 'files';
       try { return await write(files, message); }
-      catch (error) { candidate.phase = previousPhase; throw error; }
+      catch (error) {
+        candidate.phase = previousPhase;
+        if (evidence && candidate.sourceKey !== undefined) delete candidate.evidenceSha256;
+        throw error;
+      }
     } } satisfies PublicationTransport,
   };
 }

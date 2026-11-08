@@ -7,6 +7,7 @@ import { Ajv } from 'ajv';
 import manifestSchema from '../contracts/artifact-manifest.schema.json' with { type: 'json' };
 import subscriptionSchema from '../contracts/rule-subscription.schema.json' with { type: 'json' };
 import subscriptionV2Schema from '../contracts/rule-subscription-v2.schema.json' with { type: 'json' };
+import { validCommitSource } from './github-commit.js';
 import { buildNative } from './native.js';
 import { decodedTerms, USAGES } from './projection.js';
 import { sha256, validReleaseAssetIdentities, V2FLY_RELEASE_INPUT } from './release.js';
@@ -45,11 +46,15 @@ function candidateLocation(url: string, file: string) {
   return { commit: match[1], id: match[2] };
 }
 
-/** Reads the complete trusted remote record chain and validates actual bytes afresh. */
-export async function verifyActivationCandidate(options: Pick<ActivationOptions, 'candidateEvidenceUrl' | 'binary'>, transport: Pick<ActivationTransport, 'branch' | 'download'>,
-  definition?: RuleDefinition, operation: 'activate' | 'rollback' = 'activate') {
+/** Reads the complete trusted remote record chain and optionally revalidates it with sing-box. */
+export async function verifyCandidateEvidence(options: { candidateEvidenceUrl: string; binary?: string; evidenceSha256?: string },
+  transport: Pick<ActivationTransport, 'branch' | 'download'>, definition?: RuleDefinition,
+  operation: 'activate' | 'rollback' = 'activate') {
   const location = candidateLocation(options.candidateEvidenceUrl, 'readback.json');
-  const evidence = JSON.parse((await transport.download(options.candidateEvidenceUrl)).toString('utf8'));
+  const evidenceBytes = await transport.download(options.candidateEvidenceUrl);
+  requireThat(options.evidenceSha256 === undefined || options.evidenceSha256 === sha256(evidenceBytes),
+    'CANDIDATE_UNAVAILABLE: remote readback differs from registered evidence');
+  const evidence = JSON.parse(evidenceBytes.toString('utf8'));
   requireThat(evidence.schemaVersion === 1 && evidence.status === 'remote-verified' && evidence.candidateId === location.id,
     'Missing complete remote candidate verification');
   for (const commit of [evidence.filesCommit, evidence.metadataCommit]) requireThat(/^[a-f0-9]{40}$/.test(commit), 'Invalid candidate commit');
@@ -69,7 +74,10 @@ export async function verifyActivationCandidate(options: Pick<ActivationOptions,
   const source = JSON.parse((await remote('source.json', evidence.metadataCommit)).toString());
   const report = JSON.parse((await remote('conversion-report.json', evidence.metadataCommit)).toString());
   const build = JSON.parse((await remote('build.json', evidence.metadataCommit)).toString());
-  if (source.kind === 'synthetic') {
+  const isCidr = source.kind === 'github-commit';
+  if (isCidr) {
+    requireThat(definition && validCommitSource(source) && source.inputBytes > 0, 'Incomplete official Git source');
+  } else if (source.kind === 'synthetic') {
     requireThat(typeof source.description === 'string' && source.description.length > 0 && typeof source.revision === 'string' && source.revision.length > 0,
       'Synthetic candidate must identify its controlled origin');
   } else {
@@ -82,7 +90,9 @@ export async function verifyActivationCandidate(options: Pick<ActivationOptions,
     && build.validation.semanticRoundTrip === true && Array.isArray(build.validation.steps) && build.validation.steps.length >= 4
     && build.tool?.version === '1.14.4' && /^[a-f0-9]{64}$/.test(build.tool.sha256)
     && evidence.native?.status === 'passed' && evidence.native.semanticRoundTrip === true
-    && evidence.tool?.sha256 === build.tool.sha256, 'Incomplete native validation record');
+    && evidence.tool?.sha256 === build.tool.sha256
+    && (!isCidr || evidence.tool.version === '1.14.4' && Array.isArray(evidence.native.steps) && evidence.native.steps.length >= 4),
+    'Incomplete native validation record');
   // Historical candidates predate explicit contract versions in the build identity.
   const identity = { source, tools: build.tools, nativeBuildId: build.nativeBuildId };
   if (build.contracts !== undefined) {
@@ -90,14 +100,16 @@ export async function verifyActivationCandidate(options: Pick<ActivationOptions,
       && Object.keys(build.contracts).length === 3 && build.contracts.artifactManifest === 1
       && build.contracts.sourceFormat === 4 && build.contracts.buildRecord === (definition ? CONFIGURED_BUILD_RECORD : 1), 'Unsupported build contracts');
   }
+  let candidateDefinition = definition;
   if (definition) {
     // A rollback retains its original source selection. Validate that definition
     // and build identity independently, while keeping today's delivery identity.
-    const expectedDefinition = operation === 'rollback' ? parseRuleDefinition(build.definition) : definition;
+    const expectedDefinition = operation === 'rollback' ? parseRuleDefinition(build.definition, isCidr ? 'cidr-text' : 'plain-yaml') : definition;
     requireThat(equal(build.definition, expectedDefinition) && expectedDefinition.id === definition.id
       && expectedDefinition.stablePath === definition.stablePath && build.id === definition.id && build.candidateId === location.id
       && build.target?.repository === ARTIFACT_REPOSITORY && build.target?.branch === transport.branch
       && build.contracts !== undefined, 'Configured build identity or target mismatch');
+    candidateDefinition = expectedDefinition;
   }
   const configuredIdentity = { definition: build.definition, target: build.target, source, tools: build.tools, nativeBuildId: build.nativeBuildId,
     contracts: { sourceFormat: 4, buildRecord: CONFIGURED_BUILD_RECORD } };
@@ -108,42 +120,56 @@ export async function verifyActivationCandidate(options: Pick<ActivationOptions,
   requireThat(report.status === 'converted' && report.inputCount > 0 && report.inputCount === report.convertedCount
     && report.invalidCount === 0 && report.unsupportedCount === 0 && report.diagnostics?.length === 0
     && report.outputTermCount === report.convertedCount - report.duplicateCount, 'Incomplete conversion record');
-  // The initial production slice supports the official pure-domain list and matching controlled fixtures.
-  requireThat(manifest.artifacts.length === 2 && manifest.projections['dns-response'].unavailable === 'empty', 'Unsupported candidate projections');
+  const route = candidateDefinition?.usages.route;
+  const stem = route && 'artifact' in route ? route.artifact : 'domains';
+  requireThat(stem === (isCidr ? 'route' : 'domains') && manifest.artifacts.length === 2, 'Unsupported candidate projections');
   const artifactIds = manifest.artifacts.map((artifact: any) => artifact.id);
   requireThat(new Set(artifactIds).size === artifactIds.length, 'Duplicate artifact identity');
   requireThat(build.artifacts?.length === 2, 'Unexpected build artifact set');
-  const sourceBytes = await remote('domains.json', evidence.filesCommit);
-  const srsBytes = await remote('domains.srs', evidence.filesCommit);
+  const sourceBytes = await remote(`${stem}.json`, evidence.filesCommit);
+  const srsBytes = await remote(`${stem}.srs`, evidence.filesCommit);
   const json = JSON.parse(sourceBytes.toString());
   requireThat(json.version === 4, 'Candidate Source Format mismatch');
   const terms = decodedTerms(json);
-  requireThat(terms.length > 0 && terms.every(term => term.type !== 'ip_cidr'), 'Candidate has empty or incompatible usage content');
+  requireThat(terms.length > 0 && terms.every(term => (term.type === 'ip_cidr') === isCidr), 'Candidate has empty or incompatible usage content');
   requireThat(report.outputTermCount === terms.length, 'Conversion term count mismatch');
-  const native = await buildNative(terms, options.binary);
+  const native = options.binary === undefined ? undefined : await buildNative(terms, options.binary);
   requireThat(build.nativeBuildId === sha256(JSON.stringify({ policy: 'native-projection-v2', sourceFormat: 4,
     tool: build.tool.sha256, terms })), 'Native build identity mismatch');
   const bytesByFormat = { source: sourceBytes, binary: srsBytes };
   for (const format of ['source', 'binary'] as const) {
     const artifact = manifest.artifacts.filter((entry: any) => entry.format === format);
     requireThat(artifact.length === 1, 'Duplicate or missing artifact format');
-    const a = artifact[0], bytes = bytesByFormat[format], file = format === 'source' ? 'domains.json' : 'domains.srs';
+    const a = artifact[0], bytes = bytesByFormat[format], file = `${stem}.${format === 'source' ? 'json' : 'srs'}`;
     requireThat(a.url === immutableUrl(evidence.filesCommit, `${prefix}/${file}`)
-      && a.byteLength === bytes.length && a.sha256 === sha256(bytes) && a.termCount === terms.length
+      && a.byteLength === bytes.length && a.sha256 === sha256(bytes)
+      && (format === 'binary' && isCidr || a.termCount === terms.length)
       && a.requiredCapabilities.length === 0, `Artifact integrity or capability mismatch: ${file}`);
     const stored = build.artifacts?.filter((entry: any) => entry.file === file);
     requireThat(stored?.length === 1 && stored[0].sha256 === a.sha256 && stored[0].bytes === a.byteLength
       && stored[0].termCount === a.termCount && stored[0].format === format && equal(stored[0].requiredCapabilities, []), 'Build artifact mismatch');
     // buildNative recompiles, decodes and loads both formats; exact bytes prove downloaded SRS is that validated file.
-    requireThat(native.artifacts.find(entry => entry.file === file)?.content.equals(bytes), `Native artifact mismatch: ${file}`);
+    const reproduced = native?.artifacts.find(entry => entry.file === file);
+    requireThat(!native || reproduced?.termCount === a.termCount && reproduced?.content.equals(bytes), `Native artifact mismatch: ${file}`);
   }
-  for (const usage of ['route', 'dns-query'] as const) {
+  for (const usage of USAGES) {
+    if (usage === (isCidr ? 'dns-query' : 'dns-response')) {
+      requireThat(equal(manifest.projections[usage], { unavailable: 'empty' }), 'Projection availability mismatch');
+      continue;
+    }
     const ids = manifest.projections[usage].artifactIds;
     requireThat(Array.isArray(ids) && ids.length === 2 && new Set(ids).size === 2 && manifest.artifacts.every((entry: any) => ids.includes(entry.id)), 'Projection mapping mismatch');
   }
-  return { candidateId: location.id, evidenceUrl: options.candidateEvidenceUrl, manifest, source, bytesByFormat,
+  return { candidateId: location.id, buildId: build.buildId, evidenceUrl: options.candidateEvidenceUrl, manifest, source, bytesByFormat,
     build: { definition: build.definition, tools: build.tools, tool: build.tool },
-    validation: { tool: native.tool, buildId: build.buildId, nativeBuildId: native.buildId } };
+    validation: native && { tool: native.tool, buildId: build.buildId, nativeBuildId: native.buildId } };
+}
+
+export async function verifyActivationCandidate(options: Pick<ActivationOptions, 'candidateEvidenceUrl' | 'binary'> & { evidenceSha256?: string },
+  transport: Pick<ActivationTransport, 'branch' | 'download'>, definition?: RuleDefinition, operation: 'activate' | 'rollback' = 'activate') {
+  const candidate = await verifyCandidateEvidence(options, transport, definition, operation);
+  requireThat(candidate.validation, 'Missing native validation');
+  return { ...candidate, validation: candidate.validation };
 }
 
 export interface RollbackOptions extends Omit<ActivationOptions, 'candidateEvidenceUrl'> {
@@ -157,7 +183,7 @@ function activationContext(options: Pick<ActivationOptions, 'configuration' | 'l
   const definition = configuration?.ruleSets.find(rule => rule.id === options.logicalId);
   if (configured) requireThat(definition && configuration?.target.branch === transport.branch, 'Unknown logical ID or activation target mismatch');
   if (definition && configuration?.sources[definition.source].version === 'git-branch') {
-    throw new Error('Git commit sources are supported only by local build');
+    throw new Error('Stable activation and rollback for Git commit sources are not supported');
   }
   return { configured, definition, recordPath: definition ? `${definition.stablePath}/activation.json` : RECORD_PATH };
 }

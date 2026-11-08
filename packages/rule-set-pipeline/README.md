@@ -2,7 +2,7 @@
 
 包名：`@sing-box-config-manager/rule-set-pipeline`。管理者需要更新系统维护的规则集合时，本模块从官方来源生成 sing-box 可加载的规则文件，验证并上传为候选。管理者可显式激活候选，检查流程也可自动激活符合条件的规则。客户端随后通过稳定地址取得当前规则；构建成功、候选验证成功、稳定入口切换和客户端加载完成是不同的状态。
 
-当前 `update` 可发布 V2Fly `domain-list-community` 官方 Release 中 `dlc.dat_plain.yml` 的 `category-ai-!cn`，也可按管理者的 YAML 配置从同一 Release 发布多个列表。本地 `build` 同样支持配置驱动的多集构建。`activate` 与 `rollback` 均可通过 `--config ... --id ...` 按逻辑 ID 独立操作。输出包括 JSON 源规则文件和 SRS 二进制规则文件，目标版本固定为 sing-box **1.14.4**，JSON Source Format 固定为 **4**。本地构建也支持从固定的 GitHub commit 生成双栈 `china-ip`。当前发布、激活与维护流程适用于 V2Fly Release。
+当前 `update` 可发布 V2Fly `domain-list-community` 官方 Release 中 `dlc.dat_plain.yml` 的 `category-ai-!cn`，也可按管理者的 YAML 配置从同一 Release 发布多个列表。本地 `build` 同样支持配置驱动的多集构建。`activate` 与 `rollback` 均可通过 `--config ... --id ...` 按逻辑 ID 独立操作。输出包括 JSON 源规则文件和 SRS 二进制规则文件，目标版本固定为 sing-box **1.14.4**，JSON Source Format 固定为 **4**。`china-ip` 可从固定的 GitHub commit 构建双栈规则，显式发布、查询和重建候选。稳定激活、自动更新和当前版本的维护流程适用于 V2Fly Release。
 
 ## 操作分别产生什么结果
 
@@ -11,8 +11,8 @@
 | 操作 | 输入与结果 | 是否改变稳定入口 |
 | --- | --- | --- |
 | `build:release` | 读取指定 Release 或固定 Git commit，在新目录生成经过本地原生验证的规则文件及记录 | 否；不上传 |
-| `update` | 先恢复远端未完成操作；无待恢复操作时查询一次 latest，逐集发布候选 | 否；候选仍待显式激活 |
-| `rebuild` | 对远端已固定且成功处理、必要证据仍保留的 Release 重建候选 | 否；保留原候选与成功处理记录 |
+| `update` | 先恢复远端未完成操作；无待恢复操作时查询 Release latest 或解析 Git 分支，逐集发布候选 | 否；候选仍待显式激活 |
+| `rebuild` | 对远端已固定且成功处理、必要证据仍保留的 Release 或 Git commit 重建候选 | 否；保留原候选与成功处理记录 |
 | `check-now` | 检查固定的最新 Release，发布并激活允许自动更新的有效变化 | 有验证通过的有效变化时 |
 | `resume` | 解除所选集的人工固定并立即检查最新 Release | 所选集有验证通过的有效变化时 |
 | `activate` | 复验选定候选，更新稳定规则文件及激活记录 | 是；客户端何时加载由其更新机制决定 |
@@ -92,7 +92,7 @@ pnpm --dir packages/rule-set-pipeline build:release \
 
 每个有效行包含一个带前缀长度的 IPv4 或 IPv6 CIDR。文件使用 UTF-8，允许开头的 BOM，接受 LF、CRLF 和 CR 换行。行首尾的空格和制表符会被移除。空行和以 `#` 开头的整行注释会被跳过。转换会规范化网络地址并去重，保留不同前缀。无效 UTF-8、非法 CIDR（包括带行尾注释的行）或空结果都会使构建失败。诊断记录文件名，非法 CIDR 同时记录行和列。
 
-输出在 `china-ip/` 子目录中。Route 和 DNS Response 共用 `route.json` 与 `route.srs`，DNS Query 标记为 `unavailable: empty`。验证包含编译、解码、比较 IP 匹配范围，以及加载两种格式。[`config/china-ip.yml`](config/china-ip.yml) 供本地构建使用。
+输出在 `china-ip/` 子目录中。Route 和 DNS Response 共用 `route.json` 与 `route.srs`，DNS Query 标记为 `unavailable: empty`。验证包含编译、解码、比较 IP 匹配范围，以及加载两种格式。[`config/china-ip.yml`](config/china-ip.yml) 同时供本地构建和显式候选发布使用。
 
 ## 按逻辑 ID 显式激活
 
@@ -164,15 +164,30 @@ pnpm --dir packages/rule-set-pipeline status --config config/rulesets.yml --bina
 
 Artifact Manifest（产物清单）记录某次不可变规则文件的固定地址、摘要和使用约束。原有单集及目标为 `main` 的配置驱动更新在产物仓库的 `candidates` 分支追加候选；配置目标为 `acceptance-*` 时在该隔离分支追加候选。两者均采用三个有序的候选提交阶段，并穿插远端操作检查点，使清单可以引用已固定的 commit 地址：
 
-1. `candidates/<candidate-id>/domains.json` 和 `domains.srs`。
+1. `candidates/<candidate-id>/` 下的 JSON／SRS。域名使用 `domains.json` 和 `domains.srs`，`china-ip` 使用 `route.json` 和 `route.srs`。
 2. 引用第一步完整 commit URL 的 `manifest.json`，以及 `source.json`、`conversion-report.json`、`build.json`。
 3. `readback.json` 引用前两步的完整 commit、实际 HTTPS 回读摘要／字节数，以及对下载字节重新执行的原生验证记录。
 
-发布只允许追加新的候选路径，保留父 tree，拒绝历史路径覆盖或并发非快进更新。Manifest 使用既有 v1 契约，物理产物 ID 包含候选修订；Route／DNS 请求复用文件，DNS 响应为 `unavailable: empty`。所有文件使用完整 commit 的 HTTPS URL；时间、日志和 Manifest 不进入规则文件，避免摘要循环。
+发布只允许追加新的候选路径，保留父 tree，拒绝历史路径覆盖或并发非快进更新。Manifest 使用既有 v1 契约，物理产物 ID 包含候选修订；域名候选的 Route／DNS 请求复用文件，DNS 响应为 `unavailable: empty`。`china-ip` 候选的 Route／DNS 响应复用文件，DNS 请求不可用。所有文件使用完整 commit 的 HTTPS URL；时间、日志和 Manifest 不进入规则文件，避免摘要循环。
 
 远程文件逐一核对字节数、SHA-256 和逐字节内容。下载的 JSON 重新编译、解码及加载，所得 SRS 必须与下载的 SRS 一致。随后回读元数据，并在第三步提交、回读证据文件后才记为 `verified` 和成功处理。失败返回非零并保留远端阶段；重试复用原候选，补齐未完成阶段并重新核验，残缺文件不能作为通过证据。发布的 `build.json` 仅表示本地验证，只有完整远程证据及成功候选状态才能供后续激活检查。
 
 本命令不写稳定路径、不激活候选、不修改实际客户端配置，也不切换全局 binary。首次创建产物仓库、候选发布属于外部写入，须有覆盖它们的授权；命令不自动创建仓库。
+
+### 发布和重建 `china-ip` 候选
+
+在预先创建的隔离分支使用一份 `config/china-ip.yml` 的副本，将 `target.branch` 设为该分支。以下命令在 `packages/rule-set-pipeline` 下运行，`$binary` 为 sing-box 1.14.4 的绝对路径：
+
+```sh
+pnpm initialize --config "$config"
+pnpm update --config "$config" --id china-ip --state "$state" --binary "$binary"
+pnpm status --config "$config" --binary "$binary"
+pnpm rebuild --config "$config" --id china-ip --commit "$commit" --state "$state" --binary "$binary"
+```
+
+首次 `update` 解析 `ip-lists`，在下载 `china46.txt` 前将完整 commit SHA 和文件地址写入远端操作日志。中断后可换一个 `--state` 目录运行原命令。已有操作继续使用登记的 commit，输入下载成功后记录并核对 SHA-256 和字节数。已有完整回读证据的候选可以直接复验，复验无需访问上游。
+
+`status` 通过候选的 `sourceKey` 在 `state.commitPins` 中查到固定来源和输入摘要，并在 `candidateAvailability` 报告候选的可用性。`--binary` 同时启用原生复验。`rebuild --commit` 要求该 SHA 已按相同定义成功处理且原候选证据仍可核验。原输入或证据缺失时重建失败。两个命令只追加候选及其进度，稳定入口由独立的激活流程管理。
 
 ## 预览清理与维护隔离
 

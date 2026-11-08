@@ -5,6 +5,7 @@ import { buildRelease } from './index.js';
 import { buildNative } from './native.js';
 import { decodedTerms } from './projection.js';
 import { sha256, type ReleaseOptions } from './release.js';
+import type { CommitIdentity, CommitSourceRecord } from './github-commit.js';
 import type { SourceRecord } from './types.js';
 import { githubPublication, immutableUrl, type PublicationTransport } from './publication.js';
 import { processConfiguredUpdate, type ConfiguredRebuildOptions, type ConfiguredUpdateOptions } from './configured-update.js';
@@ -16,12 +17,17 @@ import { verifyRetainedCandidate } from './candidate-recovery.js';
 
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
 type Pin = Pick<SourceRecord, 'repository' | 'releaseId' | 'tag' | 'commit' | 'yaml' | 'checksum'>;
-export interface Candidate {
-  id: string; releaseId: number; tag: string;
+export type ReleaseReference = { releaseId: number; tag: string; sourceKey?: never };
+type CommitReference = { sourceKey: string; releaseId?: never; tag?: never };
+export type SourceReference = ReleaseReference | CommitReference;
+export const sourceReferenceKey = (reference: SourceReference) => reference.sourceKey ?? String(reference.releaseId);
+
+export type Candidate = SourceReference & {
+  id: string;
   status: 'building' | 'publishing' | 'verified' | 'failed';
   operation?: 'update' | 'rebuild'; previousCandidateId?: string; buildId?: string;
   filesCommit?: string; metadataCommit?: string; evidenceCommit?: string;
-  manifestUrl?: string; evidenceUrl?: string; error?: string;
+  manifestUrl?: string; evidenceUrl?: string; evidenceSha256?: string; error?: string;
   logicalId?: string;
   generation?: number; retained?: boolean; phase?: 'registered' | 'files' | 'metadata' | 'evidence' | 'complete';
   definition?: RuleDefinition; targetBranch?: string; operationId?: string;
@@ -29,11 +35,12 @@ export interface Candidate {
 export interface UpdateState {
   schemaVersion: 1;
   pinned: Record<string, { identity?: Pin; source?: SourceRecord }>;
+  commitPins?: Record<string, { identity: CommitIdentity; source?: CommitSourceRecord }>;
   processed: Record<string, { candidateId: string; tag: string; evidenceUrl?: string }>;
-  configuredProcessed?: Record<string, Record<string, { candidateId: string; tag: string; evidenceUrl?: string; definitionSha256: string }>>;
+  configuredProcessed?: Record<string, Record<string, { candidateId: string; tag?: string; evidenceUrl?: string; definitionSha256: string }>>;
   candidates: Record<string, Candidate>;
   latestChecks?: Record<string, CheckRecord>;
-  pendingOperation?: { id: string; kind: 'update' | 'rebuild' | 'check'; generation: number; releaseId: number; tag: string;
+  pendingOperation?: SourceReference & { id: string; kind: 'update' | 'rebuild' | 'check'; generation: number;
     status: 'pending' | 'complete'; expectedHead: string; candidateIds: string[]; configuration?: string; selectedIds?: string[]; controlRevisions?: Record<string, string | null>; subscriptionHashes?: Record<string, string> };
 }
 async function readJson(path: string): Promise<any> {
@@ -73,12 +80,15 @@ export function updateRules(options: UpdateOptions | ConfiguredUpdateOptions) {
   return 'configuration' in options ? processConfiguredUpdate(options) : processRelease(options);
 }
 
-/** Rebuild only a previously pinned, successfully processed Release, never latest. */
+/** Rebuild a previously pinned, successfully processed version. */
 export function rebuildRules(options: ConfiguredRebuildOptions): ReturnType<typeof processConfiguredUpdate>;
 export function rebuildRules(options: RebuildOptions): ReturnType<typeof processRelease>;
 export function rebuildRules(options: RebuildOptions | ConfiguredRebuildOptions) {
-  if (!options.release || options.release.toLowerCase() === 'latest') throw new Error('rebuild requires a fixed Release tag');
-  return 'configuration' in options ? processConfiguredUpdate(options, options.release) : processRelease(options, options.release);
+  const version = options.release ?? ('commit' in options ? options.commit : undefined);
+  if (!version || version.toLowerCase() === 'latest') throw new Error('rebuild requires a fixed Release tag or Git commit');
+  return 'configuration' in options
+    ? processConfiguredUpdate(options, options.commit === undefined ? { release: version } : { commit: version })
+    : processRelease(options, version);
 }
 
 /** Durable checkpoints and publication gates are shared by update and rebuild. */
@@ -103,7 +113,7 @@ async function processRelease(options: UpdateOptions, rebuildTag?: string) {
     const publication = session?.publication ?? transport;
     const restored = session ? { state: session.state, activeRuleVersion: undefined } : await readUpdateState(options.stateDirectory);
     state = restored.state;
-    const matches = (entry: RemoteOperation) => entry.kind === (rebuildTag ? 'rebuild' : 'update') && entry.configuration === undefined
+    const matches = (entry: RemoteOperation) => entry.kind === (rebuildTag ? 'rebuild' : 'update') && entry.sourceKey === undefined && entry.configuration === undefined
       && entry.selectedIds === undefined && (!rebuildTag || rebuildTag === entry.tag) && (!options.sampleTag || options.sampleTag === entry.tag);
     const recovery = session && selectRemoteOperation(session.journal, matches);
     if (recovery && !matches(recovery) || !recovery && session?.journal.parkedOperations?.length) {
@@ -121,7 +131,7 @@ async function processRelease(options: UpdateOptions, rebuildTag?: string) {
       const { readback } = (await verifyRetained(recoverable.id, true))!;
       recoverable.status = 'verified'; recoverable.phase = 'complete'; delete recoverable.error;
       if (!rebuildTag) state.processed[String(recovery.releaseId)] = {
-        candidateId: recoverable.id, tag: recovery.tag, evidenceUrl: recoverable.evidenceUrl!,
+        candidateId: recoverable.id, tag: recovery.tag!, evidenceUrl: recoverable.evidenceUrl!,
       };
       recovery.status = 'complete'; await save();
       await session.confirmGeneration();

@@ -3,10 +3,11 @@ import { Ajv } from 'ajv';
 import manifestSchema from '../contracts/artifact-manifest.schema.json' with { type: 'json' };
 import subscriptionSchema from '../contracts/rule-subscription.schema.json' with { type: 'json' };
 import subscriptionV2Schema from '../contracts/rule-subscription-v2.schema.json' with { type: 'json' };
-import { verifyActivationCandidate } from './activation.js';
+import { candidateFiles } from './candidate-publication.js';
+import { verifyActivationCandidate, verifyCandidateEvidence } from './activation.js';
 import { githubActivation, type ActivationTransport } from './activation-transport.js';
 import { parseRuleDefinition, type RuleDefinition } from './configuration.js';
-import type { PublicationRepository } from './publication-repository.js';
+import { retainedCandidateDownload, type PublicationRepository } from './publication-repository.js';
 import { ARTIFACT_REPOSITORY, githubPublication, immutableUrl, type PublicationTransport } from './publication.js';
 import { readRemoteState } from './remote-state.js';
 import { applicableResume, effectiveControl, manualControl, readActivationOperationResults, type ObservedActivation } from './manual-activation.js';
@@ -16,7 +17,7 @@ const ajv = new Ajv({ strict: true });
 const validateManifest = ajv.compile(manifestSchema);
 const validateSubscription = ajv.compile(subscriptionSchema);
 const validateSubscriptionV2 = ajv.compile(subscriptionV2Schema);
-export const candidateEvidenceFiles = ['domains.json', 'domains.srs', 'manifest.json', 'source.json', 'conversion-report.json', 'build.json', 'readback.json'];
+export const candidateEvidenceFiles = candidateFiles();
 const commitId = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
 const object = (value: unknown): value is Record<string, any> => !!value && typeof value === 'object' && !Array.isArray(value);
 function requireThat(value: unknown, message: string): asserts value { if (!value) throw new Error(message); }
@@ -154,9 +155,21 @@ export async function readRemoteStatus(options: {
     const candidate = journal.state.candidates[id];
     const prefix = `candidates/${id}`;
     if (candidate?.retained === false) return candidateAvailability[id] = { status: 'unavailable', error: 'Candidate is no longer retained' };
-    const missingFiles = candidateEvidenceFiles.filter(file => !snapshot.paths.includes(`${prefix}/${file}`));
+    const git = candidate?.sourceKey !== undefined;
+    const missingFiles = candidateFiles(candidate?.definition).filter(file => !snapshot.paths.includes(`${prefix}/${file}`));
     if (missingFiles.length) return candidateAvailability[id] = { status: 'incomplete', missingFiles };
     try {
+      if (git) {
+        const selectedUrl = evidenceUrl ?? candidate.evidenceUrl ?? immutableUrl(snapshot.head, `${prefix}/readback.json`);
+        const verified = await verifyCandidateEvidence({ candidateEvidenceUrl: selectedUrl, binary: native ? options.binary : undefined,
+          evidenceSha256: candidate.evidenceSha256 }, {
+          branch: journal.targetBranch, download: retainedCandidateDownload(snapshot, id, url => publication.download(url)),
+        }, candidate.definition);
+        const pin = journal.state.commitPins?.[candidate.sourceKey];
+        requireThat(verified.candidateId === id && isDeepStrictEqual(verified.source, pin?.source)
+          && verified.buildId === candidate.buildId, 'Candidate source or build identity mismatch');
+        return candidateAvailability[id] = { status: 'available', verification: verified.validation ? 'native' : 'structural', evidenceUrl: selectedUrl };
+      }
       const files = new Map<string, Buffer>();
       for (const file of candidateEvidenceFiles) {
         const bytes = await snapshot.read(`${prefix}/${file}`);
