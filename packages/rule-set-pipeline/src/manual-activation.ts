@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
+import { configuredLayout } from './configuration.js';
 import type { ActivationTransport } from './activation-transport.js';
 import type { PublicationRepository, PublicationSnapshot } from './publication-repository.js';
 import { immutableUrl } from './publication.js';
@@ -65,6 +66,7 @@ export async function authorizeActivationWrite(repository: PublicationRepository
   const directory = operation.recordPath.slice(0, -'activation.json'.length);
   const ruleFiles = Object.keys(files).filter(path => path !== operation.recordPath);
   const configured = operation.logicalId !== undefined;
+  const { stem } = configuredLayout(record?.source?.kind === 'github-commit' ? 'cidr-text' : 'plain-yaml');
   if (record?.schemaVersion !== 1 || record.id !== operation.id || record.logicalId !== operation.logicalId || record.expectedHead !== expectedHead
     || record.candidateId !== operation.candidateId || record.candidateEvidenceUrl !== operation.candidateEvidenceUrl
     || record.operation !== (operation.kind === 'activate' ? undefined : operation.kind)
@@ -73,7 +75,7 @@ export async function authorizeActivationWrite(repository: PublicationRepository
     || !ruleFiles.length || !isDeepStrictEqual(Object.keys(record.files ?? {}).sort(), ruleFiles.sort())
     || ruleFiles.some(path => {
       const expected = record.files[path];
-      return (configured ? path !== directory + 'domains.srs' && path !== directory + 'domains.json' : !/\.(srs|json)$/.test(path))
+      return (configured ? path !== directory + stem + '.srs' && path !== directory + stem + '.json' : !/\.(srs|json)$/.test(path))
         || expected?.byteLength !== files[path].length || expected?.sha256 !== sha256(files[path]);
     })) {
     throw new Error('Invalid registered activation write set');

@@ -2,7 +2,7 @@
 
 包名：`@sing-box-config-manager/rule-set-pipeline`。管理者需要更新系统维护的规则集合时，本模块从官方来源生成 sing-box 可加载的规则文件，验证并上传为候选。管理者可显式激活候选，检查流程也可自动激活符合条件的规则。客户端随后通过稳定地址取得当前规则；构建成功、候选验证成功、稳定入口切换和客户端加载完成是不同的状态。
 
-当前 `update` 可发布 V2Fly `domain-list-community` 官方 Release 中 `dlc.dat_plain.yml` 的 `category-ai-!cn`，也可按管理者的 YAML 配置从同一 Release 发布多个列表。本地 `build` 同样支持配置驱动的多集构建。`activate` 与 `rollback` 均可通过 `--config ... --id ...` 按逻辑 ID 独立操作。输出包括 JSON 源规则文件和 SRS 二进制规则文件，目标版本固定为 sing-box **1.14.4**，JSON Source Format 固定为 **4**。`china-ip` 可从固定的 GitHub commit 构建双栈规则，显式发布、查询和重建候选。稳定激活、自动更新和当前版本的维护流程适用于 V2Fly Release。
+当前 `update` 可发布 V2Fly `domain-list-community` 官方 Release 中 `dlc.dat_plain.yml` 的 `category-ai-!cn`，也可按管理者的 YAML 配置从同一 Release 发布多个列表。本地 `build` 同样支持配置驱动的多集构建。`activate` 与 `rollback` 均可通过 `--config ... --id ...` 按逻辑 ID 独立操作。输出包括 JSON 源规则文件和 SRS 二进制规则文件，目标版本固定为 sing-box **1.14.4**，JSON Source Format 固定为 **4**。`china-ip` 可从固定的 GitHub commit 构建双栈规则，显式发布、查询和重建候选，也支持人工指定和回滚。自动更新和历史清理仍使用 V2Fly Release 流程；存在当前 CIDR 规则集的目标会延期清理。
 
 ## 操作分别产生什么结果
 
@@ -92,11 +92,16 @@ pnpm --dir packages/rule-set-pipeline build:release \
 
 每个有效行包含一个带前缀长度的 IPv4 或 IPv6 CIDR。文件使用 UTF-8，允许开头的 BOM，接受 LF、CRLF 和 CR 换行。行首尾的空格和制表符会被移除。空行和以 `#` 开头的整行注释会被跳过。转换会规范化网络地址并去重，保留不同前缀。无效 UTF-8、非法 CIDR（包括带行尾注释的行）或空结果都会使构建失败。诊断记录文件名，非法 CIDR 同时记录行和列。
 
-输出在 `china-ip/` 子目录中。Route 和 DNS Response 共用 `route.json` 与 `route.srs`，DNS Query 标记为 `unavailable: empty`。验证包含编译、解码、比较 IP 匹配范围，以及加载两种格式。[`config/china-ip.yml`](config/china-ip.yml) 同时供本地构建和显式候选发布使用。
+输出在 `china-ip/` 子目录中。Route 和 DNS Response 共用 `route.json` 与 `route.srs`，DNS Query 标记为 `unavailable: empty`。验证包含编译、解码、比较 IP 匹配范围，以及加载两种格式。[`config/china-ip.yml`](config/china-ip.yml) 供本地构建、候选发布及人工指定和回滚使用。
 
 ## 按逻辑 ID 显式激活
 
-管理者提供与候选一致的可信配置和一个逻辑 ID。CLI 按配置生成 Rule Subscription v2；也可用 `--subscription` 显式传入该集的订阅 JSON。订阅的 `systemRuleSetId` 必须匹配逻辑 ID；Route 与 DNS 请求复用相同文件，DNS 响应不可用，能力要求为空。稳定 URL 必须指向配置的目标分支及该集的 `stablePath/domains.srs`，可同时提供 `domains.json`。v2 订阅示例见 [`contracts/rule-subscription-v2.example.json`](contracts/rule-subscription-v2.example.json)，使用前将示例域名替换为可信产物仓库的实际地址。
+管理者提供与候选一致的可信配置和一个逻辑 ID。CLI 按配置生成 Rule Subscription v2；也可用 `--subscription` 显式传入该集的订阅 JSON。订阅的 `systemRuleSetId` 必须匹配逻辑 ID，能力要求为空。稳定 URL 必须指向配置的目标分支及该集的 `stablePath`：
+
+- 域名规则的 Route 与 DNS Query 共用 `domains.srs`，可同时提供 `domains.json`。DNS Response 不可用。
+- CIDR 规则的 Route 与 DNS Response 必须同时共用 `route.srs` 和 `route.json`。DNS Query 不可用。
+
+域名规则的 v2 订阅示例见 [`contracts/rule-subscription-v2.example.json`](contracts/rule-subscription-v2.example.json)，使用前将示例域名替换为可信产物仓库的实际地址。
 
 ```sh
 pnpm --dir packages/rule-set-pipeline activate --state /absolute/path/to/rule-state --binary /absolute/path/to/sing-box-1.14.4 --config config/rulesets.yml --id openai --candidate https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/FULL_COMMIT/candidates/CANDIDATE_ID/readback.json --expected-head FULL_OLD_HEAD
@@ -188,6 +193,21 @@ pnpm rebuild --config "$config" --id china-ip --commit "$commit" --state "$state
 首次 `update` 解析 `ip-lists`，在下载 `china46.txt` 前将完整 commit SHA 和文件地址写入远端操作日志。中断后可换一个 `--state` 目录运行原命令。已有操作继续使用登记的 commit，输入下载成功后记录并核对 SHA-256 和字节数。已有完整回读证据的候选可以直接复验，复验无需访问上游。
 
 `status` 通过候选的 `sourceKey` 在 `state.commitPins` 中查到固定来源和输入摘要，并在 `candidateAvailability` 报告候选的可用性。`--binary` 同时启用原生复验。`rebuild --commit` 要求该 SHA 已按相同定义成功处理且原候选证据仍可核验。原输入或证据缺失时重建失败。两个命令只追加候选及其进度，稳定入口由独立的激活流程管理。
+
+### 指定和回滚 `china-ip` 的交付版本
+
+沿用上节的隔离配置。用 `status` 获取当前 `stableHead`、候选的 `evidenceUrl` 和 `rollbackTargets.china-ip` 中的历史提交。每次操作前重新读取 `stableHead`：
+
+```sh
+pnpm activate --config "$config" --id china-ip --state "$state" --binary "$binary" \
+  --candidate "$evidence_url" --expected-head "$stable_head"
+pnpm rollback --config "$config" --id china-ip --state "$state" --binary "$binary" \
+  --activation "$historical_commit" --expected-head "$stable_head"
+```
+
+两种操作都复验已登记的候选和实际规则文件，将 `stable/china-ip/route.json`、`route.srs` 和激活记录一起提交。Route 与 DNS Response 可以在同一个 v2 绑定中使用 `usages: [route, dns-response]`，共用一个稳定 SRS URL；DNS Query 绑定会在编译时报错。重新指定当前候选也会记录新的人工固定；指定暂停自动激活，回滚同时暂停自动重试。暂不支持对 `china-ip` 执行自动检查或单集恢复。含已激活 CIDR 规则集的目标会在进入维护隔离前延期清理。
+
+提交回复丢失或读回失败时，先通过 `status` 查看 `manualOperations`。用错误中的操作 ID 区分已提交、未提交、待核实或已被替代的操作。客户端按自己的周期更新；后续下载或加载失败时继续使用已加载的规则，离线重启需要有效的持久缓存。
 
 ## 预览清理与维护隔离
 

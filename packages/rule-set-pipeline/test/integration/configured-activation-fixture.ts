@@ -14,6 +14,7 @@ export async function configuredEnvironment(binary: string, directory: string, b
   const ids = ['openai', 'anthropic', 'google-deepmind'];
   let sequence = 0, head = 'a'.repeat(40), mode = '', revision = 0, writes = 0;
   let journalHead = branch === 'main' ? 'b'.repeat(40) : head;
+  let readbackHead: string | undefined;
   const parents = new Map<string, string>();
   const retained: Record<string, Buffer> = {};
   const snapshots = new Map<string, Record<string, Buffer>>([[head, {}], [journalHead, {}]]);
@@ -30,7 +31,7 @@ export async function configuredEnvironment(binary: string, directory: string, b
   };
   const download = async (url: string) => {
     const parsed = new URL(url), parts = parsed.pathname.split('/').slice(3), ref = parts.shift()!, path = parts.join('/');
-    if (mode === 'readback' && ref === head && path.endsWith('/domains.srs')) throw new Error('HTTPS temporarily unavailable');
+    if (mode === 'readback' && ref === readbackHead && /^stable\/.+\/(?:domains|route)\.srs$/.test(path)) throw new Error('HTTPS temporarily unavailable');
     const bytes = snapshots.get(ref === branch ? head : ref)?.[path] ?? stored.get(url);
     if (!bytes) throw new Error(`Readback HTTP 404: ${url}`);
     return bytes;
@@ -126,6 +127,7 @@ export async function configuredEnvironment(binary: string, directory: string, b
         throw new ActivationWriteError(commit, 'lost reply');
       }
       head = commit;
+      if (mode === 'readback') readbackHead = commit;
       if (mode === 'unknown') {
         mode = 'unknown-head';
         throw new ActivationWriteError(commit, 'lost reply and connection');

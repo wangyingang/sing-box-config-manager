@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { saveActivationReceipt } from './activation-receipt.js';
 import { CONFIGURED_BUILD_RECORD } from './configured-build.js';
-import { configuredProjections, parseBuildConfiguration, parseRuleDefinition, type RuleDefinition } from './configuration.js';
+import { configuredLayout, configuredProjections, parseBuildConfiguration, parseRuleDefinition, type RuleDefinition } from './configuration.js';
 import { Ajv } from 'ajv';
 import manifestSchema from '../contracts/artifact-manifest.schema.json' with { type: 'json' };
 import subscriptionSchema from '../contracts/rule-subscription.schema.json' with { type: 'json' };
@@ -75,6 +75,7 @@ export async function verifyCandidateEvidence(options: { candidateEvidenceUrl: s
   const report = JSON.parse((await remote('conversion-report.json', evidence.metadataCommit)).toString());
   const build = JSON.parse((await remote('build.json', evidence.metadataCommit)).toString());
   const isCidr = source.kind === 'github-commit';
+  const layout = configuredLayout(isCidr ? 'cidr-text' : 'plain-yaml');
   if (isCidr) {
     requireThat(definition && validCommitSource(source) && source.inputBytes > 0, 'Incomplete official Git source');
   } else if (source.kind === 'synthetic') {
@@ -121,8 +122,8 @@ export async function verifyCandidateEvidence(options: { candidateEvidenceUrl: s
     && report.invalidCount === 0 && report.unsupportedCount === 0 && report.diagnostics?.length === 0
     && report.outputTermCount === report.convertedCount - report.duplicateCount, 'Incomplete conversion record');
   const route = candidateDefinition?.usages.route;
-  const stem = route && 'artifact' in route ? route.artifact : 'domains';
-  requireThat(stem === (isCidr ? 'route' : 'domains') && manifest.artifacts.length === 2, 'Unsupported candidate projections');
+  const stem = route && 'artifact' in route ? route.artifact : layout.stem;
+  requireThat(stem === layout.stem && manifest.artifacts.length === 2, 'Unsupported candidate projections');
   const artifactIds = manifest.artifacts.map((artifact: any) => artifact.id);
   requireThat(new Set(artifactIds).size === artifactIds.length, 'Duplicate artifact identity');
   requireThat(build.artifacts?.length === 2, 'Unexpected build artifact set');
@@ -153,7 +154,7 @@ export async function verifyCandidateEvidence(options: { candidateEvidenceUrl: s
     requireThat(!native || reproduced?.termCount === a.termCount && reproduced?.content.equals(bytes), `Native artifact mismatch: ${file}`);
   }
   for (const usage of USAGES) {
-    if (usage === (isCidr ? 'dns-query' : 'dns-response')) {
+    if (usage === layout.unavailable) {
       requireThat(equal(manifest.projections[usage], { unavailable: 'empty' }), 'Projection availability mismatch');
       continue;
     }
@@ -182,10 +183,8 @@ function activationContext(options: Pick<ActivationOptions, 'configuration' | 'l
   const configuration = configured ? parseBuildConfiguration(options.configuration ?? '') : undefined;
   const definition = configuration?.ruleSets.find(rule => rule.id === options.logicalId);
   if (configured) requireThat(definition && configuration?.target.branch === transport.branch, 'Unknown logical ID or activation target mismatch');
-  if (definition && configuration?.sources[definition.source].version === 'git-branch') {
-    throw new Error('Stable activation and rollback for Git commit sources are not supported');
-  }
-  return { configured, definition, recordPath: definition ? `${definition.stablePath}/activation.json` : RECORD_PATH };
+  const git = definition && configuration?.sources[definition.source].version === 'git-branch';
+  return { configured, definition, git, recordPath: definition ? `${definition.stablePath}/activation.json` : RECORD_PATH };
 }
 
 /** Revalidate a retained activation against today's contract, without rewriting history. */
@@ -216,7 +215,9 @@ export function activationSubscription(input: unknown, branch: string, definitio
         }
       }
     }
-    requireThat(equal(subscription.projections.route.formats, subscription.projections['dns-query'].formats), 'Subscription file reuse mismatch');
+    const sharedUsage = 'artifact' in definition.usages['dns-response'] ? 'dns-response' : 'dns-query';
+    requireThat(equal(subscription.projections.route.formats, subscription.projections[sharedUsage].formats), 'Subscription file reuse mismatch');
+    if (sharedUsage === 'dns-response') requireThat(subscription.projections.route.formats.source, 'Subscription source format is required');
   }
   return subscription;
 }
@@ -233,8 +234,9 @@ export function activateAutomatically(options: ActivationOptions, coordination: 
   return performActivation(options, coordination);
 }
 
-/** After a rewrite, only the live record and its retained history are supported. */
-async function requireRetainedRollback(transport: ActivationTransport, path: string, head: string, target: string, configured: boolean) {
+/** Require a reachable activation, not just a Git object with rule bytes. */
+async function requireRetainedRollback(transport: ActivationTransport, path: string, head: string, target: string, configured: boolean,
+  currentCommit?: () => Promise<string | undefined>) {
   if (target === head) return;
   const url = immutableUrl(head, path);
   const unavailable = 'ROLLBACK_UNAVAILABLE: activation is outside retained history';
@@ -246,7 +248,7 @@ async function requireRetainedRollback(transport: ActivationTransport, path: str
   }
   const { record, history } = activationRecord(JSON.parse(bytes.toString()), path, transport.branch);
   if (configured) {
-    requireThat(history.some(entry => entry.commit === target), unavailable);
+    requireThat(history.some(entry => entry.commit === target) || await currentCommit?.() === target, unavailable);
     return;
   }
   for await (const item of walkLegacyActivationHistory(record, head, transport.branch, url => transport.download(url))) {
@@ -259,7 +261,7 @@ async function requireRetainedRollback(transport: ActivationTransport, path: str
 async function performActivation(options: ActivationOptions | RollbackOptions, automatic?: AutomaticActivation) {
   const transport = options.transport ?? githubActivation();
   requireThat(/^[a-f0-9]{40}$/.test(options.expectedHead), 'Expected full old remote head is required');
-  const { configured, definition, recordPath } = activationContext(options, transport);
+  const { configured, definition, git, recordPath } = activationContext(options, transport);
   requireThat(!automatic || definition, 'Automatic activation requires a configured rule set');
   const subscription = activationSubscription(options.subscription, transport.branch, definition);
   // Legacy fixtures may use a fresh, unmanaged isolation branch. On an
@@ -278,10 +280,12 @@ async function performActivation(options: ActivationOptions | RollbackOptions, a
   if ('historicalActivationCommit' in options) {
     const commit = options.historicalActivationCommit;
     requireThat(/^[a-f0-9]{40}$/.test(commit), 'Expected full historical activation commit');
-    if (session?.snapshot.paths.includes(BASELINE_PATH)) {
-      await requireRetainedRollback(transport, recordPath, options.expectedHead, commit, configured);
+    if (git || session?.snapshot.paths.includes(BASELINE_PATH)) {
+      await requireRetainedRollback(transport, recordPath, options.expectedHead, commit, configured,
+        git ? async () => session?.repository.lastChange?.(options.expectedHead, recordPath) : undefined);
     }
-    const record = JSON.parse((await transport.download(immutableUrl(commit, recordPath))).toString());
+    const value = JSON.parse((await transport.download(immutableUrl(commit, recordPath))).toString());
+    const record = git ? activationRecord(value, recordPath, transport.branch).record : value;
     requireThat(record.schemaVersion === 1 && typeof record.id === 'string' && record.id.length > 0
       && typeof record.candidateId === 'string' && typeof record.candidateEvidenceUrl === 'string'
       && record.files && equal(record.subscription, options.subscription)
@@ -295,8 +299,16 @@ async function performActivation(options: ActivationOptions | RollbackOptions, a
   const download = session
     ? retainedCandidateDownload(session.snapshot, location.id, url => transport.download(url))
     : (url: string) => transport.download(url);
-  const candidate = await verifyActivationCandidate({ candidateEvidenceUrl, binary: options.binary }, { branch: transport.branch, download },
-    definition, historical ? 'rollback' : 'activate');
+  if (git) requireThat(retained?.sourceKey && retained.logicalId === definition?.id,
+    'CANDIDATE_UNAVAILABLE: no registered Git candidate for this rule set');
+  const candidate = await verifyActivationCandidate({ candidateEvidenceUrl, binary: options.binary,
+    evidenceSha256: retained?.evidenceSha256 }, { branch: transport.branch, download }, definition, historical ? 'rollback' : 'activate');
+  requireThat((candidate.source.kind === 'github-commit') === Boolean(git), 'Candidate source type does not match the configuration');
+  if (git && retained?.sourceKey) {
+    const pin = session!.journal.state.commitPins?.[retained.sourceKey];
+    requireThat(equal(candidate.source, pin?.source) && candidate.buildId === retained.buildId,
+      'CANDIDATE_UNAVAILABLE: candidate source or build identity mismatch');
+  }
   // Synthetic origins can never enter the production main branch.
   requireThat(candidate.source.kind !== 'synthetic' || transport.branch.startsWith('acceptance-'), 'Synthetic candidate requires an acceptance branch');
   const files: Record<string, Buffer> = {};
@@ -323,7 +335,8 @@ async function performActivation(options: ActivationOptions | RollbackOptions, a
     }
   }
   if (historical) {
-    requireThat(candidate.candidateId === historical.record.candidateId, 'Historical candidate identity mismatch');
+    requireThat(candidate.candidateId === historical.record.candidateId && (!git || equal(candidate.source, historical.record.source)),
+      'Historical candidate identity mismatch');
     const entries = Object.entries(files);
     requireThat(Object.keys(historical.record.files).length === entries.length, 'Historical stable file set mismatch');
     for (const [path, bytes] of entries) {
