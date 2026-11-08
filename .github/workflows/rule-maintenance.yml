@@ -48,6 +48,8 @@ jobs:
           env.RULE_TARGET != 'main' ||
           (env.RULE_OPERATION != 'cleanup' && env.RULE_UPDATE_ENABLED == 'true') ||
           (env.RULE_OPERATION != 'check' && env.RULE_CLEANUP_ENABLED == 'true')
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           build=packages/config-compiler/schemas/build.json
@@ -56,9 +58,16 @@ jobs:
           [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ && $digest =~ ^[a-f0-9]{64}$ ]]
           name="sing-box-${version}-linux-amd64"
           cd "$RUNNER_TEMP"
-          curl --fail --location --retry 3 \
+          if ! curl --fail --location --retry 3 \
             "https://github.com/SagerNet/sing-box/releases/download/v${version}/${name}.tar.gz" \
-            --output "${name}.tar.gz"
+            --output "${name}.tar.gz"; then
+            echo 'Release download failed. Retrying through the GitHub Release Assets API.'
+            asset_id=$(gh api "repos/SagerNet/sing-box/releases/tags/v${version}" |
+              jq -er --arg name "${name}.tar.gz" '.assets[] | select(.name == $name) | .id')
+            [[ $asset_id =~ ^[0-9]+$ ]]
+            gh api -H 'Accept: application/octet-stream' \
+              "repos/SagerNet/sing-box/releases/assets/${asset_id}" > "${name}.tar.gz"
+          fi
           printf '%s  %s\n' "$digest" "${name}.tar.gz" | sha256sum --check
           tar -xzf "${name}.tar.gz"
           test -x "$RUNNER_TEMP/$name/sing-box"
