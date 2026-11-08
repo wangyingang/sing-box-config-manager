@@ -1,0 +1,21 @@
+schemaVersion: 2
+target:
+  repository: wangyingang/sing-box-rule-artifacts
+  branch: main
+sources:
+  china-operator-ip:
+    repository: gaoyifan/china-operator-ip
+    version: git-branch
+    branch: ip-lists
+    input:
+      format: cidr-text
+      path: china46.txt
+ruleSets:
+  - id: china-ip
+    source: china-operator-ip
+    list: all
+    stablePath: stable/china-ip
+    usages:
+      route: { artifact: route }
+      dns-query: { unavailable: empty }
+      dns-response: { artifact: route }

@@ -2,7 +2,7 @@
 
 包名：`@sing-box-config-manager/rule-set-pipeline`。管理者需要更新系统维护的规则集合时，本模块从官方来源生成 sing-box 可加载的规则文件，验证并上传为候选。管理者可显式激活候选，检查流程也可自动激活符合条件的规则。客户端随后通过稳定地址取得当前规则；构建成功、候选验证成功、稳定入口切换和客户端加载完成是不同的状态。
 
-当前 `update` 可发布 V2Fly `domain-list-community` 官方 Release 中 `dlc.dat_plain.yml` 的 `category-ai-!cn`，也可按管理者的 YAML 配置从同一 Release 发布多个列表。本地 `build` 同样支持配置驱动的多集构建。`activate` 与 `rollback` 均可通过 `--config ... --id ...` 按逻辑 ID 独立操作。输出包括 JSON 源规则文件和 SRS 二进制规则文件，目标版本固定为 sing-box **1.14.4**，JSON Source Format 固定为 **4**。合成 IP／混合输入用于验证构建 API，不表示已经支持其他真实来源或其发布激活。
+当前 `update` 可发布 V2Fly `domain-list-community` 官方 Release 中 `dlc.dat_plain.yml` 的 `category-ai-!cn`，也可按管理者的 YAML 配置从同一 Release 发布多个列表。本地 `build` 同样支持配置驱动的多集构建。`activate` 与 `rollback` 均可通过 `--config ... --id ...` 按逻辑 ID 独立操作。输出包括 JSON 源规则文件和 SRS 二进制规则文件，目标版本固定为 sing-box **1.14.4**，JSON Source Format 固定为 **4**。本地构建也支持从固定的 GitHub commit 生成双栈 `china-ip`。当前发布、激活与维护流程适用于 V2Fly Release。
 
 ## 操作分别产生什么结果
 
@@ -10,7 +10,7 @@
 
 | 操作 | 输入与结果 | 是否改变稳定入口 |
 | --- | --- | --- |
-| `build:release` | 读取指定 Release，在新目录生成经过本地原生验证的规则文件及记录 | 否；不上传 |
+| `build:release` | 读取指定 Release 或固定 Git commit，在新目录生成经过本地原生验证的规则文件及记录 | 否；不上传 |
 | `update` | 先恢复远端未完成操作；无待恢复操作时查询一次 latest，逐集发布候选 | 否；候选仍待显式激活 |
 | `rebuild` | 对远端已固定且成功处理、必要证据仍保留的 Release 重建候选 | 否；保留原候选与成功处理记录 |
 | `check-now` | 检查固定的最新 Release，发布并激活允许自动更新的有效变化 | 有验证通过的有效变化时 |
@@ -26,7 +26,7 @@
 
 ## 本地构建：固定输入并验证规则文件
 
-本地构建适合检查指定 Release 会产生什么规则。它不查询 latest，也不上传文件或记录 Release 已成功处理。
+本地构建读取固定输入、验证规则并保存本地记录。V2Fly 构建要求显式指定 Release tag。
 
 构建先固定 Release、tag 对应源码 commit 和资产身份，核对完整 YAML 的实际字节 SHA-256，再提取目标列表。列表必须唯一、非空，声明 length 与 rules 数量一致。不带 `--config` 的单列表构建中，YAML 损坏、目标列表包含未知类型或非法记录时，整个构建失败，不返回部分成功规则。Include 展开、attribute 筛选、affiliation、官方排序与去冗余由 V2Fly 官方构建程序完成，本模块不重新解析原始来源。
 
@@ -38,7 +38,7 @@
 | `dns-query` | 域名条件 | DNS 请求域名匹配 |
 | `dns-response` | 目标 `ip_cidr` | 已取得 DNS 响应的 IP 匹配 |
 
-当前官方列表只有域名，因此 Route 和 DNS 请求复用同一组文件，DNS 响应用途为 `unavailable: empty`。无内容的用途不生成空匹配文件，也不能被配置绑定。每组非空内容均编译成 SRS、解码比较匹配语义，并实际加载 JSON 与 SRS；配置 `sing-box check` 成功不能代替这些规则文件检查。具体类型映射、属性与正则限制见[输入与转换边界](#输入与转换边界)。
+当前 V2Fly 列表只有域名，因此 Route 和 DNS 请求复用同一组文件，DNS 响应用途为 `unavailable: empty`。无内容的用途不生成空匹配文件，也不能被配置绑定。每组非空内容均编译成 SRS、解码比较匹配语义，并实际加载 JSON 与 SRS；配置 `sing-box check` 成功不能代替这些规则文件检查。具体类型映射、属性与正则限制见[输入与转换边界](#输入与转换边界)。
 
 使用 Node.js ≥24、pnpm 10.33.2。仓库根目录执行：
 
@@ -49,7 +49,7 @@ pnpm --dir packages/rule-set-pipeline build:release --binary /absolute/path/to/s
 
 `--binary` 必须明确提供绝对路径。构建检查版本恰为 1.14.4，记录完整 version 输出、真实路径及 binary SHA-256；不调用 PATH 中的默认 sing-box，不切换全局版本。缺失、不可执行或版本错误均失败。
 
-`--out` 必须是尚不存在的目录，其父目录必须已存在。已有目录直接拒绝，避免覆盖历史或把失败结果混入旧产物。`--expected-source` 可核对既有来源记录的 Release、commit、资产身份和实际输入摘要；变化时失败。本地 `build` 不查询 latest。公开 API 受 GitHub 限额约束，可通过已有 `GITHUB_TOKEN` 提供只读认证，凭据不进入产物。
+`--out` 必须是尚不存在的目录，其父目录必须已存在。已有目录直接拒绝，避免覆盖历史或把失败结果混入旧产物。`--expected-source` 可核对既有来源记录的 Release、commit、资产身份和实际输入摘要；变化时失败。V2Fly 的本地 `build` 不查询 latest。公开 API 受 GitHub 限额约束，可通过已有 `GITHUB_TOKEN` 提供只读认证，凭据不进入产物。
 
 构建从指定官方 Release 解析 tag，并递归解引用 annotated tag 至源码 commit。资产通过固定 ID 下载，核对官方摘要记录的文件名及完整 YAML 的实际字节 SHA-256。
 
@@ -76,6 +76,23 @@ pnpm --dir packages/rule-set-pipeline build:release --binary /absolute/path/to/s
 ```
 
 一次调用只下载并校验一份完整 YAML 和一份摘要文件，解析一次 YAML；随后按所选逻辑 ID 分别转换和原生验证。共同摘要或 YAML 文档错误使整批失败，且不创建输出目录。单个列表缺失、非法或原生验证失败时，其他列表仍可完成，CLI 返回非零。输出根目录的 `source.json` 和 `batch.json` 记录共同来源、规范化配置和逐集结果；每个逻辑 ID 子目录保存转换报告，成功时还保存规则文件及包含目标分支的构建记录，失败时保存 `failure.json`。`buildId` 包含规则定义、目标仓库与分支、实际列表、固定来源及工具身份；相同列表内容也不会混同两个逻辑 ID。
+
+### 本地构建双栈 `china-ip`
+
+从仓库根目录运行。首次构建将 [`ip-lists` 分支](https://github.com/gaoyifan/china-operator-ip/tree/ip-lists) 解析为完整 commit SHA，再按该 SHA 下载 `china46.txt`。`source.json` 记录仓库、分支、commit、文件路径、固定下载地址、实际输入的 SHA-256 和字节数。复现时，从首次构建的 `source.json` 取 `commit` 传给 `--commit`。构建确认该 commit 仍在分支历史中，再读取该 SHA 下的文件。
+
+```sh
+pnpm --dir packages/rule-set-pipeline build:release \
+  --config config/china-ip.yml --binary /absolute/path/to/sing-box-1.14.4 \
+  --out /tmp/china-ip-first
+pnpm --dir packages/rule-set-pipeline build:release \
+  --config config/china-ip.yml --binary /absolute/path/to/sing-box-1.14.4 \
+  --commit "$(jq -r .commit /tmp/china-ip-first/source.json)" --out /tmp/china-ip-repeat
+```
+
+每个有效行包含一个带前缀长度的 IPv4 或 IPv6 CIDR。文件使用 UTF-8，允许开头的 BOM，接受 LF、CRLF 和 CR 换行。行首尾的空格和制表符会被移除。空行和以 `#` 开头的整行注释会被跳过。转换会规范化网络地址并去重，保留不同前缀。无效 UTF-8、非法 CIDR（包括带行尾注释的行）或空结果都会使构建失败。诊断记录文件名，非法 CIDR 同时记录行和列。
+
+输出在 `china-ip/` 子目录中。Route 和 DNS Response 共用 `route.json` 与 `route.srs`，DNS Query 标记为 `unavailable: empty`。验证包含编译、解码、比较 IP 匹配范围，以及加载两种格式。[`config/china-ip.yml`](config/china-ip.yml) 供本地构建使用。
 
 ## 按逻辑 ID 显式激活
 

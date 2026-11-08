@@ -53,7 +53,7 @@ export type { BuildTerm, Usage } from './projection.js';
 export { updateRules, rebuildRules, readUpdateState } from './update.js';
 export type { UpdateOptions, RebuildOptions, UpdateState } from './update.js';
 export type { ConfiguredUpdateOptions, ConfiguredRebuildOptions } from './configured-update.js';
-export { buildConfiguredRelease, parseBuildConfiguration } from './configured-build.js';
+export { buildConfiguredCommit, buildConfiguredRelease, parseBuildConfiguration } from './configured-build.js';
 export type { BuildConfiguration, RuleDefinition, ConfiguredResult } from './configured-build.js';
 
 export { activateRules, rollbackRules, verifyActivationCandidate } from './activation.js';
@@ -68,3 +68,5 @@ export type { PublicationRepository, PublicationSnapshot } from './publication-r
 
 export { checkRules, resumeRules } from './check-rules.js';
 export type { CheckOptions, CheckRecord, ResumeOptions } from './check-rules.js';
+
+export type { CommitOptions, CommitSourceRecord } from './github-commit.js';

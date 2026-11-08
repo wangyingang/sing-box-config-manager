@@ -13,6 +13,7 @@ export interface Diagnostic {
   column?: number;
   index?: number;
 }
+interface TermCounts { input: number; converted: number; output: number }
 export interface ConversionReport {
   status: 'failed' | 'converted';
   inputCount: number;
@@ -22,7 +23,7 @@ export interface ConversionReport {
   duplicateCount: number;
   outputTermCount: number;
   attributeRecordCount: number;
-  typeCounts: Record<TermType, { input: number; converted: number; output: number }>;
+  typeCounts: Record<TermType, TermCounts> & { ip_cidr?: TermCounts };
   usageCounts: Record<'route' | 'dns-query' | 'dns-response', number>;
   diagnostics: Diagnostic[];
 }
