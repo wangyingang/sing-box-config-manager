@@ -1,4 +1,5 @@
 import type { RuleDefinition } from './configuration.js';
+import type { SourceReference } from './update.js';
 import { buildNative, type NativeBuild } from './native.js';
 import { decodedTerms } from './projection.js';
 import { immutableUrl, type PublicationTransport } from './publication.js';
@@ -14,6 +15,11 @@ export function candidateArtifactFiles(definition?: RuleDefinition) {
 export function candidateFiles(definition?: RuleDefinition) {
   const { source, binary } = candidateArtifactFiles(definition);
   return [source, binary, 'manifest.json', 'source.json', 'conversion-report.json', 'build.json', 'readback.json'];
+}
+
+/** The journal binds Git candidates to the exact bytes of their readback record. */
+export function candidateEvidenceSha256(candidate: SourceReference, evidence: Buffer | undefined) {
+  return evidence && candidate.sourceKey !== undefined ? sha256(evidence) : undefined;
 }
 
 export interface PublicationCandidate {

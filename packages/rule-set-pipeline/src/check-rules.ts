@@ -5,6 +5,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { activateAutomatically, activationSubscription, verifyActivationCandidate } from './activation.js';
 import { githubActivation, type ActivationTransport } from './activation-transport.js';
 import { verifyRetainedCandidate } from './candidate-recovery.js';
+import { ruleDefinitionSha256 } from './configuration.js';
 import { commitSourceKey, resolveCommit, withCommitCheckpoint } from './github-commit.js';
 import { buildConfiguredCommit, buildConfiguredRelease, configuredBuildTools, parseBuildConfiguration, type RuleDefinition } from './configured-build.js';
 import { publishConfiguredCandidate, type ConfiguredUpdateOptions } from './configured-update.js';
@@ -590,7 +591,7 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
         const processed = state.configuredProcessed ??= {};
         if (!Object.hasOwn(processed, id)) processed[id] = {};
         processed[id][sourceReferenceKey(candidate)] = { candidateId: candidate.id, tag: candidate.tag, evidenceUrl: candidate.evidenceUrl!,
-          definitionSha256: sha256(JSON.stringify({ definition, target: configuration.target })) };
+          definitionSha256: ruleDefinitionSha256(definition, configuration.target) };
         await session.save();
         if (controlFor(id)?.pauseAutomaticActivation) {
           recordCheckOutcome(id, 'paused', { ...checked, candidateId: candidate.id });

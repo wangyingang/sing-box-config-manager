@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
+import { candidateEvidenceSha256 } from './candidate-publication.js';
 import { immutableUrl, type PublicationTransport } from './publication.js';
 import type { PublicationRepository } from './publication-repository.js';
 import { PublicationWriteError } from './publication-repository.js';
@@ -11,7 +12,7 @@ import { cleanupRefNames } from './maintenance-refs.js';
 import type { MaintenanceCleanup, MaintenanceRun } from './maintenance.js';
 import { parseBuildConfiguration, parseRuleDefinition, type BuildConfiguration, type RuleDefinition } from './configuration.js';
 import { commitSourceKey, validCommitIdentity, validCommitSource } from './github-commit.js';
-import { sha256, validReleaseAssetIdentities, V2FLY_RELEASE_INPUT } from './release.js';
+import { validReleaseAssetIdentities, V2FLY_RELEASE_INPUT } from './release.js';
 
 export const STATE_PATH = 'pipeline/state.json';
 export const BASELINE_PATH = 'pipeline/baseline.json';
@@ -444,13 +445,14 @@ export async function openRemoteSession(publication: PublicationTransport, direc
         || paths.some(path => !path.startsWith(`candidates/${id}/`))) throw new Error('Unregistered candidate write');
       const previousPhase = candidate.phase;
       const evidence = files[`candidates/${id}/readback.json`];
-      if (evidence && candidate.sourceKey !== undefined) candidate.evidenceSha256 = sha256(evidence);
+      const evidenceSha256 = candidateEvidenceSha256(candidate, evidence);
+      if (evidenceSha256) candidate.evidenceSha256 = evidenceSha256;
       candidate.phase = evidence ? 'evidence'
         : paths.some(path => path.endsWith('/manifest.json')) ? 'metadata' : 'files';
       try { return await write(files, message); }
       catch (error) {
         candidate.phase = previousPhase;
-        if (evidence && candidate.sourceKey !== undefined) delete candidate.evidenceSha256;
+        if (evidenceSha256) delete candidate.evidenceSha256;
         throw error;
       }
     } } satisfies PublicationTransport,

@@ -53,7 +53,8 @@ async function fixture(t: TestContext, branch: string) {
     binary, configuration: id === china ? cidr : env.configuration, stateDirectory: join(directory, label),
     publication, selectedIds: [id], fetch: source(id, version),
   });
-  const write = (id: string) => ({ ...env.options(id, ''), transport: activation,
+  const write = (id: string, localDirectory = id) => ({ ...env.options(id, ''), transport: activation,
+    stateDirectory: join(directory, localDirectory),
     ...(id === china && { configuration: cidr, subscription }) });
   const publish = async (id: string, version: number) => {
     const [result] = (await updateRules(update(id, version))).results;
@@ -71,7 +72,10 @@ for (const branch of ['acceptance-issue-72', 'main']) {
   test(`${branch} 四集跨两轮清理保持稳定字节和长期 pin，旧历史不可用、新历史可回滚`, { timeout: 120_000 }, async t => {
     const env = await fixture(t, branch);
     const old = await env.deliver(china, 1);
-    const pinned = await env.deliver(china, 2);
+    const initial = await env.deliver(china, 2);
+    const [rebuilt] = (await rebuildRules({ ...env.update(china, 2, 'initial-rebuild'), commit: gitCommit(2) })).results;
+    if (rebuilt.status !== 'processed') assert.fail(JSON.stringify(rebuilt));
+    const pinned = await env.activate(china, rebuilt.candidate.evidenceUrl!);
     await env.deliver('openai', 3);
     await env.deliver('anthropic', 4);
     await env.deliver('google-deepmind', 5);
@@ -102,6 +106,7 @@ for (const branch of ['acceptance-issue-72', 'main']) {
     assert.deepEqual(cidr.candidatePaths.map(path => path.split('/').at(-1)).sort(),
       ['build.json', 'conversion-report.json', 'manifest.json', 'readback.json', 'route.json', 'route.srs', 'source.json']);
     assert.ok(preview.plan.discard.candidateIds.includes(old.activation.candidateId));
+    assert.ok(preview.plan.discard.candidateIds.includes(initial.activation.candidateId));
 
     const heads = async () => ({ journal: (await env.maintenance.repository.snapshot()).head, stable: env.head() });
     const obsolete = () => [...env.snapshots.keys()];
@@ -188,10 +193,15 @@ for (const branch of ['acceptance-issue-72', 'main']) {
     await assert.rejects(rebuildRules({ ...fresh, commit: gitCommit(1), fetch: async url => assert.fail(`Unexpected upstream read: ${url}`) }),
       /CANDIDATE_UNAVAILABLE/);
     await assert.rejects(rollbackRules({ ...env.write(china), historicalActivationCommit: old.commit }), /ROLLBACK_UNAVAILABLE/);
-    await env.activate(china, (await env.publish(china, 3)).evidenceUrl!);
+    const same = await updateRules(env.update(china, 2, 'fresh-current-candidate'));
+    assert.equal(same.results[0].status, 'skipped');
+    assert.equal(same.results[0].candidateId, pinned.activation.candidateId);
+    const next = await env.publish(china, 3);
+    const freshWrite = 'fresh-management';
+    await activateRules({ ...env.write(china, freshWrite), candidateEvidenceUrl: next.evidenceUrl! });
     const [retained] = (await env.status()).rollbackTargets[china];
     assert.equal(retained.id, pinned.activation.id);
-    const restored = await rollbackRules({ ...env.write(china), historicalActivationCommit: retained.commit });
+    const restored = await rollbackRules({ ...env.write(china, freshWrite), historicalActivationCommit: retained.commit });
     assert.deepEqual(restored.activation.files, pinned.activation.files);
     assert.equal(restored.activation.control?.reason, 'manual-rollback');
     assert.deepEqual(await bytes(), original);

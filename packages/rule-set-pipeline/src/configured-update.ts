@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { configuredInput } from './configuration.js';
+import { configuredInput, ruleDefinitionSha256 } from './configuration.js';
 import { buildConfiguredCommit, buildConfiguredRelease, CONFIGURED_BUILD_RECORD, parseBuildConfiguration } from './configured-build.js';
 import { publishCandidate } from './candidate-publication.js';
 import { githubPublication, immutableUrl, type PublicationTransport } from './publication.js';
-import { lookupRelease, sha256, type ReleaseInput } from './release.js';
+import { lookupRelease, type ReleaseInput } from './release.js';
 import { commitSourceKey, fullGitCommit, resolveCommit, withCommitCheckpoint, type CommitInput, type CommitSourceRecord } from './github-commit.js';
 import type { SourceRecord } from './types.js';
 import { readUpdateState, sourceReferenceKey, type Candidate, type SourceReference, type UpdateState } from './update.js';
@@ -74,7 +74,7 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, 
     }
     state.configuredProcessed ??= {};
     const processedFor = (id: string) => Object.hasOwn(state.configuredProcessed!, id) ? state.configuredProcessed![id] : undefined;
-    const definitionHash = (definition: typeof definitions[number]) => sha256(JSON.stringify({ definition, target: configuration.target }));
+    const definitionHash = (definition: typeof definitions[number]) => ruleDefinitionSha256(definition, configuration.target);
     const operationFinished = () => {
       const operation = state.pendingOperation!;
       if (operation.sourcePins !== undefined) throw new Error('Expected a single-source candidate operation');

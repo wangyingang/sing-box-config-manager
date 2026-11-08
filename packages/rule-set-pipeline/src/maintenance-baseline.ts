@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { activationSubscription } from './activation.js';
-import { candidateArtifactFiles, candidateFiles } from './candidate-publication.js';
-import type { RuleDefinition } from './configured-build.js';
+import { candidateArtifactFiles, candidateEvidenceSha256, candidateFiles } from './candidate-publication.js';
+import { ruleDefinitionSha256, type RuleDefinition } from './configuration.js';
 import { filePaths, stageRef, type BaselineStage, type BaselineStages, type BaselineTransport, type PreparedBaseline } from './maintenance-baseline-transport.js';
 import type { MaintenancePlan } from './maintenance.js';
 import { buildNative, type NativeTool } from './native.js';
@@ -11,7 +11,7 @@ import { ARTIFACT_REPOSITORY, immutableUrl, type PublicationTransport } from './
 import { BASELINE_PATH, IDENTITY_PATH, STATE_PATH, type RemoteJournal } from './remote-state.js';
 import { activationRecord, readRemoteStatus } from './remote-status.js';
 import { sha256 } from './release.js';
-import type { Candidate, UpdateState } from './update.js';
+import { sourceReferenceKey, type Candidate, type UpdateState } from './update.js';
 
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
 interface Verification {
@@ -36,15 +36,26 @@ async function readback(publication: PublicationTransport, url: string, bytes: B
   return { url, sha256: sha256(actual), byteLength: actual.length, exactBytes: true };
 }
 
-function rebaseProgress(state: UpdateState, candidates: Record<string, Candidate>, evidenceUrls: Map<string, string>): UpdateState {
-  const rebase = <T extends { candidateId: string; evidenceUrl?: string }>(records: Record<string, T>) => Object.fromEntries(
-    Object.entries(records).map(([id, { evidenceUrl: _oldUrl, ...progress }]) => {
-      const evidenceUrl = evidenceUrls.get(progress.candidateId);
-      return [id, { ...progress, ...(evidenceUrl && { evidenceUrl }) }];
-    }),
-  );
-  return { schemaVersion: 1, pinned: state.pinned, candidates, processed: rebase(state.processed),
-    configuredProcessed: Object.fromEntries(Object.entries(state.configuredProcessed ?? {}).map(([id, records]) => [id, rebase(records)])),
+function rebaseProgress(state: UpdateState, candidates: Record<string, Candidate>, evidenceUrls: Map<string, string>, targetBranch: string): UpdateState {
+  const rebase = <T extends { candidateId: string; evidenceUrl?: string }>({ evidenceUrl: _oldUrl, ...progress }: T) => {
+    const evidenceUrl = evidenceUrls.get(progress.candidateId);
+    return { ...progress, ...(evidenceUrl && { evidenceUrl }) };
+  };
+  const currentById = new Map(Object.values(candidates).map(candidate => [candidate.logicalId, candidate]));
+  const configuredProcessed = Object.fromEntries(Object.entries(state.configuredProcessed ?? {}).map(([id, records]) => {
+    const current = currentById.get(id);
+    return [id, Object.fromEntries(Object.entries(records).map(([key, progress]) => {
+      // An explicit rebuild leaves the processed entry pointing at the original
+      // candidate. If only the rebuilt version survived, retain its source index.
+      if (current?.definition && key === sourceReferenceKey(current) && !evidenceUrls.has(progress.candidateId)) {
+        return [key, rebase({ ...progress, candidateId: current.id, definitionSha256: ruleDefinitionSha256(current.definition,
+          { repository: ARTIFACT_REPOSITORY, branch: targetBranch }) })];
+      }
+      return [key, rebase(progress)];
+    }))];
+  }));
+  const processed = Object.fromEntries(Object.entries(state.processed).map(([key, progress]) => [key, rebase(progress)]));
+  return { schemaVersion: 1, pinned: state.pinned, candidates, processed, configuredProcessed,
     ...(state.commitPins && { commitPins: state.commitPins }),
     ...(state.latestChecks && { latestChecks: state.latestChecks }) };
 }
@@ -185,8 +196,9 @@ export async function prepareBaseline(options: Verification & {
   const evidenceUrls = new Map([...layouts.keys()].map(id => [id, immutableUrl(evidenceStage.head, `candidates/${id}/readback.json`)]));
   const candidates = Object.fromEntries(Object.entries(journal.state.candidates).filter(([id]) => layouts.has(id)).map(([id, original]) => {
     const { previousCandidateId: _previous, error: _error, ...candidate } = original;
+    const evidenceSha256 = candidateEvidenceSha256(candidate, evidence[`candidates/${id}/readback.json`]);
     return [id, { ...candidate, filesCommit: files.head, metadataCommit: metadataStage.head, evidenceCommit: evidenceStage.head,
-      ...(candidate.sourceKey !== undefined && { evidenceSha256: sha256(evidence[`candidates/${id}/readback.json`]) }),
+      ...(evidenceSha256 && { evidenceSha256 }),
       manifestUrl: immutableUrl(metadataStage.head, `candidates/${id}/manifest.json`), evidenceUrl: evidenceUrls.get(id)! }];
   }));
   const shared = repository.branch === targetBranch;
@@ -211,7 +223,7 @@ export async function prepareBaseline(options: Verification & {
     }
   }
   const rebasedJournal: RemoteJournal = { schemaVersion: 1, id: journal.id, generation: journal.generation,
-    maintenance: 'maintenance', targetBranch, state: rebaseProgress(journal.state, candidates, evidenceUrls),
+    maintenance: 'maintenance', targetBranch, state: rebaseProgress(journal.state, candidates, evidenceUrls, targetBranch),
     ...(journal.lastCleanupAt && { lastCleanupAt: journal.lastCleanupAt }), ...(journal.resumes && { resumes: journal.resumes }) };
   const journalStage = await stage('journal', evidenceStage, {
     ...(shared && stableFiles), [IDENTITY_PATH]: await required(source, IDENTITY_PATH), [STATE_PATH]: encode(rebasedJournal),
