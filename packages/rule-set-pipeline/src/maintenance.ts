@@ -63,7 +63,7 @@ async function scan(options: MaintenanceOptions) {
   const active = [...currentByPath].map(([recordPath, record]) => {
     const candidate = status.state.candidates[record.candidateId];
     const candidatePaths = candidateFiles(candidate?.definition).map(file => `candidates/${record.candidateId}/${file}`);
-    const control = record.logicalId ? status.activeRuleVersions[record.logicalId].control : undefined;
+    const control = status.activeRuleVersions[record.logicalId].control;
     return { recordPath, record, candidatePaths, ...(control ? { control } : {}),
       ...(candidate?.sourceKey && { sourceKey: candidate.sourceKey }) };
   });

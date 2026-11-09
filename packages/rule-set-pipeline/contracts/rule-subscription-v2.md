@@ -16,4 +16,4 @@
 
 Rule Subscription 不包含候选 revision、sha256、字节数或条目数。[Artifact Manifest v1](README.md) 仍描述不可变候选的实际产物。配置快照固定订阅契约和发布时的配置检查证据，不固定客户端此后加载的规则字节。
 
-Compiler 的编译、配置发布和快照交付入口只接受 v2 订阅。Recipe／Template v1 的固定 Manifest 绑定仍可用。旧 [Rule Subscription v1](rule-subscription.md) 仍用于 Pipeline 的[旧单列表激活及回滚](../README.md#显式激活)。
+Compiler 的编译、配置发布和快照交付入口只接受 v2 订阅。Recipe／Template v1 的固定 Manifest 绑定仍可用。Pipeline 的激活和回滚也只接受 v2，并要求配置及逻辑 ID。[Rule Subscription v1](rule-subscription.md) 作为历史契约保留。

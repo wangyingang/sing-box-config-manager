@@ -49,7 +49,7 @@ test('固定官方 Release 增选与单集重建保留历史候选，稳定入�
   assert.ok(requests.slice(requestStart).every(url => !url.endsWith('/latest')));
   const after = await readUpdateState(directory!);
   assert.deepEqual(after.state.configuredProcessed, before.state.configuredProcessed);
-  assert.equal(after.activeRuleVersion, null);
+  assert.deepEqual(after.activeRuleVersions, {});
   for (const entry of [original, anthropic]) assert.deepEqual(after.state.candidates[entry.candidate.id], before.state.candidates[entry.candidate.id]);
   const evidence = [];
   for (const entry of [original, anthropic, repeated]) {

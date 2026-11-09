@@ -1,7 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import { Ajv } from 'ajv';
 import manifestSchema from '../contracts/artifact-manifest.schema.json' with { type: 'json' };
-import subscriptionSchema from '../contracts/rule-subscription.schema.json' with { type: 'json' };
 import subscriptionV2Schema from '../contracts/rule-subscription-v2.schema.json' with { type: 'json' };
 import { candidateFiles } from './candidate-publication.js';
 import { verifyActivationCandidate, verifyCandidateEvidence } from './activation.js';
@@ -15,7 +14,6 @@ import { sha256 } from './release.js';
 
 const ajv = new Ajv({ strict: true });
 const validateManifest = ajv.compile(manifestSchema);
-const validateSubscription = ajv.compile(subscriptionSchema);
 const validateSubscriptionV2 = ajv.compile(subscriptionV2Schema);
 export const candidateEvidenceFiles = candidateFiles();
 const commitId = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
@@ -36,24 +34,20 @@ export function activationRecord(value: unknown, path: string, targetBranch: str
   requireThat(object(value) && value.schemaVersion === 1 && typeof value.id === 'string' && value.id.length
     && typeof value.candidateId === 'string' && /^[a-f0-9-]+$/.test(value.candidateId)
     && typeof value.candidateEvidenceUrl === 'string' && object(value.files), 'Invalid remote activation record');
-  const configured = path !== 'stable/activation.json';
-  if (configured) {
-    requireThat(typeof value.logicalId === 'string' && /^[a-z][a-z0-9-]*$/.test(value.logicalId)
-      && Array.isArray(value.history), 'Invalid configured activation history');
-    if (value.control !== undefined) {
-      const kind = value.operation === 'rollback' ? 'rollback' : 'activate';
-      requireThat(isDeepStrictEqual(value.control, manualControl({ id: value.id, kind })), 'Invalid manual control record');
-    }
-  } else requireThat(value.logicalId === undefined, 'Invalid legacy activation identity');
-  requireThat((configured ? validateSubscriptionV2 : validateSubscription)(value.subscription), 'Invalid remote Rule Subscription');
+  requireThat(typeof value.logicalId === 'string' && /^[a-z][a-z0-9-]*$/.test(value.logicalId)
+    && Array.isArray(value.history), 'Invalid configured activation history');
+  if (value.control !== undefined) {
+    const kind = value.operation === 'rollback' ? 'rollback' : 'activate';
+    requireThat(isDeepStrictEqual(value.control, manualControl({ id: value.id, kind })), 'Invalid manual control record');
+  }
+  requireThat(validateSubscriptionV2(value.subscription), 'Invalid remote Rule Subscription');
   const subscription: any = value.subscription;
-  requireThat(subscription.systemRuleSetId === (configured ? value.logicalId : 'v2fly:domain-list-community:category-ai-!cn'),
-    'Remote subscription identity mismatch');
-  const git = configured && value.source?.kind === 'github-commit';
+  requireThat(subscription.systemRuleSetId === value.logicalId, 'Remote subscription identity mismatch');
+  const git = value.source?.kind === 'github-commit';
   const { stem, dns, unavailable } = configuredLayout(git ? 'cidr-text' : 'plain-yaml');
   requireThat(subscription.projections[unavailable].unavailable === 'empty'
     && subscription.projections.route.formats && subscription.projections[dns].formats, 'Remote subscription usage mismatch');
-  if (configured) requireThat(isDeepStrictEqual(subscription.projections.route.formats, subscription.projections[dns].formats),
+  requireThat(isDeepStrictEqual(subscription.projections.route.formats, subscription.projections[dns].formats),
     'Remote subscription file reuse mismatch');
   if (git) requireThat(subscription.projections.route.formats.source, 'Remote subscription source format is required');
   const directory = path.slice(0, -'/activation.json'.length);
@@ -66,7 +60,7 @@ export function activationRecord(value: unknown, path: string, targetBranch: str
       requireThat(/^stable\/[a-z0-9/_.-]+\.(srs|json)$/.test(file) && file !== path
         && !file.split('/').some((part: string) => !part || part === '.' || part === '..'), 'Invalid remote subscription stable path');
       const candidateFile = `${stem}.${format === 'binary' ? 'srs' : 'json'}`;
-      if (configured) requireThat(file === `${directory}/${candidateFile}`
+      requireThat(file === `${directory}/${candidateFile}`
         && endpoint.requiredCapabilities.length === 0, 'Remote subscription stable path or capability mismatch');
       const signature = JSON.stringify([format, [...endpoint.requiredCapabilities].sort()]);
       requireThat(!expected.has(file) || expected.get(file)?.signature === signature, 'Conflicting remote subscription endpoint declarations');
@@ -78,8 +72,7 @@ export function activationRecord(value: unknown, path: string, targetBranch: str
     requireThat(object(metadata) && /^[a-f0-9]{64}$/.test(metadata.sha256) && Number.isSafeInteger(metadata.byteLength)
       && metadata.byteLength > 0, 'Invalid remote activation file metadata');
   }
-  const history: HistoryTarget[] = value.history ?? [];
-  requireThat(Array.isArray(history), 'Invalid activation history');
+  const history: HistoryTarget[] = value.history;
   const ids = new Set<string>();
   for (const item of history) {
     requireThat(object(item) && commitId(item.commit) && typeof item.id === 'string' && item.id.length
@@ -88,34 +81,6 @@ export function activationRecord(value: unknown, path: string, targetBranch: str
   }
   return { record: value as Record<string, any> & ObservedActivation, history,
     candidateFiles: Object.fromEntries([...expected].map(([path, { candidateFile }]) => [path, candidateFile])) };
-}
-
-/** Legacy records link to the head that preceded each activation. */
-export async function* walkLegacyActivationHistory(record: ReturnType<typeof activationRecord>['record'], head: string,
-  targetBranch: string, download: ActivationTransport['download']): AsyncGenerator<
-    { commit: string; record: ReturnType<typeof activationRecord>['record'] } | { commit: unknown; error: unknown }> {
-  const path = 'stable/activation.json';
-  const seenCommits = new Set([head]), seenIds = new Set([record.id]);
-  let previous: unknown = record.expectedHead;
-  while (true) {
-    if (!commitId(previous) || seenCommits.has(previous)) {
-      yield { commit: previous, error: new Error('Invalid or cyclic legacy activation history') };
-      return;
-    }
-    seenCommits.add(previous);
-    const url = immutableUrl(previous, path);
-    try {
-      const historical = activationRecord(JSON.parse((await download(url)).toString()), path, targetBranch).record;
-      requireThat(historical.logicalId === undefined && !seenIds.has(historical.id), 'Invalid or cyclic legacy activation identity');
-      seenIds.add(historical.id);
-      yield { commit: previous, record: historical };
-      previous = historical.expectedHead;
-    } catch (error) {
-      // The exact absence is emitted only when an immutable Git tree has no activation.
-      if (!(error instanceof Error && error.message === `Readback HTTP 404: ${url}`)) yield { commit: previous, error };
-      return;
-    }
-  }
 }
 
 export async function verifyStableFiles(record: Record<string, any>, read: (path: string) => Promise<Buffer | undefined>) {
@@ -221,14 +186,13 @@ export async function readRemoteStatus(options: {
     }
   };
   const activeRuleVersions: Record<string, ActiveVersion> = {};
-  let activeRuleVersion: ActiveVersion | null = null;
   const rollbackTargets: Record<string, RollbackTarget[]> = {};
   const unavailableRollbackTargets: Record<string, UnavailableTarget[]> = {};
   const historyComplete: Record<string, boolean> = {};
   const historyErrors: Record<string, { commit?: string; error: string }[]> = {};
   const historicalActivations: Record<string, HistoryTarget[]> = {};
   const currentByPath = new Map<string, ReturnType<typeof activationRecord>['record']>();
-  const paths = stable.paths.filter(path => (!options.recordPaths || options.recordPaths.has(path)) && /^stable\/(?:[a-z0-9._-]+\/)*activation\.json$/.test(path));
+  const paths = stable.paths.filter(path => (!options.recordPaths || options.recordPaths.has(path)) && /^stable\/(?:[a-z0-9][a-z0-9._-]*\/)+activation\.json$/.test(path));
   for (const path of paths) {
     const bytes = await stable.read(path);
     requireThat(bytes, `Missing activation record: ${path}`);
@@ -246,17 +210,14 @@ export async function readRemoteStatus(options: {
       }
     }
     const current: ActiveVersion = { status: 'activated', commit: stable.head, activation: record, candidate };
-    const id: string = record.logicalId ?? 'v2fly:category-ai-!cn';
+    const id: string = record.logicalId;
     if (candidate.status !== 'available') pendingOperations.push({ id: record.id, candidateId: record.candidateId,
       logicalId: record.logicalId, status: 'activated-verification-pending', error: candidate.error ?? 'Current candidate dependencies are incomplete' });
     requireThat(!Object.hasOwn(activeRuleVersions, id), 'Duplicate active logical ID');
-    if (path === 'stable/activation.json') activeRuleVersion = current;
-    else {
-      current.control = effectiveControl(journal, id, record);
-      const resume = applicableResume(journal, id, record);
-      if (resume?.checkPending) pendingOperations.push({ id: resume.revision, logicalId: id, status: 'resume-check-pending' });
-      activeRuleVersions[id] = current;
-    }
+    current.control = effectiveControl(journal, id, record);
+    const resume = applicableResume(journal, id, record);
+    if (resume?.checkPending) pendingOperations.push({ id: resume.revision, logicalId: id, status: 'resume-check-pending' });
+    activeRuleVersions[id] = current;
     rollbackTargets[id] = []; unavailableRollbackTargets[id] = [];
     historicalActivations[path] = [];
     historyComplete[id] = true; historyErrors[id] = [];
@@ -284,13 +245,7 @@ export async function readRemoteStatus(options: {
         unavailableRollbackTargets[id].push({ ...target, reason: error instanceof Error ? error.message : String(error) });
       }
     };
-    if (path === 'stable/activation.json') {
-      for await (const item of walkLegacyActivationHistory(record, stable.head, journal.targetBranch, url => activation.download(url))) {
-        if ('error' in item) { historyError(item.commit, item.error); break; }
-        const { commit, record: historical } = item;
-        await inspectHistorical({ commit, id: historical.id, candidateId: historical.candidateId }, historical);
-      }
-    } else for (const target of history) {
+    for (const target of history) {
       if (options.maintenanceInventory) {
         historicalActivations[path].push(target);
         continue;
@@ -335,7 +290,7 @@ export async function readRemoteStatus(options: {
       ...(operation.error ? { error: operation.error } : {}) });
   }
   return { authority: 'remote' as const, head: snapshot.head, stableHead: stable.head, generation: journal.generation,
-    maintenance: journal.maintenance, state: journal.state, activeRuleVersion,
+    maintenance: journal.maintenance, state: journal.state,
     activeRuleVersions, rollbackTargets, unavailableRollbackTargets, candidateAvailability, manualOperations, automaticOperations, pendingOperations,
     historyComplete, historyErrors,
     ...(options.maintenanceInventory ? { inventory: { targetBranch: journal.targetBranch, snapshot, stable, currentByPath, historicalActivations, resumes: journal.resumes ?? {} } } : {}) };

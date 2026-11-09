@@ -1,5 +1,4 @@
 import { githubPublicationRepository, type PublicationRepository } from './publication-repository.js';
-import { IDENTITY_PATH, STATE_PATH } from './remote-state.js';
 import { authorizeActivationWrite, type ActivationWriteReservation } from './manual-activation.js';
 import { ARTIFACT_REPOSITORY, ghJson, GitHubHttpError, githubPublication, immutableUrl } from './publication.js';
 
@@ -18,11 +17,6 @@ export interface ActivationTransport {
 
 const configuredRecord = /^stable\/(?:[a-z0-9][a-z0-9._-]*\/)+activation\.json$/;
 const configuredFilename = /^(?:domains|route)\.(?:srs|json)$/;
-const configuredRule = (path: string) => {
-  const parts = path.split('/');
-  return parts[0] === 'stable' && parts.length >= 3 && configuredFilename.test(parts.at(-1)!);
-};
-const legacyRecordPath = 'stable/activation.json';
 const recordDirectory = (path: string) => path.slice(0, -'activation.json'.length);
 
 /** Branch must already exist. Creating a production or acceptance environment is separate. */
@@ -42,7 +36,7 @@ export function githubActivation(branch = 'main', request: typeof ghJson = ghJso
     },
     async download(url) {
       const prefix = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/`;
-      const match = url.startsWith(prefix) ? /^([a-f0-9]{40})\/(stable\/(?:[a-z0-9._-]+\/)*activation\.json)$/.exec(url.slice(prefix.length)) : null;
+      const match = url.startsWith(prefix) ? /^([a-f0-9]{40})\/(stable\/(?:[a-z0-9][a-z0-9._-]*\/)+activation\.json)$/.exec(url.slice(prefix.length)) : null;
       if (!match) return githubPublication(request).download(url);
       // A fresh raw/CDN 404 cannot prove the old record is absent. Read the
       // immutable Git tree/blob for concurrency state, failing closed on errors.
@@ -64,27 +58,21 @@ export function githubActivation(branch = 'main', request: typeof ghJson = ghJso
       for (const path of paths) {
         if (!/^stable\/[a-zA-Z0-9/_.-]+$/.test(path) || path.split('/').some(part => part === '.' || part === '..' || !part)) throw new Error('Invalid stable path');
       }
-      if (!reservation && (paths.some(path => configuredRecord.test(path))
-        || paths.some(configuredRule) && !paths.includes(legacyRecordPath))) {
-        throw new Error('Configured activation requires a registered write');
-      }
+      if (!reservation) throw new Error('Configured activation requires a registered write');
+      const records = paths.filter(path => configuredRecord.test(path));
+      if (records.length !== 1) throw new Error('Expected exactly one rule-set activation record');
+      const [selectedRecord] = records;
       // Recheck immediately before constructing the single-parent update.
       if (await this.head() !== expectedHead) throw new Error('ACTIVATION_CONFLICT: remote head changed');
       const parent = await api(`git/commits/${expectedHead}`);
       const existingTree = await api(`git/trees/${parent.tree.sha}?recursive=1`);
       if (existingTree.truncated || !Array.isArray(existingTree.tree)) throw new Error('Cannot establish stable path ownership: incomplete tree');
       const existingPaths = new Map<string, string>(existingTree.tree.map((entry: { path: string; type: string }) => [entry.path, entry.type]));
-      if (!reservation && (branch === 'main' || existingPaths.has(STATE_PATH) || existingPaths.has(IDENTITY_PATH))) {
-        throw new Error('Managed activation requires a registered write');
-      }
       const otherRecords = [...existingPaths.keys()].filter(path => configuredRecord.test(path) && !paths.includes(path));
       const ownedDirectories = otherRecords.map(recordDirectory);
-      const selectedRecord = paths.find(path => configuredRecord.test(path));
-      if (selectedRecord) {
-        const selectedDirectory = recordDirectory(selectedRecord);
-        if (ownedDirectories.some(directory => directory.startsWith(selectedDirectory) || selectedDirectory.startsWith(directory))) {
-          throw new Error('Configured stable directory overlaps another rule set');
-        }
+      const selectedDirectory = recordDirectory(selectedRecord);
+      if (ownedDirectories.some(directory => directory.startsWith(selectedDirectory) || selectedDirectory.startsWith(directory))) {
+        throw new Error('Configured stable directory overlaps another rule set');
       }
       for (const path of paths) {
         if (existingPaths.has(path) && existingPaths.get(path) !== 'blob') {
@@ -102,10 +90,6 @@ export function githubActivation(branch = 'main', request: typeof ghJson = ghJso
         const owned = overlaps.find(path => Object.hasOwn(record.files, path));
         if (owned) throw new Error(`Stable path is owned by another rule set: ${owned}`);
       }
-      if (selectedRecord && existingPaths.has(legacyRecordPath)) {
-        const legacy = JSON.parse((await this.download(immutableUrl(expectedHead, legacyRecordPath))).toString());
-        if (!legacy.files || paths.some(path => Object.hasOwn(legacy.files, path))) throw new Error('Stable path is owned by the legacy rule set');
-      }
       const tree = [];
       for (const [path, bytes] of Object.entries(files)) {
         const blob = await api('git/blobs', { content: bytes.toString('base64'), encoding: 'base64' });
@@ -113,16 +97,14 @@ export function githubActivation(branch = 'main', request: typeof ghJson = ghJso
       }
       const createdTree = await api('git/trees', { base_tree: parent.tree.sha, tree });
       const commit = await api('git/commits', { message, tree: createdTree.sha, parents: [expectedHead] });
-      if (reservation) {
-        if (await this.head() !== expectedHead) throw new Error('ACTIVATION_CONFLICT: remote head changed');
-        await authorizeActivationWrite(repository, branch, expectedHead, files, reservation);
-      }
+      if (await this.head() !== expectedHead) throw new Error('ACTIVATION_CONFLICT: remote head changed');
+      await authorizeActivationWrite(repository, branch, expectedHead, files, reservation);
       // The caller knows this identity before PATCH, so even a lost reply can be reconciled.
       try {
         await request(['api', `repos/${ARTIFACT_REPOSITORY}/git/refs/heads/${branch}`, '--method', 'PATCH', '--input', '-'],
           { sha: commit.sha, force: false });
       } catch (error) {
-        if (reservation && error instanceof GitHubHttpError && [400, 401, 403, 404, 409, 422].includes(error.status)) throw error;
+        if (error instanceof GitHubHttpError && [400, 401, 403, 404, 409, 422].includes(error.status)) throw error;
         throw new ActivationWriteError(commit.sha, error);
       }
       return commit.sha;

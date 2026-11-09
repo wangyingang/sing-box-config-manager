@@ -62,7 +62,7 @@ test('固定官方 Release 真实重建、HTTPS 回读、历史保留与正常�
   assert.equal(requests.length, start + 1);
   const after = await readUpdateState(directory!);
   assert.deepEqual(after.state.processed, before.state.processed);
-  assert.equal(after.activeRuleVersion, null);
+  assert.deepEqual(after.activeRuleVersions, {});
   const activationTransport = { branch: branch!, download: publication.download,
     async head(): Promise<string> { throw new Error('must not access stable head'); },
     async commit(): Promise<string> { throw new Error('must not activate'); } };

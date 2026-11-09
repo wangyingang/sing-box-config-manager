@@ -102,10 +102,10 @@ export async function verifyPreparedBaseline(options: Verification, stages: Base
     } },
   });
   if (status.pendingOperations.length) throw new Error(`Baseline verification pending: ${JSON.stringify(status.pendingOperations)}`);
-  const activeCount = Number(!!status.activeRuleVersion) + Object.keys(status.activeRuleVersions).length;
+  const activeCount = Object.keys(status.activeRuleVersions).length;
   if (activeCount !== plan.retain.active.length) throw new Error('Baseline active entry count changed');
   for (const { recordPath, record, control } of plan.retain.active) {
-    const active = record.logicalId ? status.activeRuleVersions[record.logicalId] : status.activeRuleVersion;
+    const active = status.activeRuleVersions[record.logicalId];
     const candidateUrl = immutableUrl(stages.evidence.head, `candidates/${record.candidateId}/readback.json`);
     const expected = rebaseActivation(record, (stages.stableRoot ?? stages.evidence).head, candidateUrl);
     if (stableParent.paths.includes(recordPath)) throw new Error(`Baseline parent contains prior activation: ${recordPath}`);
@@ -212,8 +212,9 @@ export async function prepareBaseline(options: Verification & {
   for (const { record, recordPath } of plan.retain.active) {
     const build = JSON.parse(metadata[`candidates/${record.candidateId}/build.json`].toString());
     const definition: RuleDefinition | undefined = build.definition;
+    if (!definition) throw new Error(`Missing configured rule definition for baseline: ${recordPath}`);
     activationSubscription(record.subscription, targetBranch, definition);
-    if (definition && recordPath !== `${definition.stablePath}/activation.json`) throw new Error(`Baseline stable path differs from original definition: ${recordPath}`);
+    if (recordPath !== `${definition.stablePath}/activation.json`) throw new Error(`Baseline stable path differs from original definition: ${recordPath}`);
     const rebased = rebaseActivation(record, (stableRoot ?? evidenceStage).head, evidenceUrls.get(record.candidateId)!);
     stableFiles[recordPath] = encode(rebased);
     for (const [path, file] of Object.entries(activationRecord(rebased, recordPath, targetBranch).candidateFiles)) {

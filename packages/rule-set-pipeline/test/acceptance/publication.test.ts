@@ -21,7 +21,7 @@ test('固定官方样本真实发布、HTTPS 回读及持久化成功证据', { 
   assert.equal(source.tag, '20261102130044');
   assert.equal(source.inputSha256, 'bfa4ab62d0f47216029ce6b777a2364978c3f28086060b592453684a0dd830ee');
   assert.equal(result.readback.length, 7);
-  assert.equal(persisted.activeRuleVersion, null);
+  assert.deepEqual(persisted.activeRuleVersions, {});
   const evidence = { date: new Date().toISOString(), source, result, persisted, requests };
   await writeFile(evidenceFile!, JSON.stringify(evidence, null, 2) + '\n', { flag: 'wx' });
 });

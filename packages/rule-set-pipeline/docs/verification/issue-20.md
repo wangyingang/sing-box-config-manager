@@ -1,5 +1,7 @@
 # #20 历史规则回滚验收
 
+本页保留旧单列表 v1 的验收记录。下列脚本及命令对应[废止前的源码](https://github.com/wangyingang/sing-box-config-manager/tree/3e4216576506edec2835363bc003556a3d10c3c0)，当前入口使用 v2。
+
 验收日期：2026-11-04（Asia/Shanghai）。范围依据 [#20](https://github.com/wangyingang/sing-box-config-manager/issues/20)、父 Spec #14 的 AC17 及 ADR 0006。[机器证据](issue-20.evidence.json) 分别保存公开 GitHub 回滚与受控真实客户端的结果。
 
 ## 回滚入口与保护

@@ -68,12 +68,12 @@ function github(options: { branch?: string; head?: string; private?: boolean; mi
   return { transport: githubActivation(branch, request), calls };
 }
 
-test('未初始化的隔离分支使用预期旧 head，一次提交稳定文件及记录且非强制更新', async () => {
-  const branch = 'acceptance-issue-19';
-  const remote = github({ branch });
-  const files = { 'stable/domains.srs': Buffer.from([0, 255, 1]), 'stable/activation.json': Buffer.from('{"candidate":"B"}\n') };
+test('已登记的 v2 激活一次提交稳定文件及记录且非强制更新', async () => {
+  const branch = 'main';
+  const remote = github();
+  const files = stableFiles;
   assert.equal(await remote.transport.head(), oldHead);
-  assert.equal(await remote.transport.commit(oldHead, files, '激活候选 B'), newCommit);
+  assert.equal(await remote.transport.commit(oldHead, files, '激活候选 B', reservation), newCommit);
   const blobs = remote.calls.filter(c => c.args[1].endsWith('/git/blobs'));
   assert.deepEqual(blobs.map(c => Buffer.from(c.input.content, 'base64')), Object.values(files));
   assert.ok(blobs.every(c => c.input.encoding === 'base64'));
@@ -102,7 +102,7 @@ for (const path of ['candidates/abc/domains.srs', 'README.md', '/stable/domains.
 
 test('预期旧 head 已被其他激活改变时直接冲突，不创建提交或 PATCH', async () => {
   const remote = github({ head: 'f'.repeat(40) });
-  await assert.rejects(remote.transport.commit(oldHead, { 'stable/domains.srs': Buffer.from('rules') }, '激活候选'), /ACTIVATION_CONFLICT/);
+  await assert.rejects(remote.transport.commit(oldHead, stableFiles, '激活候选', reservation), /ACTIVATION_CONFLICT/);
   assert.ok(remote.calls.every(c => c.input === undefined));
   assert.ok(!remote.calls.some(c => c.args.includes('PATCH')));
 });
@@ -124,7 +124,7 @@ test('PATCH 回复失败携带准确 attemptedCommit，保留 cause 且不重试
 for (const options of [{ missing: true }, { private: true }, { head: 'short-sha' }]) {
   test(`分支缺失、仓库私有或 head 非法时拒绝激活 ${JSON.stringify(options)}`, async () => {
     const remote = github(options);
-    await assert.rejects(remote.transport.commit(oldHead, { 'stable/domains.srs': Buffer.from('rules') }, '激活候选'));
+    await assert.rejects(remote.transport.commit(oldHead, stableFiles, '激活候选', reservation));
     assert.ok(remote.calls.every(c => c.input === undefined));
   });
 }
@@ -136,10 +136,10 @@ test('非法 expectedHead 在访问远端前拒绝；候选分支和路径型分
   for (const branch of ['candidates', 'acceptance/issue-19', '../main', 'main?x=1']) assert.throws(() => githubActivation(branch), /Invalid activation branch/);
 });
 
-const recordUrl = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${oldHead}/stable/activation.json`;
+const recordUrl = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${oldHead}/${recordPath}`;
 function activationRecord(options: { absent?: boolean; truncated?: boolean; pathType?: string; pathMode?: string; blobEncoding?: string; blobContent?: unknown; blobSize?: number; recordPath?: string; failureAt?: 'commit' | 'tree' | 'blob' } = {}) {
   const paths: string[] = [];
-  const content = Buffer.from('{"subscription":{"schemaVersion":1},"note":"已激活"}\n');
+  const content = Buffer.from('{"subscription":{"schemaVersion":2},"note":"已激活"}\n');
   const request: typeof ghJson = async (args, input) => {
     assert.equal(input, undefined, 'Record inspection must be read-only');
     const path = args[1].replace(`repos/${ARTIFACT_REPOSITORY}/`, ''); paths.push(path);
@@ -150,7 +150,7 @@ function activationRecord(options: { absent?: boolean; truncated?: boolean; path
     if (path === `git/commits/${oldHead}`) return { tree: { sha: 'b'.repeat(40) } };
     if (path === `git/trees/${'b'.repeat(40)}?recursive=1`) return { truncated: options.truncated ?? false,
       tree: options.absent ? [{ path: 'README.md', type: 'blob', sha: 'd'.repeat(40) }]
-        : [{ path: options.recordPath ?? 'stable/activation.json', type: options.pathType ?? 'blob', mode: options.pathMode ?? '100644', sha: 'c'.repeat(40) }] };
+        : [{ path: options.recordPath ?? recordPath, type: options.pathType ?? 'blob', mode: options.pathMode ?? '100644', sha: 'c'.repeat(40) }] };
     if (path === `git/blobs/${'c'.repeat(40)}`) return { encoding: options.blobEncoding ?? 'base64', size: options.blobSize ?? content.length, content: options.blobContent ?? content.toString('base64').replace(/.{24}/g, '$&\n') };
     throw new Error(`Unexpected record API ${path}`);
   };
@@ -202,7 +202,7 @@ for (const options of [{ pathMode: '120000' }, { blobEncoding: 'utf-8' }, { blob
 for (const recordPath of ['stable/openai/activation.json', 'stable/providers/ai_openai.v2/activation.json']) {
   test(`多集旧记录 ${recordPath} 从完整 Git tree/blob 读取，不依赖 CDN 404`, async () => {
     const remote = activationRecord({ recordPath });
-    assert.deepEqual(await remote.transport.download(recordUrl.replace('stable/activation.json', recordPath)), remote.content);
+    assert.deepEqual(await remote.transport.download(immutableUrl(oldHead, recordPath)), remote.content);
     assert.equal(remote.paths.length, 3);
   });
 }
@@ -219,29 +219,15 @@ test('低层激活 transport 拒绝直接修改配置化稳定文件，也拒绝
   assert.ok(!remote.calls.some(call => call.args.includes('PATCH')));
 });
 
-test('允许旧 v1 入口更新既有格式，拒绝它覆盖配置化规则集的稳定文件', async () => {
-  const legacy = github({ branch: 'acceptance-issue-19' });
-  await legacy.transport.commit(oldHead, { 'stable/v2fly/category-ai-not-cn/domains.srs': rule, 'stable/activation.json': Buffer.from('{}') }, '旧单集');
-  assert.ok(legacy.calls.some(call => call.args.includes('PATCH')));
-  for (const [record, file] of [[recordPath, rulePath], ['stable/china-ip/activation.json', 'stable/china-ip/route.srs']]) {
-    const managed = github({ branch: 'acceptance-issue-19', managedRecord: record, managedFile: file });
-    await assert.rejects(managed.transport.commit(oldHead, { [file]: rule, 'stable/activation.json': Buffer.from('{}') }, '覆盖固定版本'),
-      /owned by another rule set/);
-    assert.ok(!managed.calls.some(call => call.args.includes('PATCH')));
+test('登记写入必须包含且只包含一个规则集激活记录', async () => {
+  const remote = github();
+  for (const files of [
+    { [rulePath]: rule },
+    { ...stableFiles, 'stable/anthropic/activation.json': Buffer.from('{}') },
+  ]) {
+    await assert.rejects(remote.transport.commit(oldHead, files, '激活候选', reservation), /exactly one rule-set activation record/);
   }
-  const independent = github({ branch: 'acceptance-issue-19', managedRecord: recordPath, managedFile: rulePath });
-  await independent.transport.commit(oldHead, { 'stable/openai/route.srs': rule, 'stable/activation.json': Buffer.from('{}') }, '更新独立旧版路径');
-  assert.ok(independent.calls.some(call => call.args.includes('PATCH')));
-});
-
-test('已协调目标的 v1 写入也必须登记', async () => {
-  for (const remote of [github(), github({ branch: 'acceptance-issue-19', managedRecord: statePath })]) {
-    await assert.rejects(remote.transport.commit(oldHead, {
-      'stable/v2fly/category-ai-not-cn/domains.srs': rule,
-      'stable/activation.json': Buffer.from('{}'),
-    }, '绕过登记'), /requires a registered write/);
-    assert.ok(!remote.calls.some(call => call.input));
-  }
+  assert.equal(remote.calls.length, 0);
 });
 
 test('配置化提交准备完毕后，维护门禁拒绝就不会发送 ref PATCH', async () => {
