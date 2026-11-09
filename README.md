@@ -53,6 +53,19 @@ pnpm check
 
 每次运行保留工具身份、Git 状态、命令、退出码、测试统计、日志及文件摘要。证据目录必须不存在，已有证据不覆盖；用于阶段收尾的证据应在清理 worktree 前归档。Spec #14 的最终验收证据见 [docs/verification/spec-14-final/](docs/verification/spec-14-final/)。历史测试数量只属于记录中的提交和日期，不能表述为当前提交已经重新执行通过。
 
+读取已有验证证据或汇总父 Spec 的交付状态：
+
+```sh
+node scripts/inspect-evidence.mjs --evidence /path/to/verification --out .verification/evidence-report
+node scripts/check-spec-delivery.mjs --spec 66 --out .verification/spec-report --evidence /path/to/verification
+```
+
+两条命令只读取输入，完整结果写入新目录中的 `report.json`，终端输出摘要；输出目录的父目录须已存在，且不能写入被核验的证据目录。`--evidence` 可重复，按运行分别保留源码身份、验证范围和通过／失败／跳过统计。证据读取器核验 `verify.mjs` 的 schemaVersion 1 格式、文件大小和 SHA-256，分别报告原运行结果和文件完整性；不解析任意历史 JSON，也不把旧提交的结果认定为当前源码已通过。
+
+父 Spec 工具通过 `gh` 读取全部层级的子工单、正文和评论，复用单 PR 交付校验，汇总合并结果、CI、云端 Codex 审查提交及行内讨论。它处理分页并检查读取期间的对象变化；缺少 GitHub 关闭关联时，可用 `--link <子工单编号>:<PR编号>` 显式补充，参数可重复。仓库外运行时加 `--repo owner/name`。
+
+父 Spec 报告中的 `passed` 仅表示机械核对没有发现异常；CI 未完成或被跳过、审查未覆盖 PR head、未解决讨论、缺少关联或本地证据等均产生 `attention`，读取失败产生 `failed`；后两种状态返回非零退出码。证据读取命令在任一输入损坏或原验证未通过时返回非零退出码。工具不判断验收语义，也不自动关联本地证据与 PR、不修改工单状态、不触发生产更新或清理；收尾仍须逐项对照验收标准。
+
 | 命令 | 作用 |
 | --- | --- |
 | `pnpm test:tools` | 执行根目录工具脚本测试 |
