@@ -29,7 +29,7 @@ function maintenanceFailed(result: MaintenanceOutcome | undefined) {
   return !result || result.status === 'failed' || result.error !== undefined
     || (result.maintenance === 'maintenance' && !result.run)
     || result.blockers?.some(({ status }) => /(?:^|-)verification-pending$|-commit-pending$|-readback-pending$/.test(status)
-      || status === 'current-evidence-mismatch' || status === 'candidate-completion-unverified' || status === 'retired-subscription');
+      || status === 'current-evidence-mismatch' || status === 'candidate-completion-unverified');
 }
 
 export async function runRuleWorkflow(options: WorkflowOptions, operations: WorkflowOperations,

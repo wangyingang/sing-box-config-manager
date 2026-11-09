@@ -157,21 +157,20 @@ for (const fault of ['missing', 'schema', 'identity', 'repository', 'branch', 'p
   });
 }
 
-test('已废止的 v1 记录不参与状态和回滚，维护不会重写或清除旧交付', async () => {
+test('维护发现未归属的稳定文件时延期并保留文件', async () => {
   const env = remote();
   activate(env, addCandidate(env, 'a1'));
-  const retired = 'stable/activation.json', rule = 'stable/domains.srs';
-  env.stable.set(retired, encode({ subscription: { schemaVersion: 1 } }));
-  env.stable.set(rule, Buffer.from('historical stable bytes'));
+  const rule = 'stable/untracked/rules.srs';
+  env.stable.set(rule, Buffer.from('untracked stable bytes'));
   const original = new Map(env.stable);
   const options = { repository: env.repository, publication: env.publication, activation: env.publication };
   const status = await readRemoteStatus(options);
   assert.equal(status.activeRuleVersions.openai.activation.candidateId, 'a1');
   assert.deepEqual(Object.keys(status.rollbackTargets), ['openai']);
-  assert.ok(status.pendingOperations.some(item => item.id === retired && item.status === 'retired-subscription'));
+  assert.deepEqual(status.pendingOperations, []);
   const result = await manageMaintenance({ ...options, action: 'enter', manual: true, refs: async () => [] });
   assert.equal(result.status, 'deferred');
-  assert.ok('blockers' in result && result.blockers.some(item => item.id === retired && item.status === 'retired-subscription'));
+  assert.ok('blockers' in result && result.blockers.some(item => item.id === rule && item.status === 'unidentified-stable-file'));
   assert.deepEqual(env.stable, original);
 });
 

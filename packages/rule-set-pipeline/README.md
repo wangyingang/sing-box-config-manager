@@ -80,7 +80,7 @@ CLI 的多集命令和规则维护 Actions 共用正式配置 [`config/rulesets.
 
 使用四集配置构建时，用 `--id` 选择同一来源的规则集。V2Fly 使用 `--release`，Git 来源可用 `--commit` 复现固定输入。需要在隔离分支发布时，先创建专用的 `acceptance-*` 分支并准备初始提交，再把配置复制到分支专用文件并修改 `target.branch`。参照[初始化和候选发布](#正常更新与候选发布)登记远端状态。恢复已登记操作时需要原配置和原选择。
 
-`target` 只能是可信产物仓库的 `main` 或 `acceptance-*` 分支；每个 `stablePath` 必须是互不重叠的 `stable/` 相对路径，不能占用 `stable/activation.json`。本地构建只记录这些发布意图，不写入目标分支。
+`target` 只能是可信产物仓库的 `main` 或 `acceptance-*` 分支；每个 `stablePath` 必须是互不重叠的 `stable/` 相对路径。本地构建只记录这些发布意图，不写入目标分支。
 
 ```sh
 pnpm --dir packages/rule-set-pipeline build:release --binary /absolute/path/to/sing-box-1.14.4 --release 20261104112839 --config config/rulesets.yml --id openai --id anthropic --id google-deepmind --out /tmp/three-ai-rules
@@ -175,7 +175,7 @@ pnpm --dir packages/rule-set-pipeline status --config "$config" --binary "$binar
 
 提交回复丢失时先核实远端。已确认提交的阶段复用其文件；确认未提交的阶段可在原保护条件仍成立时重试。无法核实，或提交之后 head 又发生变化，报告 `PUBLICATION_PENDING` 并停止后续写入；已知 attempted commit 保留在错误中。再次运行从远端进度恢复，不能把本地异常解释成远端未提交。
 
-`status` 返回 `authority: remote`、维护状态、`candidateAvailability` 和 `pendingOperations`。默认执行证据结构、地址和字节摘要核验，标注 `verification: structural`；提供 `--binary` 时额外执行真实原生复验，标注 `native`。已提交的当前版本即使候选回读失败也仍报告为已激活，并单独标记待核实。如分支仍含旧版 `stable/activation.json`，`pendingOperations` 会标记 `retired-subscription`。历史读取失败通过 `historyComplete`／`historyErrors` 报告，不能将空列表视为完整历史。初始化和查询 API 分别为 `initializeRemoteState(repository, targetBranch)`、`readRemoteStatus({ repository, publication?, binary? })`。
+`status` 返回 `authority: remote`、维护状态、`candidateAvailability` 和 `pendingOperations`。默认执行证据结构、地址和字节摘要核验，标注 `verification: structural`；提供 `--binary` 时额外执行真实原生复验，标注 `native`。已提交的当前版本即使候选回读失败也仍报告为已激活，并单独标记待核实。历史读取失败通过 `historyComplete`／`historyErrors` 报告，不能将空列表视为完整历史。初始化和查询 API 分别为 `initializeRemoteState(repository, targetBranch)`、`readRemoteStatus({ repository, publication?, binary? })`。
 
 同一缓存目录的 `update.lock/` 仍拒绝本机并发；远端预期 head 保护跨机器写入。进程被强制终止后，可换新目录恢复；要复用旧目录，先确认没有存活进程再移除残留锁。不要删除远端来源记录来绕过来源变化错误。人工固定、立即检查和主动恢复使用同一远端操作日志。
 
@@ -237,7 +237,7 @@ pnpm --dir packages/rule-set-pipeline rollback --config "$config" --id china-ip 
 
 ## 预览清理与维护隔离
 
-用 `maintenance-preview` 查看当前稳定入口、人工控制、候选证据、处理进度、拟清理范围和可能保留旧历史的其他 Git 引用。预览只读取远端。保留集合覆盖所有配置化规则集，当前版本的使用时长不影响保留。发现已废止的 v1 激活记录时，维护会延期，保留旧稳定文件及 Git 历史。Git 候选的 `sourceKey` 对应远端登记的固定 commit，`candidatePaths` 列出需要保留和核验的证据文件。非当前历史和已完成的未激活候选可进入清理范围，没有最低保留天数。
+用 `maintenance-preview` 查看当前稳定入口、人工控制、候选证据、处理进度、拟清理范围和可能保留旧历史的其他 Git 引用。预览只读取远端。保留集合覆盖所有配置化规则集，当前版本的使用时长不影响保留。稳定目录中存在无法归属到规则集的文件时，清理会延期。Git 候选的 `sourceKey` 对应远端登记的固定 commit，`candidatePaths` 列出需要保留和核验的证据文件。非当前历史和已完成的未激活候选可进入清理范围，没有最低保留天数。
 
 ```sh
 pnpm --dir packages/rule-set-pipeline exec node --import tsx src/cli.ts maintenance-preview --branch acceptance-example \
@@ -358,7 +358,7 @@ pnpm --dir packages/rule-set-pipeline rebuild \
 
 激活把候选文件交给稳定入口，开始影响后续客户端下载。管理者用 `--config` 和一个 `--id` 选择规则集。CLI 默认按配置生成 [Rule Subscription v2](contracts/rule-subscription-v2.md)。若显式提供 `--subscription`，其契约必须与所选规则集相符。实际调用见[按逻辑 ID 显式激活](#按逻辑-id-显式激活)。
 
-Rule Subscription v1 已废止。旧单列表的构建、候选发布及重建仍可使用。要交付同一上游列表，应在版本化配置中定义逻辑规则集，并通过 v2 发布、激活和引用。已有的 v1 稳定文件和激活记录留在产物仓库，由维护者另行处理。旧的本地 `active-version.json` 回执保留原文件，状态查询已改用 `activeRuleVersions`。历史契约见 [Rule Subscription v1](contracts/rule-subscription.md)。
+Rule Subscription v1 已废止。旧单列表的构建、候选发布及重建仍可使用。要交付同一上游列表，应在版本化配置中定义逻辑规则集，并通过 v2 发布、激活和引用。状态和本地回执按逻辑 ID 查询，使用 `activeRuleVersions`。历史契约见 [Rule Subscription v1](contracts/rule-subscription.md)。
 
 激活重新下载候选的六份文件并核对回读链、来源、Conversion Report、构建身份、实际摘要／字节数／非空 term 数、用途映射及能力。重新用指定 1.14.4 编译、解码、加载实际 JSON，并逐字节比对 SRS。本地 `verified`、单独的 `passed` 或 `build.json` 不能放行。明确标识 `kind: synthetic`、description 和 revision 的合成候选只可进入 `acceptance-*` 分支。
 

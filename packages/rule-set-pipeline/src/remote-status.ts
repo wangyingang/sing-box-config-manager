@@ -192,12 +192,7 @@ export async function readRemoteStatus(options: {
   const historyErrors: Record<string, { commit?: string; error: string }[]> = {};
   const historicalActivations: Record<string, HistoryTarget[]> = {};
   const currentByPath = new Map<string, ReturnType<typeof activationRecord>['record']>();
-  const retiredRecord = 'stable/activation.json';
-  if (!options.recordPaths && stable.paths.includes(retiredRecord)) {
-    pendingOperations.push({ id: retiredRecord, status: 'retired-subscription',
-      error: 'Rule Subscription v1 is retired; history cleanup cannot rewrite the legacy delivery' });
-  }
-  const paths = stable.paths.filter(path => (!options.recordPaths || options.recordPaths.has(path)) && /^stable\/(?:[a-z0-9._-]+\/)+activation\.json$/.test(path));
+  const paths = stable.paths.filter(path => (!options.recordPaths || options.recordPaths.has(path)) && /^stable\/(?:[a-z0-9][a-z0-9._-]*\/)+activation\.json$/.test(path));
   for (const path of paths) {
     const bytes = await stable.read(path);
     requireThat(bytes, `Missing activation record: ${path}`);

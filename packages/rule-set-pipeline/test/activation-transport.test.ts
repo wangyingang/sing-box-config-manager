@@ -136,10 +136,10 @@ test('非法 expectedHead 在访问远端前拒绝；候选分支和路径型分
   for (const branch of ['candidates', 'acceptance/issue-19', '../main', 'main?x=1']) assert.throws(() => githubActivation(branch), /Invalid activation branch/);
 });
 
-const recordUrl = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${oldHead}/stable/activation.json`;
+const recordUrl = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${oldHead}/${recordPath}`;
 function activationRecord(options: { absent?: boolean; truncated?: boolean; pathType?: string; pathMode?: string; blobEncoding?: string; blobContent?: unknown; blobSize?: number; recordPath?: string; failureAt?: 'commit' | 'tree' | 'blob' } = {}) {
   const paths: string[] = [];
-  const content = Buffer.from('{"subscription":{"schemaVersion":1},"note":"已激活"}\n');
+  const content = Buffer.from('{"subscription":{"schemaVersion":2},"note":"已激活"}\n');
   const request: typeof ghJson = async (args, input) => {
     assert.equal(input, undefined, 'Record inspection must be read-only');
     const path = args[1].replace(`repos/${ARTIFACT_REPOSITORY}/`, ''); paths.push(path);
@@ -150,7 +150,7 @@ function activationRecord(options: { absent?: boolean; truncated?: boolean; path
     if (path === `git/commits/${oldHead}`) return { tree: { sha: 'b'.repeat(40) } };
     if (path === `git/trees/${'b'.repeat(40)}?recursive=1`) return { truncated: options.truncated ?? false,
       tree: options.absent ? [{ path: 'README.md', type: 'blob', sha: 'd'.repeat(40) }]
-        : [{ path: options.recordPath ?? 'stable/activation.json', type: options.pathType ?? 'blob', mode: options.pathMode ?? '100644', sha: 'c'.repeat(40) }] };
+        : [{ path: options.recordPath ?? recordPath, type: options.pathType ?? 'blob', mode: options.pathMode ?? '100644', sha: 'c'.repeat(40) }] };
     if (path === `git/blobs/${'c'.repeat(40)}`) return { encoding: options.blobEncoding ?? 'base64', size: options.blobSize ?? content.length, content: options.blobContent ?? content.toString('base64').replace(/.{24}/g, '$&\n') };
     throw new Error(`Unexpected record API ${path}`);
   };
@@ -202,7 +202,7 @@ for (const options of [{ pathMode: '120000' }, { blobEncoding: 'utf-8' }, { blob
 for (const recordPath of ['stable/openai/activation.json', 'stable/providers/ai_openai.v2/activation.json']) {
   test(`多集旧记录 ${recordPath} 从完整 Git tree/blob 读取，不依赖 CDN 404`, async () => {
     const remote = activationRecord({ recordPath });
-    assert.deepEqual(await remote.transport.download(recordUrl.replace('stable/activation.json', recordPath)), remote.content);
+    assert.deepEqual(await remote.transport.download(immutableUrl(oldHead, recordPath)), remote.content);
     assert.equal(remote.paths.length, 3);
   });
 }
@@ -219,21 +219,15 @@ test('低层激活 transport 拒绝直接修改配置化稳定文件，也拒绝
   assert.ok(!remote.calls.some(call => call.args.includes('PATCH')));
 });
 
-test('低层激活 transport 拒绝写入已废止的 v1 记录，即使提供登记信息', async () => {
-  for (const branch of ['main', 'acceptance-issue-19']) {
-    const remote = github({ branch });
-    await assert.rejects(remote.transport.commit(oldHead, {
-      'stable/v2fly/category-ai-not-cn/domains.srs': rule,
-      'stable/activation.json': Buffer.from('{}'),
-    }, '旧单列表', reservation), /Rule Subscription v1 is retired/);
-    assert.equal(remote.calls.length, 0);
+test('登记写入必须包含且只包含一个规则集激活记录', async () => {
+  const remote = github();
+  for (const files of [
+    { [rulePath]: rule },
+    { ...stableFiles, 'stable/anthropic/activation.json': Buffer.from('{}') },
+  ]) {
+    await assert.rejects(remote.transport.commit(oldHead, files, '激活候选', reservation), /exactly one rule-set activation record/);
   }
-});
-
-test('配置化激活拒绝覆盖已废止的 v1 交付文件', async () => {
-  const remote = github({ managedRecord: 'stable/activation.json', managedFile: rulePath });
-  await assert.rejects(remote.transport.commit(oldHead, stableFiles, '激活候选', reservation), /owned by the legacy rule set/);
-  assert.ok(!remote.calls.some(call => call.input));
+  assert.equal(remote.calls.length, 0);
 });
 
 test('配置化提交准备完毕后，维护门禁拒绝就不会发送 ref PATCH', async () => {

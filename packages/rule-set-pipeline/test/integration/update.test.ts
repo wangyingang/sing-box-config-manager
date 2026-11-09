@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -61,8 +61,9 @@ async function isolated(run: (directory: string, env: ReturnType<typeof environm
 const options = (directory: string, env: ReturnType<typeof environment>) => ({ stateDirectory: directory, binary: binary!, fetch: env.fetcher, publication: env.publication });
 
 test('正常更新固定一次 latest，分阶段发布后回读真实字节和原生内容，持久成功后跳过', { skip: !binary }, async () => isolated(async (directory, env) => {
-  const active = '{"revision":"unchanged"}\n';
-  await writeFile(join(directory, 'active-version.json'), active);
+  const active = JSON.stringify({ status: 'activated', activation: { logicalId: 'openai' } });
+  await mkdir(join(directory, 'active-rule-versions'));
+  await writeFile(join(directory, 'active-rule-versions/openai.json'), active);
   const result = await updateRules(options(directory, env));
   assert.equal(result.status, 'processed');
   assert.equal(env.requests.filter(path => path.endsWith('/latest')).length, 1);
@@ -82,7 +83,7 @@ test('正常更新固定一次 latest，分阶段发布后回读真实字节和�
   assert.equal((await updateRules(options(directory, env))).status, 'skipped');
   assert.equal(env.requests.length, before + 1);
   assert.equal(env.commits.length, 3);
-  assert.equal(await readFile(join(directory, 'active-version.json'), 'utf8'), active);
+  assert.equal(await readFile(join(directory, 'active-rule-versions/openai.json'), 'utf8'), active);
   env.changeId();
   await assert.rejects(updateRules(options(directory, env)), /SOURCE_CHANGED/);
 }));

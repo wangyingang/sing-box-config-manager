@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { copyFile, mkdtemp, readFile, rm, writeFile, appendFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile, appendFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -56,8 +56,9 @@ test('同一 Release 重建复验固定 ID、保留历史与成功处理记录�
   if (initial.status !== 'processed') return;
   const before = (await readUpdateState(directory)).state;
   const history = new Map(env.stored);
-  const active = '{"revision":"issue-22-isolated-active"}\n';
-  await writeFile(join(directory, 'active-version.json'), active);
+  const active = JSON.stringify({ status: 'activated', activation: { logicalId: 'openai' } });
+  await mkdir(join(directory, 'active-rule-versions'));
+  await writeFile(join(directory, 'active-rule-versions/openai.json'), active);
   const start = env.requests.length;
   const rebuilt = await rebuildRules({ ...options(directory, env), release: tag });
   assert.equal(rebuilt.status, 'processed');
@@ -103,7 +104,7 @@ test('同一 Release 重建复验固定 ID、保留历史与成功处理记录�
     await assert.rejects(verifyActivationCandidate({ candidateEvidenceUrl: rebuilt.candidate.evidenceUrl!, binary: binary! }, activationTransport), /Unsupported build contracts/);
   }
   env.stored.set(buildKey, originalBuild); env.stored.set(evidenceKey, originalEvidence);
-  assert.equal(await readFile(join(directory, 'active-version.json'), 'utf8'), active);
+  assert.equal(await readFile(join(directory, 'active-rule-versions/openai.json'), 'utf8'), active);
   const count = env.requests.length;
   const remoteCount = env.stored.size;
   assert.equal((await updateRules({ ...options(directory, env), binary: '/must-not-run' })).status, 'skipped');

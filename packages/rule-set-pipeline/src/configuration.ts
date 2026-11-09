@@ -46,7 +46,7 @@ export function parseRuleDefinition(input: unknown, format: SourceInput['input']
   if (typeof list !== 'string' || (format === 'cidr-text' ? list !== 'all' : !/^[a-z0-9][a-z0-9!._-]*$/.test(list))) {
     throw new Error(`Invalid ${format} list: ${String(list)}`);
   }
-  if (typeof path !== 'string' || !stablePath.test(path) || path === 'stable/activation.json' || path.startsWith('stable/activation.json/')) {
+  if (typeof path !== 'string' || !stablePath.test(path)) {
     throw new Error(`Invalid stable path: ${String(path)}`);
   }
   const declared = exact(usages, [...USAGES], 'usages');

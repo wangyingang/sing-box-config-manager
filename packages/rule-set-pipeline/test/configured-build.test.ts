@@ -39,7 +39,6 @@ test('配置在写入前拒绝旧格式、无效来源、用途、身份和目�
     configuration.replace('id: anthropic', 'id: openai'),
     configuration.replace('stable/anthropic', 'stable/openai'),
     configuration.replace('stable/anthropic', 'stable/../outside'),
-    configuration.replace('stable/anthropic', 'stable/activation.json'),
     configuration.replace('branch: main', 'branch: other'),
     configuration.replace('wangyingang/sing-box-rule-artifacts', 'other/repository'),
   ]) assert.throws(() => parseBuildConfiguration(invalid));

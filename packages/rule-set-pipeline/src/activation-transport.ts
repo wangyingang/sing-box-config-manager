@@ -17,7 +17,6 @@ export interface ActivationTransport {
 
 const configuredRecord = /^stable\/(?:[a-z0-9][a-z0-9._-]*\/)+activation\.json$/;
 const configuredFilename = /^(?:domains|route)\.(?:srs|json)$/;
-const legacyRecordPath = 'stable/activation.json';
 const recordDirectory = (path: string) => path.slice(0, -'activation.json'.length);
 
 /** Branch must already exist. Creating a production or acceptance environment is separate. */
@@ -37,7 +36,7 @@ export function githubActivation(branch = 'main', request: typeof ghJson = ghJso
     },
     async download(url) {
       const prefix = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/`;
-      const match = url.startsWith(prefix) ? /^([a-f0-9]{40})\/(stable\/(?:[a-z0-9._-]+\/)*activation\.json)$/.exec(url.slice(prefix.length)) : null;
+      const match = url.startsWith(prefix) ? /^([a-f0-9]{40})\/(stable\/(?:[a-z0-9][a-z0-9._-]*\/)+activation\.json)$/.exec(url.slice(prefix.length)) : null;
       if (!match) return githubPublication(request).download(url);
       // A fresh raw/CDN 404 cannot prove the old record is absent. Read the
       // immutable Git tree/blob for concurrency state, failing closed on errors.
@@ -59,8 +58,10 @@ export function githubActivation(branch = 'main', request: typeof ghJson = ghJso
       for (const path of paths) {
         if (!/^stable\/[a-zA-Z0-9/_.-]+$/.test(path) || path.split('/').some(part => part === '.' || part === '..' || !part)) throw new Error('Invalid stable path');
       }
-      if (paths.includes(legacyRecordPath)) throw new Error('Rule Subscription v1 is retired');
       if (!reservation) throw new Error('Configured activation requires a registered write');
+      const records = paths.filter(path => configuredRecord.test(path));
+      if (records.length !== 1) throw new Error('Expected exactly one rule-set activation record');
+      const [selectedRecord] = records;
       // Recheck immediately before constructing the single-parent update.
       if (await this.head() !== expectedHead) throw new Error('ACTIVATION_CONFLICT: remote head changed');
       const parent = await api(`git/commits/${expectedHead}`);
@@ -69,12 +70,9 @@ export function githubActivation(branch = 'main', request: typeof ghJson = ghJso
       const existingPaths = new Map<string, string>(existingTree.tree.map((entry: { path: string; type: string }) => [entry.path, entry.type]));
       const otherRecords = [...existingPaths.keys()].filter(path => configuredRecord.test(path) && !paths.includes(path));
       const ownedDirectories = otherRecords.map(recordDirectory);
-      const selectedRecord = paths.find(path => configuredRecord.test(path));
-      if (selectedRecord) {
-        const selectedDirectory = recordDirectory(selectedRecord);
-        if (ownedDirectories.some(directory => directory.startsWith(selectedDirectory) || selectedDirectory.startsWith(directory))) {
-          throw new Error('Configured stable directory overlaps another rule set');
-        }
+      const selectedDirectory = recordDirectory(selectedRecord);
+      if (ownedDirectories.some(directory => directory.startsWith(selectedDirectory) || selectedDirectory.startsWith(directory))) {
+        throw new Error('Configured stable directory overlaps another rule set');
       }
       for (const path of paths) {
         if (existingPaths.has(path) && existingPaths.get(path) !== 'blob') {
@@ -91,10 +89,6 @@ export function githubActivation(branch = 'main', request: typeof ghJson = ghJso
         }
         const owned = overlaps.find(path => Object.hasOwn(record.files, path));
         if (owned) throw new Error(`Stable path is owned by another rule set: ${owned}`);
-      }
-      if (selectedRecord && existingPaths.has(legacyRecordPath)) {
-        const legacy = JSON.parse((await this.download(immutableUrl(expectedHead, legacyRecordPath))).toString());
-        if (!legacy.files || paths.some(path => Object.hasOwn(legacy.files, path))) throw new Error('Stable path is owned by the legacy rule set');
       }
       const tree = [];
       for (const [path, bytes] of Object.entries(files)) {

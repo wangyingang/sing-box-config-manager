@@ -57,7 +57,7 @@ export interface ManualOperation extends ActivationOperation {
 export interface ActivationOperation {
   id: string;
   kind: 'activate' | 'rollback' | 'automatic';
-  logicalId?: string;
+  logicalId: string;
   recordPath: string;
   generation: number;
   expectedHead: string;
@@ -138,10 +138,8 @@ function validate(value: unknown): asserts value is RemoteJournal {
     if (!object(operations)) throw new Error('REMOTE_STATE_CORRUPT: activation operations');
     for (const [id, op] of Object.entries(operations)) {
       if (!object(op) || !/^[a-f0-9-]{36}$/.test(id) || op.id !== id || !kinds.some(kind => kind === op.kind)
-        || (op.recordPath === 'stable/activation.json'
-          ? op.logicalId !== undefined || op.kind === 'automatic'
-          : typeof op.logicalId !== 'string' || !/^[a-z][a-z0-9-]*$/.test(op.logicalId)
-            || typeof op.recordPath !== 'string' || !/^stable\/(?:[a-z0-9][a-z0-9._-]*\/)+activation\.json$/.test(op.recordPath))
+        || typeof op.logicalId !== 'string' || !/^[a-z][a-z0-9-]*$/.test(op.logicalId)
+        || typeof op.recordPath !== 'string' || !/^stable\/(?:[a-z0-9][a-z0-9._-]*\/)+activation\.json$/.test(op.recordPath)
         || !Number.isSafeInteger(op.generation) || op.generation < 1 || op.generation > value.generation
         || !sha(op.expectedHead) || op.previousActivationId !== undefined && typeof op.previousActivationId !== 'string'
         || typeof op.candidateId !== 'string' || !/^[a-f0-9-]+$/.test(op.candidateId)
