@@ -1,6 +1,6 @@
 # Rule Set Pipeline
 
-包名：`@sing-box-config-manager/rule-set-pipeline`。管理者需要更新系统维护的规则集合时，本模块从官方来源生成 sing-box 可加载的规则文件，验证并上传为候选。管理者可显式激活候选，检查流程也可自动激活符合条件的规则。客户端随后通过稳定地址取得当前规则；构建成功、候选验证成功、稳定入口切换和客户端加载完成是不同的状态。
+包名：`@sing-box-config-manager/rule-set-pipeline`。管理者需要更新系统维护的规则集合时，本模块从受信任的上游生成 sing-box 可加载的规则文件，验证并上传为候选。管理者可显式激活候选，检查流程也可自动激活符合条件的规则。客户端随后通过稳定地址取得当前规则；构建成功、候选验证成功、稳定入口切换和客户端加载完成是不同的状态。
 
 正式配置 [`config/rulesets.yml`](config/rulesets.yml) 包含两类来源。V2Fly `domain-list-community` Release 提供 `openai`、`anthropic` 和 `google-deepmind`，Git 仓库 `gaoyifan/china-operator-ip` 的 `ip-lists` 分支提供双栈 `china-ip`。[维护工作流](#actions-规则维护)自动加载这份配置，CLI 通过 `--config` 显式选用。规则文件面向 sing-box **1.14.4**，生成 Source Format **4** 的 JSON 及对应 SRS。
 
@@ -65,6 +65,18 @@ pnpm --dir packages/rule-set-pipeline build:release --binary /absolute/path/to/s
 ### 配置驱动的多规则集构建
 
 CLI 的多集命令和规则维护 Actions 共用正式配置 [`config/rulesets.yml`](config/rulesets.yml)（`schemaVersion: 2`）。正式配置包含 V2Fly 的 `openai`、`anthropic`、`google-deepmind` 和 Git 来源的 `china-ip`，通过 `usages` 声明各集用途。V2Fly 三集共享 Release 的 YAML 和摘要。示例见 [`samples/rulesets.example.yml`](samples/rulesets.example.yml)。独立的 [`config/china-ip.yml`](config/china-ip.yml) 保留供既有单集调用使用。
+
+每个规则集通过 `source` 选择一个受信任的上游。当前解析器只接受 `v2fly/domain-list-community` 官方 Release 的 `dlc.dat_plain.yml` 及其摘要文件，以及 `gaoyifan/china-operator-ip` 的 `ip-lists` 分支中的 `china46.txt`。规则分类及其覆盖范围由上游维护。Pipeline 核验固定输入、转换结果和发布产物。跨源合并、来源评分、封锁探测和 IP 地理归属验证属于范围外。
+
+正式配置启用前，三集的逻辑 ID 和稳定 URL 目录同步去掉了 `ai-` 前缀。`google-deepmind` 沿用 V2Fly 的完整分类，范围比 Gemini 更广。
+
+| 旧逻辑 ID | 正式逻辑 ID | 稳定 URL 目录 |
+| --- | --- | --- |
+| `ai-openai` | `openai` | `stable/openai/` |
+| `ai-anthropic` | `anthropic` | `stable/anthropic/` |
+| `ai-google-deepmind` | `google-deepmind` | `stable/google-deepmind/` |
+
+正式配置从新状态初始化。旧 ID 和 URL 没有兼容别名，旧三集配置及运行记录没有自动迁移入口。已有 Recipe 或 Template 若使用旧 ID，需要在新的修订中改绑，再重新发布配置。三集更名在隔离目标验收，实际客户端迁移需单独安排。见 [#67 更名验收](docs/verification/issue-67.md)。
 
 使用四集配置构建时，用 `--id` 选择同一来源的规则集。V2Fly 使用 `--release`，Git 来源可用 `--commit` 复现固定输入。需要在隔离分支发布时，先创建专用的 `acceptance-*` 分支并准备初始提交，再把配置复制到分支专用文件并修改 `target.branch`。参照[初始化和候选发布](#正常更新与候选发布)登记远端状态。恢复已登记操作时需要原配置和原选择。
 
@@ -221,7 +233,7 @@ pnpm --dir packages/rule-set-pipeline rollback --config "$config" --id china-ip 
 
 检查 **Summary** 或保留 14 天的 `rule-maintenance-summary` artifact。检查摘要列出各集的来源、结果和当前交付版本。维护摘要列出阶段、保留项、拟清理数量及延期原因。更新出现失败或待核实结果时，先对同一产物目标运行 `status`，再按原配置与选择恢复。维护中断时先用下节的 `maintenance-resume` 读取远端阶段，按结果准备、切换或退出。Actions 同一目标共用并发组，取消或超时后仍须核实远端状态。
 
-隔离验收记录见 [#73 四集工作流](docs/verification/issue-73.md)，初次交付的调度与通知设置见 [#55 验收记录](docs/verification/issue-55.md)。生产开关、定时触发和实际设备版本须以各自的运行记录为准。
+隔离验收记录见 [#73 四集工作流](docs/verification/issue-73.md)，默认分支的实测见 [2026-11-09 定时触发记录](docs/verification/issue-73.md#2026-11-09-默认分支定时触发记录)。初次交付的调度与通知设置见 [#55 验收记录](docs/verification/issue-55.md)。生产开关和实际设备版本须以各自的运行记录为准。
 
 ## 预览清理与维护隔离
 

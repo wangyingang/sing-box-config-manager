@@ -26,3 +26,7 @@ RULE_OFFICIAL_CONFIG_PROBE=1 SING_BOX_TEST_BINARY=/absolute/path/to/sing-box-1.1
 ```
 
 探针需要可写产物仓库隔离引用的 `gh` 登录。探针在删除专用分支和维护引用前记录验证结果，删除后复核引用及生产 `main`、`candidates` heads。删除分支后旧 Git 对象仍可能暂时可访问；恢复验收依据远端基线状态和公开操作的结果。测试不启用生产更新或清理，不切换生产规则 URL，也不迁移现有客户端。本次执行记录及尚未验证的项目见交付 PR。
+
+## 2026-11-09 默认分支定时触发记录
+
+北京时间 07:49，GitHub Actions 在源码仓库默认分支 `main` 上触发 `schedule` 运行，源码提交为 `afadb95611bd779a63dd2a468ff99e02237f184e`。运行成功，`rule-maintenance-summary` 记录了 `operation: daily`、`target: main`，检查规则和进入维护均为 `disabled`。本次验证范围是 GitHub 的默认分支调度与生产开关关闭时的运行路径。生产更新和清理的实际执行需另行验证。[运行记录](https://github.com/wangyingang/sing-box-config-manager/actions/runs/42536996068)
