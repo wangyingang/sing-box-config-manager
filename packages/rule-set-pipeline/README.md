@@ -418,6 +418,14 @@ pnpm --dir packages/rule-set-pipeline rollback \
 
 更新周期和缓存由实际客户端配置决定，本项目不统一强制设置。受控测试中的临时 CA、`1s` 周期及持久缓存仅是测试条件。具体执行方式见[客户端故障与缓存离线恢复（#21）](#客户端故障与缓存离线恢复21)，原生边界与已执行证据见 [#21 验收记录](docs/verification/issue-21.md)。
 
+## 2026-11-09 SFM TestFlight 复测
+
+在一台 macOS 设备上使用 SFM TestFlight 1.14.1000（build 430），从原 `tun` 的本地副本加载隔离分支的 `openai` 稳定 SRS。以下时间为 UTC+8。[隔离分支激活记录](https://github.com/wangyingang/sing-box-rule-artifacts/blob/73a161087b8796623324f2430ef1eaaedfc11b9e/stable/openai/activation.json)
+
+- 19:51:35，SFM 在同一连接 ID 下记录了 `api.openai.com`、试用规则 `openai-sfm-pilot` 的命中、路由到「海外AI」以及实际出站 `dmit-vps-reality`（VLESS）。探测返回 `HTTP 401`。
+- 上次的 Codex 响应流故障在本轮未复现。试用窗口内未记录到模型响应流断开或重试。Codex 的远程控制 WebSocket 在切入后和切回后各有一次断开记录。
+- 切回后，SFM 于 19:52:07 重新连上，运行配置与原 iCloud `tun` 一致。19:53 重新探测 `api.openai.com`，仍返回 `HTTP 401`。
+
 ## 输入与转换边界
 
 公开 Node API 由包入口导出：
