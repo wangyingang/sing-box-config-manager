@@ -123,11 +123,13 @@ pnpm --dir packages/rule-set-pipeline activate \
 
 以上变量沿用[候选发布示例](#正常更新与候选发布)。`$evidence_url` 取所选集已验证候选的完整 commit `readback.json` URL，`$stable_head` 取同一目标的最新 `status.stableHead`。显式传入的 `--branch` 和订阅 URL 必须与配置一致。一次成功切换只提交选中集的稳定规则文件及 `stablePath/activation.json`。该记录保存候选、来源、验证、订阅、历史激活引用和人工控制。其他集的字节、控制和历史保留。
 
-`activation.control` 保存 `revision`、`reason`、`pauseAutomaticActivation` 和 `pauseAutomaticRetry`。人工指定的原因是 `manual-activation`，暂停自动激活。人工回滚的原因是 `manual-rollback`，同时暂停自动重试和自动激活。每次成功的人工操作都会生成新修订，即使所选候选已经是当前版本。候选发布和重建不会解除固定。旧激活记录仍可查询，其中没有 `control` 时表示尚未记录人工固定。
+`activation.control` 保存 `revision`、`reason`、`pauseAutomaticActivation` 和 `pauseAutomaticRetry`。人工指定的原因是 `manual-activation`，暂停自动激活。人工回滚的原因是 `manual-rollback`，同时暂停自动重试和自动激活。每次成功的人工操作都会生成新修订，即使所选候选已经是当前版本。候选发布和重建不会解除固定。v2 激活记录缺少 `control` 时，表示该记录未保存人工固定。
 
 激活先复验候选的固定 HTTPS 字节、Manifest、来源、构建身份和原生结果，再核对预期旧 head 中的该集契约和实际稳定文件。候选的不可变 HTTPS 字节还须与当前保留的 Git 文件一致。检查通过后，先在远端操作日志（`pipeline/state.json`）登记操作 ID、所选候选、原稳定 head 和维护代次，登记同时绑定已验证的规则摘要和激活记录，再提交选中集的稳定文件。生产布局在 `candidates` 登记，在 `main` 切换。隔离分支同时承担这两种用途，切换提交以登记提交为 parent。切换前复查已捕获的日志分支 head、代次和维护状态，以预期 parent 非强制更新稳定分支。Git API 的完整 tree/blob 用于判定旧激活记录是否存在，CDN 的 404 不作为首次激活依据。
 
-`status` 中的 `activeRuleVersions` 按逻辑 ID 返回远端 `stablePath/activation.json` 及其当前字节核验结果，`state.candidates`／`state.configuredProcessed` 来自远端候选记录。`rollbackTargets` 仅列出必要证据仍保留且与当前订阅兼容的目标；不可用原因单独列在 `unavailableRollbackTargets`。本地激活回执仍独立保存，供诊断使用，不能覆盖远端事实。
+`status` 中的 `activeRuleVersions[逻辑 ID]` 来自远端的 `<stablePath>/activation.json`，包含当前版本及其核验结果。`state.candidates` 和 `state.configuredProcessed` 来自远端候选记录。`rollbackTargets` 仅列出必要证据仍保留且与当前订阅兼容的目标，不可用原因单独列在 `unavailableRollbackTargets`。
+
+CLI 激活或回滚成功后，将本地回执写入 `<state>/active-rule-versions/<逻辑 ID>.json`。Node API 的 `readUpdateState(directory).activeRuleVersions[逻辑 ID]` 读取这些本地回执。排查交付状态时以 CLI `status` 的远端结果为准。旧 `active-version.json` 不再读取，`status`、`readUpdateState()`、`update` 和 `rebuild` 的结果已移除单数 `activeRuleVersion` 字段。
 
 提交回复丢失、回读失败或本地回执保存失败时，可在新目录执行同一目标的 `status`，按错误里的 operation ID 查找 `manualOperations`。这个查询不会再次写入或切换：
 
@@ -159,7 +161,7 @@ pnpm --dir packages/rule-set-pipeline update --config "$config" --state "$state"
 pnpm --dir packages/rule-set-pipeline status --config "$config" --binary "$binary"
 ```
 
-省略 `--config` 的 `update` 保留旧单列表 `category-ai-!cn` 的发布入口，候选写入生产 `candidates` 分支。查询或初始化也可直接指定 `--branch`。不指定目标时使用 `main`。
+省略 `--config` 的 `update` 保留旧单列表 `category-ai-!cn` 的候选发布入口，候选写入生产 `candidates` 分支。要发布可激活的候选，请使用配置化入口，见[旧单列表候选的兼容边界](#旧单列表候选的兼容边界)。查询或初始化也可直接指定 `--branch`。不指定目标时使用 `main`。
 
 一次批量调用共享一份已固定、校验的 YAML 和摘要，随后逐集构建、原生验证并发布。共同输入损坏停止整批；单集缺表、非法条目或回读失败保留兄弟集结果。`results` 分别报告 `processed`、`skipped`、`failed`，失败项携带候选进度和已知 commit；任一集失败时 CLI 退出码为 1。`update`／`rebuild` 只写候选和恢复记录，不修改 `stable/`。
 
@@ -237,7 +239,9 @@ pnpm --dir packages/rule-set-pipeline rollback --config "$config" --id china-ip 
 
 ## 预览清理与维护隔离
 
-用 `maintenance-preview` 查看当前稳定入口、人工控制、候选证据、处理进度、拟清理范围和可能保留旧历史的其他 Git 引用。预览只读取远端。保留集合覆盖所有配置化规则集，当前版本的使用时长不影响保留。稳定目录中存在无法归属到规则集的文件时，清理会延期。Git 候选的 `sourceKey` 对应远端登记的固定 commit，`candidatePaths` 列出需要保留和核验的证据文件。非当前历史和已完成的未激活候选可进入清理范围，没有最低保留天数。
+用 `maintenance-preview` 查看当前稳定入口、人工控制、候选证据、处理进度、拟清理范围和可能保留旧历史的其他 Git 引用。预览只读取远端。保留集合覆盖所有配置化规则集，当前版本的使用时长不影响保留。Git 候选的 `sourceKey` 对应远端登记的固定 commit，`candidatePaths` 列出需要保留和核验的证据文件。非当前历史和已完成的未激活候选可进入清理范围，没有最低保留天数。
+
+`status` 只识别各规则集的 `<stablePath>/activation.json`，旧根级记录 `stable/activation.json` 不再计入当前版本或回滚目标。维护发现 `stable/` 下存在无法归属到规则集的 JSON 或 SRS 文件时，会在 `blockers` 中列出对应路径和 `unidentified-stable-file`。旧根级记录和仅由它引用的规则文件也可能触发该门禁。清理延期，文件留在原处。
 
 ```sh
 pnpm --dir packages/rule-set-pipeline exec node --import tsx src/cli.ts maintenance-preview --branch acceptance-example \
@@ -247,7 +251,7 @@ pnpm --dir packages/rule-set-pipeline exec node --import tsx src/cli.ts maintena
 
 在仓库根目录运行上述命令，将 `acceptance-example` 替换为已初始化的隔离分支。周期和 UTC 起算点必须一起提供。首次到期时间是起算点加周期，有成功清理记录时从记录时间与起算点中较晚的一项计算。要预览立即清理的判定，用 `--manual` 替换预览命令的周期参数。JSON 的 `schedule` 表示周期状态，`status` 表示实际结果。进入维护后，若 `status` 为 `isolated` 且 `run.phase` 为 `ready`，即可准备基线。
 
-`maintenance-enter` 检查待恢复操作和当前证据，按预期 head 取得隔离并递增代次，随后从远端重新核实并记录保留集合。候选发布中断或激活结果待核实时，先使用对应的原操作恢复。仅取消 Actions 任务不会解除远端登记。隔离期间稳定规则继续可读，候选发布和新激活写入暂停。生产 `main` 的旧版激活与回滚也需要已初始化的协调状态和远端登记。
+`maintenance-enter` 检查待恢复操作和当前证据，按预期 head 取得隔离并递增代次，随后从远端重新核实并记录保留集合。候选发布中断或激活结果待核实时，先使用对应的原操作恢复。仅取消 Actions 任务不会解除远端登记。隔离期间稳定规则继续可读，候选发布、激活和回滚的写入暂停。
 
 断线后用 `maintenance-resume` 读取远端维护 ID、旧 heads 和阶段，并续做未完成的保留核实。切换前可用 `maintenance-abort --maintenance-id "$maintenance_id"` 安全退出，其中 `$maintenance_id` 取输出中的 `run.id`，并传入同一 `--branch`。退出会重新核实状态和 heads，并保留递增后的代次。无法确认时会延期并维持隔离。给预览、进入或恢复传入 `--binary`，可增加当前候选的原生复验。操作流程和验证边界见 [#52 验收记录](docs/verification/issue-52.md)。
 
@@ -352,21 +356,25 @@ pnpm --dir packages/rule-set-pipeline rebuild \
 
 重建复用正常更新的转换、原生验证、不可变发布和 HTTPS 回读门禁。每个新重建操作保存新候选 ID、操作类型、原成功候选 ID 和构建身份；中断后恢复同一个重建操作时复用其候选 ID。`build.json` 记录输入、转换器实现摘要、Node／yaml 版本、目标 binary 的 SHA-256、契约版本和实际产物摘要。实现摘要覆盖当前运行的来源读取、解析、转换、投影与原生验证代码；TypeScript 源码和编译后 JavaScript 分别记录各自实际运行实现的摘要。
 
-成功和失败均保留原成功处理记录、固定来源及历史候选；失败可按原命令重试。相同输入与工具的规则字节及构建身份保持一致，候选 ID 和验证运行记录独立保存。重建不写稳定入口或激活回执，正常更新仍在无新 Release 时跳过。后续激活使用既有 `activate --candidate <new-readback-url>` 流程；激活验证同时支持历史构建身份和显式记录契约版本的新身份，拒绝不支持的契约版本。
+成功和失败均保留原成功处理记录、固定来源及历史候选；失败可按原命令重试。相同输入与工具的规则字节及构建身份保持一致，候选 ID 和验证运行记录独立保存。重建不写稳定入口或激活回执，正常更新仍在无新 Release 时跳过。配置化重建的候选可按[所选逻辑 ID 激活](#按逻辑-id-显式激活)。
 
 ## 显式激活
 
 激活把候选文件交给稳定入口，开始影响后续客户端下载。管理者用 `--config` 和一个 `--id` 选择规则集。CLI 默认按配置生成 [Rule Subscription v2](contracts/rule-subscription-v2.md)。若显式提供 `--subscription`，其契约必须与所选规则集相符。实际调用见[按逻辑 ID 显式激活](#按逻辑-id-显式激活)。
 
-Rule Subscription v1 已废止。旧单列表的构建、候选发布及重建仍可使用。要交付同一上游列表，应在版本化配置中定义逻辑规则集，并通过 v2 发布、激活和引用。状态和本地回执按逻辑 ID 查询，使用 `activeRuleVersions`。历史契约见 [Rule Subscription v1](contracts/rule-subscription.md)。
+激活下载 `readback.json` 并重新核验其中引用的六份文件。核验包括来源、Conversion Report、构建身份、实际摘要、字节数、非空 term 数、用途映射及能力。Pipeline 使用指定的 1.14.4 重新编译、解码并加载下载的规则文件，并逐字节比对 SRS。本地 `verified`、单独的 `passed` 或 `build.json` 不能放行。明确标识 `kind: synthetic`、description 和 revision 的合成候选只可进入 `acceptance-*` 分支。
 
-激活重新下载候选的六份文件并核对回读链、来源、Conversion Report、构建身份、实际摘要／字节数／非空 term 数、用途映射及能力。重新用指定 1.14.4 编译、解码、加载实际 JSON，并逐字节比对 SRS。本地 `verified`、单独的 `passed` 或 `build.json` 不能放行。明确标识 `kind: synthetic`、description 和 revision 的合成候选只可进入 `acceptance-*` 分支。
-
-规则订阅中的全部入口须指向目标分支的 `stable/`，默认 SRS，也可维护契约声明的 JSON。首次激活后，后续激活须保持完整订阅契约及入口不变。每次以预期旧 head 为唯一父提交，在一个 tree／commit 内更新该集的稳定文件和 `<stablePath>/activation.json`；非强制 PATCH 拒绝并发覆盖。激活记录保存候选证据、来源、契约、原生验证身份和稳定文件摘要。旧激活记录通过预期旧 commit 的 Git tree／blob 读取；只有完整 tree 证明缺失才视为首次激活，不能凭 raw CDN 的临时 404 绕过契约保护。API 故障、tree 截断及坏记录均拒绝激活。
+规则订阅中的全部入口须指向目标分支的 `stable/`。首次激活后，后续激活须保持完整订阅契约及入口不变。Pipeline 在一次稳定入口提交中更新该集的规则文件和 `<stablePath>/activation.json`。生产与隔离分支的父提交选择见[按逻辑 ID 显式激活](#按逻辑-id-显式激活)。Pipeline 通过预期旧提交的 Git tree／blob 读取该集的激活记录。只有完整 tree 证明记录缺失时才视为首次激活。API 故障、tree 截断或损坏的记录会阻止激活。
 
 Git 提交保持文件与记录一起更新，但 GitHub 缓存和客户端轮询存在传播延迟，不保证多文件在客户端同时切换。激活不修改 Recipe、配置发布或客户端设置。运行中的 sing-box 通过原生机制获取稳定 SRS；受控测试的 `1s` 更新周期和临时 CA 只存在于测试进程，不能用于承诺全设备更新时间。
 
 公开 API 为 `activateRules({ candidateEvidenceUrl, subscription, binary, expectedHead, transport?, configuration, logicalId, stateDirectory? })`；默认使用 `githubActivation()`。提供 `stateDirectory` 时，API 保存该集本地回执。API 的成功结果和远端记录可跨进程追溯。Compiler 仍只消费契约，不导入激活运行时代码。
+
+### 旧单列表候选的兼容边界
+
+Rule Subscription v1 已废止。旧单列表仍可在省略 `--config` 时构建、发布候选和重建。由该入口发布的候选缺少现行激活所需的规则集定义和发布目标记录，替换订阅 JSON 无法使它满足现行校验。
+
+要交付同一上游列表，在版本化配置中定义该列表的逻辑 ID 和稳定路径，再用 `update --config "$config" --id "$logical_id" --state "$state" --binary "$binary"` 发布与配置匹配的新候选。随后用相同配置和逻辑 ID 激活新候选，并在 Recipe 或 Template 中引用该逻辑 ID 的 Rule Subscription v2。旧契约见 [Rule Subscription v1 历史记录](contracts/rule-subscription.md)。
 
 ## 激活失败后核实远端状态
 
@@ -435,7 +443,7 @@ YAML 解析使用固定版本的 [yaml](https://eemeli.org/yaml/)，拒绝语法
 
 ## 自动化验证
 
-已有交付的执行证据分别见 [#15 固定来源转换](docs/verification/issue-15.md)、[#16 JSON／SRS 与原生验证](docs/verification/issue-16.md)、[#18 候选发布与回读](docs/verification/issue-18.md)、[#19 激活与自动更新](docs/verification/issue-19.md)、[#20 历史回滚](docs/verification/issue-20.md)、[#21 故障与缓存恢复](docs/verification/issue-21.md)及 [#22 固定 Release 重建](docs/verification/issue-22.md)。这些记录说明各次验收的范围与结果，不证明生产当前版本或全部设备状态。
+已有交付的执行证据分别见 [#15 固定来源转换](docs/verification/issue-15.md)、[#16 JSON／SRS 与原生验证](docs/verification/issue-16.md)、[#18 候选发布与回读](docs/verification/issue-18.md)、[#19 旧单列表 v1 激活与自动更新](docs/verification/issue-19.md)、[#20 旧单列表 v1 回滚](docs/verification/issue-20.md)、[#21 故障与缓存恢复](docs/verification/issue-21.md)及 [#22 固定 Release 重建](docs/verification/issue-22.md)。这些记录说明各次验收的范围与结果，不证明生产当前版本或全部设备状态。
 
 ```sh
 pnpm --dir packages/rule-set-pipeline test
@@ -447,22 +455,47 @@ node scripts/verify.mjs --out /absolute/path/to/new-evidence --binary /absolute/
 
 `test:integration` 使用固定真实样本和合成 IR，通过 `rule-set match` 实际读取、初始化并匹配 JSON／SRS。非法 Go regexp 会在此被拒绝，不能以编译或配置 `check` 代替加载。测试覆盖域名边界、regexp 大小写、IPv4／IPv6 投影、相邻 CIDR 归并等价性及扩大／缺失反例、term 字段顺序、独立构建确定性及编译／解码／加载／语义错配故障。CI 执行完整检查时，`Native sing-box` 作业会运行此脚本。
 
-`pnpm build` 输出 Node ESM 和 TypeScript 声明至 `dist/`。本包不提供浏览器运行时，运行时代码不导入 Compiler。集成验收通过 devDependency 声明 Compiler 的准备顺序；`test:integration`、`test:activation` 和 `test:release` 在加载跨模块测试前生成 Compiler validator，干净 checkout 不依赖已有构建文件。
+`pnpm build` 输出 Node ESM 和 TypeScript 声明至 `dist/`。本包不提供浏览器运行时，运行时代码不导入 Compiler。集成验收通过 devDependency 声明 Compiler 的准备顺序。`test:integration`、`test:activation`、`test:rollback` 和 `test:release` 在加载测试前生成 Compiler 校验器，干净 checkout 不依赖已有构建文件。
 
-固定官方样本的真实公开发布验收需要显式提供以下环境变量；它会在产物仓库追加候选，请仅在获得发布授权后执行：
+固定官方样本的真实公开发布验收使用产物仓库默认的 `candidates` 分支，会追加候选。该分支的远端状态须已为 `main` 初始化，并且固定 Release `20261102130044` 尚未成功处理。更换本地状态目录不会重置远端成功记录。以下命令需要发布授权，证据文件须不存在。
 
 ```sh
-RULE_PUBLICATION_STATE=/tmp/fresh-isolated-rule-state \
+RULE_PUBLICATION_STATE=/tmp/fresh-publication-state \
 RULE_PUBLICATION_EVIDENCE=/tmp/fresh-publication-evidence.json \
 SING_BOX_TEST_BINARY=/absolute/path/to/sing-box-1.14.4 \
 pnpm --dir packages/rule-set-pipeline test:publication
 ```
 
-该验收固定 Release `20261102130044`，状态目录需尚未成功处理此样本，证据输出文件需不存在。旧单列表 `update` 只查询 latest，重建固定版本使用[独立的 rebuild 命令](#显式重建固定-release)。配置化 V2Fly 更新可显式重试已经固定的 Release。受控集成测试不访问真实 GitHub 写接口，自动覆盖上传、远程回读、来源变化和重试边界。
+旧单列表 `update` 只查询 latest，重建固定版本使用[独立的 rebuild 命令](#显式重建固定-release)。配置化 V2Fly 更新可显式重试已经固定的 Release。受控集成测试不访问真实 GitHub 写接口，自动覆盖上传、远程回读、来源变化和重试边界。
 
-真实 GitHub 隔离激活及回滚验收使用 `test:activation` 和 `test:rollback`。激活需要设置 `RULE_CONFIGURED_ACTIVATION_BRANCH`、`RULE_CONFIGURED_ACTIVATION_STATE`、`RULE_CONFIGURED_ACTIVATION_EVIDENCE` 和 `SING_BOX_TEST_BINARY`。回滚使用对应的 `RULE_CONFIGURED_ROLLBACK_*` 变量。分支必须是预先创建且已初始化的 `acceptance-*` 分支。证据文件须不存在。参见 [#39 激活验收](docs/verification/issue-39.md)和 [#40 回滚验收](docs/verification/issue-40.md)。
+### 在隔离分支验收激活与回滚
 
-受控 A／B 自动更新测试随 `test:integration` 运行，需本机 `openssl`；通过 loopback HTTPS、临时 CA 和配置内的 HTTP 隧道隔离网络，不改 hosts 或系统信任。它使用内存 Git transport，提交身份不代表真实 GitHub commit；与真实发布证据分别保存。
+`test:activation` 和 `test:rollback` 使用正式配置中的 V2Fly 三集，在真实 GitHub 隔离分支发布候选、切换稳定入口并核验实际字节。回滚脚本还逐集恢复历史版本。两个脚本各使用一个新建的 `acceptance-*` 产物分支和独立证据路径。
+
+执行前，准备可写这两个隔离分支的 `gh` 登录，并为每个分支创建初始提交。从仓库根目录运行，替换下例中的分支名和 sing-box 1.14.4 绝对路径。`initialize` 只在分支首次使用时运行。
+
+```sh
+activation_branch=acceptance-example-activation
+rollback_branch=acceptance-example-rollback
+binary=/absolute/path/to/sing-box-1.14.4
+probe_dir="$(mktemp -d)"
+
+pnpm --dir packages/rule-set-pipeline initialize --branch "$activation_branch"
+RULE_CONFIGURED_ACTIVATION_BRANCH="$activation_branch" \
+RULE_CONFIGURED_ACTIVATION_STATE="$probe_dir/activation-state" \
+RULE_CONFIGURED_ACTIVATION_EVIDENCE="$probe_dir/activation.json" \
+SING_BOX_TEST_BINARY="$binary" \
+pnpm --dir packages/rule-set-pipeline test:activation
+
+pnpm --dir packages/rule-set-pipeline initialize --branch "$rollback_branch"
+RULE_CONFIGURED_ROLLBACK_BRANCH="$rollback_branch" \
+RULE_CONFIGURED_ROLLBACK_STATE="$probe_dir/rollback-state" \
+RULE_CONFIGURED_ROLLBACK_EVIDENCE="$probe_dir/rollback.json" \
+SING_BOX_TEST_BINARY="$binary" \
+pnpm --dir packages/rule-set-pipeline test:rollback
+```
+
+原始执行结果见 [#39 激活验收](docs/verification/issue-39.md)和 [#40 回滚验收](docs/verification/issue-40.md)。受控客户端自动更新测试随 `test:integration` 运行，需本机 `openssl`。测试使用本地 HTTPS、临时 CA、配置内的 HTTP 隧道和内存 Git 传输。测试证据与真实发布证据分别保存。
 
 ### 客户端故障与缓存离线恢复（#21）
 

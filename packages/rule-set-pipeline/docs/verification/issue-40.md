@@ -1,5 +1,7 @@
 # Issue #40：单集 v2 回滚与同进程客户端换源验收
 
+本页的复现命令记录当次验收方式。当前使用 `test:rollback` 包脚本，该脚本会先生成 Compiler 校验器。隔离分支初始化和执行步骤见 [Pipeline README 的隔离验收入口](../../README.md#在隔离分支验收激活与回滚)。
+
 2026-11-06（Asia/Shanghai），通过 Pipeline 公开操作验证三集独立回滚，通过 Recipe 发布与交付验证运行中的 sing-box 跟随原稳定 URL。范围依据 [#40](https://github.com/wangyingang/sing-box-config-manager/issues/40)、父 Spec [#34](https://github.com/wangyingang/sing-box-config-manager/issues/34) 和 ADR 0006。[机器证据](issue-40.evidence.json)区分真实 GitHub 提交与受控客户端的模拟提交。
 
 ## 回滚入口与兼容性

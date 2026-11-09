@@ -125,8 +125,9 @@ Compiler 同时提供已解析编译输入 `CompileInput` 和 Recipe 入口。�
 
 - [#22 固定 Release 重建验收](packages/rule-set-pipeline/docs/verification/issue-22.md)
 - [#21 客户端故障与缓存恢复验收](packages/rule-set-pipeline/docs/verification/issue-21.md)
-- [#20 历史规则回滚验收](packages/rule-set-pipeline/docs/verification/issue-20.md)
-- [#19 显式激活与客户端自动更新验收](packages/rule-set-pipeline/docs/verification/issue-19.md)
+- [当前配置化激活与回滚的隔离验收入口](packages/rule-set-pipeline/README.md#在隔离分支验收激活与回滚)
+- [#20 旧单列表 v1 回滚验收（历史）](packages/rule-set-pipeline/docs/verification/issue-20.md)
+- [#19 旧单列表 v1 激活与客户端自动更新验收（历史）](packages/rule-set-pipeline/docs/verification/issue-19.md)
 - [#18 不可变候选发布与远程回读验收](packages/rule-set-pipeline/docs/verification/issue-18.md)
 - [#16 JSON／SRS 原生构建验收](packages/rule-set-pipeline/docs/verification/issue-16.md)
 - [1.14.4 merge 源码审计](packages/config-compiler/docs/architecture/sing-box-merge-analysis.md)

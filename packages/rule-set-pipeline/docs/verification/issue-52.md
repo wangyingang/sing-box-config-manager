@@ -1,5 +1,7 @@
 # Issue #52 清理预览与维护隔离验收
 
+下表保留当次验收结果。其中同时识别 v1 和 v2 稳定入口的行为已由 [PR #83](https://github.com/wangyingang/sing-box-config-manager/pull/83) 取代。当前维护发现无法归属到规则集的稳定 JSON 或 SRS 文件时会延期并保留文件。现行门禁见 [Pipeline README 的清理预览](../../README.md#预览清理与维护隔离)。
+
 [工单 #52](https://github.com/wangyingang/sing-box-config-manager/issues/52) 的公开入口是 `@sing-box-config-manager/rule-set-pipeline/maintenance` 的 `manageMaintenance` 和 `maintenance-*` CLI。
 
 | 场景 | 可观察结果 |

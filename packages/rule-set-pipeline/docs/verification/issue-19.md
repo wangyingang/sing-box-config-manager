@@ -2,6 +2,8 @@
 
 本页保留旧单列表 v1 的验收记录。下列脚本及命令对应[废止前的源码](https://github.com/wangyingang/sing-box-config-manager/tree/3e4216576506edec2835363bc003556a3d10c3c0)，当前入口使用 v2。
 
+当前 `test:activation` 使用配置化三集探针。所需变量和初始化步骤见 [Pipeline README 的隔离验收入口](../../README.md#在隔离分支验收激活与回滚)。
+
 验收日期：2026-11-04（Asia/Shanghai）。范围依据 [#19](https://github.com/wangyingang/sing-box-config-manager/issues/19)、父 [Spec #14](https://github.com/wangyingang/sing-box-config-manager/issues/14) 及 ADR 0006。[机器证据](issue-19.evidence.json) 分开保存真实公开激活和受控客户端更新结果。
 
 ## 真实官方候选与稳定 HTTPS
