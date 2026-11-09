@@ -60,8 +60,7 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, 
     const session = transport.repository ? await openRemoteSession(transport, options.stateDirectory, configuration.target.branch) : undefined;
     if (git && !session) throw new Error('Git candidate publication requires a remote journal');
     const publication = session?.publication ?? transport;
-    const restored = session ? { state: session.state, activeRuleVersion: undefined } : await readUpdateState(options.stateDirectory);
-    const state: UpdateState = restored.state;
+    const state: UpdateState = session?.state ?? (await readUpdateState(options.stateDirectory)).state;
     const fixedTag = rebuild?.release ?? options.retryRelease;
     const matches = (entry: RemoteOperation) => entry.kind === (rebuild ? 'rebuild' : 'update') && entry.configuration
       && JSON.stringify(parseBuildConfiguration(entry.configuration)) === JSON.stringify(configuration)
@@ -133,7 +132,7 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, 
         if (recoveredResults.length === definitions.length) {
           await session.confirmGeneration();
           return { status: 'processed', ...versionFields(recovery, state),
-            results: recoveredResults, activeRuleVersion: undefined, ...(session.cacheWarning ? { cacheWarning: session.cacheWarning } : {}) };
+            results: recoveredResults, ...(session.cacheWarning ? { cacheWarning: session.cacheWarning } : {}) };
         }
       }
     }
@@ -215,7 +214,7 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, 
     if (session && !failed) { state.pendingOperation!.status = operationFinished() ? 'complete' : 'pending'; await save(); }
     await session?.confirmGeneration();
     return { status: failed ? (failed === results.length ? 'failed' : 'partial') : pending.length ? 'processed' : 'skipped',
-      ...versionFields(reference, state), results, activeRuleVersion: restored.activeRuleVersion, ...(session?.cacheWarning ? { cacheWarning: session.cacheWarning } : {}) };
+      ...versionFields(reference, state), results, ...(session?.cacheWarning ? { cacheWarning: session.cacheWarning } : {}) };
   } finally { await rm(lock, { recursive: true, force: true }); }
 }
 

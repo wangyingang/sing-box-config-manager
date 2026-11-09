@@ -5,7 +5,6 @@ import { CONFIGURED_BUILD_RECORD } from './configured-build.js';
 import { configuredLayout, configuredProjections, parseBuildConfiguration, parseRuleDefinition, type RuleDefinition } from './configuration.js';
 import { Ajv } from 'ajv';
 import manifestSchema from '../contracts/artifact-manifest.schema.json' with { type: 'json' };
-import subscriptionSchema from '../contracts/rule-subscription.schema.json' with { type: 'json' };
 import subscriptionV2Schema from '../contracts/rule-subscription-v2.schema.json' with { type: 'json' };
 import { validCommitSource } from './github-commit.js';
 import { buildNative } from './native.js';
@@ -15,22 +14,20 @@ import { ARTIFACT_REPOSITORY, immutableUrl } from './publication.js';
 import { retainedCandidateDownload } from './publication-repository.js';
 import { activationDigest, effectiveControl, manualControl, openManualActivation, registerManualActivation, type ActivationWriteReservation, type ObservedActivation } from './manual-activation.js';
 import { BASELINE_PATH, guardResultGeneration, type ActivationOperation } from './remote-state.js';
-import { activationRecord, walkLegacyActivationHistory } from './remote-status.js';
+import { activationRecord } from './remote-status.js';
 import { ActivationWriteError, githubActivation, type ActivationTransport } from './activation-transport.js';
 
 const ajv = new Ajv({ strict: true });
 const validateManifest = ajv.compile(manifestSchema);
-const validateSubscription = ajv.compile(subscriptionSchema);
 const validateSubscriptionV2 = ajv.compile(subscriptionV2Schema);
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
 const equal = isDeepStrictEqual;
 function requireThat(condition: unknown, message: string): asserts condition { if (!condition) throw new Error(message); }
-const RECORD_PATH = 'stable/activation.json';
 export interface ActivationOptions {
   candidateEvidenceUrl: string;
   /** Trusted versioned configuration and exactly one selected logical ID. */
-  configuration?: string;
-  logicalId?: string;
+  configuration: string;
+  logicalId: string;
   stateDirectory?: string;
   /** Trusted host-owned contract, never a client-supplied URL override. */
   subscription: unknown;
@@ -179,12 +176,12 @@ export interface RollbackOptions extends Omit<ActivationOptions, 'candidateEvide
 }
 
 function activationContext(options: Pick<ActivationOptions, 'configuration' | 'logicalId'>, transport: ActivationTransport) {
-  const configured = options.configuration !== undefined || options.logicalId !== undefined;
-  const configuration = configured ? parseBuildConfiguration(options.configuration ?? '') : undefined;
-  const definition = configuration?.ruleSets.find(rule => rule.id === options.logicalId);
-  if (configured) requireThat(definition && configuration?.target.branch === transport.branch, 'Unknown logical ID or activation target mismatch');
-  const git = definition && configuration?.sources[definition.source].version === 'git-branch';
-  return { configured, definition, git, recordPath: definition ? `${definition.stablePath}/activation.json` : RECORD_PATH };
+  requireThat(options.configuration && options.logicalId, 'Activation requires a configuration and a logical ID (Rule Subscription v2)');
+  const configuration = parseBuildConfiguration(options.configuration);
+  const definition = configuration.ruleSets.find(rule => rule.id === options.logicalId);
+  requireThat(definition && configuration.target.branch === transport.branch, 'Unknown logical ID or activation target mismatch');
+  const git = configuration.sources[definition.source].version === 'git-branch';
+  return { definition, git, recordPath: `${definition.stablePath}/activation.json` };
 }
 
 /** Revalidate a retained activation against today's contract, without rewriting history. */
@@ -197,28 +194,26 @@ export async function activateRules(options: ActivationOptions) {
   return performActivation(options);
 }
 
-export function activationSubscription(input: unknown, branch: string, definition?: RuleDefinition) {
-  requireThat((definition ? validateSubscriptionV2 : validateSubscription)(input) as boolean, 'Invalid Rule Subscription');
+export function activationSubscription(input: unknown, branch: string, definition: RuleDefinition) {
+  requireThat(validateSubscriptionV2(input) as boolean, 'Invalid Rule Subscription');
   const subscription = input as any;
-  requireThat(subscription.systemRuleSetId === (definition?.id ?? 'v2fly:domain-list-community:category-ai-!cn'), 'System rule set identity mismatch');
-  if (definition) {
-    const expected = configuredProjections(definition, branch);
-    for (const usage of USAGES) {
-      const projection = subscription.projections[usage], declared = expected[usage];
-      if ('unavailable' in declared) {
-        requireThat(equal(projection, declared), 'Subscription usage availability mismatch');
-      } else {
-        requireThat(projection.formats, 'Subscription usage availability mismatch');
-        for (const format of ['binary', 'source'] as const) {
-          if (projection.formats[format] === undefined) continue;
-          requireThat(equal(projection.formats[format], declared.formats[format]), 'Subscription stable path or capability mismatch');
-        }
+  requireThat(subscription.systemRuleSetId === definition.id, 'System rule set identity mismatch');
+  const expected = configuredProjections(definition, branch);
+  for (const usage of USAGES) {
+    const projection = subscription.projections[usage], declared = expected[usage];
+    if ('unavailable' in declared) {
+      requireThat(equal(projection, declared), 'Subscription usage availability mismatch');
+    } else {
+      requireThat(projection.formats, 'Subscription usage availability mismatch');
+      for (const format of ['binary', 'source'] as const) {
+        if (projection.formats[format] === undefined) continue;
+        requireThat(equal(projection.formats[format], declared.formats[format]), 'Subscription stable path or capability mismatch');
       }
     }
-    const sharedUsage = 'artifact' in definition.usages['dns-response'] ? 'dns-response' : 'dns-query';
-    requireThat(equal(subscription.projections.route.formats, subscription.projections[sharedUsage].formats), 'Subscription file reuse mismatch');
-    if (sharedUsage === 'dns-response') requireThat(subscription.projections.route.formats.source, 'Subscription source format is required');
   }
+  const sharedUsage = 'artifact' in definition.usages['dns-response'] ? 'dns-response' : 'dns-query';
+  requireThat(equal(subscription.projections.route.formats, subscription.projections[sharedUsage].formats), 'Subscription file reuse mismatch');
+  if (sharedUsage === 'dns-response') requireThat(subscription.projections.route.formats.source, 'Subscription source format is required');
   return subscription;
 }
 
@@ -235,7 +230,7 @@ export function activateAutomatically(options: ActivationOptions, coordination: 
 }
 
 /** Require a reachable activation, not just a Git object with rule bytes. */
-async function requireRetainedRollback(transport: ActivationTransport, path: string, head: string, target: string, configured: boolean,
+async function requireRetainedRollback(transport: ActivationTransport, path: string, head: string, target: string,
   currentCommit?: () => Promise<string | undefined>) {
   if (target === head) return;
   const url = immutableUrl(head, path);
@@ -246,66 +241,47 @@ async function requireRetainedRollback(transport: ActivationTransport, path: str
     if (error instanceof Error && error.message === `Readback HTTP 404: ${url}`) throw new Error(unavailable);
     throw error;
   }
-  const { record, history } = activationRecord(JSON.parse(bytes.toString()), path, transport.branch);
-  if (configured) {
-    requireThat(history.some(entry => entry.commit === target) || await currentCommit?.() === target, unavailable);
-    return;
-  }
-  for await (const item of walkLegacyActivationHistory(record, head, transport.branch, url => transport.download(url))) {
-    if ('error' in item) throw item.error;
-    if (item.commit === target) return;
-  }
-  throw new Error(unavailable);
+  const { history } = activationRecord(JSON.parse(bytes.toString()), path, transport.branch);
+  requireThat(history.some(entry => entry.commit === target) || await currentCommit?.() === target, unavailable);
 }
 
 async function performActivation(options: ActivationOptions | RollbackOptions, automatic?: AutomaticActivation) {
   const transport = options.transport ?? githubActivation();
   requireThat(/^[a-f0-9]{40}$/.test(options.expectedHead), 'Expected full old remote head is required');
-  const { configured, definition, git, recordPath } = activationContext(options, transport);
-  requireThat(!automatic || definition, 'Automatic activation requires a configured rule set');
+  const { definition, git, recordPath } = activationContext(options, transport);
   const subscription = activationSubscription(options.subscription, transport.branch, definition);
-  // Legacy fixtures may use a fresh, unmanaged isolation branch. On an
-  // initialized target, v1 uses the same write reservation as v2.
-  const session = definition || transport.repository
-    ? await openManualActivation(transport, options.expectedHead).catch(error => {
-      if (!definition && transport.branch.startsWith('acceptance-') && error instanceof Error
-        && error.message.startsWith('REMOTE_NOT_INITIALIZED:')) return undefined;
-      throw error;
-    })
-    : undefined;
+  const session = await openManualActivation(transport, options.expectedHead);
   requireThat(await transport.head() === options.expectedHead, 'ACTIVATION_CONFLICT: remote head changed');
-  requireThat(!automatic || session?.snapshot.head === automatic.journalHead, 'PUBLICATION_CONFLICT: coordination head changed');
+  requireThat(!automatic || session.snapshot.head === automatic.journalHead, 'PUBLICATION_CONFLICT: coordination head changed');
   let historical: { commit: string; record: any } | undefined;
   let candidateEvidenceUrl: string;
   if ('historicalActivationCommit' in options) {
     const commit = options.historicalActivationCommit;
     requireThat(/^[a-f0-9]{40}$/.test(commit), 'Expected full historical activation commit');
-    if (git || session?.snapshot.paths.includes(BASELINE_PATH)) {
-      await requireRetainedRollback(transport, recordPath, options.expectedHead, commit, configured,
-        git ? async () => session?.repository.lastChange?.(options.expectedHead, recordPath) : undefined);
+    if (git || session.snapshot.paths.includes(BASELINE_PATH)) {
+      await requireRetainedRollback(transport, recordPath, options.expectedHead, commit,
+        git ? async () => session.repository.lastChange?.(options.expectedHead, recordPath) : undefined);
     }
     const value = JSON.parse((await transport.download(immutableUrl(commit, recordPath))).toString());
     const record = git ? activationRecord(value, recordPath, transport.branch).record : value;
     requireThat(record.schemaVersion === 1 && typeof record.id === 'string' && record.id.length > 0
       && typeof record.candidateId === 'string' && typeof record.candidateEvidenceUrl === 'string'
       && record.files && equal(record.subscription, options.subscription)
-      && (!definition || (record.logicalId === definition.id && Array.isArray(record.history))), 'Invalid or incompatible historical activation');
+      && record.logicalId === definition.id && Array.isArray(record.history), 'Invalid or incompatible historical activation');
     historical = { commit, record };
     candidateEvidenceUrl = record.candidateEvidenceUrl;
   } else candidateEvidenceUrl = options.candidateEvidenceUrl;
   const location = candidateLocation(candidateEvidenceUrl, 'readback.json');
-  const retained = session?.journal.state.candidates[location.id];
+  const retained = session.journal.state.candidates[location.id];
   requireThat(!retained || retained.retained && retained.phase === 'complete', 'CANDIDATE_UNAVAILABLE: candidate publication is incomplete or no longer retained');
-  const download = session
-    ? retainedCandidateDownload(session.snapshot, location.id, url => transport.download(url))
-    : (url: string) => transport.download(url);
-  if (git) requireThat(retained?.sourceKey && retained.logicalId === definition?.id,
+  const download = retainedCandidateDownload(session.snapshot, location.id, url => transport.download(url));
+  if (git) requireThat(retained?.sourceKey && retained.logicalId === definition.id,
     'CANDIDATE_UNAVAILABLE: no registered Git candidate for this rule set');
   const candidate = await verifyActivationCandidate({ candidateEvidenceUrl, binary: options.binary,
     evidenceSha256: retained?.evidenceSha256 }, { branch: transport.branch, download }, definition, historical ? 'rollback' : 'activate');
   requireThat((candidate.source.kind === 'github-commit') === Boolean(git), 'Candidate source type does not match the configuration');
   if (git && retained?.sourceKey) {
-    const pin = session!.journal.state.commitPins?.[retained.sourceKey];
+    const pin = session.journal.state.commitPins?.[retained.sourceKey];
     requireThat(equal(candidate.source, pin?.source) && candidate.buildId === retained.buildId,
       'CANDIDATE_UNAVAILABLE: candidate source or build identity mismatch');
   }
@@ -327,7 +303,6 @@ async function performActivation(options: ActivationOptions | RollbackOptions, a
       requireThat(endpoint.url.startsWith(urlPrefix), 'Unapproved stable subscription host or branch');
       const path = endpoint.url.slice(urlPrefix.length);
       requireThat(/^stable\/[a-z0-9/_.-]+\.(srs|json)$/.test(path) && !path.split('/').includes('..') && path !== recordPath, 'Invalid stable rule path');
-      requireThat(configured || !path.endsWith('/activation.json'), 'Legacy subscription cannot write a configured activation record');
       const signature = JSON.stringify([format, [...endpoint.requiredCapabilities].sort()]);
       requireThat(!endpointSignatures.has(path) || endpointSignatures.get(path) === signature, 'Conflicting stable endpoint declarations');
       endpointSignatures.set(path, signature);
@@ -358,8 +333,8 @@ async function performActivation(options: ActivationOptions | RollbackOptions, a
   if (previousBytes) {
     previous = JSON.parse(previousBytes.toString());
     requireThat(previous.schemaVersion === 1 && typeof previous.id === 'string' && typeof previous.candidateId === 'string'
-      && previous.files && (!definition || (previous.logicalId === definition.id && Array.isArray(previous.history))), 'Invalid previous activation record');
-    requireThat(!automatic || !effectiveControl(session!.journal, definition!.id, previous)?.pauseAutomaticActivation, 'Automatic activation is paused');
+      && previous.files && previous.logicalId === definition.id && Array.isArray(previous.history), 'Invalid previous activation record');
+    requireThat(!automatic || !effectiveControl(session.journal, definition.id, previous)?.pauseAutomaticActivation, 'Automatic activation is paused');
     requireThat(equal(previous.subscription, subscription), 'Existing subscription contract cannot change during activation');
     requireThat(equal(Object.keys(previous.files).sort(), Object.keys(files).sort()), 'Previous stable file set mismatch');
     for (const [path, metadata] of Object.entries(previous.files) as [string, any][]) {
@@ -368,42 +343,41 @@ async function performActivation(options: ActivationOptions | RollbackOptions, a
     }
   }
   let previousCommit = options.expectedHead;
-  if (session && previous && (previous.control || previous.operation === 'automatic') && session.repository.lastChange) {
+  if (previous && (previous.control || previous.operation === 'automatic') && session.repository.lastChange) {
     previousCommit = await session.repository.lastChange(options.expectedHead, recordPath);
   }
   const id = randomUUID();
   const kind = historical ? 'rollback' as const : 'activate' as const;
-  const control = !automatic && session && definition ? manualControl({ id, kind }) : undefined;
+  const control = automatic ? undefined : manualControl({ id, kind });
   const activation = { schemaVersion: 1, id,
     ...control && { control },
     ...(automatic ? { operation: 'automatic' as const } : {}),
-    ...(definition ? { logicalId: definition.id, history: previous ? [...previous.history,
-      { commit: previousCommit, id: previous.id, candidateId: previous.candidateId }] : [] } : {}),
+    logicalId: definition.id, history: previous ? [...previous.history,
+      { commit: previousCommit, id: previous.id, candidateId: previous.candidateId }] : [],
     ...(historical ? { operation: 'rollback' as const, historicalActivationCommit: historical.commit, historicalActivationId: historical.record.id } : {}), candidateId: candidate.candidateId,
     candidateEvidenceUrl: candidate.evidenceUrl, source: candidate.source, validation: candidate.validation,
     expectedHead: options.expectedHead, subscription,
     files: Object.fromEntries(Object.entries(files).map(([path, bytes]) => [path, { sha256: sha256(bytes), byteLength: bytes.length }])) };
-  const operation = session ? {
-    id, kind, ...(definition ? { logicalId: definition.id } : {}), recordPath, generation: session.journal.generation,
+  const operation = {
+    id, kind, logicalId: definition.id, recordPath, generation: session.journal.generation,
     expectedHead: options.expectedHead, ...(previous ? { previousActivationId: previous.id } : {}),
     candidateId: candidate.candidateId, candidateEvidenceUrl: candidate.evidenceUrl,
     activationDigest: activationDigest(activation),
     ...(historical ? { historicalActivationCommit: historical.commit } : {}),
-  } : undefined;
-  const reservation = operation && (automatic ? await automatic.register({ ...operation, kind: 'automatic' })
-    : await registerManualActivation(session!, operation));
-  const expectedHead = reservation?.expectedHead ?? options.expectedHead;
+  };
+  const reservation = automatic ? await automatic.register({ ...operation, kind: 'automatic' })
+    : await registerManualActivation(session, operation);
+  const expectedHead = reservation.expectedHead;
   activation.expectedHead = expectedHead;
   files[recordPath] = encode(activation);
   let commit: string;
   try {
     commit = await transport.commit(expectedHead, files,
-      `${historical ? '回滚到历史规则候选' : '激活规则候选'} ${candidate.candidateId}`, reservation?.write);
+      `${historical ? '回滚到历史规则候选' : '激活规则候选'} ${candidate.candidateId}`, reservation.write);
   }
   catch (error) {
     // No second write. Resolve a lost PATCH reply using its known immutable identity.
     if (!(error instanceof ActivationWriteError)) {
-      if (!reservation) throw error;
       try { await reservation.markNotCommitted(); }
       catch (checkpointError) {
         throw new Error(`ACTIVATION_NOT_APPLIED: operation ${id}; ${String(error)}; outcome checkpoint failed: ${String(checkpointError)}`, { cause: error });
@@ -415,8 +389,7 @@ async function performActivation(options: ActivationOptions | RollbackOptions, a
     catch { throw new Error(`ACTIVATION_UNKNOWN: cannot reconcile ${error.attemptedCommit} (operation ${id})`, { cause: error }); }
     if (head === error.attemptedCommit) commit = head;
     else if (head === expectedHead) {
-      const code = reservation ? 'ACTIVATION_UNKNOWN' : 'ACTIVATION_NOT_APPLIED';
-      throw new Error(`${code}: attempted ${error.attemptedCommit}, remote still at expected old state (operation ${id})`, { cause: error });
+      throw new Error(`ACTIVATION_UNKNOWN: attempted ${error.attemptedCommit}, remote still at expected old state (operation ${id})`, { cause: error });
     }
     else {
       // A later commit may retain this set unchanged. Its unique record proves application.
@@ -435,9 +408,9 @@ async function performActivation(options: ActivationOptions | RollbackOptions, a
       requireThat(actual.equals(bytes), `Committed activation mismatch: ${path}`);
     }
   } catch (error) { throw new Error(`ACTIVATION_APPLIED_READBACK_PENDING: commit ${commit} (operation ${id})`, { cause: error }); }
-  if (session && !automatic) await guardResultGeneration(session.repository, session.journal);
+  if (!automatic) await guardResultGeneration(session.repository, session.journal);
   const result = { status: 'activated' as const, commit, activation };
-  if (definition && options.stateDirectory) {
+  if (options.stateDirectory) {
     await saveActivationReceipt(options.stateDirectory, result, definition.id);
   }
   return result;

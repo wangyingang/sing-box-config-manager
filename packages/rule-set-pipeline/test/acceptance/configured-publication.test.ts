@@ -31,7 +31,7 @@ test('固定官方三集在隔离分支发布候选并核验 HTTPS 字节', {
   assert.equal(source.tag, '20261104112839');
   assert.equal(requests.filter(url => url.endsWith(`/assets/${source.yaml.id}`)).length, 1);
   assert.equal(requests.filter(url => url.endsWith(`/assets/${source.checksum.id}`)).length, 1);
-  assert.equal(persisted.activeRuleVersion, null);
+  assert.deepEqual(persisted.activeRuleVersions, {});
   const evidence = [];
   for (const [index, entry] of result.results.entries()) {
     assert.ok(entry.status === 'processed');

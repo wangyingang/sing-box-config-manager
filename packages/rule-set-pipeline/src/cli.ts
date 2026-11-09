@@ -4,7 +4,6 @@ import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { saveActivationReceipt } from './activation-receipt.js';
 import { activateRules, rollbackRules } from './activation.js';
 import { githubActivation } from './activation-transport.js';
 import { rebuildRules, updateRules } from './update.js';
@@ -32,7 +31,7 @@ async function main(): Promise<number> {
       'maintenance-id': { type: 'string' }, help: { type: 'boolean' } },
   });
   if (values.help) {
-    console.log('Usage: build --release <fixed-tag> --out <new-directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...]] [--expected-source <source.json>] | build --config <git-source-yaml> [--id <logical-id> ...] [--commit <full-sha>] --out <new-directory> --binary <absolute-1.14.4-path> | update --state <directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...] [--release <pinned-tag>]] | check-now --state <directory> --binary <absolute-1.14.4-path> --config <versioned-yaml> [--subscription <v2-contract-map.json>] [--id <logical-id> ...] | resume --state <directory> --binary <absolute-1.14.4-path> --config <versioned-yaml> [--subscription <v2-contract-map.json>] --id <logical-id> | initialize/status [--config <yaml> | --branch <target>] | maintenance-preview/maintenance-enter/maintenance-prepare/maintenance-switch/maintenance-resume/maintenance-abort | rebuild --state <directory> --binary <absolute-1.14.4-path> (--release <fixed-tag> | --commit <full-sha>) [--config <versioned-yaml> --id <logical-id>] | activate/rollback (see package README)');
+    console.log('Usage: build --release <fixed-tag> --out <new-directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...]] [--expected-source <source.json>] | build --config <git-source-yaml> [--id <logical-id> ...] [--commit <full-sha>] --out <new-directory> --binary <absolute-1.14.4-path> | update --state <directory> --binary <absolute-1.14.4-path> [--config <versioned-yaml> [--id <logical-id> ...] [--release <pinned-tag>]] | check-now --state <directory> --binary <absolute-1.14.4-path> --config <versioned-yaml> [--subscription <v2-contract-map.json>] [--id <logical-id> ...] | resume --state <directory> --binary <absolute-1.14.4-path> --config <versioned-yaml> [--subscription <v2-contract-map.json>] --id <logical-id> | initialize/status [--config <yaml> | --branch <target>] | maintenance-preview/maintenance-enter/maintenance-prepare/maintenance-switch/maintenance-resume/maintenance-abort | rebuild --state <directory> --binary <absolute-1.14.4-path> (--release <fixed-tag> | --commit <full-sha>) [--config <versioned-yaml> --id <logical-id>] | activate/rollback --config <versioned-yaml> --id <logical-id> (see package README)');
     return 0;
   }
   if (values.commit !== undefined && (positionals.length !== 1 || !['build', 'rebuild'].includes(positionals[0]) || !values.config || values.release !== undefined)) {
@@ -89,22 +88,21 @@ async function main(): Promise<number> {
   }
   if (positionals.length === 1 && ['activate', 'rollback'].includes(positionals[0])) {
     const rollback = positionals[0] === 'rollback';
-    if (!values.state || (!values.config && !values.subscription) || !values['expected-head'] || !values.binary
+    if (!values.state || !values.config || !values['expected-head'] || !values.binary
       || (rollback ? !values.activation || !!values.candidate : !values.candidate || !!values.activation)
       || values.release || values.out || values['expected-source']
-      || (values.config ? values.id?.length !== 1 : !!values.id)) throw new Error(`${positionals[0]} requires --state, ${rollback ? '--activation' : '--candidate'}, --expected-head, --binary and either --config with one --id or --subscription`);
-    const configuration = values.config ? await readFile(values.config, 'utf8') : undefined;
-    const parsed = configuration === undefined ? undefined : parseBuildConfiguration(configuration);
-    const logicalId = values.id?.[0];
-    if (parsed && values.branch && values.branch !== parsed.target.branch) throw new Error('Configuration and branch disagree');
+      || values.id?.length !== 1) throw new Error(`${positionals[0]} requires --state, ${rollback ? '--activation' : '--candidate'}, --expected-head, --binary and --config with one --id (Rule Subscription v2)`);
+    const configuration = await readFile(values.config, 'utf8');
+    const parsed = parseBuildConfiguration(configuration);
+    const logicalId = values.id[0];
+    if (values.branch && values.branch !== parsed.target.branch) throw new Error('Configuration and branch disagree');
     const subscription = values.subscription ? JSON.parse(await readFile(values.subscription, 'utf8'))
-      : configuredSubscriptions(parsed!)[logicalId!];
-    const common = { ...(parsed ? { configuration, logicalId, stateDirectory: resolve(values.state) } : {}), subscription, binary: values.binary,
-      expectedHead: values['expected-head'], transport: githubActivation(parsed?.target.branch ?? values.branch) };
+      : configuredSubscriptions(parsed)[logicalId];
+    const common = { configuration, logicalId, stateDirectory: resolve(values.state), subscription, binary: values.binary,
+      expectedHead: values['expected-head'], transport: githubActivation(parsed.target.branch) };
     const result = rollback
       ? await rollbackRules({ ...common, historicalActivationCommit: values.activation! })
       : await activateRules({ ...common, candidateEvidenceUrl: values.candidate! });
-    if (!values.config) await saveActivationReceipt(resolve(values.state), result);
     console.log(JSON.stringify(result));
     return 0;
   }

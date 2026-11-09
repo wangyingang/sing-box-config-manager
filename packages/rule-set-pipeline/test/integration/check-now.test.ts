@@ -737,25 +737,6 @@ for (const branch of ['acceptance-issue-53', 'main']) {
     const openai = 'openai', anthropic = 'anthropic';
     const before = await readRemoteStatus({ ...first, repository: env.repository });
     const pin = await activateRules(env.options(openai, before.activeRuleVersions[openai].activation.candidateEvidenceUrl));
-    if (branch !== 'main') {
-      const legacy = upstream(4);
-      const input = JSON.stringify({ lists: [{ name: 'category-ai-!cn', length: 1, rules: ['domain:legacy.example'] }] });
-      const built = await updateRules({ binary: binary!, stateDirectory: join(directory, 'legacy'), publication: first.publication,
-        fetch: async (url, init) => String(url).endsWith('/assets/11') ? new Response(input)
-          : String(url).endsWith('/assets/12') ? new Response(`${sha256(input)}  dlc.dat_plain.yml\n`) : legacy.fetcher(url, init),
-      });
-      if (built.status !== 'processed' || !('candidate' in built)) throw new Error('Expected a legacy candidate');
-      const formats = {
-        source: { url: `https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/${branch}/stable/domains.json`, requiredCapabilities: [] },
-        binary: { url: `https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/${branch}/stable/domains.srs`, requiredCapabilities: [] },
-      };
-      await activateRules({ binary: binary!, stateDirectory: directory, expectedHead: env.head(), transport: env.transport,
-        candidateEvidenceUrl: built.candidate.evidenceUrl!, subscription: {
-          schemaVersion: 1, systemRuleSetId: 'v2fly:domain-list-community:category-ai-!cn', targetVersion: '1.14.4',
-          sourceFormatVersion: 4, projections: { route: { formats }, 'dns-query': { formats }, 'dns-response': { unavailable: 'empty' } },
-        },
-      });
-    }
     const next = options(env, join(directory, 'second'), upstream(2, { anthropic: 'domain:new-anthropic.example' }));
     next.configuration = next.configuration.replace('list: openai', 'list: openai-alt');
     assert.notEqual(next.configuration, env.configuration);
@@ -840,12 +821,7 @@ for (const branch of ['acceptance-issue-53', 'main']) {
       assert.deepEqual(active.files, original.files);
       assert.deepEqual(after.rollbackTargets[id], []);
     }
-    if (branch !== 'main') {
-      assert.equal(after.activeRuleVersion?.activation.id, live.activeRuleVersion?.activation.id);
-      assert.deepEqual(after.activeRuleVersion?.activation.files, live.activeRuleVersion?.activation.files);
-      assert.deepEqual(after.rollbackTargets['v2fly:category-ai-!cn'], []);
-    }
-    assert.equal(Object.keys(after.state.candidates).length, branch === 'main' ? 3 : 4);
+    assert.equal(Object.keys(after.state.candidates).length, 3);
     const pinnedBuildPath = `candidates/${pin.activation.candidateId}/build.json`;
     const oldBuild = await (await env.repository.snapshot()).read(pinnedBuildPath);
     assert.deepEqual(await (await newRepository.snapshot()).read(pinnedBuildPath), oldBuild);

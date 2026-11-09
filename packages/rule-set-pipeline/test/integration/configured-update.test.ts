@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fsPromises from 'node:fs/promises';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -69,8 +69,9 @@ test('单独重建固定 Release 的成功集保留原候选、成功记录与�
   const first = await updateRules({ ...options(directory, env), selectedIds: ['openai'] });
   const original = first.results[0];
   assert.ok(original.status === 'processed');
-  const receipt = { logicalId: 'openai', commit: 'b'.repeat(40), candidateId: original.candidate.id };
-  await writeFile(join(directory, 'active-version.json'), JSON.stringify(receipt));
+  const receipt = { status: 'activated', commit: 'b'.repeat(40), activation: { logicalId: 'openai', candidateId: original.candidate.id } };
+  await mkdir(join(directory, 'active-rule-versions'));
+  await writeFile(join(directory, 'active-rule-versions/openai.json'), JSON.stringify(receipt));
   const before = await readUpdateState(directory);
   const requestStart = env.requests.length;
   env.advanceLatest();
@@ -87,7 +88,7 @@ test('单独重建固定 Release 的成功集保留原候选、成功记录与�
   const after = await readUpdateState(directory);
   assert.deepEqual(after.state.configuredProcessed, before.state.configuredProcessed);
   assert.deepEqual(after.state.candidates[original.candidate.id], before.state.candidates[original.candidate.id]);
-  assert.deepEqual(after.activeRuleVersion, before.activeRuleVersion);
+  assert.deepEqual(after.activeRuleVersions, before.activeRuleVersions);
   for (const candidate of [original, entry]) {
     for (const file of candidate.readback) {
       const actual = await env.publication.download(file.url);
@@ -98,7 +99,7 @@ test('单独重建固定 Release 的成功集保留原候选、成功记录与�
   assert.ok(env.commits.every(files => Object.keys(files).every(path => path.startsWith('candidates/'))));
   const status = await readUpdateState(directory);
   assert.equal(status.state.candidates[entry.candidate.id].operation, 'rebuild');
-  assert.deepEqual(status.activeRuleVersion, receipt);
+  assert.deepEqual(status.activeRuleVersions.openai, receipt);
   const skipped = await updateRules({ ...options(directory, env), selectedIds: ['openai'], retryRelease: tag, binary: '/must-not-run' });
   assert.ok(skipped.results[0].status === 'skipped');
   assert.equal(skipped.results[0].candidateId, original.candidate.id);

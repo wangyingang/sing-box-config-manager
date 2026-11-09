@@ -3,10 +3,10 @@ import { join } from 'node:path';
 
 /** Persist a local receipt only after remote application has been confirmed. */
 export async function saveActivationReceipt(stateDirectory: string,
-  result: { commit: string; activation: { id: string } }, logicalId?: string) {
-  const directory = logicalId ? join(stateDirectory, 'active-rule-versions') : stateDirectory;
+  result: { commit: string; activation: { id: string } }, logicalId: string) {
+  const directory = join(stateDirectory, 'active-rule-versions');
   const temporary = join(directory, `active-${result.activation.id}.tmp`);
-  const destination = join(directory, logicalId ? `${logicalId}.json` : 'active-version.json');
+  const destination = join(directory, `${logicalId}.json`);
   try {
     await mkdir(directory, { recursive: true });
     await writeFile(temporary, JSON.stringify(result, null, 2) + '\n', { flag: 'wx' });

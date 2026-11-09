@@ -57,8 +57,7 @@ export async function readUpdateState(directory: string) {
     schemaVersion: 1, pinned: {}, processed: {}, candidates: {},
   };
   if (state.schemaVersion !== 1 || !state.pinned || !state.processed || !state.candidates) throw new Error('Invalid update state');
-  // Owned by explicit activation (#19), never written by update.
-  const activeRuleVersion = await readJson(join(directory, 'active-version.json')) ?? null;
+  // Per-rule receipts belong to activation and are only read here.
   const activeRuleVersions: Record<string, any> = {};
   let receipts: string[];
   try { receipts = await readdir(join(directory, 'active-rule-versions')); }
@@ -68,7 +67,7 @@ export async function readUpdateState(directory: string) {
     if (receipt?.status !== 'activated' || receipt.activation?.logicalId !== file.slice(0, -5)) throw new Error('Invalid activation receipt');
     activeRuleVersions[file.slice(0, -5)] = receipt;
   }
-  return { state, activeRuleVersion, activeRuleVersions };
+  return { state, activeRuleVersions };
 }
 export interface UpdateOptions {
   stateDirectory: string; binary: string; token?: string; fetch?: typeof fetch;
@@ -116,8 +115,7 @@ async function processRelease(options: UpdateOptions, rebuildTag?: string) {
     const targetBranch = transport.repository?.branch === 'candidates' ? 'main' : transport.repository?.branch ?? 'main';
     session = transport.repository ? await openRemoteSession(transport, options.stateDirectory, targetBranch) : undefined;
     const publication = session?.publication ?? transport;
-    const restored = session ? { state: session.state, activeRuleVersion: undefined } : await readUpdateState(options.stateDirectory);
-    state = restored.state;
+    state = session?.state ?? (await readUpdateState(options.stateDirectory)).state;
     const matches = (entry: RemoteOperation) => entry.kind === (rebuildTag ? 'rebuild' : 'update') && entry.sourceKey === undefined && entry.configuration === undefined
       && entry.selectedIds === undefined && (!rebuildTag || rebuildTag === entry.tag) && (!options.sampleTag || options.sampleTag === entry.tag);
     const recovery = session && selectRemoteOperation(session.journal, matches);
@@ -140,7 +138,7 @@ async function processRelease(options: UpdateOptions, rebuildTag?: string) {
       };
       recovery.status = 'complete'; await save();
       await session.confirmGeneration();
-      return { status: 'processed' as const, candidate: recoverable, activeRuleVersion: restored.activeRuleVersion, readback,
+      return { status: 'processed' as const, candidate: recoverable, readback,
         ...(session.cacheWarning ? { cacheWarning: session.cacheWarning } : {}) };
     }
     const fetcher = options.fetch ?? fetch;
@@ -175,7 +173,7 @@ async function processRelease(options: UpdateOptions, rebuildTag?: string) {
       if (!previousProcessed.evidenceUrl) throw new Error('CANDIDATE_UNAVAILABLE: processed candidate has no retained address');
       if (session && recovery) { recovery.status = 'complete'; await save(); }
       await session?.confirmGeneration();
-      return { status: 'skipped' as const, releaseId: release.id, ...previousProcessed, evidenceUrl: previousProcessed.evidenceUrl, activeRuleVersion: restored.activeRuleVersion,
+      return { status: 'skipped' as const, releaseId: release.id, ...previousProcessed, evidenceUrl: previousProcessed.evidenceUrl,
         ...(session?.cacheWarning ? { cacheWarning: session.cacheWarning } : {}) };
     }
     if (session && !recovery) state.pendingOperation = { id: randomUUID(), kind: rebuildTag ? 'rebuild' : 'update',
@@ -239,7 +237,7 @@ async function processRelease(options: UpdateOptions, rebuildTag?: string) {
     if (!rebuildTag) state.processed[key] = { candidateId: candidate.id, tag, evidenceUrl: candidate.evidenceUrl! };
     await save();
     await session?.confirmGeneration();
-    return { status: 'processed' as const, candidate, activeRuleVersion: restored.activeRuleVersion, readback,
+    return { status: 'processed' as const, candidate, readback,
       ...(session?.cacheWarning ? { cacheWarning: session.cacheWarning } : {}) };
   } catch (error) {
     if (session && /PUBLICATION_(CONFLICT|PENDING)/.test(String(error))) throw error;

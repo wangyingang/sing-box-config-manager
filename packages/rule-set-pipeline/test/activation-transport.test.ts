@@ -68,12 +68,12 @@ function github(options: { branch?: string; head?: string; private?: boolean; mi
   return { transport: githubActivation(branch, request), calls };
 }
 
-test('未初始化的隔离分支使用预期旧 head，一次提交稳定文件及记录且非强制更新', async () => {
-  const branch = 'acceptance-issue-19';
-  const remote = github({ branch });
-  const files = { 'stable/domains.srs': Buffer.from([0, 255, 1]), 'stable/activation.json': Buffer.from('{"candidate":"B"}\n') };
+test('已登记的 v2 激活一次提交稳定文件及记录且非强制更新', async () => {
+  const branch = 'main';
+  const remote = github();
+  const files = stableFiles;
   assert.equal(await remote.transport.head(), oldHead);
-  assert.equal(await remote.transport.commit(oldHead, files, '激活候选 B'), newCommit);
+  assert.equal(await remote.transport.commit(oldHead, files, '激活候选 B', reservation), newCommit);
   const blobs = remote.calls.filter(c => c.args[1].endsWith('/git/blobs'));
   assert.deepEqual(blobs.map(c => Buffer.from(c.input.content, 'base64')), Object.values(files));
   assert.ok(blobs.every(c => c.input.encoding === 'base64'));
@@ -102,7 +102,7 @@ for (const path of ['candidates/abc/domains.srs', 'README.md', '/stable/domains.
 
 test('预期旧 head 已被其他激活改变时直接冲突，不创建提交或 PATCH', async () => {
   const remote = github({ head: 'f'.repeat(40) });
-  await assert.rejects(remote.transport.commit(oldHead, { 'stable/domains.srs': Buffer.from('rules') }, '激活候选'), /ACTIVATION_CONFLICT/);
+  await assert.rejects(remote.transport.commit(oldHead, stableFiles, '激活候选', reservation), /ACTIVATION_CONFLICT/);
   assert.ok(remote.calls.every(c => c.input === undefined));
   assert.ok(!remote.calls.some(c => c.args.includes('PATCH')));
 });
@@ -124,7 +124,7 @@ test('PATCH 回复失败携带准确 attemptedCommit，保留 cause 且不重试
 for (const options of [{ missing: true }, { private: true }, { head: 'short-sha' }]) {
   test(`分支缺失、仓库私有或 head 非法时拒绝激活 ${JSON.stringify(options)}`, async () => {
     const remote = github(options);
-    await assert.rejects(remote.transport.commit(oldHead, { 'stable/domains.srs': Buffer.from('rules') }, '激活候选'));
+    await assert.rejects(remote.transport.commit(oldHead, stableFiles, '激活候选', reservation));
     assert.ok(remote.calls.every(c => c.input === undefined));
   });
 }
@@ -219,29 +219,21 @@ test('低层激活 transport 拒绝直接修改配置化稳定文件，也拒绝
   assert.ok(!remote.calls.some(call => call.args.includes('PATCH')));
 });
 
-test('允许旧 v1 入口更新既有格式，拒绝它覆盖配置化规则集的稳定文件', async () => {
-  const legacy = github({ branch: 'acceptance-issue-19' });
-  await legacy.transport.commit(oldHead, { 'stable/v2fly/category-ai-not-cn/domains.srs': rule, 'stable/activation.json': Buffer.from('{}') }, '旧单集');
-  assert.ok(legacy.calls.some(call => call.args.includes('PATCH')));
-  for (const [record, file] of [[recordPath, rulePath], ['stable/china-ip/activation.json', 'stable/china-ip/route.srs']]) {
-    const managed = github({ branch: 'acceptance-issue-19', managedRecord: record, managedFile: file });
-    await assert.rejects(managed.transport.commit(oldHead, { [file]: rule, 'stable/activation.json': Buffer.from('{}') }, '覆盖固定版本'),
-      /owned by another rule set/);
-    assert.ok(!managed.calls.some(call => call.args.includes('PATCH')));
-  }
-  const independent = github({ branch: 'acceptance-issue-19', managedRecord: recordPath, managedFile: rulePath });
-  await independent.transport.commit(oldHead, { 'stable/openai/route.srs': rule, 'stable/activation.json': Buffer.from('{}') }, '更新独立旧版路径');
-  assert.ok(independent.calls.some(call => call.args.includes('PATCH')));
-});
-
-test('已协调目标的 v1 写入也必须登记', async () => {
-  for (const remote of [github(), github({ branch: 'acceptance-issue-19', managedRecord: statePath })]) {
+test('低层激活 transport 拒绝写入已废止的 v1 记录，即使提供登记信息', async () => {
+  for (const branch of ['main', 'acceptance-issue-19']) {
+    const remote = github({ branch });
     await assert.rejects(remote.transport.commit(oldHead, {
       'stable/v2fly/category-ai-not-cn/domains.srs': rule,
       'stable/activation.json': Buffer.from('{}'),
-    }, '绕过登记'), /requires a registered write/);
-    assert.ok(!remote.calls.some(call => call.input));
+    }, '旧单列表', reservation), /Rule Subscription v1 is retired/);
+    assert.equal(remote.calls.length, 0);
   }
+});
+
+test('配置化激活拒绝覆盖已废止的 v1 交付文件', async () => {
+  const remote = github({ managedRecord: 'stable/activation.json', managedFile: rulePath });
+  await assert.rejects(remote.transport.commit(oldHead, stableFiles, '激活候选', reservation), /owned by the legacy rule set/);
+  assert.ok(!remote.calls.some(call => call.input));
 });
 
 test('配置化提交准备完毕后，维护门禁拒绝就不会发送 ref PATCH', async () => {
