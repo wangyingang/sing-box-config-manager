@@ -10,7 +10,7 @@
 
 | 模块 | 接收什么、完成什么 | 当前边界 |
 | --- | --- | --- |
-| [Rule Set Pipeline](packages/rule-set-pipeline/README.md) | 从官方规则来源构建 JSON／SRS，发布候选，激活后更新稳定规则入口 | 已实现 V2Fly Release 和 Git CIDR 来源的多集检查、候选发布、单集激活／回滚／恢复及同进程客户端更新验证；CLI 和维护工作流共用双来源四集配置，生产更新和清理默认关闭 |
+| [Rule Set Pipeline](packages/rule-set-pipeline/README.md) | 从上游来源构建 JSON／SRS，发布候选，激活后更新稳定规则入口 | 正式配置包含 V2Fly Release 的 `openai`、`anthropic`、`google-deepmind` 和 Git CIDR 来源的 `china-ip`。CLI 可显式传入这份配置，维护工作流自动加载它 |
 | [Config Compiler](packages/config-compiler/README.md) | 将模板、配置选择、节点修订、规则元数据和客户端能力组合成完整配置，并检查错误 | 已实现纯内存编译、发布快照及 Node 本地发布适配器 |
 | [Configuration Manager Web App](apps/web/README.md) | 计划负责编辑、存储、管理授权、配置交付和订阅服务 | 当前只有工作区骨架及 Compiler 依赖，没有页面、HTTP API 或数据库 |
 
@@ -25,7 +25,7 @@ Pipeline 通过规则文件和元数据对接 Compiler，两者没有源码或�
 项目中有两种不同的发布与更新：
 
 - **配置发布**：固定 Recipe、模板、节点和校验结果，生成可交付的配置快照。继续编辑草稿不会改变已经发布的快照。
-- **规则发布与激活**：先上传经过验证的规则候选。管理者可以显式选择候选，立即检查和每日工作流也可以自动激活符合条件的规则。人工固定持续有效，生产调度默认关闭。客户端按自身更新机制从稳定入口加载规则。
+- **规则发布与激活**。用 `update` 发布候选，用 `activate` 按规则集激活。需要检查最新来源并自动激活符合条件的变化时，使用 `check-now` 或维护工作流。人工固定会阻止自动激活，`resume` 可恢复单集跟随。客户端按自身更新机制从稳定入口加载规则。生产 Actions 的更新和清理分别受开关控制，默认均关闭。详见 [CLI 操作](packages/rule-set-pipeline/README.md#操作分别产生什么结果)和 [Actions 规则维护](packages/rule-set-pipeline/README.md#actions-规则维护)。
 
 当前 Recipe／Template v2 使用第二种机制跟随规则变化。因此，**配置快照固定，不代表客户端以后加载的规则内容固定**。模板和节点仍采用固定修订，不因规则自动更新而自动升级。该区别由 [ADR 0006](docs/adr/0006-follow-active-rule-subscriptions.md) 明确规定；旧 v1 固定产物路径保留兼容。
 
@@ -56,6 +56,7 @@ pnpm check
 读取已有验证证据或汇总父 Spec 的交付状态：
 
 ```sh
+mkdir -p .verification
 node scripts/inspect-evidence.mjs --evidence /path/to/verification --out .verification/evidence-report
 node scripts/check-spec-delivery.mjs --spec 66 --out .verification/spec-report --evidence /path/to/verification
 ```

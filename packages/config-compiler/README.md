@@ -183,8 +183,14 @@ Node 端 `publishRecipe` 同时支持两版契约。发布继续执行两种 ECS
 旧 `schemaVersion: 1` 继续使用下述固定 Manifest 绑定，保留原验收含义；
 v2 不接受该绑定。迁移需要新 Recipe／Template 修订、显式改绑和重新发布。
 节点、模板和 Client Profile 的固定引用规则不变。
-三集可编译输入见 [three-rule-subscriptions-v2.json](examples/three-rule-subscriptions-v2.json)；单集测试输入见 [subscription-fixtures.ts](test/subscription-fixtures.ts)，
-验收与限制见 [#17 验证记录](docs/verification/issue-17.md)。
+
+正式配置中，`openai`、`anthropic` 和 `google-deepmind` 支持 Route 和 DNS Query。
+`china-ip` 支持 Route 和 DNS Response。需要在两个位置使用同一个 `china-ip` tag 时，
+绑定可写为 `subscriptionRef: { systemRuleSetId: 'china-ip', usages: ['route', 'dns-response'] }`。
+两种用途共用稳定 SRS，DNS 响应匹配仍须引用已经执行 `evaluate` 的响应。
+绑定 `china-ip` 的 `dns-query` 会导致编译失败。参见 [三集可编译示例](examples/three-rule-subscriptions-v2.json)
+和 [双栈客户端集成测试](../rule-set-pipeline/test/integration/china-ip-delivery.test.ts)。
+单集订阅的初次交付范围见 [#17 验证记录](docs/verification/issue-17.md)。
 
 ### 固定规则产物
 
