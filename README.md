@@ -137,5 +137,6 @@ Compiler 同时提供已解析编译输入 `CompileInput` 和 Recipe 入口。�
 - [配置数据契约设计与实施计划（M2，历史背景及后续事项）](docs/architecture/m2-contract-plan.md)
 - [领域术语索引](GLOSSARY-MAP.md)
 - [初始交接文档](docs/history/2026-11-02-configuration-management-handoff.md)（历史参考，部分决策已被后续 ADR 和 spec 替代）
+- [2026-11-06 Rule Set Pipeline 需求交接](docs/history/2026-11-06-ruleset-pipeline-scope-handoff.md)（历史归档，原文保留；不代表当前实现或执行授权）
 
 各层 `node_modules/`、`dist/` 和生成的 validator 均被 Git 忽略。依赖锁文件只维护根目录 `pnpm-lock.yaml`。
