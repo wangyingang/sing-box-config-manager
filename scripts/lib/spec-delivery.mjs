@@ -93,7 +93,8 @@ function readChecks(snapshot) {
   const result = collectPages(cursor => {
     const pr = query(document, { owner, name, number, cursor }).repository?.pullRequest;
     const identity = prIdentity(pr, snapshot), rollup = pr.statusCheckRollup;
-    requireThat(rollup === null || (commitId(rollup?.commit?.oid) && nonempty(rollup.state)), 'CI 汇总数据不完整');
+    requireThat(rollup === null || (commitId(rollup?.commit?.oid)
+      && ['EXPECTED', 'ERROR', 'FAILURE', 'PENDING', 'SUCCESS'].includes(rollup.state)), 'CI 汇总数据不完整');
     commit = rollup?.commit.oid ?? null; state = rollup?.state ?? null;
     return { identity: { ...identity, commit, state }, connection: rollup?.contexts ?? { totalCount: 0, nodes: [], pageInfo: { hasNextPage: false } } };
   }, `PR #${number} CI`);
@@ -158,6 +159,7 @@ function auditPullRequest(repository, number, issues) {
   requireThat(isDeepStrictEqual(snapshot, readPullRequest(repository, number)), `PR #${number} 在审计期间发生变化，请重试`);
   const warnings = deliveryErrors(snapshot, issues, expected, 'after-merge');
   if (!ci.checks.length) warnings.push('没有可核对的 CI 检查');
+  if (ci.state !== null && ci.state !== 'SUCCESS') warnings.push(`CI 汇总状态：${ci.state}`);
   if (ci.commit !== null && ci.commit !== snapshot.pullRequest.headCommit) warnings.push('CI 对应提交与 PR head 不同');
   for (const check of ci.checks) {
     if (check.__typename === 'CheckRun' && (check.status !== 'COMPLETED' || check.conclusion !== 'SUCCESS'))
@@ -177,7 +179,7 @@ function auditPullRequest(repository, number, issues) {
 
 export function auditSpec(repository, number, links = []) {
   const issues = [], pullRequests = [], visited = new Set();
-  const issueByKey = new Map(), prIssues = new Map();
+  const issueByKey = new Map(), prIssues = new Map(), issueSnapshots = new Map();
   let parent, defaultBranch;
   function visit(repo, n, ancestry = []) {
     const identityKey = `${repo.toLowerCase()}#${n}`;
@@ -185,6 +187,7 @@ export function auditSpec(repository, number, links = []) {
     if (visited.has(identityKey)) return;
     visited.add(identityKey);
     const children = issueConnection(repo, n, 'subIssues', `${issueFields}`);
+    issueSnapshots.set(identityKey, { repository: repo, number: n, children });
     const record = { ...children.identity.issue, parent: ancestry.at(-1) ?? null, children: children.items.map(key) };
     const comments = issueConnection(repo, n, 'comments', commentFields);
     requireThat(isDeepStrictEqual(children.identity.issue, comments.identity.issue), `工单 ${identityKey} 在审计期间发生变化`);
@@ -227,9 +230,9 @@ export function auditSpec(repository, number, links = []) {
     pullRequests.push(result);
     warnings.push(...result.warnings.map(warning => `${pr.repository}#${pr.number}：${warning}`));
   }
-  const finalChildren = issueConnection(repository, number, 'subIssues', issueFields);
-  requireThat(isDeepStrictEqual(finalChildren.identity.issue, Object.fromEntries(Object.entries(parent)
-    .filter(([key]) => !['parent', 'children', 'comments'].includes(key))))
-    && isDeepStrictEqual(finalChildren.items.map(key), parent.children), '父 Spec 在审计期间发生变化，请重试');
+  for (const [identityKey, snapshot] of issueSnapshots) {
+    const current = issueConnection(snapshot.repository, snapshot.number, 'subIssues', issueFields);
+    requireThat(isDeepStrictEqual(current, snapshot.children), `工单 ${identityKey} 或子工单关系在审计期间发生变化，请重试`);
+  }
   return { repository, parent, defaultBranch, issues, pullRequests, warnings, acceptance: 'not-evaluated' };
 }

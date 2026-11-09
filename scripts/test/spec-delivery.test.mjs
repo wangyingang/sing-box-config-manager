@@ -68,7 +68,7 @@ function fixture(t) {
       { __typename: 'StatusContext', id: 'STATUS_1', context: 'external', state: 'SUCCESS', targetUrl: `${pr.url}/checks` }])],
       'thread:THREAD_1:comments': [page([{ ...comment('thread-comment'), originalCommit: { oid: head },
         commit: { oid: head }, path: 'src/main.ts', line: 8 }])],
-    }, errors: {}, failures: {}, invalidJson: {}, overrides: {} };
+    }, errors: {}, failures: {}, invalidJson: {}, overrides: {}, afterResponse: {} };
   const callsPath = join(directory, 'calls.jsonl'), dataPath = join(directory, 'data.json');
   const evidenceDirectory = evidence(join(directory, 'evidence'));
   writeFileSync(join(directory, 'gh'), String.raw`#!/usr/bin/env node
@@ -107,6 +107,15 @@ if (Object.hasOwn(data.overrides, route)) result = data.overrides[route];
 if (data.failures[route]) { console.error('GitHub is unavailable'); process.exit(1); }
 if (data.invalidJson[route]) console.log('{broken');
 else console.log(JSON.stringify(result));
+const patches = data.afterResponse[route];
+if (patches) {
+  delete data.afterResponse[route];
+  for (const { path, value } of patches) {
+    const target = path.slice(0, -1).reduce((node, key) => node[key], data);
+    target[path.at(-1)] = value;
+  }
+  fs.writeFileSync(process.env.SPEC_TEST_DATA, JSON.stringify(data));
+}
 `, { mode: 0o755 });
   let runNumber = 0;
   function run({ args = [], rawArgs, withEvidence = true, output = join(directory, `report-${runNumber++}`) } = {}) {
@@ -120,7 +129,8 @@ else console.log(JSON.stringify(result));
     const calls = readFileSync(callsPath, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
     const reportPath = join(output, 'report.json');
     const report = existsSync(reportPath) ? JSON.parse(readFileSync(reportPath, 'utf8')) : undefined;
-    return { code: result.status, stdout: result.stdout, stderr: result.stderr, calls, report, output, reportPath };
+    return { code: result.status, stdout: result.stdout, stderr: result.stderr, calls, report, output, reportPath,
+      state: JSON.parse(readFileSync(dataPath, 'utf8')) };
   }
   return { directory, data, evidenceDirectory, run };
 }
@@ -208,6 +218,7 @@ for (const [name, mutate] of [
   ['repeated cursor', data => { data.pages['pr:56:comments'] = [page([comment('first')], 3, 'page-1'), page([comment('second')], 3, 'page-1')]; }],
   ['duplicate identity', data => { data.pages['pr:56:comments'] = [page([comment('same')], 2, 'page-1'), page([comment('same')], 2)]; }],
   ['wrong total type', data => { data.pages['pr:56:contexts'][0].totalCount = '2'; }],
+  ['invalid CI rollup state', data => { data.rollups[56].state = 'unexpected'; }],
   ['wrong thread flag type', data => { data.pages['pr:56:reviewThreads'][0].nodes[0].isResolved = 'true'; }],
   ['partial GraphQL errors', data => { data.errors['issue:40:subIssues'] = [{ message: 'Partial response' }]; }],
   ['wrong GraphQL errors type', data => { data.errors['issue:40:subIssues'] = { message: 'Partial response' }; }],
@@ -232,6 +243,8 @@ for (const [name, mutate] of [
 }
 
 for (const [name, mutate, expected] of [
+  ['failed CI rollup', data => { data.rollups[56].state = 'FAILURE'; }, /FAILURE/],
+  ['pending CI rollup', data => { data.rollups[56].state = 'PENDING'; }, /PENDING/],
   ['pending CI', data => { const check = data.pages['pr:56:contexts'][0].nodes[0]; check.status = 'IN_PROGRESS'; check.conclusion = null; }, /IN_PROGRESS/],
   ['skipped CI', data => { data.pages['pr:56:contexts'][0].nodes[0].conclusion = 'SKIPPED'; }, /SKIPPED/],
   ['missing CI', data => { data.rollups[56] = null; }, /CI/],
@@ -251,6 +264,33 @@ for (const [name, mutate, expected] of [
     assert.match(result.report.warnings.join('\n'), expected); assert.deepEqual(result.report.errors, []);
   });
 }
+
+test('a child issue reopened after PR CI is read invalidates the earlier completed snapshot', t => {
+  const f = fixture(t);
+  const reopened = { ...f.data.issues[42], state: 'OPEN', stateReason: null, updatedAt: '2026-11-09T02:00:00Z' };
+  f.data.afterResponse['pr:56:contexts'] = [
+    { path: ['issues', '42'], value: reopened },
+    { path: ['pages', 'issue:41:subIssues', 0, 'nodes', 0], value: reopened },
+  ];
+  const result = f.run();
+  assert.equal(result.state.issues[42].state, 'OPEN');
+  assert.equal(Object.hasOwn(result.state.afterResponse, 'pr:56:contexts'), false);
+  assertStatus(result, 'failed');
+  assert.match(result.report.errors.join('\n'), /工单.*审计期间发生变化/);
+});
+
+test('a deeper sub-issue added after PR CI is read invalidates the earlier hierarchy snapshot', t => {
+  const f = fixture(t), added = { ...issue(43), state: 'OPEN', stateReason: null };
+  f.data.afterResponse['pr:56:contexts'] = [
+    { path: ['issues', '43'], value: added },
+    { path: ['pages', 'issue:42:subIssues'], value: [page([added])] },
+  ];
+  const result = f.run();
+  assert.deepEqual(result.state.pages['issue:42:subIssues'][0].nodes.map(record => record.number), [43]);
+  assert.equal(Object.hasOwn(result.state.afterResponse, 'pr:56:contexts'), false);
+  assertStatus(result, 'failed');
+  assert.match(result.report.errors.join('\n'), /42.*子工单关系.*审计期间发生变化/);
+});
 
 test('a current completed Codex summary supersedes an earlier review of another commit', t => {
   const f = fixture(t);
