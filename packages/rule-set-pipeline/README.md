@@ -2,7 +2,7 @@
 
 包名：`@sing-box-config-manager/rule-set-pipeline`。管理者需要更新系统维护的规则集合时，本模块从受信任的上游生成 sing-box 可加载的规则文件，验证并上传为候选。管理者可显式激活候选，检查流程也可自动激活符合条件的规则。客户端随后通过稳定地址取得当前规则；构建成功、候选验证成功、稳定入口切换和客户端加载完成是不同的状态。
 
-正式配置 [`config/rulesets.yml`](config/rulesets.yml) 包含两类来源。V2Fly `domain-list-community` Release 提供 `openai`、`anthropic` 和 `google-deepmind`，Git 仓库 `gaoyifan/china-operator-ip` 的 `ip-lists` 分支提供双栈 `china-ip`。[维护工作流](#actions-规则维护)自动加载这份配置，CLI 通过 `--config` 显式选用。规则文件面向 sing-box **1.14.4**，生成 Source Format **4** 的 JSON 及对应 SRS。
+正式配置 [`config/rulesets.yml`](config/rulesets.yml) 包含两类来源。V2Fly `domain-list-community` Release 提供 `openai`、`anthropic` 和 `google-deepmind`，Git 仓库 `gaoyifan/china-operator-ip` 的 `ip-lists` 分支提供双栈 `china-ip`。[维护工作流](#actions-规则维护)自动加载这份配置，CLI 通过 `--config` 显式选用。构建面向 sing-box **1.14.4**，生成 Source Format **4** 的 JSON 和对应的二进制规则文件（SRS）。
 
 ## 操作分别产生什么结果
 
@@ -30,7 +30,7 @@
 
 构建先固定 Release、tag 对应源码 commit 和资产身份，核对完整 YAML 的实际字节 SHA-256，再提取目标列表。列表必须唯一、非空，声明 length 与 rules 数量一致。不带 `--config` 的单列表构建中，YAML 损坏、目标列表包含未知类型或非法记录时，整个构建失败，不返回部分成功规则。Include 展开、attribute 筛选、affiliation、官方排序与去冗余由 V2Fly 官方构建程序完成，本模块不重新解析原始来源。
 
-转换得到的 Rule IR 是一组不带路由或 DNS 动作的匹配条件，例如“匹配完整域名”与“匹配域名及其子域”。任一条件命中即算集合命中。随后按使用场景选择条件，称为用途投影（Projection）：
+转换得到的规则中间表示（Rule IR）是一组不带路由或 DNS 动作的匹配条件，例如“匹配完整域名”与“匹配域名及其子域”。任一条件命中即算集合命中。随后按使用场景选择条件，称为用途投影（Projection）：
 
 | 用途 | 选择的条件 | 用在什么位置 |
 | --- | --- | --- |
@@ -125,7 +125,7 @@ pnpm --dir packages/rule-set-pipeline activate \
 
 `activation.control` 保存 `revision`、`reason`、`pauseAutomaticActivation` 和 `pauseAutomaticRetry`。人工指定的原因是 `manual-activation`，暂停自动激活。人工回滚的原因是 `manual-rollback`，同时暂停自动重试和自动激活。每次成功的人工操作都会生成新修订，即使所选候选已经是当前版本。候选发布和重建不会解除固定。旧激活记录仍可查询，其中没有 `control` 时表示尚未记录人工固定。
 
-激活先复验候选的固定 HTTPS 字节、Manifest、来源、构建身份和原生结果，再核对预期旧 head 中的该集契约和实际稳定文件。候选的不可变 HTTPS 字节还须与当前保留的 Git 文件一致。检查通过后，先在远端 journal 登记操作 ID、所选候选、原稳定 head 和维护代次，登记同时绑定已验证的规则摘要和激活记录，再提交选中集的稳定文件。生产布局在 `candidates` 登记，在 `main` 切换。隔离分支同时承担这两种用途，切换提交以登记提交为 parent。切换前复查已捕获的 journal head、代次和维护状态，以预期 parent 非强制更新稳定分支。Git API 的完整 tree/blob 用于判定旧激活记录是否存在，CDN 的 404 不作为首次激活依据。
+激活先复验候选的固定 HTTPS 字节、Manifest、来源、构建身份和原生结果，再核对预期旧 head 中的该集契约和实际稳定文件。候选的不可变 HTTPS 字节还须与当前保留的 Git 文件一致。检查通过后，先在远端操作日志（`pipeline/state.json`）登记操作 ID、所选候选、原稳定 head 和维护代次，登记同时绑定已验证的规则摘要和激活记录，再提交选中集的稳定文件。生产布局在 `candidates` 登记，在 `main` 切换。隔离分支同时承担这两种用途，切换提交以登记提交为 parent。切换前复查已捕获的日志分支 head、代次和维护状态，以预期 parent 非强制更新稳定分支。Git API 的完整 tree/blob 用于判定旧激活记录是否存在，CDN 的 404 不作为首次激活依据。
 
 `status` 中的 `activeRuleVersions` 按逻辑 ID 返回远端 `stablePath/activation.json` 及其当前字节核验结果，`state.candidates`／`state.configuredProcessed` 来自远端候选记录。`rollbackTargets` 仅列出必要证据仍保留且与当前订阅兼容的目标；不可用原因单独列在 `unavailableRollbackTargets`。本地激活回执仍独立保存，供诊断使用，不能覆盖远端事实。
 
@@ -177,7 +177,7 @@ pnpm --dir packages/rule-set-pipeline status --config "$config" --binary "$binar
 
 `status` 返回 `authority: remote`、维护状态、`candidateAvailability` 和 `pendingOperations`。默认执行证据结构、地址和字节摘要核验，标注 `verification: structural`；提供 `--binary` 时额外执行真实原生复验，标注 `native`。已提交的当前版本即使候选回读失败也仍报告为已激活，并单独标记待核实。旧单集的历史通过 `expectedHead` 追溯，在结果映射中使用 `v2fly:category-ai-!cn`；历史读取失败通过 `historyComplete`／`historyErrors` 报告，不能将空列表视为完整历史。初始化和查询 API 分别为 `initializeRemoteState(repository, targetBranch)`、`readRemoteStatus({ repository, publication?, binary? })`。
 
-同一缓存目录的 `update.lock/` 仍拒绝本机并发；远端预期 head 保护跨机器写入。进程被强制终止后，可换新目录恢复；要复用旧目录，先确认没有存活进程再移除残留锁。不要删除远端来源记录来绕过来源变化错误。人工固定、立即检查和主动恢复使用同一远端 journal。
+同一缓存目录的 `update.lock/` 仍拒绝本机并发；远端预期 head 保护跨机器写入。进程被强制终止后，可换新目录恢复；要复用旧目录，先确认没有存活进程再移除残留锁。不要删除远端来源记录来绕过来源变化错误。人工固定、立即检查和主动恢复使用同一远端操作日志。
 
 Artifact Manifest（产物清单）记录某次不可变规则文件的固定地址、摘要和使用约束。原有单集及目标为 `main` 的配置驱动更新在产物仓库的 `candidates` 分支追加候选；配置目标为 `acceptance-*` 时在该隔离分支追加候选。两者均采用三个有序的候选提交阶段，并穿插远端操作检查点，使清单可以引用已固定的 commit 地址：
 
@@ -237,7 +237,7 @@ pnpm --dir packages/rule-set-pipeline rollback --config "$config" --id china-ip 
 
 ## 预览清理与维护隔离
 
-用 `maintenance-preview` 查看当前稳定入口、人工控制、候选证据、处理进度、拟清理范围和可能保留旧历史的其他 Git 引用。预览只读取远端。保留集合覆盖配置化规则集（包括 `china-ip`）和仍受支持的 v1 入口，当前版本的使用时长不影响保留。Git 候选的 `sourceKey` 对应远端登记的固定 commit，`candidatePaths` 列出需要保留和核验的证据文件。非当前历史和已完成的未激活候选可进入清理范围，没有最低保留天数。
+用 `maintenance-preview` 查看当前稳定入口、人工控制、候选证据、处理进度、拟清理范围和可能保留旧历史的其他 Git 引用。预览只读取远端。保留集合覆盖配置化规则集（包括 `china-ip`）和使用 Rule Subscription v1 的旧单列表入口，当前版本的使用时长不影响保留。Git 候选的 `sourceKey` 对应远端登记的固定 commit，`candidatePaths` 列出需要保留和核验的证据文件。非当前历史和已完成的未激活候选可进入清理范围，没有最低保留天数。
 
 ```sh
 pnpm --dir packages/rule-set-pipeline exec node --import tsx src/cli.ts maintenance-preview --branch acceptance-example \
@@ -459,7 +459,7 @@ node scripts/verify.mjs --out /absolute/path/to/new-evidence --binary /absolute/
 
 常规测试离线运行，纳入 `pnpm check` 和 CI。固定样本包含官方目标列表原文摘录、完整资产的来源身份及预期 JSON。统一验证入口的 `--release` 在常规与原生检查之外，只运行固定 Release 的单列表和配置化三集构建测试。测试联网下载完整资产并核对来源、产物及原生结果。网络错误、限额或来源变化会使验收失败。包脚本 `test:release` 匹配整个 `test/acceptance/`，若已设置对应探针的启用变量，也会运行写远端产物仓库的验收。
 
-`test:integration` 使用固定真实样本和合成 IR，通过 `rule-set match` 实际读取、初始化并匹配 JSON／SRS。非法 Go regexp 会在此被拒绝，不能以编译或配置 `check` 代替加载。测试覆盖域名边界、regexp 大小写、IPv4／IPv6 投影、相邻 CIDR 归并等价性及扩大／缺失反例、term 字段顺序、独立构建确定性及编译／解码／加载／语义错配故障；现有 native CI 自动执行此脚本。
+`test:integration` 使用固定真实样本和合成 IR，通过 `rule-set match` 实际读取、初始化并匹配 JSON／SRS。非法 Go regexp 会在此被拒绝，不能以编译或配置 `check` 代替加载。测试覆盖域名边界、regexp 大小写、IPv4／IPv6 投影、相邻 CIDR 归并等价性及扩大／缺失反例、term 字段顺序、独立构建确定性及编译／解码／加载／语义错配故障。CI 执行完整检查时，`Native sing-box` 作业会运行此脚本。
 
 `pnpm build` 输出 Node ESM 和 TypeScript 声明至 `dist/`。本包不提供浏览器运行时，运行时代码不导入 Compiler。集成验收通过 devDependency 声明 Compiler 的准备顺序；`test:integration`、`test:activation` 和 `test:release` 在加载跨模块测试前生成 Compiler validator，干净 checkout 不依赖已有构建文件。
 
@@ -489,7 +489,7 @@ pnpm --dir packages/rule-set-pipeline test:activation
 
 ### 客户端故障与缓存离线恢复（#21）
 
-`test/integration/client-failure-recovery.test.ts` 随 `test:integration` 和 native CI 自动运行，复用 Compiler 订阅入口与 #19 的 loopback HTTPS 验收方式。测试使用独立临时目录、缓存文件、动态端口和测试专用 `acceptance-issue-21` URL；不写远程分支，也不依赖 #20 的状态。单独运行并保存机器证据：
+`test/integration/client-failure-recovery.test.ts` 随 `test:integration` 运行，包括 CI 的 `Native sing-box` 作业。测试复用 Compiler 订阅入口和[客户端自动更新验收的本地 HTTPS 测试方式](docs/verification/issue-19.md)。测试使用独立临时目录、缓存文件、动态端口和测试专用 `acceptance-issue-21` URL，不写远程分支。单独运行并保存机器证据：
 
 ```sh
 pnpm --filter @sing-box-config-manager/config-compiler generate:validator

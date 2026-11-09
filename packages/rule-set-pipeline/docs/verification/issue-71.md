@@ -6,6 +6,8 @@
 node scripts/verify.mjs --out /absolute/path/to/new-evidence --binary /absolute/path/to/sing-box-1.14.4
 ```
 
+下表的验收编号对应[双栈 IP 规则集交付 Spec #66](https://github.com/wangyingang/sing-box-config-manager/issues/66)。
+
 | 验收范围 | 测试观察 |
 | --- | --- |
 | A6–A7：按来源共享输入，按规则集判断交付变化 | 四集首轮各自激活；单独改变 CIDR 后只增加一个 `china-ip` 候选和激活；新 Git commit 只有注释变化时，摘要保留新检查 SHA，稳定版本和候选数不变；人工固定期间内容重复时也保留已核验候选 |

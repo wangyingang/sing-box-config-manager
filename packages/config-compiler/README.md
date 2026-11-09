@@ -6,7 +6,7 @@
 
 Compiler 核心只接收内存对象。调用它的可信应用或脚本负责加载依赖、管理授权、保存修订，并验证规则元数据的来源；Node 专用 `/publisher` 入口另外提供真实 `sing-box check` 和本地文件发布。Web 页面、数据库、配置订阅 HTTP 服务及其鉴权尚未实现；`renderSubscription` 是生成响应内容的函数，不是已经部署的端点。
 
-阅读顺序：先看 [从配置选择到完整配置](#从配置选择到完整配置)、[草稿与编译的边界](#草稿与编译的边界)、[配置发布及失败后的状态](#配置发布及失败后的状态)；字段范围见后面的 [Route](#recipe-route-策略) 和 [DNS](#recipe-dns-策略) 章节。当前系统规则使用 [v2 稳定规则订阅](#稳定规则订阅recipetemplate-v2)，旧 v1 固定产物仍兼容。
+阅读顺序：先看 [从配置选择到完整配置](#从配置选择到完整配置)、[草稿与编译的边界](#草稿与编译的边界)、[配置发布及失败后的状态](#配置发布及失败后的状态)；字段范围见后面的 [Route](#recipe-route-策略) 和 [DNS](#recipe-dns-策略) 章节。Recipe／Template v2 使用 [Rule Subscription v2](#稳定规则订阅recipetemplate-v2)，Recipe／Template v1 使用[固定产物绑定](#固定规则产物)。
 
 ## 从配置选择到完整配置
 
@@ -16,7 +16,7 @@ Compiler 核心只接收内存对象。调用它的可信应用或脚本负责�
 
 模板资源在前，Recipe 资源在后；DNS server 的顺序为模板公共项、当前 Profile 的平台项、Recipe 项。同一命名空间的重复 tag 会报错，不按 tag 合并对象。DNS 与 Route 是两个独立步骤数组，不自动排序、去重、补回已删除的预设或删除失效引用。
 
-项目已决定使用 TypeScript Composer，也就是用 TypeScript 代码直接表达对象选择和策略顺序的配置组合器。这样可以减少围绕文件排序和数组追加的预处理；官方 `sing-box merge` 继续用于旧配置迁移对照。代价是项目需要维护支持范围、引用检查和客户端能力表，不承诺成为通用 sing-box 配置编辑器。决定及依据见 [D06 结论](docs/architecture/sing-box-merge-analysis.md#d06-结论)。
+项目已决定使用 TypeScript Composer，也就是用 TypeScript 代码直接表达对象选择和策略顺序的配置组合器。这样可以减少围绕文件排序和数组追加的预处理；官方 `sing-box merge` 继续用于旧配置迁移对照。代价是项目需要维护支持范围、引用检查和客户端能力表，不承诺成为通用 sing-box 配置编辑器。决定及依据见 [配置组合机制的设计结论（D06）](docs/architecture/sing-box-merge-analysis.md#d06-结论)。
 
 新增模板或节点修订不会改变已有 Recipe。让某份配置采用新修订，需要显式升级引用、创建新 Recipe 修订并重新发布。这避免公共资源更新静默改变已有配置，决策背景见 [ADR 0001](../../docs/adr/0001-shared-node-revisions.md)。
 
@@ -71,7 +71,7 @@ Template 支持 `experimental.cache_file.enabled/store_dns`、
 
 `compileRecipe` 检查依赖、资源引用、规则用途、DNS 响应顺序、固定 Schema 和 Profile 能力。有错误时只返回诊断，不返回成功配置；正式下载必须使用编译成功结果。DNS 响应检查证明定义在引用之前，不证明每次请求都一定经过定义该响应的条件分支。
 
-`inspectRecipeComposition` 只供预览和迁移审计，可能返回带错误候选。旧 Android 样本含桌面进程匹配条件，可保留候选用于对照，但正式编译和发布仍拒绝它，不会为通过检查而删掉原有条件。当前 Profile 能力表仅覆盖已确认的进程匹配、应用包名匹配和 DHCP DNS 限制，不等于所有客户端特性都已运行验证；详细矩阵见 [D06 Client Profile](docs/architecture/config-composition-design.md#client-profile)。
+`inspectRecipeComposition` 只供预览和迁移审计，可能返回带错误候选。旧 Android 样本含桌面进程匹配条件，可保留候选用于对照，但正式编译和发布仍拒绝它，不会为通过检查而删掉原有条件。当前 Profile 能力表仅覆盖已确认的进程匹配、应用包名匹配和 DHCP DNS 限制，不等于所有客户端特性都已运行验证；详细矩阵见 [Client Profile 能力表](docs/architecture/config-composition-design.md#client-profile)。
 
 ### 草稿与编辑判定
 
@@ -148,11 +148,11 @@ if (published.ok) {
 `publishRecipe` 复用既有本地发布适配器。启用与关闭 ECS 两种输出都必须通过真实 check。
 ECS 校验参数和订阅时允许的修改见 [ECS 与订阅渲染](#ecs-与订阅渲染)。
 
-发布保留原 D06 `inputHash`，新增可选 `body.recipeSource`：
+发布快照包含已解析编译输入的 `inputHash`，Recipe 发布另有可选字段 `body.recipeSource`。
 其 `inputHash` 包含完整 Recipe（含步骤 ID）、选中的固定模板、节点、Manifest 或订阅契约及生成参数；
 同时保存 Recipe、模板、节点修订、所选固定产物摘要或订阅契约，供宿主审计与修订保留。
 这些记录参与最终发布 ID。未引用的节点最新版或模板候选不改变发布；
-检查期间的调用方修改不影响快照。D06 调用及旧发布格式继续可用。
+检查期间的调用方修改不影响快照。`compile(input)` 和 `preparePublication(input, check)` 继续接受 `CompileInput`，既有发布快照格式仍兼容。
 记录中的摘要提供完整性绑定，不提供授权或远程内容证明。
 
 ## 稳定规则订阅（Recipe／Template v2）
@@ -164,7 +164,7 @@ ECS 校验参数和订阅时允许的修改见 [ECS 与订阅渲染](#ecs-与订
 [工单 #17](https://github.com/wangyingang/sing-box-config-manager/issues/17) 新增显式
 `schemaVersion: 2`。Recipe 与所选 Template 必须同版；系统规则绑定只选择
 `subscriptionRef: { systemRuleSetId, usage }` 或 `{ systemRuleSetId, usages }`，
-保留本地 `tag` 与可选 `httpClient`。多个用途共用一个 tag 时，必须引用同一 SRS 入口。
+保留本地 `tag` 与可选 `httpClient`。多个用途共用一个 tag 时，必须引用同一个 sing-box 二进制规则文件（SRS）入口。
 不接受固定规则产物版本、任意 URL、摘要、格式或能力覆盖。
 
 可信宿主在 `dependencies.subscriptions` 提供 Pipeline 拥有的
@@ -175,7 +175,7 @@ Compiler 仍为纯函数，默认生成 binary SRS 远程配置，保留用途�
 资源引用和固定 Profile 检查。不会下载规则、调用 Pipeline 或统一注入更新周期／缓存。
 
 `compileRecipe`、`resolveRecipe`、草稿／编辑入口、`prepareRecipePublication` 和
-Node 端 `publishRecipe` 同时支持两版契约。发布继续执行两种 ECS 原生配置检查；
+Node 端 `publishRecipe` 同时支持 Recipe／Template v1 和 v2。发布继续执行两种 ECS 原生配置检查；
 快照的 `compiled.subscriptions` 和 `recipeSource.subscriptions` 固定契约，
 现有 `checks` 保存配置校验摘要。它们不承诺以后稳定入口的内容摘要。
 未引用的契约不会进入发布身份；异步检查期间的外部修改不会改变快照。
@@ -202,7 +202,7 @@ Recipe 和 Template 的 `resources.ruleSets` 支持
 包括预设及逻辑子规则。用户不能提交 URL、路径、摘要或能力声明。
 
 解析检查精确修订、用途可用性、非空投影、已知格式／能力及 Recipe 固定 Profile，
-显式转换为 D06 的 `RuleArtifact` 和绑定。多个本地 tag／用途可以共享一份物理产物。
+将清单转换为 `CompileInput` 使用的 `RuleArtifact` 和绑定。多个本地 tag／用途可以共享一份物理产物。
 DNS 响应用途要求当前匹配对象引用此前已 evaluate 的响应；
 具名和无 tag 响应分别验证，不能将目标 IP 投影改作 source IP。
 消费位置错误携带稳定 step、预设及最终输出位置诊断。
@@ -234,7 +234,7 @@ ECS 是 DNS 查询中携带的客户端网段信息。模板通过 `ecsResponseT
 ## Recipe Route 策略
 
 Recipe `resources.outbounds` 按声明顺序支持固定 Node Binding，以及显式的
-`direct`、`selector`、`urltest` 对象。Selector 的默认成员和组引用沿用 D06 校验。
+`direct`、`selector`、`urltest` 对象。Compiler 校验 Selector 的默认成员和组引用。
 `resources.ruleSets` 按版本支持 v2 订阅绑定或 v1 固定 curated binding，两版均支持 `{ kind: 'inline', definition: { type: 'inline', tag, rules } }`；
 其中 Headless Rule 只描述匹配条件，不允许动作或出站引用。
 
@@ -246,7 +246,7 @@ Template 可提供固定 `routePresets: Record<string, RouteRule[]>`。Recipe �
 
 `compileRecipe` 的 Route 语义诊断将 `path` 指向 Recipe step，附加 `source`
 中的 `stepId`、`stepIndex`、`outputRuleIndex`、`outputPath`；预设规则还包含
-`preset` 和 `presetRuleIndex`。D06 `compile` 的输出路径保持原样。
+`preset` 和 `presetRuleIndex`。`compile(input)` 的 Route 语义诊断使用编译输出中的规则路径。
 四项 settings 均为明确字段：logLevel、tunMtu、dnsFinal、routeFinal。
 dnsFinal 是 DNS server tag；tunMtu 要求 Template 中有且仅有一个 TUN 入站。
 
@@ -264,7 +264,7 @@ Template 和 Recipe 的 `resources.dnsServers` 支持 local／UDP／HTTPS；
 HTTPS 保留样本使用的 TLS、Host headers、detour 和 domain_resolver。
 local 支持 prefer_go、neighbor_domain。`resources.httpClients` 支持 tag、detour、
 domain_resolver；resolver 可以是 tag 或 `{ server, strategy? }`。
-这些对象均有封闭字段契约，引用沿用 D06 校验。平台 DHCP resolver 只能由
+这些对象均有封闭字段契约，Compiler 校验其中的资源引用。平台 DHCP resolver 只能由
 Template 的 `platformDnsServers` 提供；Android 选择 local，若配置 DHCP 或
 不支持的进程／应用条件则明确拒绝。资源顺序为模板公共项、平台项、Recipe 项。
 
@@ -274,9 +274,9 @@ Template 的 `platformDnsServers` 提供；Android 选择 local，若配置 DHCP
 Inline Rule Set 依赖；这组 DNS 测试本身不代表已迁移远程产物内容或完成五份样本的全量迁移；完整迁移验收见 [历史记录](#五份样本迁移与-recipe-发布)。
 原生集成覆盖桌面 DHCP／Android local 选择，以及发布和订阅的两种 ECS 输出。
 
-## D06 已解析输入接口
+## 已解析编译输入接口
 
-D06 是最初实现切片的名称。以下已解析输入接口继续兼容；新管理数据可使用前文的 Recipe 入口，由适配器生成 `CompileInput`。这些接口不是 HTTP 请求格式。
+编译和发布入口接收已解析编译输入 `CompileInput`。使用 Recipe 入口时，适配器先解析固定依赖，再生成 `CompileInput`。HTTP 请求由宿主解析。
 
 ```ts
 import { compile, inspectComposition, preparePublication, renderSubscription } from '@sing-box-config-manager/config-compiler';
@@ -296,7 +296,7 @@ import { createSingBoxChecker, publish } from '@sing-box-config-manager/config-c
 | `createSingBoxChecker(binary)` | Node 适配器，使用指定 1.14.4 binary 做真实 check |
 | `publish(input, options)` | 本地校验及指针切换；失败边界与上文 `publishRecipe` 相同 |
 
-输入类型见 `src/types.ts`，真实脱敏输入映射见 `test/fixtures.ts`。这些是已解析输入契约，不是 M2 的完整领域或 HTTP Schema。Compiler 只消费系统提供的规则元数据，不依赖 Rule Set Pipeline 包。
+已解析编译输入类型见 `src/types.ts`，脱敏样本的输入映射见 `test/fixtures.ts`。Compiler 通过宿主提供的元数据消费系统规则，与 Rule Set Pipeline 包没有运行时依赖。
 
 ## 本模块命令
 
@@ -334,8 +334,8 @@ python3 scripts/import-legacy-fixtures.py \
 五份旧配置候选保持生成语义并通过原生 check。旧 Android 样本仍含不支持的进程规则，正式 compile/发布会拒绝它；不为通过测试而静默删除规则。设备运行和线上订阅尚未验收。
 
 - [1.14.4 merge 源码审计](docs/architecture/sing-box-merge-analysis.md)
-- [D06 组合、ECS 与发布契约](docs/architecture/config-composition-design.md)
-- [2026-11-02 原始验收与当时的 M2 待办](docs/architecture/d06-validation.md)
+- [配置组合、ECS 与发布契约（D06）](docs/architecture/config-composition-design.md)
+- [2026-11-02 原始验收与后续配置数据契约计划](docs/architecture/d06-validation.md)
 - [固定 Schema 来源与许可证](schemas/README.md)
 
 ### 五份样本迁移与 Recipe 发布
@@ -345,7 +345,7 @@ python3 scripts/import-legacy-fixtures.py \
 `test/fixtures/migrated/` 保存五份可独立加载的静态 `RecipeCompileInput`；
 同名 `.mapping.json` 逐项记录原 fragment、固定节点和产物绑定。
 每个脱敏节点按样本与本地 tag 显式分配 ID，不根据相同连接内容推断共享身份。
-共享节点行为另由合成测试验证。旧 golden 与受限 normalization 保持原样，
+共享节点行为另由合成测试验证。迁移对照使用原有的固定预期输出和受限规范化规则，
 数组顺序不排序、不去重；user-d 继续使用独立模板和策略。
 
 `inspectRecipeComposition` 仅供审计／预览：保持结构、依赖和用途检查，
@@ -366,7 +366,7 @@ python3 scripts/import-legacy-fixtures.py \
 
 本次迁移验收结果（2026-11-03）：
 
-| 样本 | 新契约与旧 golden 对照 | 真实 1.14.4 两种 ECS check | 正式发布 |
+| 样本 | 新契约生成结果与原预期输出对照 | 真实 1.14.4 两种 ECS check | 正式发布 |
 | --- | --- | --- | --- |
 | user-a-tun | 通过 | 通过 | 通过 |
 | user-b-tun | 通过 | 通过 | 通过 |

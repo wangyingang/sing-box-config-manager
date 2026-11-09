@@ -13,7 +13,7 @@
 
 Manifest 的 `id` 标识系统规则集，`revision` 固定整个清单的不可变修订。
 `schemaVersion: 1`、`targetVersion: "1.14.4"` 和 `sourceFormatVersion: 4`
-是明确支持的版本；source JSON 和 binary SRS 都使用此固定构建目标。
+是明确支持的版本。JSON 源文件和 sing-box 二进制规则文件（SRS）都使用此固定构建目标。
 真实 binary 集成测试使用合成规则确认 v4 JSON 可编译为 SRS 并解码恢复。
 
 `artifacts` 中每项 `id` 必须全局唯一且绑定版本，推荐
@@ -62,7 +62,7 @@ Recipe／Template 的 curated binding 仅接受：
 用户不能在 binding 填写 URL、路径、摘要或能力。HTTP client 引用仅连接到
 已经开放的 HTTP client 资源，沿用既有引用检查。
 Compiler 接受宿主提供的 `dependencies.manifests`，检查结构、固定版本、用途及 Profile，
-再显式映射到现有 `RuleArtifact`；用途、条目数等元数据不透传 D06。
+再显式映射到现有 `RuleArtifact`。用途和条目数等产物清单元数据由适配器处理，不传入 `CompileInput`。
 Compiler 不导入 Pipeline 运行时代码，也不实时运行 Pipeline。
 
 可信接入方负责清单来源、产物 ID 与修订不可变性、HTTPS 地址不可覆盖、远程内容下载、

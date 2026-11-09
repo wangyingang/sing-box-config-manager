@@ -15,3 +15,9 @@ Recipe／Template 的系统规则绑定和 Compiler 接入契约随本次交付�
 本决策是 Spec #1 完成后的契约演进。Spec #1 的原始需求、实现与验收历史保留。模板、节点和 Client Profile 的既有固定引用规则不因此改变。
 
 具体交付范围与验收边界见[首个完整交付设计](../architecture/rule-set-pipeline-first-delivery.md)。
+
+## 规则候选验证通过后的自动激活
+
+`check-now` 和启用了更新的定时工作流共用检查流程。Pipeline 发现规则内容有有效变化后，会验证候选及其订阅兼容性。只有验证通过且该规则集允许自动激活时，Pipeline 才切换稳定入口。`update` 和 `rebuild` 只发布候选。
+
+人工指定版本或回滚会暂停该集的自动激活。管理者可用 `resume` 解除人工固定，并立即检查该集的最新来源。客户端按自身更新机制从原稳定 URL 获取已激活版本，无需重新发布配置。[自动更新与人工控制 Spec #47](https://github.com/wangyingang/sing-box-config-manager/issues/47)
