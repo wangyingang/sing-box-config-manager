@@ -14,6 +14,8 @@
 
 五个服务返回 `RulesResult`，CLI `--json` 直接呈现相同业务结果：
 
+Node 请求可选传入 `onProgress(event)`，事件为 `RulesProgress`（`stage` 及可选 `logicalId`）。这是非持久观察信息，不是成功回执；回调抛错不能中止业务操作。CLI 和 Actions 将阶段及累计耗时写到 stderr，长阶段每 15 秒继续提示；stdout 的最终结果结构不变。
+
 | 字段 | 含义 |
 | --- | --- |
 | `operation`、`dryRun` | status/sync/pin/resume/cleanup 及是否仅预览 |
@@ -66,6 +68,20 @@ status 只读取，不登记操作、更新检查时间、恢复维护或发送�
 输入绑定依据规范化来源与所选列表计算。它不含 source 别名或上游随后出现的新版本；定义修订另包含稳定路径与用途。控制只有 auto/pinned，不再由旧激活记录的双暂停布尔值与 resumes 叠加判定。
 
 候选文件位于 `candidates/<id>/`，仍使用固定 commit 地址、Manifest、构建记录与 readback 证据。候选首次成功发布保存 UTC ISO 8601 `publishedAt`，并以时间和候选稳定短身份组成 `versionId`，例如 `2026-11-16T12:34:56.789Z~1234abcd`。时间相同的候选仍由完整身份区分，短身份冲突时延长；不覆盖旧候选。pin、resume、重试和再次交付不刷新原版本身份或时间。有效内容与构建条件未变时 sync 不新增候选。
+
+正式配置状态先单独保存。每集正常首次交付采用以下 7 个持久阶段，沿用现有 schema、分支与稳定 URL，不重写历史：
+
+1. 登记候选，固定来源及 buildId，状态为 building。
+2. 上传 JSON/SRS，同时保存 publishing 状态。
+3. 上传 Manifest、来源及构建记录，同时保存规则文件所在 commit。
+4. 保存 HTTPS 回读证据，同时保存元数据 commit、地址和已确定的版本身份。
+5. 候选验证及交付准备均成功后，合并保存 verified 与 pendingDelivery。
+6. 更新稳定文件、交付记录及操作回执。
+7. 回读确认后保存交付完成并清除 pendingDelivery。
+
+阶段文件与当时的 journal 同一提交；返回的 commit 指针在下一阶段保存。若文件已提交但指针未保存，按原候选固定路径核实实际提交和字节，继续原 candidateId、source、buildId 和已登记版本。不能以缺失指针认定文件未提交，或盲目重试上传。候选合格但交付准备失败，或恢复后未被选中时，单独保存 verified；29 次只是四集正常成功路径目标，故障与恢复可以增加提交。
+
+读取优化只复用完整 Git SHA 指定的不可变内容，缓存有界且失败请求不复用；正式配置分支、目标分支和公开仓库权限仍实时读取。每次实际写入在对象创建前和 ref 更新前核对配置、journal head、维护门禁及由 journal 约束的规则身份，更新目标 ref 前再核对目标 head，保留预期 parent 与非强制更新。移除同一次提交之外的重复预检，不移除这些写入检查；响应不明仍由 writeId 或交付回执核实。
 
 真实 sync 按规则及稳定候选身份遍历当前有效意图下的全部 building/publishing，核对输入绑定、定义修订、规则代次及控制修订，再作普通更新或 unchanged 判断。同源分组只优化普通输入获取，不能限制恢复范围。沿用原 candidateId/source/buildId 完成 building→publishing→verified，不新增终止状态，不以同内容直接宣告 verified。已有完整证据时优先复验；证据不足时使用原固定输入补齐缺失阶段。已登记的 versionId/publishedAt 必须与证据一致；journal 缺失时只从核实后的原证据恢复，不可靠或冲突的事实明确失败并保留记录。
 

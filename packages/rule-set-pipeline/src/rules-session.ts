@@ -17,6 +17,7 @@ export interface RulesSession {
 
 /** State remains entirely remote; even preview builds do not touch a normal cache. */
 export async function openRulesSession(loaded: LoadedRules): Promise<RulesSession> {
+  loaded.progress('state');
   const { repository } = loaded.context;
   let snapshot = await repository.snapshot();
   const bytes = await snapshot.read(RULE_STATE_PATH);
@@ -33,13 +34,12 @@ export async function openRulesSession(loaded: LoadedRules): Promise<RulesSessio
     async guard() {
       if (loaded.dryRun) throw new Error('Dry-run has no write capability');
       await guardRulesConfiguration(loaded);
-      const current = await repository.snapshot();
-      if (current.head !== snapshot.head) throw new Error('RULE_WRITE_CONFLICT: journal changed');
+      const head = repository.head ? await repository.head() : (await repository.snapshot()).head;
+      if (head !== snapshot.head) throw new Error('RULE_WRITE_CONFLICT: journal changed');
       if (session.journal.maintenance !== 'open') throw new Error('RULE_MAINTENANCE: writes are isolated');
     },
     async save(files = {}) {
       if (Object.keys(files).length === 0 && persisted && isDeepStrictEqual(session.journal, persisted)) return snapshot.head;
-      await session.guard();
       const next = { ...structuredClone(session.journal), writeId: randomUUID() };
       // Validate our own complete record before any remote mutation.
       const state = encodeRecord(next);
@@ -47,6 +47,8 @@ export async function openRulesSession(loaded: LoadedRules): Promise<RulesSessio
       const writes = { ...files, [RULE_STATE_PATH]: state,
         ...(!persisted ? { 'pipeline/identity.json': encodeRecord({ schemaVersion: 2, id: next.id }) } : {}) };
       try {
+        // The repository guards object creation and the ref update; avoid a
+        // third redundant preflight while retaining both actual write checks.
         await repository.commit(repository.branch, snapshot.head, writes, '保存规则配置、版本与操作状态', session.guard);
       } catch (error) {
         if (!(error instanceof PublicationWriteError)) throw error;

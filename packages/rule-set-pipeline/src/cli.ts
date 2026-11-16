@@ -7,6 +7,7 @@ import { syncRules, pinRuleVersion, resumeRuleUpdates } from './rules-operations
 import { cleanupRuleHistory } from './rules-cleanup.js';
 import type { RulesContext, RulesRequest } from './rules-context.js';
 import type { RulesResult } from './rules-model.js';
+import { cliRulesProgress } from './rules-progress.js';
 
 const help = `Usage:
   pnpm rules status [id] [--json]
@@ -72,8 +73,10 @@ function humanResult(result: RulesResult & { rules?: RuleStatus[]; maintenance?:
 }
 
 /** Only the trusted host/test harness supplies a context; it is never a CLI flag. */
-export async function runRulesCli(args: string[], output: (text: string) => void = console.log, context?: RulesContext): Promise<number> {
+export async function runRulesCli(args: string[], output: (text: string) => void = console.log, context?: RulesContext,
+  progressOutput: (text: string) => void = text => { process.stderr.write(`${text}\n`); }): Promise<number> {
   let json = args.includes('--json');
+  let progress: ReturnType<typeof cliRulesProgress> | undefined;
   try {
     const { values, positionals } = parseArgs({ args, allowPositionals: true,
       options: { help: { type: 'boolean' }, json: { type: 'boolean' }, 'dry-run': { type: 'boolean' }, config: { type: 'string' } } });
@@ -88,7 +91,8 @@ export async function runRulesCli(args: string[], output: (text: string) => void
     if (operation === 'status' && (values['dry-run'] || values.config !== undefined)) throw new Error('status is read-only and does not accept --dry-run or --config');
     if (values.config !== undefined && !values['dry-run']) throw new Error('--config requires --dry-run; writes always read the current official configuration');
     if (values.config !== undefined && operation !== 'sync') throw new Error('--config is only supported by sync --dry-run');
-    const request: RulesRequest = { context, dryRun: values['dry-run'],
+    progress = cliRulesProgress(progressOutput);
+    const request: RulesRequest = { context, dryRun: values['dry-run'], onProgress: progress.update,
       ...(values.config !== undefined ? { draft: await readFile(resolve(process.env.INIT_CWD ?? process.cwd(), values.config), 'utf8') } : {}) };
     const result = operation === 'status' ? await getRulesStatus({ ...request, id })
       : operation === 'sync' ? await syncRules(request)
@@ -101,7 +105,7 @@ export async function runRulesCli(args: string[], output: (text: string) => void
     const message = error instanceof Error ? error.message : String(error);
     output(json ? JSON.stringify({ operation: args[0] ?? 'unknown', status: 'failed', exitCode: 1, error: message }) : `Error: ${message}`);
     return 1;
-  }
+  } finally { progress?.close(); }
 }
 
 if (import.meta.main) process.exitCode = await runRulesCli(process.argv.slice(2));

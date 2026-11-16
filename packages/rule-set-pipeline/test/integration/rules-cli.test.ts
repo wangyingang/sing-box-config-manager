@@ -10,6 +10,18 @@ import { getRulesStatus, cleanupRuleHistory } from '../../src/index.js';
 import { cleanupEnvironment } from '../fixtures/cleanup-environment.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
+test('CLI 在写入前和各阶段持续报告进度，JSON stdout 只有最终结果', { skip: !binary }, async () => {
+  const env = cleanupEnvironment(binary!, 'main');
+  const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
+  const stdout: string[] = [], stderr: string[] = [];
+  env.beforeWrite(async () => { assert.equal(stdout.length, 0); assert.ok(stderr.length); });
+  assert.equal(await runRulesCli(['sync', '--json'], text => stdout.push(text), env.context, text => stderr.push(text)), 0);
+  assert.equal(stdout.length, 1); assert.equal(JSON.parse(stdout[0]).status, 'success');
+  for (const stage of ['正式配置', '构建校验', '登记规则候选', '上传规则文件', '候选构建记录', '验证候选', '准备交付', '稳定订阅文件', '回读确认交付']) {
+    assert.ok(stderr.some(line => line.includes(stage)), stage);
+  }
+  assert.ok(stderr.every(line => !/token|Authorization|https:\/\//.test(line)));
+});
 test('五个 CLI 操作使用同一服务：预览零写入，pin/resume 和 Action 结果与实际交付一致', { skip: !binary }, async t => {
   const env = cleanupEnvironment(binary!);
   async function run(...args: string[]) {

@@ -4,9 +4,12 @@ import { ARTIFACT_REPOSITORY, ghJson, GitHubHttpError, githubPublication } from 
 export type RuleWrites = Record<string, Buffer | null>;
 export interface RulesRepository {
   readonly branch: string;
+  /** Fresh ref read, never a cached branch snapshot. */
+  head?(branch?: string): Promise<string>;
   snapshot(branch?: string): Promise<PublicationSnapshot>;
   lastChange(head: string, path: string): Promise<string>;
-  /** A guarded single-parent write; null deletes a path from the current tree. */
+  /** Guard before creating objects and immediately before updating the ref.
+   * The single parent must be expectedHead; null deletes a current-tree path. */
   commit(branch: string, expectedHead: string, files: RuleWrites, message: string, guard: () => Promise<void>): Promise<string>;
   download(url: string): Promise<Buffer>;
 }
@@ -19,6 +22,7 @@ export function githubRulesRepository(targetBranch: string, request: typeof ghJs
     ...(input === undefined ? [] : ['--method', 'POST', '--input', '-'])], input);
   return {
     branch,
+    head: reader.head,
     snapshot: reader.snapshot,
     lastChange: reader.lastChange,
     download: githubPublication(request, branch).download,
@@ -37,9 +41,9 @@ export function githubRulesRepository(targetBranch: string, request: typeof ghJs
       }
       // Guard before creating objects and again immediately before moving a ref.
       await guard();
-      const parent = await api(`git/commits/${expectedHead}`);
-      const commit = await createGitCommit(api, files, message, { tree: parent.tree.sha, head: expectedHead });
+      const commit = await createGitCommit(api, files, message, { tree: current.treeSha, head: expectedHead });
       await guard();
+      if (await reader.head(target) !== expectedHead) throw new Error('RULE_WRITE_CONFLICT: remote head changed before ref update');
       try {
         await request(['api', `repos/${ARTIFACT_REPOSITORY}/git/refs/heads/${target}`, '--method', 'PATCH', '--input', '-'],
           { sha: commit, force: false });

@@ -1,5 +1,6 @@
 import type { RemoteJournal } from './remote-state.js';
 import { ARTIFACT_REPOSITORY, ghJson, PUBLICATION_BRANCH } from './publication.js';
+import { cacheImmutableGitReads } from './immutable-github.js';
 
 export interface PublicationSnapshot {
   head: string;
@@ -11,6 +12,7 @@ export interface PublicationSnapshot {
 }
 export interface PublicationRepository {
   readonly branch: string;
+  head?(branch?: string): Promise<string>;
   lastChange?(head: string, path: string): Promise<string>;
   snapshot(branch?: string): Promise<PublicationSnapshot>;
   /** The supplied head is the only parent; a conflict never rebases this write. */
@@ -42,16 +44,20 @@ interface TreeEntry { path: string; type: string; mode: string; sha: string }
 /** Reads control records from immutable Git objects, never from a potentially stale CDN. */
 export function githubPublicationRepository(branch = PUBLICATION_BRANCH, request: typeof ghJson = ghJson) {
   checkBranch(branch);
+  request = cacheImmutableGitReads(request);
   const api = (path: string, input?: unknown) => request(['api', `repos/${ARTIFACT_REPOSITORY}${path ? `/${path}` : ''}`,
     ...(input === undefined ? [] : ['--method', 'POST', '--input', '-'])], input);
-  async function snapshot(target = branch) {
+  async function head(target = branch) {
     checkBranch(target);
     const repository = await api('');
     if (repository.private !== false) throw new Error('Artifact repository must be public');
     const ref = await api(`git/ref/heads/${target}`);
     if (!fullCommit(ref?.object?.sha)) throw new Error('Invalid remote head');
-    const head: string = ref.object.sha;
-    const parent = await api(`git/commits/${head}`);
+    return ref.object.sha as string;
+  }
+  async function snapshot(target = branch) {
+    const currentHead = await head(target);
+    const parent = await api(`git/commits/${currentHead}`);
     if (!fullCommit(parent?.tree?.sha)) throw new Error('Invalid remote tree');
     const treeSha: string = parent.tree.sha;
     const result = await api(`git/trees/${treeSha}?recursive=1`);
@@ -66,7 +72,7 @@ export function githubPublicationRepository(branch = PUBLICATION_BRANCH, request
       throw new Error('Invalid remote commit parents');
     }
     const parents: string[] | undefined = parent.parents?.map((entry: { sha: string }) => entry.sha);
-    return { head, parent: parents?.length === 1 ? parents[0] : undefined, parents, treeSha, entries, paths: [...entries.keys()],
+    return { head: currentHead, parent: parents?.length === 1 ? parents[0] : undefined, parents, treeSha, entries, paths: [...entries.keys()],
       async read(path: string): Promise<Buffer | undefined> {
         const entry = entries.get(path);
         if (!entry) return undefined;
@@ -81,7 +87,7 @@ export function githubPublicationRepository(branch = PUBLICATION_BRANCH, request
       },
     };
   }
-  return { branch, snapshot,
+  return { branch, snapshot, head,
     async lastChange(head, path) {
       if (!fullCommit(head)) throw new Error('Expected full commit for path history');
       const query = new URLSearchParams({ sha: head, path, per_page: '1' });

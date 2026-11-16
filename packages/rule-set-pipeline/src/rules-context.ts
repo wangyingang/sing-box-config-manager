@@ -7,6 +7,8 @@ import { githubRulesRepository, type RulesRepository } from './rules-repository.
 import { sha256 } from './release.js';
 import { githubBaselineTransport, type BaselineTransport } from './maintenance-baseline-transport.js';
 import { gitMaintenanceRefs, type MaintenanceRefTransport } from './maintenance-refs.js';
+import { cacheImmutableGitReads } from './immutable-github.js';
+import { reportRulesProgress, type RulesProgress } from './rules-progress.js';
 
 const SOURCE_REPOSITORY = 'wangyingang/sing-box-config-manager';
 const CONFIGURATION_PATH = 'packages/rule-set-pipeline/config/rulesets.yml';
@@ -26,7 +28,10 @@ export interface RulesContext {
   /** Trusted maintenance transports; never inferred from a custom/test repository. */
   cleanup?: { baseline: BaselineTransport; refs: MaintenanceRefTransport };
 }
-export interface RulesRequest { context?: RulesContext; dryRun?: boolean; draft?: string }
+export interface RulesRequest {
+  context?: RulesContext; dryRun?: boolean; draft?: string;
+  onProgress?: (event: RulesProgress) => void;
+}
 
 export async function readCurrentRulesConfiguration(request: typeof ghJson = ghJson, branch = 'main'): Promise<ConfigurationSnapshot> {
   if (branch !== 'main' && !/^acceptance-[a-zA-Z0-9._-]+$/.test(branch)) throw new Error('Invalid official configuration branch');
@@ -64,7 +69,7 @@ export async function createGitHubRulesContext(): Promise<RulesContext> {
   const repository = githubRulesRepository(targetBranch);
   // Source reads use this workflow's token; artifact writes keep their separate
   // credential. An expired artifact secret must not hide current configuration.
-  const readSource: typeof ghJson = (args, input) => ghJson(args, input, process.env.GITHUB_TOKEN);
+  const readSource = cacheImmutableGitReads((args, input) => ghJson(args, input, process.env.GITHUB_TOKEN));
   return { targetBranch, repository, readConfiguration: () => readCurrentRulesConfiguration(readSource, configurationBranch),
     cleanup: { baseline: githubBaselineTransport(), refs: gitMaintenanceRefs() },
     allowWrites: targetBranch !== 'main' || process.env.RULE_UPDATE_ENABLED === 'true',
@@ -73,6 +78,7 @@ export async function createGitHubRulesContext(): Promise<RulesContext> {
 }
 
 export async function loadRulesRequest(request: RulesRequest, writeKind: 'update' | 'cleanup' = 'update') {
+  reportRulesProgress(request.onProgress, 'configuration');
   const context = request.context ?? await createGitHubRulesContext();
   if (request.draft !== undefined && !request.dryRun) throw new Error('Draft configuration is only allowed with --dry-run');
   const observed = request.draft === undefined ? await context.readConfiguration()
@@ -84,7 +90,8 @@ export async function loadRulesRequest(request: RulesRequest, writeKind: 'update
   if (context.repository.branch !== (context.targetBranch === 'main' ? 'candidates' : context.targetBranch)) throw new Error('Rules context repository does not match its target');
   configuration.target.branch = context.targetBranch;
   const allowWrites = writeKind === 'cleanup' ? context.allowCleanupWrites ?? context.allowWrites : context.allowWrites;
-  return { context, observed, configuration, dryRun: Boolean(request.dryRun), allowWrites, writeKind };
+  return { context, observed, configuration, dryRun: Boolean(request.dryRun), allowWrites, writeKind,
+    progress: (stage: RulesProgress['stage'], id?: string) => reportRulesProgress(request.onProgress, stage, id) };
 }
 export type LoadedRules = Awaited<ReturnType<typeof loadRulesRequest>>;
 

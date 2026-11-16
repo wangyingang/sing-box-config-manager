@@ -18,6 +18,7 @@ export type ValidRuleBuild = Extract<RuleBuild['results'][number], { status: 'bu
 
 /** Acquisition and parsing are independent, so supported formats work with either mechanism. */
 export async function buildRulesInput(loaded: LoadedRules, definitions: RuleDefinition[], fixed?: RuleCandidate) {
+  loaded.progress('build', definitions.map(rule => rule.id).join(', '));
   const input = fixed?.sourceInput ?? loaded.configuration.sources[definitions[0].source];
   const network = { fetch: loaded.context.fetch, token: loaded.context.token };
   const acquired = input.version === 'git-branch'
@@ -49,6 +50,7 @@ export async function verifyRuleCandidate(session: RulesSession, candidate: Rule
  * Verify those exact retained bytes, without regenerating machine-local paths.
  */
 export async function recoverPublishedRuleCandidate(session: RulesSession, candidate: RuleCandidate) {
+  session.loaded.progress('evidence', candidate.logicalId);
   const path = `candidates/${candidate.id}/readback.json`;
   const bytes = await session.snapshot.read(path);
   if (!bytes) return undefined;
@@ -69,7 +71,8 @@ export async function recoverPublishedRuleCandidate(session: RulesSession, candi
   await verifyRuleCandidate(session, recovered, rulesBinary(session.loaded.context));
   delete recovered.error;
   session.journal.candidates[candidate.id] = recovered;
-  await session.save();
+  // The caller either registers delivery in the same checkpoint, or saves this
+  // qualified candidate separately before checking the latest upstream input.
   return recovered;
 }
 
@@ -86,6 +89,7 @@ export async function unchangedDelivery(session: RulesSession, built: RuleBuild,
 }
 
 export async function publishRuleBuild(session: RulesSession, built: RuleBuild, result: ValidRuleBuild, rule: ManagedRule, recovering?: RuleCandidate) {
+  session.loaded.progress('candidate', result.id);
   const input = session.loaded.configuration.sources[result.definition.source];
   const candidate: RuleCandidate = recovering ?? { id: randomUUID(), logicalId: result.id, definition: result.definition,
     sourceInput: input, inputBindingRevision: inputBindingRevision(input, result.definition), definitionGeneration: rule.generation,
@@ -113,6 +117,8 @@ export async function publishRuleBuild(session: RulesSession, built: RuleBuild, 
     download: session.loaded.context.repository.download,
     async commit(files) {
       const paths = Object.keys(files);
+      session.loaded.progress(paths.some(path => path.endsWith('/readback.json')) ? 'evidence'
+        : paths.some(path => path.endsWith('/manifest.json')) ? 'metadata' : 'files', result.id);
       const retained = await Promise.all(paths.map(path => session.snapshot.read(path)));
       if (retained.some(Boolean)) {
         if (!retained.every((bytes, index) => bytes?.equals(files[paths[index]]))) throw new Error('CANDIDATE_UNAVAILABLE: partial or changed retained stage');
@@ -124,7 +130,11 @@ export async function publishRuleBuild(session: RulesSession, built: RuleBuild, 
     },
   };
   await publishConfiguredCandidate(result, candidate, built.source, built.tools, session.loaded.configuration.target,
-    publication, rulesBinary(session.loaded.context), async () => { await session.save(); }, () => {
+    // Stage writes already include the journal. Save each returned commit
+    // pointer with the next stage, recovering it by fixed path after a crash.
+    publication, rulesBinary(session.loaded.context), async () => {
+      if (candidate.metadataCommit) session.loaded.progress('evidence', result.id);
+    }, () => {
       if (candidate.publishedAt) return;
       candidate.publishedAt = (session.loaded.context.now?.() ?? new Date()).toISOString();
       const identity = candidate.id.replaceAll('-', '');
@@ -137,6 +147,7 @@ export async function publishRuleBuild(session: RulesSession, built: RuleBuild, 
   const evidence = await session.snapshot.read(`candidates/${candidate.id}/readback.json`);
   if (!evidence) throw new Error('Candidate readback record missing');
   candidate.evidenceSha256 = sha256(evidence);
-  await session.save();
+  // Delivery registration persists verified + evidence identity atomically.
+  // A caller that does not select this candidate must checkpoint it separately.
   return candidate;
 }
