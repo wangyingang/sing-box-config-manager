@@ -29,7 +29,7 @@ export interface ConversionReport {
 }
 export interface AssetIdentity { id: number; name: string; url: string }
 export interface SourceRecord {
-  repository: 'v2fly/domain-list-community';
+  repository: string;
   releaseId: number;
   tag: string;
   commit: string;

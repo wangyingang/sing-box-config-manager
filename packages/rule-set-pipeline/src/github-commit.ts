@@ -1,3 +1,4 @@
+import { validRepository, validBranch, validInputPath } from './source-input.js';
 import { isDeepStrictEqual } from 'node:util';
 import { sha256, SourceError } from './release.js';
 
@@ -10,7 +11,7 @@ export interface CommitInput {
   repository: string;
   version: 'git-branch';
   branch: string;
-  input: { format: 'cidr-text'; path: string };
+  input: { format: 'plain-yaml' | 'cidr-text'; path: string };
 }
 
 export interface CommitIdentity {
@@ -57,11 +58,13 @@ export function commitSourceKey({ repository, branch, commit, file }: CommitIden
   return `github-commit:${repository}:${branch}:${file.path}:${commit}`;
 }
 
-export function validCommitIdentity(identity: CommitIdentity, input: CommitInput = CHINA_IP_INPUT) {
-  return identity && fullGitCommit(identity.commit) && isDeepStrictEqual(identity, commitIdentity(input, identity.commit));
+export function validCommitIdentity(identity: CommitIdentity, input?: CommitInput) {
+  if (!identity || !validRepository(identity.repository) || !validBranch(identity.branch) || !validInputPath(identity.file?.path)) return false;
+  input ??= { repository: identity.repository, version: 'git-branch', branch: identity.branch, input: { format: 'cidr-text', path: identity.file.path } };
+  return fullGitCommit(identity.commit) && isDeepStrictEqual(identity, commitIdentity(input, identity.commit));
 }
 
-export function validCommitSource(source: CommitSourceRecord, input: CommitInput = CHINA_IP_INPUT) {
+export function validCommitSource(source: CommitSourceRecord, input?: CommitInput) {
   if (!source || typeof source !== 'object') return false;
   const { inputSha256, inputBytes, ...identity } = source;
   return validCommitIdentity(identity, input) && typeof inputSha256 === 'string' && /^[a-f0-9]{64}$/.test(inputSha256)
@@ -82,7 +85,7 @@ export async function resolveCommit(input: CommitInput, options: CommitOptions):
     if (!response.ok) throw new SourceError(errorCode, `${repository}/${endpoint}: HTTP ${response.status}`);
     return response.json();
   };
-  const metadata = await api(`branches/${branch}`, 'BRANCH_LOOKUP_FAILED') as
+  const metadata = await api(`branches/${encodeURIComponent(branch)}`, 'BRANCH_LOOKUP_FAILED') as
     { name?: unknown; commit?: { sha?: unknown } } | null;
   const head = metadata?.commit?.sha;
   if (metadata?.name !== branch || !fullGitCommit(head)) {

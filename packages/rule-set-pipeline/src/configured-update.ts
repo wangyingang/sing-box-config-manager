@@ -3,7 +3,7 @@ import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { configuredInput } from './configuration.js';
 import { buildConfiguredCommit, buildConfiguredRelease, CONFIGURED_BUILD_RECORD, parseBuildConfiguration } from './configured-build.js';
-import { publishCandidate } from './candidate-publication.js';
+import { publishCandidate, type PublicationCandidate } from './candidate-publication.js';
 import { githubPublication, immutableUrl, type PublicationTransport } from './publication.js';
 import { lookupRelease, type ReleaseInput } from './release.js';
 import { commitSourceKey, fullGitCommit, resolveCommit, withCommitCheckpoint, type CommitInput, type CommitSourceRecord } from './github-commit.js';
@@ -277,10 +277,10 @@ async function prepareRelease(source: ReleaseInput, options: ConfiguredUpdateOpt
 }
 
 export async function publishConfiguredCandidate(result: Extract<Awaited<ReturnType<typeof buildConfiguredRelease>>['results'][number], { status: 'built-validated' }>,
-  candidate: Candidate, source: SourceRecord | CommitSourceRecord, tools: Record<string, string | number>, target: { repository: string; branch: string },
-  publication: PublicationTransport, binary: string, save: () => Promise<void>) {
+  candidate: PublicationCandidate & { operation?: string; previousCandidateId?: string }, source: SourceRecord | CommitSourceRecord, tools: Record<string, string | number>, target: { repository: string; branch: string },
+  publication: PublicationTransport, binary: string, save: () => Promise<void>, beforeEvidence?: () => void) {
   const prefix = `candidates/${candidate.id}`;
-  return publishCandidate({ candidate, native: result.native, buildId: result.buildId, binary, publication, save,
+  return publishCandidate({ candidate, native: result.native, buildId: result.buildId, binary, publication, save, beforeEvidence,
     records: filesCommit => {
       const artifactId = (file: string) => `${result.id}@${candidate.id}:${file}`;
       const manifest = { schemaVersion: 1, id: result.id, revision: candidate.id, targetVersion: '1.14.4', sourceFormatVersion: 4,

@@ -21,7 +21,7 @@
 检查摘要列出实际检查的 Release／Git commit、每集检查结果、当前交付版本、pin、回滚目标及已知失败或待核实操作。维护摘要列出周期、阶段、保留版本、拟清理数量、延期原因和仍保留的其他引用。执行步骤生成的摘要同时保存在 Summary 和 `rule-maintenance-summary` artifact。检查有实际失败或待核实时运行失败，其他集已完成的结果仍保留。正常暂停、未到期、无须清理或安全延期可从摘要区分。
 
 - 检查失败时，先看 Summary 和产物目标的 `status`。未决更新使用相同目标和配置重新运行 `check`；远端日志核实前不要删除记录或切换目标。
-- 维护隔离后中断时，先以原目标运行 `maintenance-resume`。如仍处于切换前，按已记录阶段执行 `maintenance-prepare` 或 `maintenance-switch`，或按维护 ID 安全退出。切换后从远端记录继续核验和收尾。详见 [维护隔离与切换](../../README.md#预览清理与维护隔离)。
+- 维护隔离后中断时，先以原目标运行 `maintenance-resume`。如仍处于切换前，按已记录阶段执行 `maintenance-prepare` 或 `maintenance-switch`，或按维护 ID 安全退出。切换后从远端记录继续核验和收尾。详见 [当时的维护隔离与切换说明](https://github.com/wangyingang/sing-box-config-manager/blob/8ad4bcc2317bbade100e8426af0b23b32cec0d20/packages/rule-set-pipeline/README.md#预览清理与维护隔离)。
 - GitHub Actions 同一产物目标的运行使用同一并发组，保留正在执行的任务。GitHub 仍可能替换排队的运行。CLI 和 Actions 的实际写入都受远端协调约束。取消或超时后仍须核实远端，随后才能继续维护。
 - 检查 Actions 的最近一次 `schedule` 运行及其 Summary。GitHub 定时任务可能延迟或漏触发，公开仓库长期无活动时也可能被停用。确认工作流已启用、定时 actor 仍有效后，可用 `gh workflow enable rule-maintenance.yml` 恢复，并手动 `check` 补一次检查。[GitHub 定时触发说明](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)
 - 管理者在 GitHub 的通知设置中启用 **Actions → Email → Only notify for failed workflows**。上线前核对定时任务关联的账号，以及手动运行的触发者。定时通知发给当前定时 actor。[设置失败通知](https://docs.github.com/en/subscriptions-and-notifications/how-tos/managing-github-actions-notifications) · [通知接收者](https://docs.github.com/en/actions/concepts/workflows-and-actions/notifications-for-workflow-runs)

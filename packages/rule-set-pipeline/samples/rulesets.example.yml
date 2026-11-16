@@ -1,4 +1,6 @@
-schemaVersion: 2
+schemaVersion: 3
+# 候选保留策略为 30 天；#85 实现清理，当前交付不受保留期限制。
+candidateRetentionDays: 30
 target:
   repository: wangyingang/sing-box-rule-artifacts
   branch: acceptance-example

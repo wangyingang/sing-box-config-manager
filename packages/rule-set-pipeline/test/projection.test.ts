@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildNative, decodedTerms, projectTerms, renderRuleJson, type BuildTerm } from '../src/index.js';
+import { buildNative } from '../src/native.js';
+import { decodedTerms, projectTerms, renderRuleJson, type BuildTerm } from '../src/projection.js';
 
 const domain: BuildTerm = { type: 'domain_suffix', value: 'example.test' };
 const ip: BuildTerm = { type: 'ip_cidr', value: '192.0.2.0/24' };

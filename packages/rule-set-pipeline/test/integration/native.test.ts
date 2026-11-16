@@ -5,7 +5,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import test from 'node:test';
-import { buildConfiguredCommit, buildNative, convertRules, readTargetList, NativeBuildError, type BuildTerm, type NativeBuild } from '../../src/index.js';
+import { buildConfiguredCommit } from '../../src/configured-build.js';
+import { buildNative, NativeBuildError, type NativeBuild } from '../../src/native.js';
+import { convertRules } from '../../src/convert.js';
+import { readTargetList } from '../../src/yaml-input.js';
+import { type BuildTerm } from '../../src/projection.js';
 import { sha256 } from '../../src/release.js';
 
 const exec = promisify(execFile);

@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import { buildRelease, convertRules, readTargetList } from '../src/index.js';
+import { buildRelease } from '../src/release-build.js';
+import { convertRules } from '../src/convert.js';
+import { readTargetList } from '../src/yaml-input.js';
 
 const repository = 'v2fly/domain-list-community';
 const tag = '20261102130044';

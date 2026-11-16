@@ -27,6 +27,7 @@ export interface PublicationCandidate {
   status: 'building' | 'publishing' | 'verified' | 'failed';
   filesCommit?: string; metadataCommit?: string; evidenceCommit?: string;
   manifestUrl?: string; evidenceUrl?: string;
+  publishedAt?: string; versionId?: string;
 }
 
 /** Common immutable publication gate for legacy and configured candidates. */
@@ -34,6 +35,7 @@ export async function publishCandidate(options: {
   candidate: PublicationCandidate; native: NativeBuild; buildId: string; binary: string;
   publication: PublicationTransport; save: () => Promise<void>;
   records: (filesCommit: string) => Record<string, Buffer>;
+  beforeEvidence?: () => void;
 }) {
   const { candidate, native, buildId, binary, publication, save } = options;
   const prefix = `candidates/${candidate.id}`;
@@ -87,7 +89,9 @@ export async function publishCandidate(options: {
   if (remoteNative.artifacts.length !== native.artifacts.length || remoteNative.artifacts.some(artifact =>
     !downloaded.get(`${prefix}/${artifact.file}`)?.equals(artifact.content))) throw new Error('Remote native content mismatch');
   for (const [path, bytes] of Object.entries(records)) await verify(path, bytes, metadataCommit);
+  options.beforeEvidence?.();
   const evidence = Buffer.from(JSON.stringify({ schemaVersion: 1, candidateId: candidate.id, status: 'remote-verified',
+    ...(candidate.publishedAt ? { publishedAt: candidate.publishedAt, versionId: candidate.versionId } : {}),
     filesCommit, metadataCommit, buildId, readback, native: remoteNative.validation, tool: remoteNative.tool }, null, 2) + '\n');
   const evidencePath = `${prefix}/readback.json`;
   candidate.evidenceCommit ??= await publication.commit({ [evidencePath]: evidence }, `候选 ${candidate.id}：HTTPS 回读验证`);

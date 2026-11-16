@@ -20,7 +20,7 @@ export type ConfiguredResult = { id: string; definition: RuleDefinition; status:
   | { id: string; definition: RuleDefinition; status: 'built-validated'; report: ConversionReport; native: NativeBuild; buildId: string };
 
 export async function configuredBuildTools(format: 'plain-yaml' | 'cidr-text' = 'plain-yaml') {
-  const files = ['configuration', 'configured-build', 'release', 'plain-yaml-adapter', 'yaml-input', 'convert',
+  const files = ['source-input', 'configuration', 'configured-build', 'release', 'plain-yaml-adapter', 'yaml-input', 'convert',
     'types', 'projection', 'native', 'semantics'];
   if (format === 'cidr-text') files.push('github-commit', 'cidr-text-adapter');
   const implementationSha256 = sha256(Buffer.concat(await Promise.all(
@@ -50,7 +50,7 @@ export async function buildConfiguredRelease(options: BuildOptions & { release: 
   const definitions = selectDefinitions(configuration, options.selectedIds);
   const input = configuredReleaseInput(configuration, definitions);
   const { bytes, source } = await readReleaseInput(options.release, input);
-  const lists = convertPlainYaml(bytes, definitions.map(rule => rule.list));
+  const lists = convertInput(bytes, definitions, input.input.format, input.input.asset);
   return buildConfigured(configuration, definitions, options.binary, source, lists, input.input.format, input.input.asset);
 }
 
@@ -60,12 +60,17 @@ export async function buildConfiguredCommit(options: BuildOptions & { github: Co
   const input = configuredInput(configuration, definitions);
   if (input.version !== 'git-branch') throw new Error('Git commit build requires a configured Git source; use --release for Release sources');
   const { bytes, source } = await readCommitInput(input, options.github);
-  const list = definitions[0].list;
-  const lists = new Map([[list, convertCidrText(bytes, input.input.path, list)]]);
+  const lists = convertInput(bytes, definitions, input.input.format, input.input.path);
   return buildConfigured(configuration, definitions, options.binary, source, lists, input.input.format, input.input.path);
 }
 
-async function buildConfigured<Source extends SourceRecord | CommitSourceRecord>(
+
+export function convertInput(bytes: Uint8Array, definitions: RuleDefinition[], format: 'plain-yaml' | 'cidr-text', file: string) {
+  return format === 'plain-yaml' ? convertPlainYaml(bytes, definitions.map(rule => rule.list))
+    : new Map(definitions.map(rule => [rule.list, convertCidrText(bytes, file, rule.list)]));
+}
+
+export async function buildConfigured<Source extends SourceRecord | CommitSourceRecord>(
   configuration: BuildConfiguration, definitions: RuleDefinition[], binary: string, source: Source,
   lists: ReadonlyMap<string, Converted>, format: 'plain-yaml' | 'cidr-text', file: string,
 ) {

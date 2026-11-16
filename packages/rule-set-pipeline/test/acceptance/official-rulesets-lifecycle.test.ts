@@ -17,7 +17,7 @@ import { ARTIFACT_REPOSITORY, GitHubHttpError, githubPublication, type ghJson } 
 import { sha256 } from '../../src/release.js';
 import { initializeRemoteState } from '../../src/remote-state.js';
 import { readRemoteStatus } from '../../src/remote-status.js';
-import { runRuleWorkflow, workflowRules } from '../../src/rule-workflow.js';
+import { runRuleWorkflow, workflowRules } from '../fixtures/legacy-workflow.js';
 import { updateRules } from '../../src/update.js';
 
 const originalTag = '20261104112839';

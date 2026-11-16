@@ -3,7 +3,9 @@ import { execFile } from 'node:child_process';
 import { writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import test from 'node:test';
-import { activateRules, parseBuildConfiguration, readUpdateState, updateRules } from '../../src/index.js';
+import { activateRules, rollbackRules } from '../../src/activation.js';
+import { parseBuildConfiguration } from '../../src/configuration.js';
+import { readUpdateState, updateRules } from '../../src/update.js';
 import { githubActivation } from '../../src/activation-transport.js';
 import { githubPublication, ARTIFACT_REPOSITORY, immutableUrl } from '../../src/publication.js';
 import { sha256 } from '../../src/release.js';
@@ -15,7 +17,7 @@ const branch = process.env.RULE_CONFIGURED_ROLLBACK_BRANCH;
 const directory = process.env.RULE_CONFIGURED_ROLLBACK_STATE;
 const evidenceFile = process.env.RULE_CONFIGURED_ROLLBACK_EVIDENCE;
 
-test('隔离分支通过 CLI 逐集回滚真实三集，恢复历史字节且兄弟版本不变', {
+test('隔离分支通过内部恢复能力逐集回滚真实三集，恢复历史字节且兄弟版本不变', {
   skip: !binary || !branch || !directory || !evidenceFile, timeout: 1_200_000,
 }, async () => {
   assert.match(branch!, /^acceptance-[a-zA-Z0-9._-]+$/);
@@ -49,18 +51,13 @@ test('隔离分支通过 CLI 逐集回滚真实三集，恢复历史字节且兄
       subscription: subscription(definition.id), candidateEvidenceUrl: candidate.candidateEvidenceUrl, expectedHead: await transport.head(), transport });
     switches.push({ candidate, result });
   }
-  const configPath = `${directory}/rollback-config.yml`;
-  await writeFile(configPath, configuration);
   const rollbacks = [];
   for (const historical of activations) {
     const id = historical.activation.logicalId!;
     const before = await readUpdateState(directory!), beforeHead = await transport.head();
-    const subscriptionPath = `${directory}/${id}-subscription.json`;
-    await writeFile(subscriptionPath, JSON.stringify(subscription(id)));
-    const { stdout } = await promisify(execFile)(process.execPath, ['--import', 'tsx', 'src/cli.ts', 'rollback',
-      '--config', configPath, '--id', id, '--state', directory!, '--activation', historical.commit,
-      '--subscription', subscriptionPath, '--branch', branch!, '--expected-head', beforeHead, '--binary', binary!], { timeout: 180_000 });
-    const result = JSON.parse(stdout) as Awaited<ReturnType<typeof activateRules>>;
+    const result = await rollbackRules({ configuration, logicalId: id, stateDirectory: directory!,
+      historicalActivationCommit: historical.commit, subscription: subscription(id),
+      expectedHead: beforeHead, binary: binary!, transport });
     assert.equal(result.activation.candidateId, historical.activation.candidateId);
     assert.equal(result.activation.operation, 'rollback');
     const after = await readUpdateState(directory!);
@@ -81,7 +78,7 @@ test('隔离分支通过 CLI 逐集回滚真实三集，恢复历史字节且兄
       siblings.push({ id: sibling.id, ...record });
     }
     rollbacks.push({ result, siblings, stable: [] as { url: string; sha256: string; byteLength: number; observedAt: string }[] });
-    console.log(`${id} 已通过 CLI 回滚；历史字节和兄弟文件及记录核验通过`);
+    console.log(`${id} 已通过内部能力回滚；历史字节和兄弟文件及记录核验通过`);
   }
   for (const entry of rollbacks) {
     for (const [path, expected] of Object.entries(entry.result.activation.files)) {

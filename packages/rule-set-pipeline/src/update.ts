@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { buildRelease } from './index.js';
+import { buildRelease } from './release-build.js';
 import { buildNative } from './native.js';
 import { decodedTerms } from './projection.js';
 import { sha256, type ReleaseOptions } from './release.js';

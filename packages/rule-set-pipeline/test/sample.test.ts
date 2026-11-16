@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { convertRules, readTargetList, renderDomainJson } from '../src/index.js';
+import { convertRules, renderDomainJson } from '../src/convert.js';
+import { readTargetList } from '../src/yaml-input.js';
 
 test('固定官方目标列表的 214 条记录全部转换，覆盖 13 条属性记录', async () => {
   // This fixture is an exact list excerpt, not the complete checksummed asset.

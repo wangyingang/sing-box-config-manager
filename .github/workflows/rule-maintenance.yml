@@ -1,25 +1,33 @@
-name: Rule set maintenance
+name: Isolated rule operations
 
 on:
-  schedule:
-    - cron: '23 20 * * *'
   workflow_dispatch:
     inputs:
       operation:
-        description: Check for updates or clean history
+        description: Rule operation (production automation is delivered by Spec 86)
         type: choice
-        options: [check, cleanup]
-        default: check
+        options: [status, sync, pin, resume]
+        default: status
       target:
-        description: Artifact branch (main or a prepared acceptance-* branch)
+        description: Prepared acceptance-* artifact branch; main is rejected
         type: string
-        default: main
+        required: true
+      id:
+        description: Rule ID for status, pin or resume
+        type: string
+      version:
+        description: Retained version ID for pin
+        type: string
+      dry_run:
+        description: Preview a write operation without changing remote state
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: rule-maintenance-${{ inputs.target || 'main' }}
+  group: rule-maintenance-${{ inputs.target }}
   cancel-in-progress: false
 
 jobs:
@@ -27,13 +35,15 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
-      RULE_OPERATION: ${{ github.event_name == 'schedule' && 'daily' || inputs.operation }}
-      RULE_TARGET: ${{ inputs.target || 'main' }}
-      RULE_UPDATE_ENABLED: ${{ vars.RULE_UPDATE_ENABLED }}
-      RULE_CLEANUP_ENABLED: ${{ vars.RULE_CLEANUP_ENABLED }}
-      RULE_CLEANUP_PERIOD_DAYS: ${{ vars.RULE_CLEANUP_PERIOD_DAYS }}
-      RULE_CLEANUP_START_AT: ${{ vars.RULE_CLEANUP_START_AT }}
+      RULE_OPERATION: ${{ inputs.operation }}
+      RULE_TARGET: ${{ inputs.target }}
+      RULE_ID: ${{ inputs.id }}
+      RULE_VERSION: ${{ inputs.version }}
+      RULE_DRY_RUN: ${{ inputs.dry_run }}
     steps:
+      - name: Require isolated target
+        shell: bash
+        run: '[[ "$RULE_TARGET" =~ ^acceptance-[a-zA-Z0-9._-]+$ ]]'
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
@@ -44,10 +54,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Install verified sing-box
-        if: >-
-          env.RULE_TARGET != 'main' ||
-          (env.RULE_OPERATION != 'cleanup' && env.RULE_UPDATE_ENABLED == 'true') ||
-          (env.RULE_OPERATION != 'check' && env.RULE_CLEANUP_ENABLED == 'true')
+        if: inputs.operation != 'status'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -72,12 +79,11 @@ jobs:
           tar -xzf "${name}.tar.gz"
           test -x "$RUNNER_TEMP/$name/sing-box"
           printf 'SING_BOX_BINARY=%s/%s/sing-box\n' "$RUNNER_TEMP" "$name" >> "$GITHUB_ENV"
-      - name: Check or clean rule sets
+      - name: Run isolated rule operation
         working-directory: packages/rule-set-pipeline
         env:
           GH_TOKEN: ${{ secrets.RULE_ARTIFACT_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
-          RULE_STATE_DIRECTORY: ${{ runner.temp }}/rule-state
         shell: bash
         run: |
           trap 'cp "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/rule-maintenance-summary.md"' EXIT

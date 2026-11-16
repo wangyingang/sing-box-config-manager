@@ -1,8 +1,10 @@
 ---
-status: accepted
+status: partially superseded by Rule Set Pipeline ADR 0001
 ---
 
 # Recipe 自动跟随已激活的系统规则版本
+
+2026-11-16 更新：本 ADR 的稳定订阅、Compiler 边界与客户端原生更新决定继续有效。下述显式激活、旧操作入口及人工暂停安排已由 [Rule Set Pipeline ADR 0001](../../packages/rule-set-pipeline/docs/adr/0001-configuration-driven-rule-operations.md) 和 [Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84) 替代；原文保留设计背景，不作为当前命令指南。
 
 2026-11-03，Rule Set Pipeline 首个完整交付的设计确认：Recipe 选择系统规则集及用途，通过稳定的规则订阅入口自动跟随已激活版本，不提供固定规则产物版本的选项。规则候选通过验证和订阅兼容性检查后，才可显式激活。客户端按自身远程规则更新机制加载新版本，无需修改 Recipe 或重新发布配置。
 
@@ -16,7 +18,7 @@ Recipe／Template 的系统规则绑定和 Compiler 接入契约随本次交付�
 
 具体交付范围与验收边界见[首个完整交付设计](../architecture/rule-set-pipeline-first-delivery.md)。
 
-## 规则候选验证通过后的自动激活
+## 规则候选验证通过后的自动激活（历史）
 
 `check-now` 和启用了更新的定时工作流共用检查流程。Pipeline 发现规则内容有有效变化后，会验证候选及其订阅兼容性。只有验证通过且该规则集允许自动激活时，Pipeline 才切换稳定入口。`update` 和 `rebuild` 只发布候选。
 
