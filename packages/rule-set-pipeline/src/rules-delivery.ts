@@ -39,8 +39,8 @@ export function ruleSubscription(session: RulesSession, rule: Pick<ManagedRule, 
 }
 
 /** Desired paths cannot overwrite a different rule's still-current contract. */
-export async function ensureRulePathAvailable(session: RulesSession, definition: RuleDefinition) {
-  const stable = await session.stable();
+export async function ensureRulePathAvailable(session: RulesSession, definition: RuleDefinition, observed?: PublicationSnapshot) {
+  const stable = observed ?? await session.stable();
   const deliveries = await readRuleDeliveries(stable);
   const ownFiles = new Set(Object.keys(deliveries.get(definition.id)?.files ?? {}));
   for (const path of stable.paths.filter(path => path.startsWith('stable/') && path.endsWith('/activation.json'))) {
@@ -116,6 +116,7 @@ export async function recoverRuleDelivery(session: RulesSession) {
     return;
   }
   if (!applied) {
+    session.loaded.progress('stable-write', pending.logicalId);
     if (!session.shared && stable.head !== pending.stableHead) throw new Error('RULE_WRITE_PENDING: stable head differs from registered write');
     const files = await plannedDeliveryFiles(session, pending);
     if (!isDeepStrictEqual(evidenceFor(files), pending.changes)) throw new Error('RULE_WRITE_PENDING: registered content changed');
@@ -132,6 +133,7 @@ export async function recoverRuleDelivery(session: RulesSession) {
     stable = await session.stable();
   }
   if (!await receiptMatches(stable, pending.id)) throw new Error('RULE_WRITE_PENDING: receipt not visible');
+  session.loaded.progress('readback', pending.logicalId);
   await verifyChanges(stable, pending.changes);
   // Git success and HTTPS readback are separate facts. Keep the registration if
   // readback fails, so status can show the committed version and pending check.
@@ -145,6 +147,7 @@ export async function recoverRuleDelivery(session: RulesSession) {
 
 export async function deliverRuleVersion(session: RulesSession, rule: ManagedRule, candidate: RuleCandidate,
   kind: 'sync' | 'pin', current?: RuleDelivery) {
+  session.loaded.progress('prepare-delivery', rule.definition.id);
   const verified = await verifyRuleCandidate(session, candidate, rulesBinary(session.loaded.context));
   const subscription = ruleSubscription(session, rule, current);
   await ensureRulePathAvailable(session, rule.definition);

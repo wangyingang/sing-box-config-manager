@@ -92,7 +92,7 @@ async function updateSelectedRules(session: RulesSession, definitions: RuleDefin
             deliveries.set(definition.id, delivered); completed.add(definition.id);
             results.push({ id: definition.id, status: 'delivered', changes: [...(changes.get(definition.id) ?? []), current ? 'replace-current-version' : 'first-delivery'],
               candidate: { versionId: candidate.versionId, publishedAt: candidate.publishedAt } });
-          }
+          } else await session.save(); // Qualified history is durable even if latest input fails.
         } catch (error) {
           results.push(await failure(session, definition.id, new Error(`Candidate ${fixed.id}: ${message(error)}`), changes.get(definition.id)));
           blocked.add(definition.id);

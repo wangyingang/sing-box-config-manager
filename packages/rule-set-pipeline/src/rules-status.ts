@@ -74,6 +74,7 @@ export async function getRulesStatus(request: RulesRequest & { id?: string } = {
     if (request.id && !ids.includes(request.id)) throw new Error(`Unknown rule set: ${request.id}`);
     const rules: RuleStatus[] = [];
     for (const id of ids.filter(id => !request.id || id === request.id)) {
+      loaded.progress('status', id);
       const definition = definitions.get(id);
       const accepted = await observedRule(session, id, stable);
       const expectedSource = definition && session.loaded.configuration.sources[definition.source];
@@ -89,7 +90,7 @@ export async function getRulesStatus(request: RulesRequest & { id?: string } = {
             if (!definition) throw new Error('Rule definition is pending deletion');
             const subscription = ruleSubscription(session, { definition }, current);
             candidateStableFiles(verified, subscription, definition, session.loaded.context.targetBranch);
-            await ensureRulePathAvailable(session, definition);
+            await ensureRulePathAvailable(session, definition, stable);
             if (!verified.manifest) throw new Error('Incomplete candidate evidence');
           } catch (error) { selectable = false; reason = String(error); }
         }

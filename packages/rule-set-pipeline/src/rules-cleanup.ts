@@ -96,6 +96,7 @@ export async function cleanupRuleHistory(request: RulesRequest = {}): Promise<Ru
     const disabled = disabledRulesResult(loaded, 'cleanup');
     if (disabled) return disabled;
     session = await openRulesSession(loaded);
+    loaded.progress('cleanup');
     const { repository, cleanup, targetBranch } = session.loaded.context;
     if (!cleanup) throw new Error('Rule cleanup requires trusted baseline and reference transports');
     const refs = cleanup.refs;
