@@ -56,6 +56,16 @@ pnpm typecheck
 
 原始日志、实施记录、工具及源码身份、SHA-256 清单保留在任务 worktree 的 `.verification/issue-90/`。`targeted-summary.json` 的范围为 `targeted-rules-recovery`，不是统一完整验收入口的 summary。本地未额外执行完整 workspace/native 或固定官方 Release 套件；PR 的完整 CI 和云端审查结果按覆盖 commit 更新到 PR/工单交付记录。
 
+## 本地审查与定向复验
+
+本地审查覆盖 `6fc78fda5434acbae244477be45232a3531753a9...118db741cc63341f97e5e04dc6da9d32a8b74c51`。Standards 轴硬性违规 0；唯一 P3 维护建议是两处共享异常 row 判断重复，现已提取为共用谓词，保留各自 pending 分类和 `results`/`rules` 遍历，不扩展异常类别。Spec 轴无 finding。审查报告保留在集成 worktree 的 `.verification/issue-90/standards-review.md` 与 `spec-review.md`。
+
+主 Agent 在 `118db741cc63341f97e5e04dc6da9d32a8b74c51` 独立复跑全部恢复测试，14 项通过、0 失败、0 跳过；日志为集成 worktree 的 `.verification/issue-90/integration-recovery.log`。这是原 57 项验收之后的独立复验，不改写上节验收的源码身份或统计。
+
+重复判断重构后，在独立 review worktree 完成 frozen-lockfile 依赖安装，复跑 `test/rule-workflow.test.ts`（13 项）、`test/integration/rule-workflow.test.ts`（1 项），以及 `test/integration/rules-recovery.test.ts` 中名称匹配 `schedule` 的恢复、混合共享异常与维护门禁场景（3 项）。合计 17 项通过，0 失败、0 取消、0 跳过；模块 `pnpm typecheck` 与 `git diff --check` 通过。未新增仅复述谓词实现的测试。工具版本和原生 binary 与上节相同。
+
+本次复验基于 `118db741cc63341f97e5e04dc6da9d32a8b74c51` 加上述重构，`rule-workflow.ts` 的 Git blob 为 `1815e362024b9273be160ad67724bddc04b48d38`；随后仅更新本验收记录。汇总日志为 `/tmp/issue-90-review-fix.log`，分项日志为 `/tmp/issue-90-review-{install,unit,native-workflow,schedule,typecheck}.log`。后续 CI 与云端审查覆盖的提交在 PR 记录，不由本地复验推断。
+
 ## 兼容与运行边界
 
 保留现有五个入口、公开结果结构、journal schema、30 天保留策略及三份模块 ADR 的共享写入、失效回收和维护优先边界。不修改 agent-facing 指令或 #84/#85/#86 的历史验收事实。

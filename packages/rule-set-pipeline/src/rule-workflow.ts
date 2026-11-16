@@ -54,11 +54,15 @@ export async function runRuleWorkflow(request: RuleWorkflowRequest, report: Work
   }
 }
 
+function sharedStateException(row: { status: string; error?: string }) {
+  return row.status === 'superseded'
+    || /RULE_(WRITE_|INTENT_|MAINTENANCE|STATE_|TARGET_|MIGRATION)|PUBLICATION_(PENDING|CONFLICT)/.test(row.error ?? '');
+}
+
 function uncertainSharedState(result: WorkflowResult) {
   if (result.status === 'disabled') return false;
   return result.status === 'pending' || Boolean(result.error)
-    || result.results?.some(row => row.status === 'pending' || row.status === 'superseded'
-      || /RULE_(WRITE_|INTENT_|MAINTENANCE|STATE_|TARGET_|MIGRATION)|PUBLICATION_(PENDING|CONFLICT)/.test(row.error ?? ''));
+    || result.results?.some(row => row.status === 'pending' || sharedStateException(row));
 }
 
 // Status only routes a registered delivery to sync. The service rechecks the
@@ -67,8 +71,7 @@ function registeredDeliveryRecovery(result: WorkflowResult) {
   const pending = result.rules?.filter(row => row.status === 'pending') ?? [];
   return result.status === 'pending' && !result.error && pending.length > 0
     && pending.every(row => Boolean(row.pendingOperation))
-    && !result.rules?.some(row => row.status === 'superseded'
-      || /RULE_(WRITE_|INTENT_|MAINTENANCE|STATE_|TARGET_|MIGRATION)|PUBLICATION_(PENDING|CONFLICT)/.test(row.error ?? ''));
+    && !result.rules?.some(sharedStateException);
 }
 
 /** Trigger orchestration is internal; daily is deliberately not a sixth manager operation. */
