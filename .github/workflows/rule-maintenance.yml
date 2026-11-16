@@ -48,7 +48,6 @@ jobs:
       RULE_CONFIG_BRANCH: ${{ github.event_name == 'push' && github.ref_name || inputs.target || 'main' }}
       RULE_UPDATE_ENABLED: ${{ vars.RULE_UPDATE_ENABLED }}
       RULE_CLEANUP_ENABLED: ${{ vars.RULE_CLEANUP_ENABLED }}
-      RULE_RESULT_PATH: ${{ runner.temp }}/rule-result.json
       RULE_ID: ${{ inputs.id }}
       RULE_VERSION: ${{ inputs.version }}
       RULE_DRY_RUN: ${{ inputs.dry_run }}
@@ -105,6 +104,7 @@ jobs:
       - name: Run rule operations
         working-directory: packages/rule-set-pipeline
         env:
+          RULE_RESULT_PATH: ${{ runner.temp }}/rule-result.json
           GH_TOKEN: ${{ secrets.RULE_ARTIFACT_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
         shell: bash

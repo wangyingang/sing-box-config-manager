@@ -19,11 +19,17 @@
 
 ## 本地统一验收
 
-统一入口正在执行，结果待补录。未完成的检查不记为通过。使用 sing-box 1.14.4，不运行固定官方 Release 全量构建套件。
+统一入口 `node scripts/verify.mjs --out .verification/issue-86-local-1 --binary <sing-box 1.14.4 绝对路径>` 已通过，scope=`check-native`。summary 源码身份为 base commit `1ed2ab1af412199262e25c146b64938947580364`、`clean=false`、tracked diff SHA-256 `0cf6b59d570ee65f6413e48604cc3fe6646d07f9d1c5dce3a0dc68a65031e9c7`；该实现随后提交为 `24de37a`。Node.js `v26.13.0`、pnpm `10.33.2`、sing-box `1.14.4`，binary SHA-256 `6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2`。
+
+- 常规检查：工具 115、Compiler 99、Pipeline 171，共 385 项通过；类型检查、构建和 workspace smoke 通过。
+- 原生集成：Compiler 28、Pipeline 229，共 257 项通过。
+- 合计 642 项通过，0 失败、0 取消、0 跳过。summary、日志和文件摘要保留在上述目录；未额外运行固定官方 Release 全量构建套件。
+- 本地 Standards / Spec 对 `1ed2ab1...24de37a` 各自审查，均无 finding。独立复跑门禁与工作流 18 项通过。
+- 真实 push 首次发现 workflow 的 job 级 env 不支持 `runner.temp`，未进入业务步骤；已将结果路径移到执行 step 的 env。修复后 actionlint `v1.7.12` 校验通过（禁用未安装的 shellcheck/pyflakes 外部检查）；这项工作流修复不计入此前 642 项源码覆盖。
 
 ## 真实 GitHub 隔离验收
 
-探针限定一个同名 acceptance-issue-86-* 源码配置分支与产物分支。计划覆盖基线 push、pin、混合新增/换源/删除 push、resume 预览与实际执行、部分失败 push 和旧事件 rerun；来源为该隔离分支上的小型真实 CIDR 文件。保存原生事件、运行链接、实际配置修订及结果 artifact；前后核对生产 refs/Actions variables，最终清理本次隔离 refs。当前尚未执行，不记为通过。
+探针限定一个同名 acceptance-issue-86-* 源码配置分支与产物分支。计划覆盖基线 push、pin、混合新增/换源/删除 push、resume 预览与实际执行、部分失败 push 和旧事件 rerun；来源为该隔离分支上的小型真实 CIDR 文件。保存原生事件、运行链接、实际配置修订及结果 artifact；前后核对生产 refs/Actions variables，最终清理本次隔离 refs。首轮真实 push 已触发，但在 workflow 解析阶段失败，无业务执行或 artifact；运行 [43906028541](https://github.com/wangyingang/sing-box-config-manager/actions/runs/43906028541)。首轮两个隔离 refs 已清理，生产 refs/variables 前后不变，原始日志、诊断与证据保留在 `.verification/issue-86-github/attempt-1*`。修复后的完整生命周期待重跑，不记为通过。
 
 ## 限制与部署边界
 
