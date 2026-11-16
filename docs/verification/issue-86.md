@@ -6,13 +6,13 @@
 
 | 验收 | 检查及边界 |
 | --- | --- |
-| C01 配置 push | 正式 main 配置及同名 acceptance 隔离配置 push 调用完整 sync；真实混合变更触发证据待隔离探针补录 |
-| C02 自动控制 | 原生编排验证 auto 更新、pinned 跳过、resume 后交付当前来源；复用共享业务层 |
+| C01 配置 push | 正式 main 配置及同名 acceptance 隔离配置 push 调用完整 sync；真实混合 push 已同时完成新增、换源、删除，固定集保持原版本，见第五轮记录 |
+| C02 自动控制 | 原生编排及真实 Actions 验证 auto 更新、pinned 跳过、resume 后交付当前来源；复用共享业务层 |
 | C03 日常维护 | 原生样本中断 cleanup 后，schedule 先续做原计划再访问上游；同步部分失败仍保留安全清理结果且整体失败 |
 | C04 五入口 | CLI、Node API、workflow_dispatch 共用五操作；无关参数拒绝，预览零写入；不增加 daily 公开命令 |
 | C05 失败映射 | 普通来源失败与部分成功返回非零；pending/共享冲突停止后续写入，后续 cleanup 成功不能覆盖失败 |
 | C06 原生通知 | 已只读核对账号 Actions 为 Email / Failed workflows only；未改变设置，邮箱实收未验证；文档提供官方设置路径 |
-| C07 门禁与修订 | 更新与清理默认关闭且独立；disabled 返回当前配置修订和未应用，不读取旧生产 journal。每次读配置解析分支当前 head；真实旧事件重跑及生产前后对照待探针补录 |
+| C07 门禁与修订 | 更新与清理默认关闭且独立；disabled 返回当前配置修订和未应用，不读取旧生产 journal。每次读配置解析分支当前 head；真实旧事件重跑读取当前修订，生产 refs/variables 前后完全一致 |
 | C08 交付核对 | 根 help、五个 Node 导出、CLI、Actions、README 与模块 ADR 对齐；保留 A/B 的历史验收记录 |
 
 针对门禁与当前配置 5 项常规测试通过，工作流适配器 13 项常规测试通过，编排原生集成 1 项通过（0 跳过）；这些结果不替代后续统一验收及真实 GitHub 触发。
@@ -38,6 +38,26 @@
 第四轮基线 [43909174053](https://github.com/wangyingang/sing-box-config-manager/actions/runs/43909174053) 已证实独立凭据能够写入隔离产物，三集实际交付记录均存在；其中 changing 记录 GitHub HTTP 422 `The request is taking too long to generate`，其余两集为 delivered，整体为 partial/exit 1。该轮未继续混合变更，不能算生命周期通过。两个隔离 refs 已清理，生产 refs/variables 前后不变；证据为 `.verification/issue-86-github/attempt-4/`。
 
 对本轮不可变源码/产物对象的只读复查均成功，未复现该 422，原日志不能确定具体 endpoint。因此补齐 `ghJson` 失败的方法/路径诊断（不记录 query、body 或凭据，不重试写请求），25 项针对测试和 typecheck 通过。探针单运行/总等待上限改为 30/90 分钟，以容纳已观察到的真实远端耗时，业务断言不变。
+
+### 第五轮：完整生命周期通过
+
+实现固定为 `606b595d5f58a507371fd9a461ee53cf2479a74f`。一条真实 GitHub 生命周期测试通过（1 pass，0 fail/cancel/skip，约 26 分钟），覆盖以下七个阶段。表中两个 failure 是预期的业务失败，探针已断言部分成功、旧交付保留及正确的非零退出，不是跳过失败。
+
+| 阶段 | 原生事件 / Actions 结论 | 观察结果 |
+| --- | --- | --- |
+| [baseline-push](https://github.com/wangyingang/sing-box-config-manager/actions/runs/43912244882/attempts/1) | push / success | 三集均 delivered，配置修订匹配 push |
+| [pin-fixed](https://github.com/wangyingang/sing-box-config-manager/actions/runs/43913733332/attempts/1) | workflow_dispatch / success | fixed 控制状态变为 pinned |
+| [mixed-push](https://github.com/wangyingang/sing-box-config-manager/actions/runs/43914127847/attempts/1) | push / success | added 新增、changing 换源并更换版本、deleting 删除；fixed 跳过且保留固定版本 |
+| [resume-preview](https://github.com/wangyingang/sing-box-config-manager/actions/runs/43915129348/attempts/1) | workflow_dispatch / success | dryRun=true，产物 head 前后一致，零业务写入 |
+| [resume-fixed](https://github.com/wangyingang/sing-box-config-manager/actions/runs/43915305302/attempts/1) | workflow_dispatch / success | fixed 恢复 auto，并交付当前来源的新版本 |
+| [partial-failure-push](https://github.com/wangyingang/sing-box-config-manager/actions/runs/43915880368/attempts/1) | push / failure | changing 来源失败但保留旧交付；added 成功交付新版本，整体 partial/exit 1 |
+| [old-event-rerun](https://github.com/wangyingang/sing-box-config-manager/actions/runs/43914127847/attempts/2) | push / failure | 旧事件读取当前配置，保留已成功的 added 版本，不恢复已删除集；整体 partial/exit 1 |
+
+旧事件 head 为 `c324085c4cb5ac56fde422d402844324997af84a`，第二次运行的实际配置修订为当前 `4f311c0f3d15ddcc631bf68390b16377f34ce4d5`。结果与新配置中的来源失败一致，证明没有重放旧配置。
+
+两个本次拥有的隔离 refs 已删除，`remaining=[]`、`cleanupErrors=[]`。前后生产对照完全一致：源码 main=`1ed2ab1af412199262e25c146b64938947580364`，产物 main=`ae3cf588169226618eb30271f123c29608eb754a`，candidates=`2b74039505116d84688a379bfe04d25ae76f4350`；Actions variables 仍为空，更新和清理仍默认关闭。
+
+原始证据保留在任务 worktree 的 `.verification/issue-86-github/attempt-5/`：`evidence.json` 含运行、配置修订和生产前后对照，各阶段目录保留下载的 JSON 与摘要，日志为 `../attempt-5.log`。前四轮失败及清理证据继续保留。此记录不宣称原生 schedule 或邮箱实收已经验证。
 
 ## 限制与部署边界
 
