@@ -1,6 +1,6 @@
 # 配置驱动操作、状态与版本契约
 
-本页描述 [Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84)、[Spec #85](https://github.com/wangyingang/sing-box-config-manager/issues/85) 与 [Spec #86](https://github.com/wangyingang/sing-box-config-manager/issues/86) 的应用服务结果、自动运行边界及远端持久事实。它不是 Compiler 的输入契约；Compiler 继续消费 [Rule Subscription v2](rule-subscription-v2.md) 或固定 [Artifact Manifest v1](README.md)。
+本页描述 [Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84)、[Spec #85](https://github.com/wangyingang/sing-box-config-manager/issues/85)、[Spec #86](https://github.com/wangyingang/sing-box-config-manager/issues/86) 及 [Spec #90 恢复修复](https://github.com/wangyingang/sing-box-config-manager/issues/90) 的应用服务结果、自动运行边界及远端持久事实。它不是 Compiler 的输入契约；Compiler 继续消费 [Rule Subscription v2](rule-subscription-v2.md) 或固定 [Artifact Manifest v1](README.md)。
 
 ## 配置
 
@@ -37,6 +37,8 @@ main 的 sync/pin/resume 写入受 `RULE_UPDATE_ENABLED` 控制，cleanup 写入
 
 配置 push 调用完整 sync；schedule 正常先 sync 后 cleanup，存在活动维护时先 cleanup 续做，确认恢复可写后再同步。自动编排保留各次应用服务结果，并聚合退出码；独立单集失败不会回滚其他成功，也不能被之后的 cleanup 成功覆盖。共享状态未明或维护仍未完成时停止相关写入；pending/partial/failed 使整个运行非成功。手工 sync 不暗中清理，手工 cleanup 不更新上游，不公开 daily 或内部维护阶段入口。
 
+仅关联已登记交付、且无整体或逐集共享异常的 status pending，可以路由到 sync 恢复。此分类只决定是否调用应用服务；sync 重新读取持久状态并核对原操作、回执、摘要、意图和 heads/CAS，不因此获得绕过保护的写权限。sync 仍 pending 或共享状态未明时停止后续 cleanup；更新 disabled 也不能证明此前登记交付已完成。缺少登记依据、损坏、不可读、目标不符及迁移归属未决状态继续阻断。
+
 Actions 的 main 目标使用 `RULE_ARTIFACT_TOKEN`；acceptance-* 目标只使用独立 `RULE_ACCEPTANCE_TOKEN`，缺少时失败，不回落生产凭据。源码配置读取使用工作流 `GITHUB_TOKEN`。隔离 token 只授予产物仓库 Contents 读写权限，但权限范围仍是仓库；分支范围由可信目标校验约束。Secret 的设置位置与最小权限见[模块凭据说明](../README.md#actions-自动与手工运行)。
 
 同一目标的工作流使用同一 concurrency 组，业务远端校验继续生效。Actions 摘要和 JSON artifact 保存实际结果；GitHub 原生失败通知依赖账号设置，不承载独立业务邮件契约。通知设置和手工参数对照见[模块操作说明](../README.md#actions-自动与手工运行)。
@@ -64,6 +66,12 @@ status 只读取，不登记操作、更新检查时间、恢复维护或发送�
 输入绑定依据规范化来源与所选列表计算。它不含 source 别名或上游随后出现的新版本；定义修订另包含稳定路径与用途。控制只有 auto/pinned，不再由旧激活记录的双暂停布尔值与 resumes 叠加判定。
 
 候选文件位于 `candidates/<id>/`，仍使用固定 commit 地址、Manifest、构建记录与 readback 证据。候选首次成功发布保存 UTC ISO 8601 `publishedAt`，并以时间和候选稳定短身份组成 `versionId`，例如 `2026-11-16T12:34:56.789Z~1234abcd`。时间相同的候选仍由完整身份区分，短身份冲突时延长；不覆盖旧候选。pin、resume、重试和再次交付不刷新原版本身份或时间。有效内容与构建条件未变时 sync 不新增候选。
+
+真实 sync 按规则及稳定候选身份遍历当前有效意图下的全部 building/publishing，核对输入绑定、定义修订、规则代次及控制修订，再作普通更新或 unchanged 判断。同源分组只优化普通输入获取，不能限制恢复范围。沿用原 candidateId/source/buildId 完成 building→publishing→verified，不新增终止状态，不以同内容直接宣告 verified。已有完整证据时优先复验；证据不足时使用原固定输入补齐缺失阶段。已登记的 versionId/publishedAt 必须与证据一致；journal 缺失时只从核实后的原证据恢复，不可靠或冲突的事实明确失败并保留记录。
+
+候选恢复与选择当前交付分别处理。已有 current 时，先完成所有匹配候选的证据，再通过正常最新上游输入与兼容检查决定一次交付；即使仅有一个在途候选也不直接切换。latest 检查失败时，已恢复证据仍保留，已有稳定交付不变，整体报告失败并以 sync 继续。完整证据复验本身不重新获取候选的固定上游输入，但不能据此承诺已有 current 时上游离线也能完成整次 sync。尚无 current 且单一有效在途候选可以直接复验并交付；原已登记 pendingDelivery 沿用原操作恢复，不受该选择限制。
+
+历史候选可作为完整非当前版本保留；多候选的遍历顺序不选择版本，也不依次交付每个候选。unchanged 不跳过在途收尾；任一候选无法恢复时，结果包含该 candidateId、具体错误及 sync 继续入口，不能因当前字节相同返回整体 success。已删除定义、换源、新控制修订和 pin 仍约束迟到任务；查询、预览和 pinned 跳过不会恢复旧意图。本边界不新增选择状态或 schema；它以已有 current 时的最新输入检查，避免 A 当前、B 中断而上游已回到 A 时误交付残留 B。
 
 `<stablePath>/activation.json` 是 schema 2 交付记录，保存逻辑 ID、candidateId、版本身份、真实来源、订阅和当前文件摘要。它描述实际交付，不承载更新控制。生产状态/候选位于 candidates 分支，稳定记录/文件位于 main；隔离目标共用同一 acceptance 分支。
 

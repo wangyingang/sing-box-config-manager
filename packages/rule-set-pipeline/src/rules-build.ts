@@ -9,7 +9,7 @@ import { lookupRelease, readReleaseInput, sha256 } from './release.js';
 import type { SourceRecord } from './types.js';
 import { retainedCandidateDownload } from './publication-repository.js';
 import { immutableUrl, type PublicationTransport } from './publication.js';
-import { inputBindingRevision, type ManagedRule, type RuleCandidate, type RuleDelivery } from './rules-model.js';
+import { inputBindingRevision, parseRulesJournal, type ManagedRule, type RuleCandidate, type RuleDelivery } from './rules-model.js';
 import { rulesBinary, type LoadedRules } from './rules-context.js';
 import type { RulesSession } from './rules-session.js';
 
@@ -56,9 +56,16 @@ export async function recoverPublishedRuleCandidate(session: RulesSession, candi
   const evidenceCommit = candidate.evidenceCommit ?? await session.loaded.context.repository.lastChange(session.snapshot.head, path);
   const recovered: RuleCandidate = { ...candidate, status: 'verified', evidenceCommit,
     evidenceUrl: immutableUrl(evidenceCommit, path), evidenceSha256: sha256(bytes) };
-  if (!recovered.publishedAt || !recovered.versionId || recovered.publishedAt !== evidence.publishedAt || recovered.versionId !== evidence.versionId) {
+  if (recovered.publishedAt && recovered.publishedAt !== evidence.publishedAt
+    || recovered.versionId && recovered.versionId !== evidence.versionId) {
     throw new Error('CANDIDATE_UNAVAILABLE: retained evidence does not match the registered version');
   }
+  recovered.publishedAt ??= evidence.publishedAt;
+  recovered.versionId ??= evidence.versionId;
+  // Validate recovered identity before recording it, including its uniqueness.
+  parseRulesJournal(Buffer.from(JSON.stringify({ ...session.journal,
+    candidates: { ...session.journal.candidates, [candidate.id]: recovered } })));
+  if (!recovered.publishedAt || !recovered.versionId) throw new Error('CANDIDATE_UNAVAILABLE: retained evidence has no reliable publication time');
   await verifyRuleCandidate(session, recovered, rulesBinary(session.loaded.context));
   delete recovered.error;
   session.journal.candidates[candidate.id] = recovered;
