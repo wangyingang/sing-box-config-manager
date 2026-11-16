@@ -2,7 +2,7 @@
 
 包名：`@sing-box-config-manager/rule-set-pipeline`。管理者通过正式配置维护规则集的来源和用途，再用 `sync` 完成新增、更新与删除。合格规则通过稳定 URL 交付给订阅使用者；构建成功、候选发布、稳定入口切换和客户端加载完成是不同的状态。
 
-[Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84) 将日常操作收敛为 `status`、`sync`、`pin`、`resume`。[Spec #85](https://github.com/wangyingang/sing-box-config-manager/issues/85) 增加一个 `cleanup` 入口，按保留期重建受管历史并保留可选版本。配置 push、定时运行及 GitHub 失败通知仍由 [#86](https://github.com/wangyingang/sing-box-config-manager/issues/86) 接线。本次代码交付不包含生产状态转换或启用。决定及迁移成本见 [配置驱动操作 ADR](docs/adr/0001-configuration-driven-rule-operations.md)。
+[Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84) 将日常操作收敛为 `status`、`sync`、`pin`、`resume`。[Spec #85](https://github.com/wangyingang/sing-box-config-manager/issues/85) 增加一个 `cleanup` 入口，按保留期重建受管历史并保留可选版本。[Spec #86](https://github.com/wangyingang/sing-box-config-manager/issues/86) 将配置 push、定时运行和手工 Actions 接到同一应用服务，并使用 GitHub 原生失败通知。本次代码交付不包含生产状态转换或启用。决定及迁移成本见 [配置驱动操作 ADR](docs/adr/0001-configuration-driven-rule-operations.md)。
 
 ## 操作分别产生什么结果
 
@@ -32,7 +32,7 @@ pin 示例的版本仅说明格式。实际操作先从 `status openai` 中选�
 
 无效 pin 不改变控制、当前交付或尚未同步的配置。新 pin 可以选择当前规则代次内保留的旧源版本；再次实质换源会撤销该固定。`resume` 不补跑固定期间的中间版本，已经为 auto 时也立即检查。
 
-整体结果为 `success`、`partial`、`failed` 或 `pending`。CLI 仅在完全成功、无变化或正常固定跳过时返回 0；部分失败、失败和待核实均返回 1。`pending` 表示提交、回读结果、历史候选归属仍待核实，或维护隔离尚未结束。先查看 status，再根据返回的继续入口处理，不能当作没有发生变更。具体 JSON 字段见 [操作与状态契约](contracts/rules-operations.md)。
+整体结果为 `success`、`disabled`、`partial`、`failed` 或 `pending`。完全成功、无变化、正常固定跳过及环境门禁关闭时返回 0；`disabled` 明确表示未应用，不能当作配置已经生效。部分失败、失败和待核实均返回 1。`pending` 表示提交、回读结果、历史候选归属仍待核实，或维护隔离尚未结束。先查看 status，再根据返回的继续入口处理，不能当作没有发生变更。具体 JSON 字段见 [操作与状态契约](contracts/rules-operations.md)。
 
 旧 `update`、`rebuild`、`check-now`、`activate`、`rollback`、`initialize` 及 `maintenance-enter/prepare/switch/resume/abort` 等旧命令和 Node API 已退出公开入口。必要的构建、验证和转换仍是内部能力，不提供旧命令兼容层。
 
@@ -72,7 +72,9 @@ pnpm rules sync --config /path/to/rulesets-draft.yml --dry-run --json
 | `main` | 产物仓库 `candidates` 分支 | 产物仓库 `main` 分支 |
 | `acceptance-*` | 专用隔离分支 | 同一隔离分支 |
 
-`RULE_TARGET` 选择已准备的隔离目标；省略时为 `main`。生产写入另受 `RULE_UPDATE_ENABLED=true` 门禁控制。这个设置是环境准备的一部分，不属于日常命令参数，也不表示本 PR 已获生产操作授权。#86 完成前不把新编排接入生产自动触发。
+`RULE_TARGET` 选择已准备的目标，省略时为 `main`。生产更新类写入（sync/pin/resume）只在 `RULE_UPDATE_ENABLED=true` 时允许；历史清理只在 `RULE_CLEANUP_ENABLED=true` 时允许，两个开关默认关闭。CLI、默认 Node 宿主和 Actions 共用这两个门禁，不能改用另一入口绕过。关闭时返回 `disabled`、本次配置修订和未应用原因；它不改变单集 auto/pinned 控制。status 与 dry-run 保持只读，可在写入开关关闭时使用。
+
+隔离目标仅限 `acceptance-*`，不会写产物 main/candidates。默认 CLI/API 仍读取源码 main 当前配置；可信隔离宿主可通过 `RULE_CONFIG_BRANCH` 选择与目标同名的 acceptance 分支，不能用隔离配置授权生产写入。Actions 的隔离运行固定使用同名配置分支。源码配置分支和产物目标须事先准备，配置修订每次从当前 head 解析。环境变量和凭据属于宿主部署配置，不是日常命令参数；启用生产开关、转换生产旧状态及实际运行都需要对应授权。
 
 `sync` 可以为没有受管内容的目标建立缺失状态；发现未知 schema 或未管理的已有内容时拒绝覆盖。正式状态完全保存在远端，换机器不依赖本地缓存。schema 1 历史状态须先通过内部一次性转换，保留稳定 URL、字节、来源和有效固定。转换的待处理条件及边界见 [状态契约](contracts/rules-operations.md#一次性转换)。
 
@@ -100,11 +102,48 @@ pnpm rules status openai
 
 受管历史回收同时覆盖 candidates 与 main；单分支隔离目标使用同一流程。工具只删除本次维护拥有且 head 匹配的临时/旧引用，其他分支和标签保留并报告；它们可能继续引用旧历史。不承诺固定仓库体积、GitHub 立即回收对象或旧 SHA 立即不可访问。没有到期候选且没有待回收历史时返回无变化，不重复建立基线。
 
-## Actions 隔离操作
+## Actions 自动与手工运行
 
-[`rule-maintenance.yml`](../../.github/workflows/rule-maintenance.yml) 现在只提供手动 `workflow_dispatch`，调用与 CLI 相同的五个应用服务。选择 operation，并提供已经准备的 `acceptance-*` target；status 可选 id，pin 需要 id/version，resume 需要 id，cleanup 不接收 id/version，写操作可选 dry_run。工作流和运行时都拒绝 main，当前没有 schedule 或配置 push 触发。
+[`rule-maintenance.yml`](../../.github/workflows/rule-maintenance.yml) 使用三种触发方式，业务写入均调用相同应用服务：
 
-隔离目标写入使用仓库 Secret `RULE_ARTIFACT_TOKEN`，来源读取使用工作流自身 GitHub token。每次运行把共同结果写入 Step Summary；partial/failed/pending 使 job 失败，摘要作为 artifact 保留。配置仍读取源码 main 当前正式定义，不能通过工作流运行 ref 重放旧定义。生产自动运行与通知接线留给 #86。
+| 触发 | 配置与执行行为 |
+| --- | --- |
+| main 的正式配置 `config/rulesets.yml` push | 读取 main 当前配置，执行一次完整 sync，统一识别新增、换源和删除 |
+| `acceptance-*` 的同一路径 push | 读取该分支当前配置，只向产物仓库同名隔离目标执行 sync |
+| 每日 `23 20 * * *`（UTC 每日 20:23，北京时间每日 04:23） | 正常先 sync 后 cleanup；已有未完成维护时先续做 cleanup，恢复可写后再 sync 和必要清理 |
+| 手工 `workflow_dispatch` | 选择五个 operation 之一、target 和该操作需要的参数；target 默认 main，也可选择已准备的 acceptance 分支 |
+
+例如在同一次正式配置提交中新增 A、将 B 换源、删除 C，push 会完成一次完整 sync，无需另发逐集命令。若 B 的来源失败，A/C 的成功保留，摘要列出 B 仍实际交付的版本，运行整体失败。修复后再次 push，或下一次每日 sync，会按当前配置继续处理。pinned 集跳过上游处理；手工 resume 后恢复 auto 并立即检查当前来源。生产更新开关关闭时，此次 push 显示未应用，而不会假装已经完成配置变更。
+
+日常编排分别保留 sync 和 cleanup 的结果；清理成功不能覆盖更新失败。单集普通来源失败不必阻止可安全执行的清理，共享状态或写入结果尚不明确时停止受影响写入。两类生产开关分别控制各自阶段；未完成维护无法恢复时不能继续更新。每日频率不改变候选保留年龄；不再使用 `RULE_CLEANUP_PERIOD_DAYS` 或 `RULE_CLEANUP_START_AT`，也不增加公开 daily 操作。GitHub 的 [schedule 事件可能延迟或丢弃](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)，本模块不承诺准时触发。
+
+五个入口的参数保持一致：
+
+| CLI | Node API | workflow_dispatch |
+| --- | --- | --- |
+| `status [id]` | `getRulesStatus({ id? })` | operation=status，可选 id；不接受 version/dry_run |
+| `sync [--dry-run]` | `syncRules({ dryRun? })` | operation=sync，可选 dry_run；不接受 id/version |
+| `pin <id> <version> [--dry-run]` | `pinRuleVersion({ id, version, dryRun? })` | operation=pin，必填 id/version，可选 dry_run |
+| `resume <id> [--dry-run]` | `resumeRuleUpdates({ id, dryRun? })` | operation=resume，必填 id，可选 dry_run；不接受 version |
+| `cleanup [--dry-run]` | `cleanupRuleHistory({ dryRun? })` | operation=cleanup，可选 dry_run；不接受 id/version |
+
+手工运行的 target 为 main 时，工作流运行分支也必须是 main；从开发分支运行只能选择隔离目标。手工工作流不接受内部维护阶段、证据 URL、expected-head、binary 或状态目录。Actions 对 main 使用仓库 Secret `RULE_ARTIFACT_TOKEN`；对 acceptance-* 只使用独立 Secret `RULE_ACCEPTANCE_TOKEN`，缺少时失败，不回落到生产凭据。源码配置与上游来源读取使用工作流自身 `GITHUB_TOKEN`；Actions variables `RULE_UPDATE_ENABLED` 和 `RULE_CLEANUP_ENABLED` 继续分别控制生产写入。工作流按目标串行排队，业务服务仍检查配置修订、head 与 generation；排队不能代替这些检查。
+
+隔离验收的最小凭据设置：在源码仓库 `wangyingang/sing-box-config-manager` 的 **Settings → Secrets and variables → Actions → Repository secrets** 中保存 `RULE_ACCEPTANCE_TOKEN`。使用独立的 Fine-grained PAT，仅选择产物仓库 `wangyingang/sing-box-rule-artifacts`，仓库权限设为 **Contents: Read and write**，有效期只覆盖测试所需时间。创建步骤见 [GitHub Fine-grained PAT 文档](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token)。该 token 授权范围是仓库，不是 acceptance 分支；分支隔离由工作流和应用服务的目标校验约束。不要复制本机 `gh` 登录 token，也不要替换或修改生产 `RULE_ARTIFACT_TOKEN`。
+
+旧事件或 rerun 重新读取对应配置分支的当前 head，并记录实际配置修订，不能重放已删除的旧定义。运行摘要与可下载 JSON 结果保留操作、目标、配置修订、各集实际交付与控制状态、失败原因及继续入口。partial/failed/pending 均使工作流失败；成功、无变化、固定跳过和无到期数据为成功。disabled 表示对应阶段没有应用；它不会抵消其他阶段已经报告的失败或 pending。
+
+## GitHub 原生失败通知
+
+维护者在自己的 GitHub 账号中设置通知：
+
+1. 打开 [Notification settings](https://github.com/settings/notifications)，找到 **System → Actions**。
+2. 选择 **Email**，同时选择 **Only notify for failed workflows**，保存设置；使用账号已验证的通知邮箱。
+3. 从通知或仓库 Actions 打开失败运行，阅读 Summary，下载结果 artifact，按实际当前版本和继续入口处理。
+
+具体选项见 [GitHub Actions 通知设置](https://docs.github.com/en/subscriptions-and-notifications/how-tos/managing-github-actions-notifications)。GitHub 管理邮件内容和收件行为；定时任务通知对象与最初创建工作流、修改 cron 或重新启用工作流的人有关，不能据此承诺固定收件人。详见 [工作流通知规则](https://docs.github.com/en/actions/concepts/workflows-and-actions/notifications-for-workflow-runs)。
+
+本项目不配置收件人列表、SMTP、邮件 API 或发送队列，也不承诺每次失败必定送达。手工实际运行及 dry-run 失败也可能按账号设置触发原生通知；dry-run 本身不执行任何邮件发送。代码交付和 Actions 显示失败不等于邮箱已实收；生产启用、账号通知配置核验、原生 schedule 触发与邮箱实收应按部署时的实际证据记录。选择原因见 [自动运行与通知 ADR](docs/adr/0003-automated-operations-and-native-notifications.md)。
 
 ## Node API
 
@@ -171,6 +210,6 @@ SING_BOX_TEST_BINARY=/absolute/path/to/sing-box-1.14.4 pnpm --dir packages/rule-
 
 #84 的验收范围包含新增、换源、删除、pin、resume、部分失败、查询/预览与一次性转换；真实 GitHub 生命周期在专用 `acceptance-*` 分支验证，不写生产分支。场景与远端证据见 [#84 验收记录](../../docs/verification/issue-84.md)，最终源码和交付状态以 [Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84) 的 PR 交付证据为准。
 
-#85 的验收聚焦保留范围、当前版本保护、清理后 status/pin、跨机器恢复、只读预览及受管 refs/可达历史；最终执行结果以对应 PR 和工单的验收证据为准。
+#85 的验收聚焦保留范围、当前版本保护、清理后 status/pin、跨机器恢复、只读预览及受管 refs/可达历史。#86 聚焦真实配置 push、手工入口一致性、日常编排、失败映射与生产门禁；定时行为的本地测试不冒充原生 schedule 事件，未验证邮箱实收不报告为收到。最终执行结果以各 PR 和工单的验收证据为准。
 
 已有验收是各自日期与提交的历史事实：[#15 转换](docs/verification/issue-15.md)、[#16 原生验证](docs/verification/issue-16.md)、[#18 候选回读](docs/verification/issue-18.md)、[#19 v1 激活](docs/verification/issue-19.md)、[#20 v1 回滚](docs/verification/issue-20.md)、[#21 客户端故障恢复](docs/verification/issue-21.md)、[#22 重建](docs/verification/issue-22.md)、[#67 四集配置及更名](docs/verification/issue-67.md)。其中旧命令不再是当前操作指南，历史通过不表示 #84 新入口已在生产运行。

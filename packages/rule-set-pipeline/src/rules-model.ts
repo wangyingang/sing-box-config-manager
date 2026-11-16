@@ -114,7 +114,7 @@ export interface RulesResult {
   configurationRevision: string;
   configurationOrigin: string;
   target: BuildConfiguration['target'];
-  status: 'success' | 'partial' | 'failed' | 'pending';
+  status: 'success' | 'partial' | 'failed' | 'pending' | 'disabled';
   exitCode: 0 | 1;
   results: RuleResult[];
   observedHeads?: { journal: string; stable: string };

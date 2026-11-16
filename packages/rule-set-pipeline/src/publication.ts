@@ -16,11 +16,18 @@ export class GitHubHttpError extends Error {
 }
 
 /** Uses the existing gh login; credentials never enter files or published records. */
-export function ghJson(args: string[], input?: unknown): Promise<any> {
+export function ghJson(args: string[], input?: unknown, token?: string): Promise<any> {
+  // Identify the failing API without recording credentials, bodies or query values.
+  const methodIndex = args.indexOf('--method');
+  const method = methodIndex >= 0 ? args[methodIndex + 1] : input === undefined ? 'GET' : 'POST';
+  const path = args[0] === 'api' ? args[1]?.split(/[?#]/, 1)[0] : undefined;
+  const request = path && /^repos\/[A-Za-z0-9._/-]+$/.test(path) && /^[A-Z]+$/.test(method ?? '')
+    ? `${method} ${path}: ` : '';
   return new Promise((resolve, reject) => {
-    const child = execFile('gh', args, { timeout: 120_000, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
+    const child = execFile('gh', args, { timeout: 120_000, maxBuffer: 16 * 1024 * 1024,
+      ...(token ? { env: { ...process.env, GH_TOKEN: token } } : {}) }, (error, stdout, stderr) => {
       if (error) {
-        const message = `gh failed: ${stderr.trim() || error.message}`;
+        const message = `gh failed: ${request}${stderr.trim() || error.message}`;
         const status = /^gh: .* \(HTTP (\d{3})\)$/m.exec(stderr)?.[1];
         reject(status && !error.killed ? new GitHubHttpError(Number(status), message) : new Error(message));
       } else { try { resolve(stdout.trim() ? JSON.parse(stdout) : null); } catch (error) { reject(error); } }

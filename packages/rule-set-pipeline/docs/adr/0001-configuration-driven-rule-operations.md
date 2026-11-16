@@ -20,4 +20,4 @@ status: accepted
 
 移除旧公开命令与 Node API，不保留长期兼容层；内部构建、发布、复验及转换能力继续复用。配置和操作状态升级，已有远端状态需要一次性受控转换，保留稳定 URL、字节、来源和有效固定。无法可靠恢复的历史发布时间明确待处理，不能以迁移时间充当真实发布时间。
 
-候选清理的后续决定见 [ADR 0002](0002-retained-history-cleanup.md) 和 [#85](https://github.com/wangyingang/sing-box-config-manager/issues/85)，push/schedule 与 GitHub 失败通知属于 [#86](https://github.com/wangyingang/sing-box-config-manager/issues/86)。这些拆分会要求后续同步维护调用方和验收证据；本次不接入未完成的生产编排、不执行生产转换。历史验收保留原日期与事实，当前完成状态以对应 PR 和工单交付记录为准。
+候选清理决定见 [ADR 0002](0002-retained-history-cleanup.md) 和 [#85](https://github.com/wangyingang/sing-box-config-manager/issues/85)，push/schedule 与 GitHub 失败通知见 [ADR 0003](0003-automated-operations-and-native-notifications.md) 和 [#86](https://github.com/wangyingang/sing-box-config-manager/issues/86)。#84 阶段没有接入生产编排或执行生产转换；后续接线仍遵守独立的环境门禁和生产授权。历史验收保留原日期与事实，当前完成状态以对应 PR 和工单交付记录为准。

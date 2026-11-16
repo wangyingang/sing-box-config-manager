@@ -1,6 +1,6 @@
 import { candidateStableFiles } from './activation.js';
 import { ARTIFACT_REPOSITORY } from './publication.js';
-import { loadRulesRequest, type RulesRequest } from './rules-context.js';
+import { loadRulesRequest, type LoadedRules, type RulesRequest } from './rules-context.js';
 import { openRulesSession, type RulesSession } from './rules-session.js';
 import { readRuleDeliveries, observedRule, ruleSubscription, ensureRulePathAvailable } from './rules-delivery.js';
 import { verifyRuleCandidate } from './rules-build.js';
@@ -17,6 +17,15 @@ export interface RuleStatus extends RuleResult {
   pendingOperation?: string;
 }
 
+/** A closed environment gate does not read or migrate the artifact journal. */
+export function disabledRulesResult(loaded: LoadedRules, operation: RulesResult['operation']): RulesResult | undefined {
+  if (loaded.allowWrites || loaded.dryRun) return;
+  const gate = loaded.writeKind === 'cleanup' ? 'RULE_CLEANUP_ENABLED' : 'RULE_UPDATE_ENABLED';
+  return { operation, dryRun: false, configurationRevision: loaded.observed.revision,
+    configurationOrigin: loaded.observed.origin, target: loaded.configuration.target,
+    status: 'disabled', exitCode: 0, results: [], error: `${gate} is disabled; configuration has not been applied (未应用)` };
+}
+
 export function rulesReport(session: RulesSession, operation: RulesResult['operation'], results: RuleResult[]): RulesResult {
   const pending = results.some(result => result.status === 'pending') || Boolean(session.journal.pendingDelivery)
     || session.journal.maintenance === 'maintenance'
@@ -30,10 +39,11 @@ export function rulesReport(session: RulesSession, operation: RulesResult['opera
       ? { error: 'RULE_MIGRATION_PENDING: retained candidate ownership is unresolved' } : {}) };
 }
 
-export function rulesFailure(operation: RulesResult['operation'], request: RulesRequest, error: unknown): RulesResult {
+export function rulesFailure(operation: RulesResult['operation'], request: RulesRequest, error: unknown, loaded?: LoadedRules): RulesResult {
   const message = error instanceof Error ? error.message : String(error);
-  return { operation, dryRun: Boolean(request.dryRun), configurationRevision: 'unavailable', configurationOrigin: 'unavailable',
-    target: { repository: ARTIFACT_REPOSITORY, branch: request.context?.targetBranch ?? process.env.RULE_TARGET ?? 'main' },
+  return { operation, dryRun: Boolean(request.dryRun), configurationRevision: loaded?.observed.revision ?? 'unavailable',
+    configurationOrigin: loaded?.observed.origin ?? 'unavailable',
+    target: loaded?.configuration.target ?? { repository: ARTIFACT_REPOSITORY, branch: request.context?.targetBranch ?? process.env.RULE_TARGET ?? 'main' },
     status: /PENDING/.test(message) ? 'pending' : 'failed', exitCode: 1, results: [], error: message };
 }
 
@@ -51,9 +61,11 @@ export async function addCurrentFacts(session: RulesSession, results: RuleResult
 }
 
 export async function getRulesStatus(request: RulesRequest & { id?: string } = {}): Promise<RulesResult & { rules?: RuleStatus[]; maintenance?: string; quarantinedCandidates?: RulesSession['journal']['quarantinedCandidates'] }> {
+  let loaded: LoadedRules | undefined;
   try {
     if (request.draft !== undefined || request.dryRun) throw new Error('status is read-only and does not accept draft or dry-run');
-    const session = await openRulesSession(await loadRulesRequest(request));
+    loaded = await loadRulesRequest(request);
+    const session = await openRulesSession(loaded);
     const stable = await session.stable();
     const deliveries = await readRuleDeliveries(stable);
     const definitions = new Map(session.loaded.configuration.ruleSets.map(rule => [rule.id, rule]));
@@ -103,5 +115,5 @@ export async function getRulesStatus(request: RulesRequest & { id?: string } = {
       ...(cleanup && { cleanup: { phase: 'phase' in cleanup ? cleanup.phase : 'cleanup' as const,
         maintenanceId: cleanup.id, plan: cleanup.plan, continueWith: 'cleanup' as const } }),
       observedHeads: { journal: session.snapshot.head, stable: stable.head } };
-  } catch (error) { return rulesFailure('status', request, error); }
+  } catch (error) { return rulesFailure('status', request, error, loaded); }
 }
