@@ -1,10 +1,10 @@
 # 配置驱动操作、状态与版本契约
 
-本页描述 [Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84) 的应用服务结果及远端持久事实。它不是 Compiler 的输入契约；Compiler 继续消费 [Rule Subscription v2](rule-subscription-v2.md) 或固定 [Artifact Manifest v1](README.md)。
+本页描述 [Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84) 与 [Spec #85](https://github.com/wangyingang/sing-box-config-manager/issues/85) 的应用服务结果及远端持久事实。它不是 Compiler 的输入契约；Compiler 继续消费 [Rule Subscription v2](rule-subscription-v2.md) 或固定 [Artifact Manifest v1](README.md)。
 
 ## 配置
 
-正式配置为源码 main 当前 commit 的 `packages/rule-set-pipeline/config/rulesets.yml`。完整结构使用 `schemaVersion: 3`，字段为 `candidateRetentionDays`、`sources`、`target`、`ruleSets`。各层拒绝未知字段；`candidateRetentionDays` 必须为显式正整数，#84 不执行按天清理。
+正式配置为源码 main 当前 commit 的 `packages/rule-set-pipeline/config/rulesets.yml`。完整结构使用 `schemaVersion: 3`，字段为 `candidateRetentionDays`、`sources`、`target`、`ruleSets`。各层拒绝未知字段；`candidateRetentionDays` 必须为显式正整数，正式值为已确认的 30 天，由 cleanup 执行年龄保留策略。
 
 `target.repository` 固定为 `wangyingang/sing-box-rule-artifacts`；分支只能是 `main` 或受限 `acceptance-*`。`ruleSets` 中 ID 唯一，`source` 必须存在，`stablePath` 为互不重叠的 `stable/` 路径。显式空集合表示删除全部；缺少集合、读取失败或解析错误不能解释为删除。
 
@@ -12,21 +12,22 @@
 
 ## 共同结果
 
-四个服务返回 `RulesResult`，CLI `--json` 直接呈现相同业务结果：
+五个服务返回 `RulesResult`，CLI `--json` 直接呈现相同业务结果：
 
 | 字段 | 含义 |
 | --- | --- |
-| `operation`、`dryRun` | status/sync/pin/resume 及是否仅预览 |
+| `operation`、`dryRun` | status/sync/pin/resume/cleanup 及是否仅预览 |
 | `configurationRevision`、`configurationOrigin` | 本次读到的正式 commit 和来源；草稿标记为 local-draft |
 | `target` | 本次受限产物仓库与分支 |
 | `status`、`exitCode` | success/partial/failed/pending；只有 success 为 0 |
 | `results[]` | 每集的 `id`、结果、`changes`、`error`、`current`、`control`、`expectedSource` 和需要时的 `continueWith` |
 | `observedHeads` | 能读到时返回日志与稳定分支的观察 head，不作为后续执行凭证 |
 | `error` | 无法分配到单集的失败，或交付事实尚不能完成核实 |
+| `cleanup` | cleanup 的阶段、固化计划、保留/移除数量、其他引用与继续入口；无法盘点时可缺省 |
 
 逐集结果区分 delivered、unchanged、pinned-skipped、pinned、resumed、deleted、failed、pending、superseded、planned。正常固定跳过是成功；独立失败与成功并存为 partial；存在待核实提交或归属未知的隔离候选为 pending。`changes` 说明本次已完成或预览预计完成的变化。resume 后更新失败时，`automatic-updates-restored` 与 auto 控制说明解除固定已经持久化，不能把整次失败理解为仍被固定。
 
-预览结果可以包含 `verified` 和 `unverified`，例如已验证来源、原生规则与订阅契约，但尚未验证远端发布及 HTTPS 回读。三种写操作的 dry-run 不持久保存任何状态，也不补做 pending 恢复。草稿仅允许 sync 预览；pin/resume 始终按正式配置核对。
+预览结果可以包含 `verified` 和 `unverified`，例如已验证来源、原生规则与订阅契约，但尚未验证远端发布及 HTTPS 回读。四种写操作的 dry-run 不持久保存任何状态，也不补做 pending 恢复。草稿仅允许 sync 预览；pin/resume/cleanup 始终按正式配置核对。
 
 ## 查询
 
@@ -56,6 +57,31 @@ status 只读取，不登记操作、更新检查时间、恢复维护或发送�
 
 稳定写入先登记操作，再核对配置、日志 head 和维护状态，按预期 parent 非强制更新目标 ref，并读回验证。响应丢失时先识别同一次操作；不明确时返回 pending。删除移除当前受管路径及候选，保留最小代次记录防止旧任务复活，不承诺清除 Git 历史或客户端缓存。
 
+## 清理计划与恢复
+
+`cleanupRuleHistory({ dryRun? })` 对整份受管状态执行维护，不接受规则 ID、版本或内部阶段参数。共同结果的 `cleanup` 包含：
+
+| 字段 | 含义 |
+| --- | --- |
+| `phase` | preview/unchanged/isolated/prepared/readback/cleanup/completed/blocked，说明当前完成或待处理的位置 |
+| `maintenanceId` | 存在时标识本次维护；恢复沿用同一身份 |
+| `plan.candidateRetentionDays`、`plan.cleanupObservedAt`、`plan.cutoff` | 本次采用的天数、UTC 观察时间和截止时间 |
+| `plan.decisions[]` | 每个候选的身份、已知版本/时间、retain/discard 及原因 |
+| `plan.retain.candidateIds`、`plan.retain.active` | 保留候选集合和按 candidateId 明确指向的实际当前交付 |
+| `plan.discard.candidateIds` | 本次可移除候选集合 |
+| `plan.blockers`、`plan.retainedBytes`、`plan.hasCleanup` | 阻塞原因、保留候选与当前稳定文件的逻辑字节数及是否存在清理工作；字节数不含 Git 对象开销 |
+| `plan.otherRefs`、`otherRefs` | 盘点时和结果中观察到的非受管引用；报告而不删除 |
+| `retainedCandidateCount`、`removedCandidateCount` | 能确认时返回的保留/移除数量 |
+| `continueWith` | 未完成时为 cleanup，CLI 显示 `pnpm rules cleanup` |
+
+年龄按首次成功发布的 `publishedAt` 计算，UTC 连续 24 小时计一天。`publishedAt >= cutoff` 的完整候选保留；早于 cutoff 的候选仅在没有保护依赖时删除。当前交付、pin 目标、未决操作所需证据和最小控制/删除代次均受到保护。候选退出当前身份不更新时间或重新计时；未知历史时间不伪造、不按过期处理。
+
+实际执行隔离写入后保存维护身份、时间边界和完整集合；中断恢复不重新计算删除计划。关键写入仍核对当前定义、控制、generation 和 Git heads，冲突时停止。新基线复制所有保留候选的完整依赖，并保留实际当前 candidate/version 指针。物理 commit 和证据 URL 可重写，业务 `versionId`、`publishedAt`、来源、稳定 URL 与规则字节不变。
+
+切换前重跑 cleanup 复用或核实已准备对象；切换后继续回读、清理本次拥有且 head 一致的临时引用、恢复写入，不回滚旧基线。无法判定时保留隔离并返回 pending/failed。dry-run 只盘点已保存的状态与文件；`cleanup.unverified` 明示尚未执行的原生候选复验、新基线 HTTPS 回读和原子切换。存在活动维护时展示已固化计划，不恢复阶段、不写引用或 generation。status 在维护隔离期间报告 pending，并在当前检查点有计划时提供 cleanup 阶段、身份、截止时间与继续入口。
+
+历史重建覆盖 candidates 和 main，隔离目标支持单分支。其他分支/标签只报告，它们可能使旧历史继续可达；不承诺 GitHub 立即物理回收。cleanup 不访问最新上游、不改变当前选择、不解除 pin；无候选到期且无待回收历史时不重复创建基线。
+
 ## 一次性转换
 
 schema 1 旧状态不能直接交给新编排，也不以缺失状态覆盖已有文件。内部转换须先核实旧状态、稳定交付和候选证据，再生成新模型；未知 schema 或无法安全归属的状态必须明确拒绝。转换预览只读，生产执行另行授权。
@@ -68,4 +94,4 @@ schema 1 旧状态不能直接交给新编排，也不以缺失状态覆盖已�
 
 `quarantinedCandidates` 保存不完整候选的最小归属索引和原因，不伪造 build/source；同集显式删除会删除其文件与索引，归属无法确定时整体保持 pending 并阻止删除误报成功。`migration.pending` 列出转换时的待处理项；未完成候选的原字节保留，并在 `migration.quarantinedCandidates` 和旧状态审计快照中登记，旧任务由 head/维护隔离失效。转换结果区分 planned、converted 和 already-converted，返回 migration 审计。
 
-转换的隔离验收和剩余项记录在 #84 交付证据；生产没有因代码合并而自动完成转换。候选年龄保留及 cleanup、push/schedule 和失败通知仍分别由 #85/#86 交付。
+转换的隔离验收和剩余项记录在 #84 交付证据；生产没有因代码合并而自动完成转换。候选年龄保留和 cleanup 按本页契约处理；push/schedule 和失败通知仍由 #86 交付。旧维护未决状态必须先核实，不能作为新 schema 的清理计划直接重放。

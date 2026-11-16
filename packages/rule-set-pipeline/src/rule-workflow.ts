@@ -10,7 +10,7 @@ export interface RuleWorkflowRequest {
   dryRun?: boolean;
 }
 
-/** #84 provides an isolated thin adapter. Production triggers belong to #86. */
+/** All manager operations share this isolated adapter. Production triggers belong to #86. */
 export async function runRuleWorkflow(request: RuleWorkflowRequest, report: (text: string) => void, context?: RulesContext) {
   if (!/^acceptance-[a-zA-Z0-9._-]+$/.test(request.target)) {
     report(JSON.stringify({ status: 'failed', exitCode: 1, error: 'Production workflow is not enabled; use an isolated acceptance-* target until #86' }));

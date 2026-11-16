@@ -19,6 +19,7 @@ export interface RuleStatus extends RuleResult {
 
 export function rulesReport(session: RulesSession, operation: RulesResult['operation'], results: RuleResult[]): RulesResult {
   const pending = results.some(result => result.status === 'pending') || Boolean(session.journal.pendingDelivery)
+    || session.journal.maintenance === 'maintenance'
     || Object.values(session.journal.quarantinedCandidates ?? {}).some(candidate => !candidate.logicalId);
   const failed = results.filter(result => result.status === 'failed' || result.status === 'superseded').length;
   const status = pending ? 'pending' : failed ? (failed === results.length ? 'failed' : 'partial') : 'success';
@@ -97,7 +98,10 @@ export async function getRulesStatus(request: RulesRequest & { id?: string } = {
         candidates, candidateCount: candidates.filter(candidate => candidate.selectable).length,
         error: accepted?.lastFailure, pendingOperation: session.journal.pendingDelivery?.logicalId === id ? session.journal.pendingDelivery.id : undefined });
     }
+    const cleanup = session.journal.cleanupRun ?? session.journal.cleanupCheckpoint;
     return { ...rulesReport(session, 'status', rules), rules, maintenance: session.journal.maintenance, quarantinedCandidates: session.journal.quarantinedCandidates,
+      ...(cleanup && { cleanup: { phase: 'phase' in cleanup ? cleanup.phase : 'cleanup' as const,
+        maintenanceId: cleanup.id, plan: cleanup.plan, continueWith: 'cleanup' as const } }),
       observedHeads: { journal: session.snapshot.head, stable: stable.head } };
   } catch (error) { return rulesFailure('status', request, error); }
 }

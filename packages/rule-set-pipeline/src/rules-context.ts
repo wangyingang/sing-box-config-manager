@@ -5,6 +5,8 @@ import { parseBuildConfiguration } from './configuration.js';
 import { ghJson } from './publication.js';
 import { githubRulesRepository, type RulesRepository } from './rules-repository.js';
 import { sha256 } from './release.js';
+import { githubBaselineTransport, type BaselineTransport } from './maintenance-baseline-transport.js';
+import { gitMaintenanceRefs, type MaintenanceRefTransport } from './maintenance-refs.js';
 
 const SOURCE_REPOSITORY = 'wangyingang/sing-box-config-manager';
 const CONFIGURATION_PATH = 'packages/rule-set-pipeline/config/rulesets.yml';
@@ -19,6 +21,8 @@ export interface RulesContext {
   fetch?: typeof fetch;
   token?: string;
   now?: () => Date;
+  /** Trusted maintenance transports; never inferred from a custom/test repository. */
+  cleanup?: { baseline: BaselineTransport; refs: MaintenanceRefTransport };
 }
 export interface RulesRequest { context?: RulesContext; dryRun?: boolean; draft?: string }
 
@@ -51,6 +55,7 @@ export async function createGitHubRulesContext(): Promise<RulesContext> {
   const targetBranch = process.env.RULE_TARGET ?? 'main';
   const repository = githubRulesRepository(targetBranch);
   return { targetBranch, repository, readConfiguration: () => readCurrentRulesConfiguration(),
+    cleanup: { baseline: githubBaselineTransport(), refs: gitMaintenanceRefs() },
     allowWrites: targetBranch !== 'main' || process.env.RULE_UPDATE_ENABLED === 'true',
     binary: await installedBinary(), token: process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN };
 }
