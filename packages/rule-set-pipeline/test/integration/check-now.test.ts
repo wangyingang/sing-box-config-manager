@@ -3,7 +3,11 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { activateRules, checkRules, readRemoteState, readRemoteStatus, readUpdateState, rebuildRules, resumeRules, rollbackRules, updateRules } from '../../src/index.js';
+import { activateRules, rollbackRules } from '../../src/activation.js';
+import { checkRules, resumeRules } from '../../src/check-rules.js';
+import { readRemoteState } from '../../src/remote-state.js';
+import { readRemoteStatus } from '../../src/remote-status.js';
+import { readUpdateState, rebuildRules, updateRules } from '../../src/update.js';
 import { manageMaintenance } from '../../src/maintenance.js';
 import type { BaselineTransport } from '../../src/maintenance-baseline-transport.js';
 

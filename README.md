@@ -10,7 +10,7 @@
 
 | 模块 | 接收什么、完成什么 | 当前边界 |
 | --- | --- | --- |
-| [Rule Set Pipeline](packages/rule-set-pipeline/README.md) | 构建 JSON 和 sing-box 二进制规则文件（SRS），发布候选，激活后更新稳定规则入口 | 正式配置包含 V2Fly Release 的 `openai`、`anthropic`、`google-deepmind` 和 Git 来源的双栈 IP 规则集 `china-ip`。CLI 可显式传入这份配置，维护工作流自动加载它 |
+| [Rule Set Pipeline](packages/rule-set-pipeline/README.md) | 根据正式配置协调新增、换源和删除，验证候选后交付稳定规则入口 | `pnpm rules` 提供 status、sync、pin、resume；正式配置包含三个域名集和双栈 `china-ip`。历史状态转换与生产启用需另行安排 |
 | [Config Compiler](packages/config-compiler/README.md) | 将模板、配置选择、节点修订、规则元数据和客户端能力组合成完整配置，并检查错误 | 已实现纯内存编译、发布快照及 Node 本地发布适配器 |
 | [Configuration Manager Web App](apps/web/README.md) | 计划负责编辑、存储、管理授权、配置交付和订阅服务 | 当前只有工作区骨架及 Compiler 依赖，没有页面、HTTP API 或数据库 |
 
@@ -25,14 +25,14 @@ Pipeline 通过规则文件和元数据对接 Compiler，两者没有源码或�
 项目中有两种不同的发布与更新：
 
 - **配置发布**：固定 Recipe、模板、节点和校验结果，生成可交付的配置快照。继续编辑草稿不会改变已经发布的快照。
-- **规则发布与激活**。用 `update` 发布候选，用 `activate` 按规则集激活。需要检查最新来源并自动激活符合条件的变化时，使用 `check-now` 或维护工作流。人工固定会阻止自动激活，`resume` 可恢复单集跟随。客户端按自身更新机制从稳定入口加载规则。生产 Actions 的更新和清理分别受开关控制，默认均关闭。详见 [CLI 操作](packages/rule-set-pipeline/README.md#操作分别产生什么结果)和 [Actions 规则维护](packages/rule-set-pipeline/README.md#actions-规则维护)。
+- **规则交付**：管理者提交正式配置，用 `pnpm rules sync` 统一处理新增、换源、删除与最新输入。`pin` 交付选定版本并停止该集全部自动处理，`resume` 恢复 auto 并立即更新。客户端按自身机制从稳定入口获取规则。部分失败保留独立成功及失败集的原交付。详见 [CLI 操作](packages/rule-set-pipeline/README.md#操作分别产生什么结果)。候选清理与自动触发分别由 [#85](https://github.com/wangyingang/sing-box-config-manager/issues/85)、[#86](https://github.com/wangyingang/sing-box-config-manager/issues/86) 交付；本次不启用生产。
 
 当前 Recipe／Template v2 使用 Rule Subscription v2 跟随已激活的规则版本。**配置快照固定，不代表客户端以后加载的规则内容固定**。模板和节点仍采用固定修订。Recipe／Template v1 继续支持固定产物绑定。见 [规则订阅决策](docs/adr/0006-follow-active-rule-subscriptions.md)和[固定产物契约](packages/rule-set-pipeline/contracts/README.md)。
 
 ## 第一次阅读
 
 1. 阅读 [Compiler 的配置生成与发布流程](packages/config-compiler/README.md#从配置选择到完整配置)，理解一份配置如何产生。
-2. 阅读 [Pipeline 的操作与结果](packages/rule-set-pipeline/README.md#操作分别产生什么结果)，理解规则如何发布、激活和更新。
+2. 阅读 [Pipeline 的操作与结果](packages/rule-set-pipeline/README.md#操作分别产生什么结果)，理解规则如何新增、固定、恢复和删除。
 3. 需要接入接口时，再查模块 README 中的字段、示例和契约链接。
 4. 需要理解设计原因时查 [ADR](docs/adr/)；判断某项能力完成到什么程度时，查对应验收记录。
 
@@ -107,6 +107,8 @@ pnpm --dir packages/config-compiler build
 
 ## 调用入口
 
+- `@sing-box-config-manager/rule-set-pipeline`：Node 应用服务 `getRulesStatus`、`syncRules`、`pinRuleVersion`、`resumeRuleUpdates`，与根 CLI 共用业务规则；[结果及状态契约](packages/rule-set-pipeline/contracts/rules-operations.md)。
+
 - `@sing-box-config-manager/config-compiler`：独立核心包，不依赖 Node、数据库、文件、网络或 binary。
 - `compile(input)`：返回完整配置或结构化错误；有错误时不返回成功配置。
 - `compileRecipe(input)`／`resolveRecipe(input)`：验证封闭 Recipe 契约并解析固定修订依赖。
@@ -125,7 +127,8 @@ Compiler 同时提供已解析编译输入 `CompileInput` 和 Recipe 入口。�
 
 - [#22 固定 Release 重建验收](packages/rule-set-pipeline/docs/verification/issue-22.md)
 - [#21 客户端故障与缓存恢复验收](packages/rule-set-pipeline/docs/verification/issue-21.md)
-- [当前配置化激活与回滚的隔离验收入口](packages/rule-set-pipeline/README.md#在隔离分支验收激活与回滚)
+- [#84 配置驱动操作验收](docs/verification/issue-84.md)
+- [配置驱动规则操作 ADR](packages/rule-set-pipeline/docs/adr/0001-configuration-driven-rule-operations.md)
 - [#20 旧单列表 v1 回滚验收（历史）](packages/rule-set-pipeline/docs/verification/issue-20.md)
 - [#19 旧单列表 v1 激活与客户端自动更新验收（历史）](packages/rule-set-pipeline/docs/verification/issue-19.md)
 - [#18 不可变候选发布与远程回读验收](packages/rule-set-pipeline/docs/verification/issue-18.md)

@@ -1,160 +1,44 @@
 import { appendFileSync } from 'node:fs';
-import { checkRules } from './check-rules.js';
-import { configuredSubscriptions, parseBuildConfiguration, readOfficialConfiguration } from './configuration.js';
-import { manageMaintenance, type MaintenanceRequest, type MaintenanceSchedule } from './maintenance.js';
-import { githubPublication } from './publication.js';
+import { runRulesCli } from './cli.js';
+import { createGitHubRulesContext, type RulesContext } from './rules-context.js';
 
-export interface WorkflowOptions {
-  operation: 'daily' | 'check' | 'cleanup';
+export interface RuleWorkflowRequest {
   target: string;
-  updateEnabled: boolean;
-  cleanupEnabled: boolean;
-  schedule?: MaintenanceSchedule;
+  operation: string;
+  id?: string;
+  version?: string;
+  dryRun?: boolean;
 }
 
-interface MaintenanceOutcome {
-  status: string;
-  error?: string;
-  maintenance?: 'open' | 'maintenance';
-  run?: { id: string; phase: string };
-  blockers?: { status: string }[];
-}
-
-export interface WorkflowOperations {
-  check(): Promise<{ exitCode: number }>;
-  maintenance(request: MaintenanceRequest): Promise<MaintenanceOutcome>;
-}
-
-function maintenanceFailed(result: MaintenanceOutcome | undefined) {
-  return !result || result.status === 'failed' || result.error !== undefined
-    || (result.maintenance === 'maintenance' && !result.run)
-    || result.blockers?.some(({ status }) => /(?:^|-)verification-pending$|-commit-pending$|-readback-pending$/.test(status)
-      || status === 'current-evidence-mismatch' || status === 'candidate-completion-unverified');
-}
-
-export async function runRuleWorkflow(options: WorkflowOptions, operations: WorkflowOperations,
-  report: (name: string, value: unknown) => void) {
-  const { operation, target, updateEnabled, cleanupEnabled, schedule } = options;
-  if (!['daily', 'check', 'cleanup'].includes(operation)) throw new Error('Invalid workflow operation');
-  if (target !== 'main' && !/^acceptance-[a-zA-Z0-9._-]+$/.test(target)) throw new Error('Invalid workflow target');
-  const isolated = target !== 'main';
-
-  async function attempt<T>(name: string, action: () => Promise<T>) {
-    let result;
-    try { result = await action(); }
-    catch (error) {
-      report(name, { status: 'failed', error: error instanceof Error ? error.message : String(error) });
-      return;
-    }
-    report(name, result);
-    return result;
+/** #84 provides an isolated thin adapter. Production triggers belong to #86. */
+export async function runRuleWorkflow(request: RuleWorkflowRequest, report: (text: string) => void, context?: RulesContext) {
+  if (!/^acceptance-[a-zA-Z0-9._-]+$/.test(request.target)) {
+    report(JSON.stringify({ status: 'failed', exitCode: 1, error: 'Production workflow is not enabled; use an isolated acceptance-* target until #86' }));
+    return 1;
   }
-
-  let failed = false;
-  if (operation !== 'cleanup') {
-    if (isolated || updateEnabled) {
-      const result = await attempt('检查规则', operations.check);
-      failed = result?.exitCode !== 0;
-    } else {
-      report('检查规则', { status: 'disabled' });
-    }
+  const execution = context ?? await createGitHubRulesContext();
+  if (execution.targetBranch !== request.target) {
+    report(JSON.stringify({ status: 'failed', exitCode: 1, error: 'Workflow context and target disagree' }));
+    return 1;
   }
-  if (operation === 'check') return failed ? 1 : 0;
-  if (!isolated && !cleanupEnabled) {
-    report('进入维护', { status: 'disabled', schedule: { enabled: false } });
-    return failed ? 1 : 0;
-  }
-
-  const entered = await attempt('进入维护', () => operations.maintenance({
-    action: 'enter', ...(operation === 'cleanup' ? { manual: true } : schedule ? { schedule } : {}),
-  }));
-  if (!entered || maintenanceFailed(entered)) return 1;
-  if (entered.status !== 'isolated') return failed ? 1 : 0;
-  if (!entered.run || entered.run.phase !== 'ready') throw new Error('Maintenance retention plan is missing');
-  const maintenanceId = entered.run.id;
-  const prepared = await attempt('准备基线', () => operations.maintenance({ action: 'prepare', maintenanceId }));
-  if (!prepared || maintenanceFailed(prepared)) return 1;
-  if (prepared.status !== 'prepared') return failed ? 1 : 0;
-  const switched = await attempt('切换基线', () => operations.maintenance({ action: 'switch', maintenanceId }));
-  return maintenanceFailed(switched) || failed ? 1 : 0;
-}
-
-function reportMaintenance(result: Awaited<ReturnType<typeof manageMaintenance>>) {
-  const plan = 'plan' in result ? result.plan : result.run?.plan;
-  return {
-    status: result.status, schedule: result.schedule, generation: result.generation, maintenance: result.maintenance,
-    run: result.run && { id: result.run.id, phase: result.run.phase },
-    maintenanceId: 'maintenanceId' in result ? result.maintenanceId : undefined,
-    phase: 'phase' in result ? result.phase : undefined,
-    reason: 'reason' in result ? result.reason : undefined,
-    error: 'error' in result ? result.error : undefined,
-    blockers: 'blockers' in result ? result.blockers : undefined,
-    completedAt: 'completedAt' in result ? result.completedAt : undefined,
-    retained: plan?.retain.active.map(({ recordPath, record, control }) => ({
-      recordPath, candidateId: record.candidateId, activationId: record.id, source: record.source, control,
-    })),
-    discard: plan && {
-      candidates: plan.discard.candidateIds.length,
-      activations: Object.fromEntries(Object.entries(plan.discard.activations).map(([id, versions]) => [id, versions.length])),
-      operations: plan.discard.completedOperationIds.length,
-    },
-    otherRefs: 'otherRefs' in result ? result.otherRefs : plan?.otherRefs,
-  };
-}
-
-export function workflowRules(target: string) {
-  const base = parseBuildConfiguration(readOfficialConfiguration());
-  const configuration = parseBuildConfiguration(JSON.stringify({ ...base, target: { ...base.target, branch: target } }));
-  return { configuration: JSON.stringify(configuration), subscriptions: configuredSubscriptions(configuration) };
+  const args = [request.operation];
+  if (request.id) args.push(request.id);
+  if (request.version) args.push(request.version);
+  if (request.dryRun) args.push('--dry-run');
+  args.push('--json');
+  return runRulesCli(args, report, execution);
 }
 
 async function main() {
   const env = process.env;
-  const token = env.GH_TOKEN;
-  const credentials = [token, env.GITHUB_TOKEN].filter((value): value is string => !!value);
   const summary = env.GITHUB_STEP_SUMMARY;
   if (!summary) throw new Error('Missing GITHUB_STEP_SUMMARY');
-  const report = (name: string, value: unknown) => {
-    const json = JSON.stringify(value, null, 2);
-    const safe = credentials.reduce((text, credential) => text.replaceAll(credential, '[redacted]'), json);
-    appendFileSync(summary, `### ${name}\n\n\`\`\`json\n${safe.replaceAll('\`', '\\u0060')}\n\`\`\`\n\n`);
+  const credentials = [env.GH_TOKEN, env.GITHUB_TOKEN].filter((value): value is string => Boolean(value));
+  const report = (value: string) => {
+    const safe = credentials.reduce((text, token) => text.replaceAll(token, '[redacted]'), value).replaceAll('`', '\\u0060');
+    appendFileSync(summary, `\`\`\`json\n${safe}\n\`\`\`\n`);
   };
-  try {
-    const target = env.RULE_TARGET ?? '';
-    const operation = env.RULE_OPERATION as WorkflowOptions['operation'];
-    if (target === 'main' && env.GITHUB_REF !== 'refs/heads/main') throw new Error('Production requires the main workflow ref');
-    const binary = env.SING_BOX_BINARY ?? '';
-    const period = env.RULE_CLEANUP_PERIOD_DAYS;
-    const startAt = env.RULE_CLEANUP_START_AT;
-    const schedule = period ? { periodDays: Number(period), startAt: startAt ?? '' } : undefined;
-    const requireToken = () => {
-      if (!token) throw new Error('Missing RULE_ARTIFACT_TOKEN');
-    };
-    const requireSchedule = () => {
-      if (schedule && !/^[1-9][0-9]*$/.test(period ?? '')) throw new Error('Invalid cleanup period in RULE_CLEANUP_PERIOD_DAYS');
-    };
-    report('运行', { target, operation });
-    process.exitCode = await runRuleWorkflow({
-      operation, target, updateEnabled: env.RULE_UPDATE_ENABLED === 'true',
-      cleanupEnabled: env.RULE_CLEANUP_ENABLED === 'true', schedule,
-    }, {
-      async check() {
-        requireToken();
-        const stateDirectory = env.RULE_STATE_DIRECTORY;
-        if (!stateDirectory) throw new Error('Missing RULE_STATE_DIRECTORY');
-        return checkRules({ ...workflowRules(target), binary, stateDirectory, token: env.GITHUB_TOKEN });
-      },
-      async maintenance(request) {
-        requireToken();
-        if (request.action === 'enter' && !request.manual) requireSchedule();
-        const repository = githubPublication(undefined, target === 'main' ? 'candidates' : target).repository!;
-        return reportMaintenance(await manageMaintenance({ ...request, repository, binary }));
-      },
-    }, report);
-  } catch (error) {
-    report('工作流', { status: 'failed', error: error instanceof Error ? error.message : String(error) });
-    process.exitCode = 1;
-  }
+  process.exitCode = await runRuleWorkflow({ target: env.RULE_TARGET ?? '', operation: env.RULE_OPERATION ?? '',
+    id: env.RULE_ID, version: env.RULE_VERSION, dryRun: env.RULE_DRY_RUN === 'true' }, report);
 }
-
 if (import.meta.main) await main();

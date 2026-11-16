@@ -1,5 +1,7 @@
 # Rule Set Pipeline 首个完整交付设计
 
+历史设计边界：本页保留原设计及其验收背景。2026-11-16 配置驱动操作与公开入口以 [当前模块文档](../../packages/rule-set-pipeline/README.md) 和 [Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84) 为准；本页中的早期操作安排不代表当前实现。
+
 设计确认日期：2026-11-03。本页保留设计基线；分阶段交付状态以 [Spec #14](https://github.com/wangyingang/sing-box-config-manager/issues/14) 和子工单为准。[#15 本地 JSON 构建验收](../../packages/rule-set-pipeline/docs/verification/issue-15.md)记录已交付的输入与转换范围。
 
 本设计承接 Spec #1 已完成的 Compiler 与固定产物契约，新增真实规则生产、候选发布、激活、回滚及客户端自动更新闭环。规则订阅决策见 [ADR 0006](../adr/0006-follow-active-rule-subscriptions.md)。Spec #1 的原始需求与验收历史不作改写。

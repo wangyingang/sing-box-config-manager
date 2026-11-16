@@ -10,7 +10,7 @@ import type { SourceReference, UpdateState } from './update.js';
 import { validBaseline } from './maintenance-baseline-transport.js';
 import { cleanupRefNames } from './maintenance-refs.js';
 import type { MaintenanceCleanup, MaintenanceRun } from './maintenance.js';
-import { parseBuildConfiguration, parseRuleDefinition, type BuildConfiguration, type RuleDefinition } from './configuration.js';
+import { parseHistoricalConfiguration as parseBuildConfiguration, parseRuleDefinition, type BuildConfiguration, type RuleDefinition } from './configuration.js';
 import { commitSourceKey, validCommitIdentity, validCommitSource } from './github-commit.js';
 import { validReleaseAssetIdentities, V2FLY_RELEASE_INPUT } from './release.js';
 

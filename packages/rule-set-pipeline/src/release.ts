@@ -1,10 +1,11 @@
+import { validRepository, validInputFile } from './source-input.js';
 import { createHash } from 'node:crypto';
 import type { AssetIdentity, SourceRecord } from './types.js';
 
 export interface ReleaseInput {
-  repository: 'v2fly/domain-list-community';
+  repository: string;
   version: 'latest-release';
-  input: { format: 'plain-yaml'; asset: string; checksum: string };
+  input: { format: 'plain-yaml' | 'cidr-text'; asset: string; checksum: string };
 }
 export const V2FLY_RELEASE_INPUT = {
   repository: 'v2fly/domain-list-community', version: 'latest-release',
@@ -18,12 +19,15 @@ export interface ReleaseOptions { tag: string; fetch?: typeof fetch; token?: str
   onPinned?: (identity: Pick<SourceRecord, 'repository' | 'releaseId' | 'tag' | 'commit' | 'yaml' | 'checksum'>) => Promise<void>;
   onSource?: (source: SourceRecord) => Promise<void> }
 function releaseAssetUrl(repository: string, tag: string, name: string) {
-  return `https://github.com/${repository}/releases/download/${encodeURIComponent(tag)}/${name}`;
+  return `https://github.com/${repository}/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(name)}`;
 }
 
-export function validReleaseAssetIdentities(record: Record<string, unknown>, source: ReleaseInput = V2FLY_RELEASE_INPUT): boolean {
+export function validReleaseAssetIdentities(record: Record<string, unknown>, source?: ReleaseInput): boolean {
   const tag = record.tag;
-  if (typeof tag !== 'string') return false;
+  if (typeof tag !== 'string' || !tag || typeof record.repository !== 'string' || !validRepository(record.repository)) return false;
+  source ??= { repository: record.repository, version: 'latest-release', input: { format: 'plain-yaml',
+    asset: (record.yaml as Partial<AssetIdentity>)?.name ?? '', checksum: (record.checksum as Partial<AssetIdentity>)?.name ?? '' } };
+  if (!validInputFile(source.input.asset) || !validInputFile(source.input.checksum) || source.input.asset === source.input.checksum) return false;
   return ([['yaml', source.input.asset], ['checksum', source.input.checksum]] as const).every(([key, name]) => {
     const value = record[key];
     if (!value || typeof value !== 'object' || Array.isArray(value)) return false;

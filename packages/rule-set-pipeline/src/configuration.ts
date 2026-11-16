@@ -1,12 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
+import { validRepository, validBranch, validInputPath, validInputFile } from './source-input.js';
 import { isMap, parseDocument, visit } from 'yaml';
 import { USAGES, type Usage } from './projection.js';
 import { ARTIFACT_REPOSITORY } from './publication.js';
 import { CHINA_IP_INPUT, type CommitInput } from './github-commit.js';
 import { V2FLY_RELEASE_INPUT, type ReleaseInput } from './release.js';
 
-type SourceInput = ReleaseInput | CommitInput;
+export type SourceInput = ReleaseInput | CommitInput;
 type ConfiguredUsage = { artifact: 'domains' | 'route' } | { unavailable: 'empty' };
 
 export function configuredLayout(format: SourceInput['input']['format']) {
@@ -16,7 +17,8 @@ export function configuredLayout(format: SourceInput['input']['format']) {
 }
 export interface RuleDefinition { id: string; source: string; list: string; stablePath: string; usages: Record<Usage, ConfiguredUsage> }
 export interface BuildConfiguration {
-  schemaVersion: 2;
+  schemaVersion: 3;
+  candidateRetentionDays: number;
   sources: Record<string, SourceInput>;
   target: { repository: typeof ARTIFACT_REPOSITORY; branch: string };
   ruleSets: RuleDefinition[];
@@ -63,14 +65,23 @@ export function parseRuleDefinition(input: unknown, format: SourceInput['input']
   return { id, source, list, stablePath: path, usages: { route: usage('route'), 'dns-query': usage('dns-query'), 'dns-response': usage('dns-response') } };
 }
 
-function parseSource(input: unknown): SourceInput {
-  if (isDeepStrictEqual(input, CHINA_IP_INPUT)) return structuredClone(CHINA_IP_INPUT);
-  const source = exact(input, ['repository', 'version', 'input'], 'source');
-  const file = exact(source.input, ['format', 'asset', 'checksum'], 'source input');
-  const trusted = V2FLY_RELEASE_INPUT;
-  if (source.repository !== trusted.repository || source.version !== trusted.version || file.format !== trusted.input.format
-    || file.asset !== trusted.input.asset || file.checksum !== trusted.input.checksum) throw new Error('Unsupported or untrusted source');
-  return { repository: source.repository, version: source.version, input: { format: file.format, asset: file.asset, checksum: file.checksum } };
+export function parseSource(input: unknown): SourceInput {
+  const raw = mapping(input, 'source');
+  const source = exact(raw, raw.version === 'git-branch' ? ['repository', 'version', 'branch', 'input'] : ['repository', 'version', 'input'], 'source');
+  if (!validRepository(source.repository)) throw new Error('Invalid GitHub source repository');
+  const file = mapping(source.input, 'source input');
+  if (file.format !== 'plain-yaml' && file.format !== 'cidr-text') throw new Error('Unsupported input format');
+  if (source.version === 'latest-release') {
+    exact(file, ['format', 'asset', 'checksum'], 'Release input');
+    if (!validInputFile(file.asset) || !validInputFile(file.checksum) || file.asset === file.checksum) throw new Error('Invalid Release asset or checksum');
+    return { repository: source.repository, version: 'latest-release', input: { format: file.format, asset: file.asset, checksum: file.checksum } };
+  }
+  if (source.version === 'git-branch') {
+    exact(file, ['format', 'path'], 'Git input');
+    if (!validBranch(source.branch) || !validInputPath(file.path)) throw new Error('Invalid Git branch or input path');
+    return { repository: source.repository, version: 'git-branch', branch: source.branch, input: { format: file.format, path: file.path } };
+  }
+  throw new Error('Unsupported source acquisition method');
 }
 
 /** Validate every definition before source access or output directory creation. */
@@ -80,20 +91,20 @@ export function parseBuildConfiguration(input: string): BuildConfiguration {
   let alias = false;
   visit(document, { Alias() { alias = true; } });
   if (alias || !isMap(document.contents)) throw new Error('Invalid build configuration YAML');
-  const raw = exact(document.toJS(), ['schemaVersion', 'sources', 'target', 'ruleSets'], 'configuration');
-  if (raw.schemaVersion !== 2) throw new Error('Unsupported configuration version');
+  const raw = exact(document.toJS(), ['schemaVersion', 'candidateRetentionDays', 'sources', 'target', 'ruleSets'], 'configuration');
+  if (raw.schemaVersion !== 3) throw new Error('Unsupported configuration version');
+  if (!Number.isSafeInteger(raw.candidateRetentionDays) || Number(raw.candidateRetentionDays) <= 0) throw new Error('candidateRetentionDays must be a positive integer');
   const target = exact(raw.target, ['repository', 'branch'], 'target');
   if (target.repository !== ARTIFACT_REPOSITORY || typeof target.branch !== 'string'
     || (target.branch !== 'main' && !acceptanceBranch.test(target.branch))) {
     throw new Error('Target repository or branch is outside the trusted publication target');
   }
   const declarations = Object.entries(mapping(raw.sources, 'sources'));
-  if (!declarations.length) throw new Error('At least one source must be declared');
   const sources = Object.fromEntries(declarations.map(([id, source]) => {
     if (!logicalId.test(id)) throw new Error(`Invalid source ID: ${id}`);
     return [id, parseSource(source)];
   }));
-  if (!Array.isArray(raw.ruleSets) || !raw.ruleSets.length) throw new Error('ruleSets must be a nonempty sequence');
+  if (!Array.isArray(raw.ruleSets)) throw new Error('ruleSets must be an explicit sequence');
   const ids = new Set<string>(), paths = new Set<string>();
   const ruleSets = raw.ruleSets.map(entry => {
     const { source } = mapping(entry, 'rule definition');
@@ -107,7 +118,7 @@ export function parseBuildConfiguration(input: string): BuildConfiguration {
     ids.add(rule.id); paths.add(path);
     return rule;
   });
-  return { schemaVersion: 2, sources, target: { repository: target.repository, branch: target.branch }, ruleSets };
+  return { schemaVersion: 3, candidateRetentionDays: Number(raw.candidateRetentionDays), sources, target: { repository: target.repository, branch: target.branch }, ruleSets };
 }
 
 export function configuredInput(configuration: BuildConfiguration, definitions: readonly RuleDefinition[]) {
@@ -148,4 +159,15 @@ export function configuredSubscriptions({ ruleSets, target }: BuildConfiguration
     schemaVersion: 2, systemRuleSetId: rule.id, targetVersion: '1.14.4', sourceFormatVersion: 4,
     projections: configuredProjections(rule, target.branch),
   }]));
+}
+
+/** Read-only support for the one-time conversion of pre-operations journals. */
+export function parseHistoricalConfiguration(input: string): BuildConfiguration {
+  const document = parseDocument(input);
+  if (document.get('schemaVersion') !== 2) return parseBuildConfiguration(input);
+  document.set('schemaVersion', 3);
+  // The old configuration had no retention policy. This value is only used to
+  // validate old source/definition records; it is never accepted as policy.
+  document.set('candidateRetentionDays', 1);
+  return parseBuildConfiguration(document.toString());
 }

@@ -152,9 +152,10 @@ export function githubPublicationRepository(branch = PUBLICATION_BRANCH, request
 }
 
 export async function createGitCommit(api: (path: string, input?: unknown) => Promise<any>,
-  files: Record<string, Buffer>, message: string, parent?: { tree: string; head: string }) {
+  files: Record<string, Buffer | null>, message: string, parent?: { tree: string; head: string }) {
   const entries = [];
   for (const [path, bytes] of Object.entries(files)) {
+    if (bytes === null) { entries.push({ path, mode: '100644', type: 'blob', sha: null }); continue; }
     const blob = await api('git/blobs', { content: bytes.toString('base64'), encoding: 'base64' });
     if (!fullCommit(blob?.sha)) throw new Error('Invalid created blob');
     entries.push({ path, mode: '100644', type: 'blob', sha: blob.sha });

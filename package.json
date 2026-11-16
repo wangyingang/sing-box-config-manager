@@ -15,6 +15,7 @@
     "test:integration": "pnpm -r --if-present run test:integration",
     "test:tools": "node --test scripts/test/*.test.mjs",
     "check": "pnpm test:tools && pnpm typecheck && pnpm test && pnpm build && pnpm smoke:workspace",
-    "smoke:workspace": "node scripts/smoke-workspace.mjs"
+    "smoke:workspace": "node scripts/smoke-workspace.mjs",
+    "rules": "pnpm --filter @sing-box-config-manager/rule-set-pipeline rules"
   }
 }

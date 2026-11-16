@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { sameSemantics } from '../src/semantics.js';
-import { type BuildTerm } from '../src/index.js';
+import { type BuildTerm } from '../src/projection.js';
 
 const ip = (...values: string[]): BuildTerm[] => values.map(value => ({ type: 'ip_cidr', value }));
 

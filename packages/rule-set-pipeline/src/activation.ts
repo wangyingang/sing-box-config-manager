@@ -1,3 +1,4 @@
+import { validRepository } from './source-input.js';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { saveActivationReceipt } from './activation-receipt.js';
@@ -71,16 +72,16 @@ export async function verifyCandidateEvidence(options: { candidateEvidenceUrl: s
   const source = JSON.parse((await remote('source.json', evidence.metadataCommit)).toString());
   const report = JSON.parse((await remote('conversion-report.json', evidence.metadataCommit)).toString());
   const build = JSON.parse((await remote('build.json', evidence.metadataCommit)).toString());
-  const isCidr = source.kind === 'github-commit';
+  const isCidr = build.definition?.usages?.route?.artifact === 'route';
   const layout = configuredLayout(isCidr ? 'cidr-text' : 'plain-yaml');
-  if (isCidr) {
+  if (source.kind === 'github-commit') {
     requireThat(definition && validCommitSource(source) && source.inputBytes > 0, 'Incomplete official Git source');
   } else if (source.kind === 'synthetic') {
     requireThat(typeof source.description === 'string' && source.description.length > 0 && typeof source.revision === 'string' && source.revision.length > 0,
       'Synthetic candidate must identify its controlled origin');
   } else {
-    requireThat(source.repository === V2FLY_RELEASE_INPUT.repository && Number.isSafeInteger(source.releaseId) && source.releaseId > 0
-      && /^[a-f0-9]{40}$/.test(source.commit) && /^[0-9]{14}$/.test(source.tag)
+    requireThat(validRepository(source.repository) && Number.isSafeInteger(source.releaseId) && source.releaseId > 0
+      && /^[a-f0-9]{40}$/.test(source.commit) && typeof source.tag === 'string' && source.tag.length > 0
       && /^[a-f0-9]{64}$/.test(source.inputSha256) && Number.isSafeInteger(source.inputBytes) && source.inputBytes > 0 && /^[a-f0-9]{64}$/.test(source.checksumSha256), 'Incomplete official source');
     requireThat(validReleaseAssetIdentities(source), 'Incomplete source asset identity');
   }
@@ -217,6 +218,33 @@ export function activationSubscription(input: unknown, branch: string, definitio
   return subscription;
 }
 
+export function candidateStableFiles(candidate: Awaited<ReturnType<typeof verifyCandidateEvidence>>, subscription: any, definition: RuleDefinition, branch: string) {
+  const recordPath = `${definition.stablePath}/activation.json`;
+  const files: Record<string, Buffer> = {};
+  const endpointSignatures = new Map<string, string>();
+  const urlPrefix = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${branch}/`;
+  for (const usage of USAGES) {
+    const expected = subscription.projections[usage], actual = candidate.manifest.projections[usage];
+    if ('unavailable' in expected) {
+      requireThat(actual.unavailable === expected.unavailable, 'Subscription usage availability mismatch');
+      continue;
+    }
+    requireThat(Array.isArray(actual.artifactIds), 'Subscription usage unavailable');
+    for (const [format, endpoint] of Object.entries(expected.formats) as [keyof typeof candidate.bytesByFormat, any][]) {
+      const artifact = candidate.manifest.artifacts.find((entry: any) => entry.format === format && actual.artifactIds.includes(entry.id));
+      requireThat(artifact && artifact.requiredCapabilities.every((capability: string) => endpoint.requiredCapabilities.includes(capability)), 'Subscription format or capability mismatch');
+      requireThat(endpoint.url.startsWith(urlPrefix), 'Unapproved stable subscription host or branch');
+      const path = endpoint.url.slice(urlPrefix.length);
+      requireThat(/^stable\/[a-z0-9/_.-]+\.(srs|json)$/.test(path) && !path.split('/').includes('..') && path !== recordPath, 'Invalid stable rule path');
+      const signature = JSON.stringify([format, [...endpoint.requiredCapabilities].sort()]);
+      requireThat(!endpointSignatures.has(path) || endpointSignatures.get(path) === signature, 'Conflicting stable endpoint declarations');
+      endpointSignatures.set(path, signature);
+      files[path] = candidate.bytesByFormat[format];
+    }
+  }
+  return files;
+}
+
 interface AutomaticActivation {
   journalHead: string;
   register(operation: ActivationOperation): Promise<{
@@ -287,28 +315,7 @@ async function performActivation(options: ActivationOptions | RollbackOptions, a
   }
   // Synthetic origins can never enter the production main branch.
   requireThat(candidate.source.kind !== 'synthetic' || transport.branch.startsWith('acceptance-'), 'Synthetic candidate requires an acceptance branch');
-  const files: Record<string, Buffer> = {};
-  const endpointSignatures = new Map<string, string>();
-  const urlPrefix = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${transport.branch}/`;
-  for (const usage of USAGES) {
-    const expected = subscription.projections[usage], actual = candidate.manifest.projections[usage];
-    if ('unavailable' in expected) {
-      requireThat(actual.unavailable === expected.unavailable, 'Subscription usage availability mismatch');
-      continue;
-    }
-    requireThat(Array.isArray(actual.artifactIds), 'Subscription usage unavailable');
-    for (const [format, endpoint] of Object.entries(expected.formats) as [keyof typeof candidate.bytesByFormat, any][]) {
-      const artifact = candidate.manifest.artifacts.find((entry: any) => entry.format === format && actual.artifactIds.includes(entry.id));
-      requireThat(artifact && artifact.requiredCapabilities.every((capability: string) => endpoint.requiredCapabilities.includes(capability)), 'Subscription format or capability mismatch');
-      requireThat(endpoint.url.startsWith(urlPrefix), 'Unapproved stable subscription host or branch');
-      const path = endpoint.url.slice(urlPrefix.length);
-      requireThat(/^stable\/[a-z0-9/_.-]+\.(srs|json)$/.test(path) && !path.split('/').includes('..') && path !== recordPath, 'Invalid stable rule path');
-      const signature = JSON.stringify([format, [...endpoint.requiredCapabilities].sort()]);
-      requireThat(!endpointSignatures.has(path) || endpointSignatures.get(path) === signature, 'Conflicting stable endpoint declarations');
-      endpointSignatures.set(path, signature);
-      files[path] = candidate.bytesByFormat[format];
-    }
-  }
+  const files = candidateStableFiles(candidate, subscription, definition, transport.branch);
   if (historical) {
     requireThat(candidate.candidateId === historical.record.candidateId && (!git || equal(candidate.source, historical.record.source)),
       'Historical candidate identity mismatch');

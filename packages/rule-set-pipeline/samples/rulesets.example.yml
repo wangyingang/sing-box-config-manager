@@ -1,4 +1,6 @@
-schemaVersion: 2
+schemaVersion: 3
+# 示例保留策略；生产启用前由管理者明确配置，#85 实现清理。
+candidateRetentionDays: 30
 target:
   repository: wangyingang/sing-box-rule-artifacts
   branch: acceptance-example
