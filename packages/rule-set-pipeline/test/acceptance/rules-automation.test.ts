@@ -137,8 +137,10 @@ test('GitHub 自动生命周期：真实配置 push、五操作共享语义、�
   let sourceHead = implementation!;
   const sourceApi = (path: string, input?: unknown) => request(sourceRepository, path, input);
   const publish = async (configuration: BuildConfiguration, files: Record<string, Buffer>, label: string, conclusion: 'success' | 'failure' = 'success') => {
+    const content = stringify(configuration, { aliasDuplicateObjects: false });
+    parseBuildConfiguration(content);
     const parent = await request(sourceRepository, `git/commits/${sourceHead}`);
-    const commit = await createGitCommit(sourceApi, { ...files, [configurationPath]: Buffer.from(stringify(configuration)) },
+    const commit = await createGitCommit(sourceApi, { ...files, [configurationPath]: Buffer.from(content) },
       `test(rules): 隔离自动流程 ${label}`, { tree: parent.tree.sha, head: sourceHead });
     if (!ownedRefs.has(sourceRepository)) {
       await request(sourceRepository, 'git/refs', { ref: `refs/heads/${target}`, sha: commit });
