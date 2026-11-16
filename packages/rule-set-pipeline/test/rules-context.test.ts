@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { delimiter, join } from 'node:path';
+import { ghJson } from '../src/publication.js';
 import { createGitHubRulesContext, guardRulesConfiguration, loadRulesRequest, readCurrentRulesConfiguration } from '../src/rules-context.js';
 import { cleanupRuleHistory } from '../src/rules-cleanup.js';
 import { syncRules, pinRuleVersion, resumeRuleUpdates } from '../src/rules-operations.js';
 import { runRulesCli } from '../src/cli.js';
+import { getRulesStatus } from '../src/rules-status.js';
 import { rulesEnvironment } from './fixtures/rules-environment.js';
 import { cleanupEnvironment } from './fixtures/cleanup-environment.js';
 
@@ -96,4 +101,47 @@ test('trusted environment rejects test configuration for production and derives 
   } finally {
     names.forEach((name, index) => { if (previous[index] === undefined) delete process.env[name]; else process.env[name] = previous[index]; });
   }
+});
+
+test('source configuration uses the workflow token without replacing the artifact credential', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'rules-credentials-'));
+  const names = ['PATH', 'GH_TOKEN', 'GITHUB_TOKEN', 'RULE_TARGET', 'RULE_CONFIG_BRANCH'] as const;
+  const previous = names.map(name => process.env[name]);
+  try {
+    await writeFile(join(directory, 'gh'), `#!${process.execPath}
+const path = process.argv[3];
+if (path === 'artifact-probe') console.log(JSON.stringify({ credential: process.env.GH_TOKEN }));
+else if (process.env.GH_TOKEN !== 'test-source-token') process.exit(1);
+else if (path.endsWith('/commits/main')) console.log(JSON.stringify({sha:'a'.repeat(40)}));
+else console.log(JSON.stringify({encoding:'base64', content:Buffer.from('current-source').toString('base64')}));
+`, { mode: 0o700 });
+    process.env.PATH = directory + delimiter + (process.env.PATH ?? '');
+    process.env.GH_TOKEN = 'test-artifact-token';
+    process.env.GITHUB_TOKEN = 'test-source-token';
+    delete process.env.RULE_TARGET;
+    delete process.env.RULE_CONFIG_BRANCH;
+    const context = await createGitHubRulesContext();
+    assert.equal((await context.readConfiguration()).content, 'current-source');
+    assert.equal((await ghJson(['api', 'artifact-probe'])).credential, 'test-artifact-token');
+    assert.equal(process.env.GH_TOKEN, 'test-artifact-token');
+  } finally {
+    names.forEach((name, index) => { if (previous[index] === undefined) delete process.env[name]; else process.env[name] = previous[index]; });
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('artifact access failure keeps the configuration revision already observed by every entry point', async () => {
+  const env = rulesEnvironment('/unused');
+  env.context.repository.snapshot = async () => { throw new Error('Artifact credential rejected'); };
+  for (const result of await Promise.all([
+    getRulesStatus({ context: env.context }), syncRules({ context: env.context }),
+    pinRuleVersion({ context: env.context, id: 'openai', version: 'retained' }),
+    resumeRuleUpdates({ context: env.context, id: 'openai' }), cleanupRuleHistory({ context: env.context }),
+  ])) {
+    assert.equal(result.status, 'failed');
+    assert.equal(result.configurationRevision, '1'.padStart(40, '0'));
+    assert.equal(result.configurationOrigin, 'isolated-fixture');
+    assert.match(result.error!, /credential rejected/);
+  }
+  assert.equal(env.writes.length, 0);
 });

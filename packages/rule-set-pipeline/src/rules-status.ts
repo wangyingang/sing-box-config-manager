@@ -39,10 +39,11 @@ export function rulesReport(session: RulesSession, operation: RulesResult['opera
       ? { error: 'RULE_MIGRATION_PENDING: retained candidate ownership is unresolved' } : {}) };
 }
 
-export function rulesFailure(operation: RulesResult['operation'], request: RulesRequest, error: unknown): RulesResult {
+export function rulesFailure(operation: RulesResult['operation'], request: RulesRequest, error: unknown, loaded?: LoadedRules): RulesResult {
   const message = error instanceof Error ? error.message : String(error);
-  return { operation, dryRun: Boolean(request.dryRun), configurationRevision: 'unavailable', configurationOrigin: 'unavailable',
-    target: { repository: ARTIFACT_REPOSITORY, branch: request.context?.targetBranch ?? process.env.RULE_TARGET ?? 'main' },
+  return { operation, dryRun: Boolean(request.dryRun), configurationRevision: loaded?.observed.revision ?? 'unavailable',
+    configurationOrigin: loaded?.observed.origin ?? 'unavailable',
+    target: loaded?.configuration.target ?? { repository: ARTIFACT_REPOSITORY, branch: request.context?.targetBranch ?? process.env.RULE_TARGET ?? 'main' },
     status: /PENDING/.test(message) ? 'pending' : 'failed', exitCode: 1, results: [], error: message };
 }
 
@@ -60,9 +61,11 @@ export async function addCurrentFacts(session: RulesSession, results: RuleResult
 }
 
 export async function getRulesStatus(request: RulesRequest & { id?: string } = {}): Promise<RulesResult & { rules?: RuleStatus[]; maintenance?: string; quarantinedCandidates?: RulesSession['journal']['quarantinedCandidates'] }> {
+  let loaded: LoadedRules | undefined;
   try {
     if (request.draft !== undefined || request.dryRun) throw new Error('status is read-only and does not accept draft or dry-run');
-    const session = await openRulesSession(await loadRulesRequest(request));
+    loaded = await loadRulesRequest(request);
+    const session = await openRulesSession(loaded);
     const stable = await session.stable();
     const deliveries = await readRuleDeliveries(stable);
     const definitions = new Map(session.loaded.configuration.ruleSets.map(rule => [rule.id, rule]));
@@ -112,5 +115,5 @@ export async function getRulesStatus(request: RulesRequest & { id?: string } = {
       ...(cleanup && { cleanup: { phase: 'phase' in cleanup ? cleanup.phase : 'cleanup' as const,
         maintenanceId: cleanup.id, plan: cleanup.plan, continueWith: 'cleanup' as const } }),
       observedHeads: { journal: session.snapshot.head, stable: stable.head } };
-  } catch (error) { return rulesFailure('status', request, error); }
+  } catch (error) { return rulesFailure('status', request, error, loaded); }
 }

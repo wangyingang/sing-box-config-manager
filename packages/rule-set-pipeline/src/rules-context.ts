@@ -62,7 +62,10 @@ export async function createGitHubRulesContext(): Promise<RulesContext> {
     throw new Error('Isolated configuration must match its acceptance target; it cannot authorize production');
   }
   const repository = githubRulesRepository(targetBranch);
-  return { targetBranch, repository, readConfiguration: () => readCurrentRulesConfiguration(ghJson, configurationBranch),
+  // Source reads use this workflow's token; artifact writes keep their separate
+  // credential. An expired artifact secret must not hide current configuration.
+  const readSource: typeof ghJson = (args, input) => ghJson(args, input, process.env.GITHUB_TOKEN);
+  return { targetBranch, repository, readConfiguration: () => readCurrentRulesConfiguration(readSource, configurationBranch),
     cleanup: { baseline: githubBaselineTransport(), refs: gitMaintenanceRefs() },
     allowWrites: targetBranch !== 'main' || process.env.RULE_UPDATE_ENABLED === 'true',
     allowCleanupWrites: targetBranch !== 'main' || process.env.RULE_CLEANUP_ENABLED === 'true',

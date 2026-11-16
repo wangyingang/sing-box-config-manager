@@ -16,9 +16,10 @@ export class GitHubHttpError extends Error {
 }
 
 /** Uses the existing gh login; credentials never enter files or published records. */
-export function ghJson(args: string[], input?: unknown): Promise<any> {
+export function ghJson(args: string[], input?: unknown, token?: string): Promise<any> {
   return new Promise((resolve, reject) => {
-    const child = execFile('gh', args, { timeout: 120_000, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
+    const child = execFile('gh', args, { timeout: 120_000, maxBuffer: 16 * 1024 * 1024,
+      ...(token ? { env: { ...process.env, GH_TOKEN: token } } : {}) }, (error, stdout, stderr) => {
       if (error) {
         const message = `gh failed: ${stderr.trim() || error.message}`;
         const status = /^gh: .* \(HTTP (\d{3})\)$/m.exec(stderr)?.[1];

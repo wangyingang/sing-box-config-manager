@@ -127,7 +127,9 @@ pnpm rules status openai
 | `resume <id> [--dry-run]` | `resumeRuleUpdates({ id, dryRun? })` | operation=resume，必填 id，可选 dry_run；不接受 version |
 | `cleanup [--dry-run]` | `cleanupRuleHistory({ dryRun? })` | operation=cleanup，可选 dry_run；不接受 id/version |
 
-手工运行的 target 为 main 时，工作流运行分支也必须是 main；从开发分支运行只能选择隔离目标。手工工作流不接受内部维护阶段、证据 URL、expected-head、binary 或状态目录。写入使用仓库 Secret `RULE_ARTIFACT_TOKEN`，来源读取使用工作流自身 GitHub token；Actions variables `RULE_UPDATE_ENABLED` 和 `RULE_CLEANUP_ENABLED` 控制生产写入。工作流按目标串行排队，业务服务仍检查配置修订、head 与 generation；排队不能代替这些检查。
+手工运行的 target 为 main 时，工作流运行分支也必须是 main；从开发分支运行只能选择隔离目标。手工工作流不接受内部维护阶段、证据 URL、expected-head、binary 或状态目录。Actions 对 main 使用仓库 Secret `RULE_ARTIFACT_TOKEN`；对 acceptance-* 只使用独立 Secret `RULE_ACCEPTANCE_TOKEN`，缺少时失败，不回落到生产凭据。源码配置与上游来源读取使用工作流自身 `GITHUB_TOKEN`；Actions variables `RULE_UPDATE_ENABLED` 和 `RULE_CLEANUP_ENABLED` 继续分别控制生产写入。工作流按目标串行排队，业务服务仍检查配置修订、head 与 generation；排队不能代替这些检查。
+
+隔离验收的最小凭据设置：在源码仓库 `wangyingang/sing-box-config-manager` 的 **Settings → Secrets and variables → Actions → Repository secrets** 中保存 `RULE_ACCEPTANCE_TOKEN`。使用独立的 Fine-grained PAT，仅选择产物仓库 `wangyingang/sing-box-rule-artifacts`，仓库权限设为 **Contents: Read and write**，有效期只覆盖测试所需时间。创建步骤见 [GitHub Fine-grained PAT 文档](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token)。该 token 授权范围是仓库，不是 acceptance 分支；分支隔离由工作流和应用服务的目标校验约束。不要复制本机 `gh` 登录 token，也不要替换或修改生产 `RULE_ARTIFACT_TOKEN`。
 
 旧事件或 rerun 重新读取对应配置分支的当前 head，并记录实际配置修订，不能重放已删除的旧定义。运行摘要与可下载 JSON 结果保留操作、目标、配置修订、各集实际交付与控制状态、失败原因及继续入口。partial/failed/pending 均使工作流失败；成功、无变化、固定跳过和无到期数据为成功。disabled 表示对应阶段没有应用；它不会抵消其他阶段已经报告的失败或 pending。
 

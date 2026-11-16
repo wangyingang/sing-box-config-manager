@@ -105,10 +105,18 @@ jobs:
         working-directory: packages/rule-set-pipeline
         env:
           RULE_RESULT_PATH: ${{ runner.temp }}/rule-result.json
-          GH_TOKEN: ${{ secrets.RULE_ARTIFACT_TOKEN }}
+          RULE_ARTIFACT_TOKEN: ${{ secrets.RULE_ARTIFACT_TOKEN }}
+          RULE_ACCEPTANCE_TOKEN: ${{ secrets.RULE_ACCEPTANCE_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
         shell: bash
         run: |
+          if [[ "$RULE_TARGET" == main ]]; then
+            export GH_TOKEN="$RULE_ARTIFACT_TOKEN"
+          else
+            export GH_TOKEN="$RULE_ACCEPTANCE_TOKEN"
+            [[ -n "$GH_TOKEN" ]] || { echo 'RULE_ACCEPTANCE_TOKEN is required for isolated Actions runs'; exit 1; }
+          fi
+          unset RULE_ARTIFACT_TOKEN RULE_ACCEPTANCE_TOKEN
           trap 'cp "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/rule-maintenance-summary.md"' EXIT
           node --import tsx src/rule-workflow.ts
       - name: Preserve rule operation results

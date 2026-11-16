@@ -37,6 +37,8 @@ main 的 sync/pin/resume 写入受 `RULE_UPDATE_ENABLED` 控制，cleanup 写入
 
 配置 push 调用完整 sync；schedule 正常先 sync 后 cleanup，存在活动维护时先 cleanup 续做，确认恢复可写后再同步。自动编排保留各次应用服务结果，并聚合退出码；独立单集失败不会回滚其他成功，也不能被之后的 cleanup 成功覆盖。共享状态未明或维护仍未完成时停止相关写入；pending/partial/failed 使整个运行非成功。手工 sync 不暗中清理，手工 cleanup 不更新上游，不公开 daily 或内部维护阶段入口。
 
+Actions 的 main 目标使用 `RULE_ARTIFACT_TOKEN`；acceptance-* 目标只使用独立 `RULE_ACCEPTANCE_TOKEN`，缺少时失败，不回落生产凭据。源码配置读取使用工作流 `GITHUB_TOKEN`。隔离 token 只授予产物仓库 Contents 读写权限，但权限范围仍是仓库；分支范围由可信目标校验约束。Secret 的设置位置与最小权限见[模块凭据说明](../README.md#actions-自动与手工运行)。
+
 同一目标的工作流使用同一 concurrency 组，业务远端校验继续生效。Actions 摘要和 JSON artifact 保存实际结果；GitHub 原生失败通知依赖账号设置，不承载独立业务邮件契约。通知设置和手工参数对照见[模块操作说明](../README.md#actions-自动与手工运行)。
 
 ## 查询

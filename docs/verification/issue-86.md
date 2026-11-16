@@ -29,7 +29,9 @@
 
 ## 真实 GitHub 隔离验收
 
-探针限定一个同名 acceptance-issue-86-* 源码配置分支与产物分支。计划覆盖基线 push、pin、混合新增/换源/删除 push、resume 预览与实际执行、部分失败 push 和旧事件 rerun；来源为该隔离分支上的小型真实 CIDR 文件。保存原生事件、运行链接、实际配置修订及结果 artifact；前后核对生产 refs/Actions variables，最终清理本次隔离 refs。首轮真实 push 已触发，但在 workflow 解析阶段失败，无业务执行或 artifact；运行 [43906028541](https://github.com/wangyingang/sing-box-config-manager/actions/runs/43906028541)。首轮两个隔离 refs 已清理，生产 refs/variables 前后不变，原始日志、诊断与证据保留在 `.verification/issue-86-github/attempt-1*`。修复后的完整生命周期待重跑，不记为通过。
+探针限定一个同名 acceptance-issue-86-* 源码配置分支与产物分支。计划覆盖基线 push、pin、混合新增/换源/删除 push、resume 预览与实际执行、部分失败 push 和旧事件 rerun；来源为该隔离分支上的小型真实 CIDR 文件。保存原生事件、运行链接、实际配置修订及结果 artifact；前后核对生产 refs/Actions variables，最终清理本次隔离 refs。首轮真实 push 已触发，但在 workflow 解析阶段失败，无业务执行或 artifact；运行 [43906028541](https://github.com/wangyingang/sing-box-config-manager/actions/runs/43906028541)。首轮两个隔离 refs 已清理，生产 refs/variables 前后不变，原始日志、诊断与证据保留在 `.verification/issue-86-github/attempt-1*`。第二轮 [43906598656](https://github.com/wangyingang/sing-box-config-manager/actions/runs/43906598656) 已完成真实 push 启动、工具安装、失败摘要和 JSON artifact，但现有 `RULE_ARTIFACT_TOKEN` 返回 HTTP 401，规则业务未完成。第二轮两个隔离 refs 也已清理，`remaining=[]`、`cleanupErrors=[]`，生产 refs/variables 前后一致；证据为 `.verification/issue-86-github/attempt-2*`。完整自动混合变更、手工后续操作与旧事件重跑仍待有效隔离凭据，不记为通过。
+
+用户随后选择准备独立隔离凭据。Actions 的 acceptance 目标改为只使用 `RULE_ACCEPTANCE_TOKEN`，不回落生产 Secret；生产路径仍使用 `RULE_ARTIFACT_TOKEN`。源码配置读取明确使用工作流自身 token，产物访问失败时保留已读取的配置修订。补充 20 项常规回归与 2 项原生入口/编排回归通过，0 跳过；typecheck、actionlint 通过。日志为 `.verification/issue-86-credential-regression.log` 与 `issue-86-credential-native.log`。这些补充修改晚于统一 642 项验证，最终 CI 覆盖见 PR。
 
 ## 限制与部署边界
 
