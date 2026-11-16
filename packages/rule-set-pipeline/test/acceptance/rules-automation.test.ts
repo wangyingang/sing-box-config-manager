@@ -20,7 +20,7 @@ type Report = { event: string; target: string; exitCode: number; results: RulesR
 
 /** Opt-in: all writes are confined to two identically named disposable refs. */
 test('GitHub 自动生命周期：真实配置 push、五操作共享语义、失败与旧事件当前配置', {
-  skip: process.env.RULE_AUTOMATION_PROBE !== '1', timeout: 2_700_000,
+  skip: process.env.RULE_AUTOMATION_PROBE !== '1', timeout: 5_400_000,
 }, async t => {
   const implementation = process.env.RULE_AUTOMATION_COMMIT;
   const implementationBranch = process.env.RULE_AUTOMATION_BRANCH ?? 'codex/issue-86';
@@ -108,7 +108,7 @@ test('GitHub 自动生命周期：真实配置 push、五操作共享语义、�
   });
 
   const waitRun = async (select: () => Promise<Run | undefined>, label: string, attempt = 1): Promise<Run> => {
-    const deadline = Date.now() + 900_000;
+    const deadline = Date.now() + 1_800_000;
     while (Date.now() < deadline) {
       const run = await select();
       if (run) {

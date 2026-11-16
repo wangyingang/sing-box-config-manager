@@ -29,9 +29,15 @@
 
 ## 真实 GitHub 隔离验收
 
-探针限定一个同名 acceptance-issue-86-* 源码配置分支与产物分支。计划覆盖基线 push、pin、混合新增/换源/删除 push、resume 预览与实际执行、部分失败 push 和旧事件 rerun；来源为该隔离分支上的小型真实 CIDR 文件。保存原生事件、运行链接、实际配置修订及结果 artifact；前后核对生产 refs/Actions variables，最终清理本次隔离 refs。首轮真实 push 已触发，但在 workflow 解析阶段失败，无业务执行或 artifact；运行 [43906028541](https://github.com/wangyingang/sing-box-config-manager/actions/runs/43906028541)。首轮两个隔离 refs 已清理，生产 refs/variables 前后不变，原始日志、诊断与证据保留在 `.verification/issue-86-github/attempt-1*`。第二轮 [43906598656](https://github.com/wangyingang/sing-box-config-manager/actions/runs/43906598656) 已完成真实 push 启动、工具安装、失败摘要和 JSON artifact，但现有 `RULE_ARTIFACT_TOKEN` 返回 HTTP 401，规则业务未完成。第二轮两个隔离 refs 也已清理，`remaining=[]`、`cleanupErrors=[]`，生产 refs/variables 前后一致；证据为 `.verification/issue-86-github/attempt-2*`。完整自动混合变更、手工后续操作与旧事件重跑仍待有效隔离凭据，不记为通过。
+探针限定一个同名 acceptance-issue-86-* 源码配置分支与产物分支。计划覆盖基线 push、pin、混合新增/换源/删除 push、resume 预览与实际执行、部分失败 push 和旧事件 rerun；来源为该隔离分支上的小型真实 CIDR 文件。保存原生事件、运行链接、实际配置修订及结果 artifact；前后核对生产 refs/Actions variables，最终清理本次隔离 refs。首轮真实 push 已触发，但在 workflow 解析阶段失败，无业务执行或 artifact；运行 [43906028541](https://github.com/wangyingang/sing-box-config-manager/actions/runs/43906028541)。首轮两个隔离 refs 已清理，生产 refs/variables 前后不变，原始日志、诊断与证据保留在 `.verification/issue-86-github/attempt-1*`。第二轮 [43906598656](https://github.com/wangyingang/sing-box-config-manager/actions/runs/43906598656) 已完成真实 push 启动、工具安装、失败摘要和 JSON artifact，但现有 `RULE_ARTIFACT_TOKEN` 返回 HTTP 401，规则业务未完成。第二轮两个隔离 refs 也已清理，`remaining=[]`、`cleanupErrors=[]`，生产 refs/variables 前后一致；证据为 `.verification/issue-86-github/attempt-2*`。当时完整自动混合变更、手工后续操作与旧事件重跑未完成。
 
 用户随后选择准备独立隔离凭据。Actions 的 acceptance 目标改为只使用 `RULE_ACCEPTANCE_TOKEN`，不回落生产 Secret；生产路径仍使用 `RULE_ARTIFACT_TOKEN`。源码配置读取明确使用工作流自身 token，产物访问失败时保留已读取的配置修订。补充 20 项常规回归与 2 项原生入口/编排回归通过，0 跳过；typecheck、actionlint 通过。日志为 `.verification/issue-86-credential-regression.log` 与 `issue-86-credential-native.log`。这些补充修改晚于统一 642 项验证，最终 CI 覆盖见 PR。
+
+第三轮使用已配置的独立 Secret，运行 [43908543388](https://github.com/wangyingang/sing-box-config-manager/actions/runs/43908543388) 在读取配置后失败：探针复用对象时生成了正式解析器拒绝的 YAML aliases。已在 `444a801` 禁用别名生成，并在远端提交前调用正式解析器校验；代表性三规则配置本地解析及 typecheck 通过。第三轮两个 refs 删除成功，最终只读查询遇到一次网络 EOF，随后复核确认 refs 不存在、生产 refs/variables 不变。原始失败与补充复核记录保留在 `.verification/issue-86-github/attempt-3/`；该轮不计为生命周期通过。
+
+第四轮基线 [43909174053](https://github.com/wangyingang/sing-box-config-manager/actions/runs/43909174053) 已证实独立凭据能够写入隔离产物，三集实际交付记录均存在；其中 changing 记录 GitHub HTTP 422 `The request is taking too long to generate`，其余两集为 delivered，整体为 partial/exit 1。该轮未继续混合变更，不能算生命周期通过。两个隔离 refs 已清理，生产 refs/variables 前后不变；证据为 `.verification/issue-86-github/attempt-4/`。
+
+对本轮不可变源码/产物对象的只读复查均成功，未复现该 422，原日志不能确定具体 endpoint。因此补齐 `ghJson` 失败的方法/路径诊断（不记录 query、body 或凭据，不重试写请求），25 项针对测试和 typecheck 通过。探针单运行/总等待上限改为 30/90 分钟，以容纳已观察到的真实远端耗时，业务断言不变。
 
 ## 限制与部署边界
 
