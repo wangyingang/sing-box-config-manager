@@ -120,6 +120,8 @@ test('GitHub 隔离清理：窗口内候选可查可 pin，真实历史切换且
     };
     const official = parseBuildConfiguration(readOfficialConfiguration());
     const config = { ...official, sources: { dlc: official.sources.dlc }, ruleSets: official.ruleSets.filter(rule => rule.id === 'openai') };
+    // The isolated application clock supplies candidate age; upstream bytes,
+    // Git history, reference transactions and HTTPS delivery are all real.
     let revision = 1, now = '2026-09-01T00:00:00.000Z';
     const context: RulesContext = { repository, targetBranch: target, allowWrites: true, binary, token, fetch: sourceFetch,
       now: () => new Date(now),
