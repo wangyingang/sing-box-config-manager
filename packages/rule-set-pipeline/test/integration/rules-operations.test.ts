@@ -196,3 +196,55 @@ test('pin和resume改变控制修订后，不恢复被取代的旧候选任务',
   assert.equal((resumed.results[0].current!.source as { releaseId: number }).releaseId, 3);
   assert.ok(!env.requests.some(url => /\/releases\/2$/.test(url)));
 });
+
+test('稳定字节损坏时，sync与resume不得先接受换源或解除固定', { skip: !binary }, async () => {
+  for (const operation of ['sync', 'resume'] as const) {
+    const env = rulesEnvironment(binary!, 'main'); const request = { context: env.context };
+    const first = await syncRules(request);
+    await pinRuleVersion({ ...request, id: 'openai', version: first.results[0].current!.versionId! });
+    const stable = await env.context.repository.snapshot('main');
+    env.trees.get(stable.head)!.set('stable/openai/domains.srs', Buffer.from('corrupt'));
+    const config = env.config(); config.ruleSets[0].list = 'other'; env.configure(config);
+    const before = env.writes.length;
+    const result = operation === 'sync' ? await syncRules(request) : await resumeRuleUpdates({ ...request, id: 'openai' });
+    assert.notEqual(result.status, 'success'); assert.equal(env.writes.length, before);
+    const state = JSON.parse((await (await env.context.repository.snapshot()).read('pipeline/state.json'))!.toString());
+    assert.equal(state.rules.openai.control.mode, 'pinned'); assert.equal(state.rules.openai.definition.list, 'openai');
+  }
+});
+
+for (const stage of ['evidence', 'metadata'] as const) test(`${stage}阶段已提交但检查点中断，换机不同binary路径继续原候选`, { skip: !binary }, async t => {
+  const { mkdtemp, copyFile, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os'); const { join } = await import('node:path');
+  const directory = await mkdtemp(join(tmpdir(), 'rules-recovery-binary-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const movedBinary = join(directory, 'sing-box'); await copyFile(binary!, movedBinary);
+  const env = rulesEnvironment(binary!); const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
+  const repository = env.context.repository; const download = repository.download;
+  if (stage === 'evidence') repository.download = async url => { if (url.endsWith('/readback.json')) throw new Error('readback unavailable'); return download(url); };
+  const commit = repository.commit;
+  if (stage === 'metadata') repository.commit = async (...args) => {
+    const head = await commit(...args);
+    if (Object.keys(args[2]).some(path => path.endsWith('/build.json'))) throw new Error('process stopped after metadata commit');
+    return head;
+  };
+  assert.equal((await syncRules({ context: env.context })).status, 'failed');
+  const snapshot = await repository.snapshot();
+  const state = JSON.parse((await snapshot.read('pipeline/state.json'))!.toString());
+  const candidate = Object.values(state.candidates)[0] as { id: string; versionId: string; publishedAt: string; status: string };
+  assert.equal(candidate.status, 'publishing');
+  const evidence = await snapshot.read(`candidates/${candidate.id}/readback.json`);
+  const build = await snapshot.read(`candidates/${candidate.id}/build.json`); assert.ok(build);
+  if (stage === 'evidence') assert.ok(evidence);
+  repository.download = download; repository.commit = commit; env.failSource(stage === 'evidence'); env.requests.length = 0;
+  const resumed = await syncRules({ context: { ...env.context, binary: movedBinary } });
+  assert.equal(resumed.status, 'success', JSON.stringify(resumed));
+  assert.equal(resumed.results[0].current?.candidateId, candidate.id);
+  if (stage === 'evidence') {
+    assert.equal(env.requests.length, 0);
+    assert.equal(resumed.results[0].current?.versionId, candidate.versionId);
+    assert.equal(resumed.results[0].current?.publishedAt, candidate.publishedAt);
+    assert.deepEqual(await (await repository.snapshot()).read(`candidates/${candidate.id}/readback.json`), evidence);
+  }
+  assert.deepEqual(await (await repository.snapshot()).read(`candidates/${candidate.id}/build.json`), build);
+});

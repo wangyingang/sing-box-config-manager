@@ -21,7 +21,7 @@
 
 ## 统一本地验证
 
-执行 `node scripts/verify.mjs --out .verification/issue-84-local-1 --binary <本机 sing-box 1.14.4 绝对路径>`，范围 `check-native`，结果 `passed`。源码身份来自本次 summary：base commit `8ad4bcc2317bbade100e8426af0b23b32cec0d20`、`clean=false`、tracked diff SHA-256 `9060fba55732438a40e9fe0550543d262da069164981298b67819ff6b11052d9`，包含本 PR 尚未提交的实现与测试。运行后仅补充本验收记录和文档说明；最终提交身份由 PR 的 CI 验证。
+执行 `node scripts/verify.mjs --out .verification/issue-84-local-1 --binary <本机 sing-box 1.14.4 绝对路径>`，范围 `check-native`，结果 `passed`。源码身份来自本次 summary：base commit `8ad4bcc2317bbade100e8426af0b23b32cec0d20`、`clean=false`、tracked diff SHA-256 `9060fba55732438a40e9fe0550543d262da069164981298b67819ff6b11052d9`，包含本 PR 尚未提交的实现与测试。统一验证后补充共享状态损坏零写入及换机恢复修复，针对验证见下节；最终提交身份由 PR 的 CI 验证。
 
 - Node.js `v26.13.0`、pnpm `10.33.2`、sing-box `1.14.4`；binary SHA-256 `6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2`。
 - 常规检查：工具 115、Compiler 99、Pipeline 155，共 369 项通过；类型检查、build 和 workspace smoke 通过。
@@ -47,12 +47,24 @@
 
 ## 本地审查修复
 
-独立审查发现并修复四项问题，均通过真实 sing-box 与内存 Git transport 复验：
+独立审查发现并修复五项问题，均通过真实 sing-box 与内存 Git transport 复验：
 
 1. 新规则可能占用另一个规则尚在交付的旧路径：现按实际稳定记录检查归属和路径重叠。
 2. 不兼容的期望路径被接受后，删除可能遗漏旧 activation：现定位实际已交付记录再删除。
 3. pin/resume 可能采用被旧控制决定取代的在途候选：恢复必须匹配候选登记时的 control revision。
 4. pinned 跳过及 status 可选候选缺少完整订阅兼容检查：现报告失败和不可选原因，保持真实当前交付。
+
+5. 稳定字节损坏时 sync/resume 会先保存定义或解除固定：现将稳定交付完整校验前移，损坏时不保存任何控制或定义变化。
+
+## 云端首轮审查与补充验证
+
+云端首轮审查覆盖 `7e8edb888ac4bb559d339fb7482d6a9e95eaf1a7`，提出 [1 项 P2](https://github.com/wangyingang/sing-box-config-manager/pull/87#discussion_r4587135789)：证据提交后回读中断，换机安装路径不同会导致重生成的诊断路径与保留证据不一致，卡住后续同步。
+
+修复优先复验远端已保留的完整证据，不重新获取上游或生成证据；保留同一候选、版本与发布时间。元数据阶段已提交但返回的 commit 尚未保存时，先从实际保留文件恢复阶段指针，继续保留原始 build 记录的诊断路径。
+
+- 共享状态损坏保护与证据恢复合并验证：规则操作套件 12 项通过，0 跳过。
+- 随后扩展 evidence/metadata 两个阶段的换机用例：复制相同 sing-box binary 到不同绝对路径，2 项针对测试通过，0 跳过；原证据/构建记录逐字节保持不变。
+- 修复后 typecheck、`git diff --check` 通过。日志保留在任务 worktree 的 `.verification/issue-84-review/`。最新 CI 和第二轮云端覆盖提交以 PR 交付记录为准。
 
 ## 范围与待部署事项
 

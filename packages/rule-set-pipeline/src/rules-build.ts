@@ -8,7 +8,7 @@ import { readCommitInput, withCommitCheckpoint, type CommitSourceRecord } from '
 import { lookupRelease, readReleaseInput, sha256 } from './release.js';
 import type { SourceRecord } from './types.js';
 import { retainedCandidateDownload } from './publication-repository.js';
-import type { PublicationTransport } from './publication.js';
+import { immutableUrl, type PublicationTransport } from './publication.js';
 import { inputBindingRevision, type ManagedRule, type RuleCandidate, type RuleDelivery } from './rules-model.js';
 import { rulesBinary, type LoadedRules } from './rules-context.js';
 import type { RulesSession } from './rules-session.js';
@@ -45,6 +45,27 @@ export async function verifyRuleCandidate(session: RulesSession, candidate: Rule
   return verified;
 }
 
+/** An immutable evidence stage survives a lost readback or process checkpoint.
+ * Verify those exact retained bytes, without regenerating machine-local paths.
+ */
+export async function recoverPublishedRuleCandidate(session: RulesSession, candidate: RuleCandidate) {
+  const path = `candidates/${candidate.id}/readback.json`;
+  const bytes = await session.snapshot.read(path);
+  if (!bytes) return undefined;
+  const evidence = JSON.parse(bytes.toString());
+  const evidenceCommit = candidate.evidenceCommit ?? await session.loaded.context.repository.lastChange(session.snapshot.head, path);
+  const recovered: RuleCandidate = { ...candidate, status: 'verified', evidenceCommit,
+    evidenceUrl: immutableUrl(evidenceCommit, path), evidenceSha256: sha256(bytes) };
+  if (!recovered.publishedAt || !recovered.versionId || recovered.publishedAt !== evidence.publishedAt || recovered.versionId !== evidence.versionId) {
+    throw new Error('CANDIDATE_UNAVAILABLE: retained evidence does not match the registered version');
+  }
+  await verifyRuleCandidate(session, recovered, rulesBinary(session.loaded.context));
+  delete recovered.error;
+  session.journal.candidates[candidate.id] = recovered;
+  await session.save();
+  return recovered;
+}
+
 export async function unchangedDelivery(session: RulesSession, built: RuleBuild, result: ValidRuleBuild, active: RuleDelivery | undefined, rule: ManagedRule) {
   if (!active) return false;
   const previous = session.journal.candidates[active.candidateId];
@@ -63,6 +84,14 @@ export async function publishRuleBuild(session: RulesSession, built: RuleBuild, 
     sourceInput: input, inputBindingRevision: inputBindingRevision(input, result.definition), definitionGeneration: rule.generation,
     source: built.source, buildId: result.buildId, status: 'building', operation: 'sync', controlRevision: rule.control.revision };
   if (candidate.buildId !== result.buildId) throw new Error('RECOVERY_BUILD_CHANGED: cannot replace an incomplete candidate with a different build');
+  if (recovering) {
+    // A stage may exist before its returned commit was checkpointed. Restore
+    // pointers first so the publisher preserves the original diagnostic path.
+    const filesPath = `candidates/${candidate.id}/${result.native.artifacts[0].file}`;
+    const metadataPath = `candidates/${candidate.id}/build.json`;
+    if (!candidate.filesCommit && await session.snapshot.read(filesPath)) candidate.filesCommit = await session.loaded.context.repository.lastChange(session.snapshot.head, filesPath);
+    if (!candidate.metadataCommit && await session.snapshot.read(metadataPath)) candidate.metadataCommit = await session.loaded.context.repository.lastChange(session.snapshot.head, metadataPath);
+  }
   session.journal.candidates[candidate.id] = candidate;
   await session.save();
   // Immutable stage writes and their journal checkpoint share the same CAS.
