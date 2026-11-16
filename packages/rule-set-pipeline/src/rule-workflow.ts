@@ -17,6 +17,7 @@ interface WorkflowResult {
   exitCode: number;
   error?: string;
   maintenance?: string;
+  rules?: { status: string; pendingOperation?: string; error?: string }[];
   results?: { status: string; error?: string }[];
 }
 
@@ -60,6 +61,16 @@ function uncertainSharedState(result: WorkflowResult) {
       || /RULE_(WRITE_|INTENT_|MAINTENANCE|STATE_|TARGET_|MIGRATION)|PUBLICATION_(PENDING|CONFLICT)/.test(row.error ?? ''));
 }
 
+// Status only routes a registered delivery to sync. The service rechecks the
+// operation, receipts, intent and CAS before it can make any shared write.
+function registeredDeliveryRecovery(result: WorkflowResult) {
+  const pending = result.rules?.filter(row => row.status === 'pending') ?? [];
+  return result.status === 'pending' && !result.error && pending.length > 0
+    && pending.every(row => Boolean(row.pendingOperation))
+    && !result.rules?.some(row => row.status === 'superseded'
+      || /RULE_(WRITE_|INTENT_|MAINTENANCE|STATE_|TARGET_|MIGRATION)|PUBLICATION_(PENDING|CONFLICT)/.test(row.error ?? ''));
+}
+
 /** Trigger orchestration is internal; daily is deliberately not a sixth manager operation. */
 export async function runRuleAutomation(request: { event: 'push' | 'schedule'; target: string }, report: WorkflowReport,
   context?: RulesContext, execute: WorkflowRunner = runRuleWorkflow): Promise<number> {
@@ -90,10 +101,11 @@ export async function runRuleAutomation(request: { event: 'push' | 'schedule'; t
     const resumed = await operation('cleanup');
     // A disabled cleanup is not evidence that maintenance was completed.
     if (resumed.exitCode !== 0 || resumed.status !== 'success') return 1;
-  } else if (uncertainSharedState(observed)) {
+  } else if (uncertainSharedState(observed) && !registeredDeliveryRecovery(observed)) {
     return 1;
   }
   const sync = await operation('sync');
+  if (registeredDeliveryRecovery(observed) && sync.status === 'disabled') return 1;
   // An ordinary per-rule source failure does not block a safe cleanup. A shared
   // conflict or unknown result must be resolved before another write is attempted.
   if (uncertainSharedState(sync)) return 1;

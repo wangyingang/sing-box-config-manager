@@ -22,6 +22,7 @@ export function rulesEnvironment(binary: string, target = 'acceptance-issue-84')
   let upstreamRevision = 1;
   let sourceFailure: boolean | string = false;
   const contents: Record<string, string> = {};
+  const history = new Map<number, Record<string, string>>([[1, {}]]);
   let beforeWrite: ((files: RuleWrites) => Promise<void>) | undefined;
   const repository: RulesRepository = {
     branch: journalBranch,
@@ -60,15 +61,19 @@ export function rulesEnvironment(binary: string, target = 'acceptance-issue-84')
     if (sourceFailure === true || typeof sourceFailure === 'string' && url.includes(sourceFailure)) throw new Error('Upstream unavailable');
     const match = /repos\/([^/]+\/[^/]+)\//.exec(url);
     const repository = match?.[1] ?? 'v2fly/domain-list-community';
-    const tag = `release-${upstreamRevision}`;
+    const requested = /\/releases\/(\d+)$/.exec(url)?.[1];
+    const asset = /\/assets\/(\d+)$/.exec(url)?.[1];
+    const version = requested ? Number(requested) : asset ? Math.floor(Number(asset) / 10) : upstreamRevision;
+    const tag = `release-${version}`;
+    const retained = history.get(version)!;
     const input = JSON.stringify({ lists: ['openai', 'anthropic', 'google-deepmind', 'other'].map(name =>
-      ({ name, length: 1, rules: [contents[name] ?? `domain:${name}.example`] })) });
-    if (url.includes('/releases/') && !url.includes('/assets/')) return Response.json({ id: upstreamRevision, tag_name: tag,
-      assets: ['dlc.dat_plain.yml', 'dlc.dat_plain.yml.sha256sum'].map((name, index) => ({ id: 11 + index, name,
+      ({ name, length: 1, rules: [retained[name] ?? `domain:${name}.example`] })) });
+    if (url.includes('/releases/') && !url.includes('/assets/')) return Response.json({ id: version, tag_name: tag,
+      assets: ['dlc.dat_plain.yml', 'dlc.dat_plain.yml.sha256sum'].map((name, index) => ({ id: version * 10 + 1 + index, name,
         browser_download_url: `https://github.com/${repository}/releases/download/${tag}/${name}` })) });
     if (url.includes('/git/ref/tags/')) return Response.json({ object: { type: 'commit', sha: 'a'.repeat(40) } });
-    if (url.endsWith('/assets/11')) return new Response(input);
-    if (url.endsWith('/assets/12')) return new Response(`${sha256(input)}  dlc.dat_plain.yml\n`);
+    if (asset && Number(asset) % 10 === 1) return new Response(input);
+    if (asset && Number(asset) % 10 === 2) return new Response(`${sha256(input)}  dlc.dat_plain.yml\n`);
     throw new Error(`Unexpected input: ${url}`);
   };
   const context: RulesContext = { repository, targetBranch: target, allowWrites: true, binary, fetch: fetcher,
@@ -77,7 +82,7 @@ export function rulesEnvironment(binary: string, target = 'acceptance-issue-84')
   return { context, writes, requests, heads, trees,
     config: () => structuredClone(config),
     configure(next: typeof config) { config = next; revision++; },
-    upstream(rules: Record<string, string>) { Object.assign(contents, rules); upstreamRevision++; },
+    upstream(rules: Record<string, string>) { Object.assign(contents, rules); upstreamRevision++; history.set(upstreamRevision, { ...contents }); },
     failSource(value: boolean | string) { sourceFailure = value; },
     beforeWrite(callback?: typeof beforeWrite) { beforeWrite = callback; },
   };

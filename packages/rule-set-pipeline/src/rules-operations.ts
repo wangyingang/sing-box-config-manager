@@ -63,37 +63,47 @@ async function updateSelectedRules(session: RulesSession, definitions: RuleDefin
     group.push(definition); groups.set(sourceKey, group);
   }
   for (const definitions of groups.values()) {
-    // A publishing candidate has durable fixed input. Finish it before starting
-    // another upstream revision; ordinary source/build failures have no such write.
-    const recovering = !session.loaded.dryRun && Object.values(session.journal.candidates).find(candidate => candidate.status === 'publishing'
-      && definitions.some(definition => definition.id === candidate.logicalId
-        && candidate.definitionGeneration === ownRule(session, definition.id)?.generation
-        && candidate.controlRevision === ownRule(session, definition.id)?.control.revision
-        && definitionRevision(candidate.sourceInput, candidate.definition) === ownRule(session, definition.id)?.definitionRevision));
-    const batches = recovering ? [[recovering.definition], definitions.filter(rule => rule.id !== recovering.logicalId)].filter(batch => batch.length) : [definitions];
-    for (const batch of batches) {
-      const fixed = recovering && batch[0].id === recovering.logicalId ? recovering : undefined;
-      if (fixed) {
+    const completed = new Set<string>();
+    const blocked = new Set<string>();
+    if (!session.loaded.dryRun) for (const definition of definitions) {
+      const rule = ownRule(session, definition.id)!;
+      const recovering = Object.values(session.journal.candidates).filter(candidate => ['building', 'publishing'].includes(candidate.status)
+        && candidate.logicalId === definition.id && candidate.inputBindingRevision === rule.inputBindingRevision
+        && candidate.definitionGeneration === rule.generation && candidate.controlRevision === rule.control.revision
+        && definitionRevision(candidate.sourceInput, candidate.definition) === rule.definitionRevision)
+        .sort((a, b) => a.id.localeCompare(b.id));
+      for (const fixed of recovering) {
         try {
-          const retained = await recoverPublishedRuleCandidate(session, fixed);
-          if (retained) {
-            const id = retained.logicalId, rule = { ...ownRule(session, id)! };
-            delete rule.lastFailure;
-            const current = deliveries.get(id);
-            const delivered = await deliverRuleVersion(session, rule, retained, 'sync', current);
-            deliveries.set(id, delivered);
-            results.push({ id, status: 'delivered', changes: [...(changes.get(id) ?? []), current ? 'replace-current-version' : 'first-delivery'],
-              candidate: { versionId: retained.versionId, publishedAt: retained.publishedAt } });
-            continue;
+          const current = deliveries.get(definition.id);
+          const direct = recovering.length === 1 && !current;
+          let candidate = await recoverPublishedRuleCandidate(session, fixed);
+          if (!candidate) {
+            const built = await buildRulesInput(session.loaded, [fixed.definition], fixed);
+            const result = built.results[0];
+            if (result.status === 'failed') throw new Error(result.error);
+            candidate = await publishRuleBuild(session, built, result, rule, fixed);
+          }
+          // Without a current delivery, one effective candidate has an
+          // unambiguous destination. Multiple candidates require normal input
+          // selection; their traversal order never selects a version.
+          if (direct) {
+            const afterRule = { ...rule }; delete afterRule.lastFailure;
+            const delivered = await deliverRuleVersion(session, afterRule, candidate, 'sync', current);
+            deliveries.set(definition.id, delivered); completed.add(definition.id);
+            results.push({ id: definition.id, status: 'delivered', changes: [...(changes.get(definition.id) ?? []), current ? 'replace-current-version' : 'first-delivery'],
+              candidate: { versionId: candidate.versionId, publishedAt: candidate.publishedAt } });
           }
         } catch (error) {
-          results.push(await failure(session, fixed.logicalId, error, changes.get(fixed.logicalId)));
+          results.push(await failure(session, definition.id, new Error(`Candidate ${fixed.id}: ${message(error)}`), changes.get(definition.id)));
+          blocked.add(definition.id);
           if (sharedFailure(session, error)) return results;
-          continue;
         }
       }
+    }
+    const batch = definitions.filter(definition => !completed.has(definition.id) && !blocked.has(definition.id));
+    if (batch.length) {
       let built;
-      try { built = await buildRulesInput(session.loaded, batch, fixed || undefined); }
+      try { built = await buildRulesInput(session.loaded, batch); }
       catch (error) {
         for (const definition of batch) results.push(await failure(session, definition.id, error, changes.get(definition.id)));
         continue;
@@ -117,7 +127,7 @@ async function updateSelectedRules(session: RulesSession, definitions: RuleDefin
           }
           const reusable = Object.values(session.journal.candidates).find(candidate => candidate.buildId === builtRule.buildId
             && candidate.logicalId === id && candidate.definitionGeneration === rule.generation && candidate.status === 'verified');
-          const candidate = reusable ?? await publishRuleBuild(session, built, builtRule, rule, fixed || undefined);
+          const candidate = reusable ?? await publishRuleBuild(session, built, builtRule, rule);
           const afterRule = { ...rule }; delete afterRule.lastFailure;
           const delivered = await deliverRuleVersion(session, afterRule, candidate, 'sync', current);
           deliveries.set(id, delivered);

@@ -34,6 +34,12 @@ pin 示例的版本仅说明格式。实际操作先从 `status openai` 中选�
 
 整体结果为 `success`、`disabled`、`partial`、`failed` 或 `pending`。完全成功、无变化、正常固定跳过及环境门禁关闭时返回 0；`disabled` 明确表示未应用，不能当作配置已经生效。部分失败、失败和待核实均返回 1。`pending` 表示提交、回读结果、历史候选归属仍待核实，或维护隔离尚未结束。先查看 status，再根据返回的继续入口处理，不能当作没有发生变更。具体 JSON 字段见 [操作与状态契约](contracts/rules-operations.md)。
 
+真实 `sync` 先处理当前定义、规则代次和控制修订下的全部 building/publishing 候选，再判断普通更新或 `unchanged`。恢复沿用原候选身份、固定来源和构建身份；完整发布证据可直接复验，缺失阶段从原固定输入继续。同源多个规则、同一规则多个在途记录都逐项核实，不由分组首项或遍历顺序决定交付。`unchanged` 只说明当前内容无需切换，不表示可以跳过旧候选收尾。无法获取固定输入、构建身份变化或证据冲突时保留候选，返回具体候选诊断及 `sync` 继续入口；cleanup 不替代构建恢复。
+
+已有当前交付时，恢复后的候选先作为完整历史版本保留，再由正常最新上游检查决定一次交付。即使只有一个在途候选、且它的完整证据已经复验，也不能仅凭该事实切换当前版本；latest 不可用时整次 sync 失败并保留当前交付，稍后重跑 sync 继续。例如 A 当前交付、B 构建中断后上游又回到 A，恢复只补齐 B 的证据，当前 A 保持不变。这是避免旧候选回切的代价；完整证据恢复本身不要求重新获取 B 的固定上游输入。尚无当前交付且只有一个有效在途候选时，仍可直接复验并交付；已登记 pendingDelivery 的原操作恢复也不改为重新选择 latest。
+
+候选已有的业务版本和首次发布时间保持不变。有效不可变证据已登记这些事实、但 journal 检查点缺失时，先核对原候选、来源、构建和产物，再补回登记；没有可靠历史时间时明确失败，不使用恢复时间补造。status 和四个写入口的 dry-run 只展示实际状态，不推进上述恢复。
+
 旧 `update`、`rebuild`、`check-now`、`activate`、`rollback`、`initialize` 及 `maintenance-enter/prepare/switch/resume/abort` 等旧命令和 Node API 已退出公开入口。必要的构建、验证和转换仍是内部能力，不提供旧命令兼容层。
 
 ## 正式配置与草稿
@@ -116,6 +122,8 @@ pnpm rules status openai
 例如在同一次正式配置提交中新增 A、将 B 换源、删除 C，push 会完成一次完整 sync，无需另发逐集命令。若 B 的来源失败，A/C 的成功保留，摘要列出 B 仍实际交付的版本，运行整体失败。修复后再次 push，或下一次每日 sync，会按当前配置继续处理。pinned 集跳过上游处理；手工 resume 后恢复 auto 并立即检查当前来源。生产更新开关关闭时，此次 push 显示未应用，而不会假装已经完成配置变更。
 
 日常编排分别保留 sync 和 cleanup 的结果；清理成功不能覆盖更新失败。单集普通来源失败不必阻止可安全执行的清理，共享状态或写入结果尚不明确时停止受影响写入。两类生产开关分别控制各自阶段；未完成维护无法恢复时不能继续更新。每日频率不改变候选保留年龄；不再使用 `RULE_CLEANUP_PERIOD_DAYS` 或 `RULE_CLEANUP_START_AT`，也不增加公开 daily 操作。GitHub 的 [schedule 事件可能延迟或丢弃](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)，本模块不承诺准时触发。
+
+稳定文件已提交而 HTTPS 回读暂时失败时，下次 schedule 可将仅关联已登记交付的 pending 交给同一个受保护的 sync 恢复；不重复提交已经核实的稳定交付。损坏、不可读、目标不符、归属未明或混合共享冲突仍阻止后续写入。恢复未完成，或更新门禁关闭而返回 disabled 时，不继续 cleanup，也不把 disabled 当作 pending 已解决。活动维护仍优先由 cleanup 沿用已固化计划恢复。
 
 五个入口的参数保持一致：
 
