@@ -40,6 +40,7 @@ function humanResult(result: RulesResult & { rules?: RuleStatus[]; maintenance?:
     }
     for (const blocker of plan.blockers) lines.push(`  Blocked: ${blocker}`);
     for (const ref of otherRefs ?? plan.otherRefs) lines.push(`  Other ref retained: ${ref.ref}@${ref.head}`);
+    if (result.cleanup.unverified?.length) lines.push(`  Unverified: ${result.cleanup.unverified.join(', ')}`);
     if (continueWith) lines.push(`Continue: pnpm rules ${continueWith}`);
   }
   const rows = result.rules ?? result.results;

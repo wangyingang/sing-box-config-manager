@@ -28,11 +28,11 @@ pnpm rules resume openai --dry-run --json
 pnpm rules cleanup --dry-run --json
 ```
 
-pin 示例的版本仅说明格式。实际操作先从 `status openai` 中选择 `selectable: true` 的 `versionId`；不要把 Git head、Release tag 或证据 URL 当作版本参数。`--dry-run` 检查真实输入和必要的原生验证，但不发布候选、不登记控制或进度、不消费正式版本身份。输出区分已验证条件、预计变化和尚未验证的远端提交/HTTPS 回读；正式执行重新核对前提。
+pin 示例的版本仅说明格式。实际操作先从 `status openai` 中选择 `selectable: true` 的 `versionId`；不要把 Git head、Release tag 或证据 URL 当作版本参数。sync/pin/resume 的 `--dry-run` 检查真实输入和必要的原生验证；cleanup 的预览只盘点保留集合，不执行原生复验或引用切换。所有预览均不发布候选、不登记控制或进度、不消费正式版本身份，输出区分已验证条件、预计变化和尚未验证的内容；正式执行重新核对前提。
 
 无效 pin 不改变控制、当前交付或尚未同步的配置。新 pin 可以选择当前规则代次内保留的旧源版本；再次实质换源会撤销该固定。`resume` 不补跑固定期间的中间版本，已经为 auto 时也立即检查。
 
-整体结果为 `success`、`partial`、`failed` 或 `pending`。CLI 仅在完全成功、无变化或正常固定跳过时返回 0；部分失败、失败和待核实均返回 1。`pending` 表示提交、回读结果或历史候选归属仍待核实，先查看 status，再根据返回的继续入口处理，不能当作没有发生变更。具体 JSON 字段见 [操作与状态契约](contracts/rules-operations.md)。
+整体结果为 `success`、`partial`、`failed` 或 `pending`。CLI 仅在完全成功、无变化或正常固定跳过时返回 0；部分失败、失败和待核实均返回 1。`pending` 表示提交、回读结果、历史候选归属仍待核实，或维护隔离尚未结束。先查看 status，再根据返回的继续入口处理，不能当作没有发生变更。具体 JSON 字段见 [操作与状态契约](contracts/rules-operations.md)。
 
 旧 `update`、`rebuild`、`check-now`、`activate`、`rollback`、`initialize` 及 `maintenance-enter/prepare/switch/resume/abort` 等旧命令和 Node API 已退出公开入口。必要的构建、验证和转换仍是内部能力，不提供旧命令兼容层。
 

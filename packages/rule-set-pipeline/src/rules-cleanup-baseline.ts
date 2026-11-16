@@ -184,6 +184,7 @@ export async function prepareRulesBaseline(options: RulesBaselineVerification & 
   }
   const metadataStage = await stage('metadata', files, metadata);
   const evidence: Record<string, Buffer> = {};
+  const priorEvidence = await transport.snapshot(stageRef(runId, 'evidence'));
   for (const id of plan.retain.candidateIds) {
     const prefix = `candidates/${id}/`, readback = [];
     for (const [contents, head] of [[assets, files.head], [metadata, metadataStage.head]] as const) {
@@ -193,11 +194,22 @@ export async function prepareRulesBaseline(options: RulesBaselineVerification & 
         readback.push({ url, sha256: sha256(actual), byteLength: actual.length, exactBytes: true });
       }
     }
-    // Preserve the original publication time, tool location and native evidence;
-    // only physical addresses and new-host revalidation metadata change.
-    evidence[`${prefix}readback.json`] = encodeRecord({ ...originals.get(id),
+    const { revalidationTool: _oldTool, ...original } = originals.get(id)!;
+    const record = { ...original,
       publishedAt: journal.candidates[id].publishedAt, versionId: journal.candidates[id].versionId, filesCommit: files.head,
-      metadataCommit: metadataStage.head, readback, revalidationTool: { version: tool.version, sha256: tool.sha256 } });
+      metadataCommit: metadataStage.head, readback };
+    const path = `${prefix}readback.json`;
+    if (priorEvidence) {
+      // Another host may use a different platform build of the same version.
+      // Revalidate locally below, but never regenerate committed evidence bytes.
+      const bytes = await required(priorEvidence, path);
+      const { revalidationTool, ...retained } = JSON.parse(bytes.toString());
+      if (!isDeepStrictEqual(record, retained) || revalidationTool?.version !== '1.14.4'
+        || !/^[a-f0-9]{64}$/.test(revalidationTool?.sha256)) throw new Error(`Invalid prior baseline evidence: ${path}`);
+      evidence[path] = bytes;
+    } else {
+      evidence[path] = encodeRecord({ ...record, revalidationTool: { version: tool.version, sha256: tool.sha256 } });
+    }
   }
   const evidenceStage = await stage('evidence', metadataStage, evidence);
   const candidates = Object.fromEntries(plan.retain.candidateIds.map(id => [id, { ...journal.candidates[id],

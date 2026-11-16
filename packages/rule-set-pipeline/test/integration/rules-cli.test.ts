@@ -48,6 +48,9 @@ test('五个 CLI 操作使用同一服务：预览零写入，pin/resume 和 Act
   const apiCleanup = await cleanupRuleHistory({ context: env.context, dryRun: true });
   assert.deepEqual(cleanup.result, JSON.parse(JSON.stringify(apiCleanup)));
   assert.ok(cleanup.result.cleanup.plan.retain.candidateIds.length >= 2);
+  let humanCleanup = '';
+  assert.equal(await runRulesCli(['cleanup', '--dry-run'], text => { humanCleanup = text; }, env.context), 0);
+  assert.match(humanCleanup, /Unverified:.*retained-candidate-native-validation.*atomic-ref-switch/);
   assert.equal(await runRuleWorkflow({ operation: 'cleanup', dryRun: true, target: env.context.targetBranch },
     text => { actionOutput = text; }, env.context), 0);
   assert.deepEqual(JSON.parse(actionOutput), cleanup.result);

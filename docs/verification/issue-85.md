@@ -19,11 +19,24 @@
 
 针对清理与迁移基线的真实 sing-box 测试 7 项通过，0 失败、0 跳过；入口常规测试 10 项、CLI 原生集成 1 项通过。使用 sing-box 1.14.4；日志位于任务 worktree `.verification/issue-85-cleanup-tests.log` 与 `.verification/issue-85-surface/`。
 
-统一入口的源码身份、范围与统计在完整验证结束后补录。PR 最新 CI 和云端审查结果在 PR／工单交付记录中更新，不为状态刷新追加源码提交。
+统一入口 `node scripts/verify.mjs --out .verification/issue-85-local-1 --binary <sing-box 1.14.4 绝对路径>` 已通过，scope=`check-native`。summary 中源码身份为 base commit `30b8c7193eac91253d52502518665bdc629a0f89`、`clean=false`、tracked diff SHA-256 `cf94afac12f4d14f95c5e589da9089745d3626d084fa3948375e7db2a9bfb44d`；该实现和测试随后提交为 `4932d0f`。工具为 Node.js `v26.13.0`、pnpm `10.33.2`、sing-box `1.14.4`，binary SHA-256 `6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2`。
+
+- 常规检查：工具 115、Compiler 99、Pipeline 157，共 371 项通过；类型检查、构建和 workspace smoke 通过。
+- 原生集成：Compiler 28、Pipeline 226，共 254 项通过。
+- 合计 625 项通过，0 失败、0 取消、0 跳过；summary、日志与完整性清单保留在上述目录。
+- 未额外运行 `--release` 固定官方全量构建套件；真实 GitHub 探针单独记载，不计入 625 项。
+
+## 本地审查与补充回归
+
+对 `30b8c71...4932d0f` 分别进行 Standards 和 Spec 审查：Standards 无 finding；Spec 发现 1 项 P2。证据阶段已保存后若中断，换机使用 SHA 不同的 sing-box 1.14.4 会重建不同证据字节，无法继续同一维护。修复改为严格比对并采用已有 evidence 原始字节，当前主机仍执行原生复验；保留业务版本、发布时间及原工具记录。
+
+修复后追加单／双分支换工具 SHA 恢复回归，并复跑迁移基线与 CLI/Action 集成，共 4 项通过、0 跳过；typecheck、diff 格式检查通过。日志为 `.verification/issue-85-review-regression.log`。同时修正 cleanup 预览文案，并让人类可读输出显示尚未验证的条件。Spec 审查者已只读确认修复覆盖原 finding。统一 625 项验证早于这些补充修复；最终提交的 CI 和云端审查覆盖以 PR／工单交付记录为准。
+
+现行文档检查 6 个 Markdown、63 个本地链接／锚点通过。PR 最新 CI 和云端审查结果只更新交付记录，不为状态刷新追加源码提交。
 
 ## 真实 GitHub 隔离验收
 
-隔离探针使用唯一 acceptance-issue-85-* 分支、受限维护 refs 和固定官方 Release 输入，检查真实引用切换、保留版本查询和 pin、稳定 HTTPS 字节及生产 refs／Actions variables 前后不变。执行结果与临时引用清理记录在探针完成后补录；当前不将其记为已通过。
+隔离探针使用唯一 acceptance-issue-85-* 分支、受限维护 refs 和固定官方 Release 输入，检查真实引用切换、保留版本查询和 pin、稳定 HTTPS 字节及生产 refs／Actions variables 前后不变。GitHub 存储、引用、HTTPS 和官方来源字节均真实；候选时间由隔离测试时钟控制，以在一次运行中验证 30 天窗口，不代表来源的历史发布时间，也不改写生产记录。执行结果与临时引用清理记录在探针完成后补录；当前不将其记为已通过。
 
 ## 范围限制
 
