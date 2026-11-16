@@ -7,7 +7,7 @@ import { ARTIFACT_REPOSITORY } from './publication.js';
 import { guardRulesConfiguration, loadRulesRequest, rulesBinary, type RulesRequest } from './rules-context.js';
 import { encodeRecord, parseRulesJournal, RULE_STATE_PATH, type RulesJournal, type RulesResult } from './rules-model.js';
 import { openRulesSession, type RulesSession } from './rules-session.js';
-import { rulesFailure, rulesReport } from './rules-status.js';
+import { disabledRulesResult, rulesFailure, rulesReport } from './rules-status.js';
 import { planRulesCleanup } from './rules-cleanup-plan.js';
 import type { CleanupPlan, CleanupReport, CleanupRun } from './rules-cleanup-model.js';
 import { prepareRulesBaseline, verifyRulesBaseline } from './rules-cleanup-baseline.js';
@@ -91,7 +91,10 @@ export async function cleanupRuleHistory(request: RulesRequest = {}): Promise<Ru
   let stableHead = '';
   try {
     if (request.draft !== undefined) throw new Error('cleanup uses the current official configuration; draft input is not allowed');
-    session = await openRulesSession(await loadRulesRequest(request));
+    const loaded = await loadRulesRequest(request, 'cleanup');
+    const disabled = disabledRulesResult(loaded, 'cleanup');
+    if (disabled) return disabled;
+    session = await openRulesSession(loaded);
     const { repository, cleanup, targetBranch } = session.loaded.context;
     if (!cleanup) throw new Error('Rule cleanup requires trusted baseline and reference transports');
     const refs = cleanup.refs;

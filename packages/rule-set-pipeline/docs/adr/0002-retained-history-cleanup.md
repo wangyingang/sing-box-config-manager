@@ -12,4 +12,4 @@ status: accepted
 
 完整但发布时间未知的迁移候选，以及仍可能恢复的在途操作，会明确阻塞清理。只有已由新定义代次或控制决定取代、且不属于当前或 pin 目标的未完成操作，才可在维护隔离后作为失效残留回收。不能用清理时间补造发布时间，也不能用旧维护计划绕过新状态约束。
 
-多版本保留增加了存储量和原生复验成本；新基线需改写物理证据地址，并保留业务身份，因此不能只删除目录文件。实现复用现有传输与原生验证，不增设数据库、调度平台或 plan/apply 审批流程。正式配置已确定为 30 天，自动调度和失败通知由 [#86](https://github.com/wangyingang/sing-box-config-manager/issues/86) 交付；生产转换、历史重写与启用仍需独立授权。当前验证与交付状态见 [#85 验收记录](../../../../docs/verification/issue-85.md)。
+多版本保留增加了存储量和原生复验成本；新基线需改写物理证据地址，并保留业务身份，因此不能只删除目录文件。实现复用现有传输与原生验证，不增设数据库、调度平台或 plan/apply 审批流程。正式配置已确定为 30 天，自动调度和失败通知的决定见 [ADR 0003](0003-automated-operations-and-native-notifications.md) 与 [#86](https://github.com/wangyingang/sing-box-config-manager/issues/86)；生产转换、历史重写与启用仍需独立授权。当前验证与交付状态见 [#85 验收记录](../../../../docs/verification/issue-85.md)。

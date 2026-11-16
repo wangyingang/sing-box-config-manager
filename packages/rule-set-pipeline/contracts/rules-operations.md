@@ -1,6 +1,6 @@
 # 配置驱动操作、状态与版本契约
 
-本页描述 [Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84) 与 [Spec #85](https://github.com/wangyingang/sing-box-config-manager/issues/85) 的应用服务结果及远端持久事实。它不是 Compiler 的输入契约；Compiler 继续消费 [Rule Subscription v2](rule-subscription-v2.md) 或固定 [Artifact Manifest v1](README.md)。
+本页描述 [Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84)、[Spec #85](https://github.com/wangyingang/sing-box-config-manager/issues/85) 与 [Spec #86](https://github.com/wangyingang/sing-box-config-manager/issues/86) 的应用服务结果、自动运行边界及远端持久事实。它不是 Compiler 的输入契约；Compiler 继续消费 [Rule Subscription v2](rule-subscription-v2.md) 或固定 [Artifact Manifest v1](README.md)。
 
 ## 配置
 
@@ -19,7 +19,7 @@
 | `operation`、`dryRun` | status/sync/pin/resume/cleanup 及是否仅预览 |
 | `configurationRevision`、`configurationOrigin` | 本次读到的正式 commit 和来源；草稿标记为 local-draft |
 | `target` | 本次受限产物仓库与分支 |
-| `status`、`exitCode` | success/partial/failed/pending；只有 success 为 0 |
+| `status`、`exitCode` | success/disabled/partial/failed/pending；success 与 disabled 为 0，disabled 表示未应用 |
 | `results[]` | 每集的 `id`、结果、`changes`、`error`、`current`、`control`、`expectedSource` 和需要时的 `continueWith` |
 | `observedHeads` | 能读到时返回日志与稳定分支的观察 head，不作为后续执行凭证 |
 | `error` | 无法分配到单集的失败，或交付事实尚不能完成核实 |
@@ -28,6 +28,16 @@
 逐集结果区分 delivered、unchanged、pinned-skipped、pinned、resumed、deleted、failed、pending、superseded、planned。正常固定跳过是成功；独立失败与成功并存为 partial；存在待核实提交或归属未知的隔离候选为 pending。`changes` 说明本次已完成或预览预计完成的变化。resume 后更新失败时，`automatic-updates-restored` 与 auto 控制说明解除固定已经持久化，不能把整次失败理解为仍被固定。
 
 预览结果可以包含 `verified` 和 `unverified`，例如已验证来源、原生规则与订阅契约，但尚未验证远端发布及 HTTPS 回读。四种写操作的 dry-run 不持久保存任何状态，也不补做 pending 恢复。草稿仅允许 sync 预览；pin/resume/cleanup 始终按正式配置核对。
+
+## 环境门禁与自动运行
+
+默认宿主读取源码 main 的当前正式配置。可信隔离环境可设置 `RULE_TARGET=acceptance-*`，并通过 `RULE_CONFIG_BRANCH` 选择 main 或与目标同名的配置分支；不接受其他分支，也不允许非 main 配置授权生产写入。每次调用及关键写入重读当前配置，不把事件 SHA、checkout 或历史结果作为重放凭证。
+
+main 的 sync/pin/resume 写入受 `RULE_UPDATE_ENABLED` 控制，cleanup 写入独立受 `RULE_CLEANUP_ENABLED` 控制；只有值为 `true` 时启用，缺省关闭。环境门禁属于共享应用服务，CLI、Node 默认宿主和 Actions 一致；它不改变单集 auto/pinned。门禁关闭时返回配置修订、目标、`status: disabled`、`exitCode: 0` 和未应用原因。status 与 dry-run 允许只读检查，不因此获得写权限。
+
+配置 push 调用完整 sync；schedule 正常先 sync 后 cleanup，存在活动维护时先 cleanup 续做，确认恢复可写后再同步。自动编排保留各次应用服务结果，并聚合退出码；独立单集失败不会回滚其他成功，也不能被之后的 cleanup 成功覆盖。共享状态未明或维护仍未完成时停止相关写入；pending/partial/failed 使整个运行非成功。手工 sync 不暗中清理，手工 cleanup 不更新上游，不公开 daily 或内部维护阶段入口。
+
+同一目标的工作流使用同一 concurrency 组，业务远端校验继续生效。Actions 摘要和 JSON artifact 保存实际结果；GitHub 原生失败通知依赖账号设置，不承载独立业务邮件契约。通知设置和手工参数对照见[模块操作说明](../README.md#actions-自动与手工运行)。
 
 ## 查询
 
@@ -94,4 +104,4 @@ schema 1 旧状态不能直接交给新编排，也不以缺失状态覆盖已�
 
 `quarantinedCandidates` 保存不完整候选的最小归属索引和原因，不伪造 build/source；同集显式删除会删除其文件与索引，归属无法确定时整体保持 pending 并阻止删除误报成功。`migration.pending` 列出转换时的待处理项；未完成候选的原字节保留，并在 `migration.quarantinedCandidates` 和旧状态审计快照中登记，旧任务由 head/维护隔离失效。转换结果区分 planned、converted 和 already-converted，返回 migration 审计。
 
-转换的隔离验收和剩余项记录在 #84 交付证据；生产没有因代码合并而自动完成转换。候选年龄保留和 cleanup 按本页契约处理；push/schedule 和失败通知仍由 #86 交付。旧维护未决状态必须先核实，不能作为新 schema 的清理计划直接重放。
+转换的隔离验收和剩余项记录在 #84 交付证据；生产没有因代码合并而自动完成转换。候选年龄保留、cleanup 与 push/schedule 按本页契约处理；生产更新和清理开关默认关闭，合并代码不会自动授权转换或启用。旧维护未决状态必须先核实，不能作为新 schema 的清理计划直接重放。

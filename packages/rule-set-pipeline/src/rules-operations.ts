@@ -7,7 +7,7 @@ import { buildRulesInput, publishRuleBuild, recoverPublishedRuleCandidate, uncha
 import { deleteRuleDelivery, deliverRuleVersion, readRuleDeliveries, recoverRuleDelivery, ruleSubscription, ensureRulePathAvailable } from './rules-delivery.js';
 import { definitionRevision, inputBindingRevision, type ManagedRule, type RuleCandidate, type RuleResult, type RulesResult } from './rules-model.js';
 import { openRulesSession, type RulesSession } from './rules-session.js';
-import { addCurrentFacts, rulesFailure, rulesReport } from './rules-status.js';
+import { addCurrentFacts, disabledRulesResult, rulesFailure, rulesReport } from './rules-status.js';
 
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 const sharedFailure = (session: RulesSession, error: unknown) => Boolean(session.journal.pendingDelivery)
@@ -150,7 +150,10 @@ export async function syncRules(request: RulesRequest = {}): Promise<RulesResult
   let session: RulesSession | undefined;
   const results: RuleResult[] = [];
   try {
-    session = await openRulesSession(await loadRulesRequest(request));
+    const loaded = await loadRulesRequest(request);
+    const disabled = disabledRulesResult(loaded, 'sync');
+    if (disabled) return disabled;
+    session = await openRulesSession(loaded);
     // Shared delivery corruption must stop even definition/control checkpoints.
     await readRuleDeliveries(await session.stable());
     if (!session.loaded.dryRun) { await guardRulesConfiguration(session.loaded); await recoverRuleDelivery(session); }
@@ -210,7 +213,10 @@ export async function pinRuleVersion(request: RulesRequest & { id: string; versi
   let session: RulesSession | undefined;
   try {
     if (request.draft !== undefined) throw new Error('pin uses the official configuration; drafts are only supported by sync preview');
-    session = await openRulesSession(await loadRulesRequest(request));
+    const loaded = await loadRulesRequest(request);
+    const disabled = disabledRulesResult(loaded, 'pin');
+    if (disabled) return disabled;
+    session = await openRulesSession(loaded);
     const definition = selectedDefinition(session, request.id);
     const candidate = selectedVersion(session, request.id, request.version);
     let current = (await readRuleDeliveries(await session.stable())).get(request.id);
@@ -248,7 +254,10 @@ export async function resumeRuleUpdates(request: RulesRequest & { id: string }):
   let resumed = false;
   try {
     if (request.draft !== undefined) throw new Error('resume uses the official configuration');
-    session = await openRulesSession(await loadRulesRequest(request));
+    const loaded = await loadRulesRequest(request);
+    const disabled = disabledRulesResult(loaded, 'resume');
+    if (disabled) return disabled;
+    session = await openRulesSession(loaded);
     const definition = selectedDefinition(session, request.id);
     await readRuleDeliveries(await session.stable());
     if (!session.loaded.dryRun) {

@@ -15,11 +15,13 @@ const help = `Usage:
   pnpm rules resume <id> [--dry-run] [--json]
   pnpm rules cleanup [--dry-run] [--json]
 
-写操作读取 main 当前已推送的正式配置。
+写操作默认读取 main 当前已推送的正式配置；隔离宿主读取其受限配置分支的当前修订。
 --config <path> 只可与 sync --dry-run 一起预览草稿；相对路径从调用目录解析。
 sync 处理全部配置差异；status 不执行恢复或写入。
 cleanup 按正式保留期清理历史；中断后重跑同一命令继续，不检查上游或改变当前交付。
 环境设置：安装 sing-box 1.14.4，或设置 SING_BOX_BINARY；GitHub 使用 gh 身份。
+生产写入：sync/pin/resume 需 RULE_UPDATE_ENABLED=true；cleanup 需 RULE_CLEANUP_ENABLED=true。
+两个开关默认关闭，返回 disabled/未应用；status 和 dry-run 保持只读。
 `;
 
 function humanResult(result: RulesResult & { rules?: RuleStatus[]; maintenance?: string }, detailed: boolean) {

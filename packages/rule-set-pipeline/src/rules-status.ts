@@ -1,6 +1,6 @@
 import { candidateStableFiles } from './activation.js';
 import { ARTIFACT_REPOSITORY } from './publication.js';
-import { loadRulesRequest, type RulesRequest } from './rules-context.js';
+import { loadRulesRequest, type LoadedRules, type RulesRequest } from './rules-context.js';
 import { openRulesSession, type RulesSession } from './rules-session.js';
 import { readRuleDeliveries, observedRule, ruleSubscription, ensureRulePathAvailable } from './rules-delivery.js';
 import { verifyRuleCandidate } from './rules-build.js';
@@ -15,6 +15,15 @@ export interface RuleStatus extends RuleResult {
   candidates: { id: string; versionId?: string; publishedAt?: string; source: unknown; current: boolean; selectable: boolean; reason?: string }[];
   candidateCount: number;
   pendingOperation?: string;
+}
+
+/** A closed environment gate does not read or migrate the artifact journal. */
+export function disabledRulesResult(loaded: LoadedRules, operation: RulesResult['operation']): RulesResult | undefined {
+  if (loaded.allowWrites || loaded.dryRun) return;
+  const gate = loaded.writeKind === 'cleanup' ? 'RULE_CLEANUP_ENABLED' : 'RULE_UPDATE_ENABLED';
+  return { operation, dryRun: false, configurationRevision: loaded.observed.revision,
+    configurationOrigin: loaded.observed.origin, target: loaded.configuration.target,
+    status: 'disabled', exitCode: 0, results: [], error: `${gate} is disabled; configuration has not been applied (未应用)` };
 }
 
 export function rulesReport(session: RulesSession, operation: RulesResult['operation'], results: RuleResult[]): RulesResult {
