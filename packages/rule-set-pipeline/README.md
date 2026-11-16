@@ -46,7 +46,7 @@ pnpm rules sync --config /path/to/rulesets-draft.yml --dry-run --json
 
 草稿可从 [`config/rulesets.yml`](config/rulesets.yml) 复制并编辑。隔离样例 [`samples/rulesets.example.yml`](samples/rulesets.example.yml) 的目标是 `acceptance-example`，须使用匹配的已准备隔离环境，不能据此写生产目标。
 
-配置使用 `schemaVersion: 3`，必须显式声明正整数 `candidateRetentionDays`。样例中的 30 是待管理者确认的示例策略；#84 只校验该字段，按天清理属于 #85。`ruleSets` 必须显式存在。`ruleSets: []` 与空 `sources: {}` 可以表达删除全部受管规则；配置缺失、无法读取、未知字段、无效引用、重复 ID 或重叠稳定路径均在写入前拒绝。
+配置使用 `schemaVersion: 3`，必须显式声明正整数 `candidateRetentionDays`。正式配置和样例采用已确定的 30 天策略；#84 只校验该字段，按天清理属于 #85。`ruleSets` 必须显式存在。`ruleSets: []` 与空 `sources: {}` 可以表达删除全部受管规则；配置缺失、无法读取、未知字段、无效引用、重复 ID 或重叠稳定路径均在写入前拒绝。
 
 当前正式配置有三个域名集 `openai`、`anthropic`、`google-deepmind`，以及双栈 `china-ip`。同类来源可以更换仓库、资产、路径或列表，无需修改代码：
 
