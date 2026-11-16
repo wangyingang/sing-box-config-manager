@@ -10,7 +10,7 @@
 
 | 模块 | 接收什么、完成什么 | 当前边界 |
 | --- | --- | --- |
-| [Rule Set Pipeline](packages/rule-set-pipeline/README.md) | 根据正式配置协调新增、换源和删除，验证候选后交付稳定规则入口 | `pnpm rules` 提供 status、sync、pin、resume；正式配置包含三个域名集和双栈 `china-ip`。历史状态转换与生产启用需另行安排 |
+| [Rule Set Pipeline](packages/rule-set-pipeline/README.md) | 根据正式配置协调新增、换源和删除，验证候选后交付稳定规则入口 | `pnpm rules` 提供 status、sync、pin、resume、cleanup；正式配置包含三个域名集和双栈 `china-ip`。历史状态转换与生产启用需另行安排 |
 | [Config Compiler](packages/config-compiler/README.md) | 将模板、配置选择、节点修订、规则元数据和客户端能力组合成完整配置，并检查错误 | 已实现纯内存编译、发布快照及 Node 本地发布适配器 |
 | [Configuration Manager Web App](apps/web/README.md) | 计划负责编辑、存储、管理授权、配置交付和订阅服务 | 当前只有工作区骨架及 Compiler 依赖，没有页面、HTTP API 或数据库 |
 
@@ -25,7 +25,7 @@ Pipeline 通过规则文件和元数据对接 Compiler，两者没有源码或�
 项目中有两种不同的发布与更新：
 
 - **配置发布**：固定 Recipe、模板、节点和校验结果，生成可交付的配置快照。继续编辑草稿不会改变已经发布的快照。
-- **规则交付**：管理者提交正式配置，用 `pnpm rules sync` 统一处理新增、换源、删除与最新输入。`pin` 交付选定版本并停止该集全部自动处理，`resume` 恢复 auto 并立即更新。客户端按自身机制从稳定入口获取规则。部分失败保留独立成功及失败集的原交付。详见 [CLI 操作](packages/rule-set-pipeline/README.md#操作分别产生什么结果)。候选清理与自动触发分别由 [#85](https://github.com/wangyingang/sing-box-config-manager/issues/85)、[#86](https://github.com/wangyingang/sing-box-config-manager/issues/86) 交付；本次不启用生产。
+- **规则交付**：管理者提交正式配置，用 `pnpm rules sync` 统一处理新增、换源、删除与最新输入。`pin` 交付选定版本并停止该集全部自动处理，`resume` 恢复 auto 并立即更新。客户端按自身机制从稳定入口获取规则。部分失败保留独立成功及失败集的原交付。详见 [CLI 操作](packages/rule-set-pipeline/README.md#操作分别产生什么结果)。`cleanup` 按正式保留期保留历史候选并重建受管 Git 历史，始终保护当前版本；中断后重跑同一命令继续。自动触发仍由 [#86](https://github.com/wangyingang/sing-box-config-manager/issues/86) 交付；本次不启用生产。
 
 当前 Recipe／Template v2 使用 Rule Subscription v2 跟随已激活的规则版本。**配置快照固定，不代表客户端以后加载的规则内容固定**。模板和节点仍采用固定修订。Recipe／Template v1 继续支持固定产物绑定。见 [规则订阅决策](docs/adr/0006-follow-active-rule-subscriptions.md)和[固定产物契约](packages/rule-set-pipeline/contracts/README.md)。
 
@@ -107,7 +107,7 @@ pnpm --dir packages/config-compiler build
 
 ## 调用入口
 
-- `@sing-box-config-manager/rule-set-pipeline`：Node 应用服务 `getRulesStatus`、`syncRules`、`pinRuleVersion`、`resumeRuleUpdates`，与根 CLI 共用业务规则；[结果及状态契约](packages/rule-set-pipeline/contracts/rules-operations.md)。
+- `@sing-box-config-manager/rule-set-pipeline`：Node 应用服务 `getRulesStatus`、`syncRules`、`pinRuleVersion`、`resumeRuleUpdates`、`cleanupRuleHistory`，与根 CLI 共用业务规则；[结果及状态契约](packages/rule-set-pipeline/contracts/rules-operations.md)。
 
 - `@sing-box-config-manager/config-compiler`：独立核心包，不依赖 Node、数据库、文件、网络或 binary。
 - `compile(input)`：返回完整配置或结构化错误；有错误时不返回成功配置。

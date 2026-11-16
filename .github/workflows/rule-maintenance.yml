@@ -6,7 +6,7 @@ on:
       operation:
         description: Rule operation (production automation is delivered by Spec 86)
         type: choice
-        options: [status, sync, pin, resume]
+        options: [status, sync, pin, resume, cleanup]
         default: status
       target:
         description: Prepared acceptance-* artifact branch; main is rejected

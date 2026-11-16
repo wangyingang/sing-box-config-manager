@@ -1,0 +1,119 @@
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
+import type { BaselineTransport } from '../../src/maintenance-baseline-transport.js';
+import type { MaintenanceRefTransport, RefChange } from '../../src/maintenance-refs.js';
+import type { PublicationSnapshot } from '../../src/publication-repository.js';
+import { parseRulesJournal, RULE_STATE_PATH } from '../../src/rules-model.js';
+import type { RulesRepository } from '../../src/rules-repository.js';
+import { rulesEnvironment } from './rules-environment.js';
+
+/** The ordinary rules fixture plus immutable roots and atomic, leased ref updates. */
+export function cleanupEnvironment(binary: string, target = 'acceptance-issue-85') {
+  const env = rulesEnvironment(binary, target);
+  const original = env.context.repository;
+  const parents = new Map<string, string[]>();
+  const blockedHeads = new Set<string>();
+  const stageWrites: string[] = [];
+  const refWrites: RefChange[][] = [];
+  let now = new Date('2026-11-16T00:00:00.000Z');
+  let stageFault: ((ref: string) => void | Promise<void>) | undefined;
+  let beforeRefs: ((changes: RefChange[]) => void | Promise<void>) | undefined;
+  let afterRefs: ((changes: RefChange[]) => void | Promise<void>) | undefined;
+  let downloadFault: ((url: string) => void | Promise<void>) | undefined;
+
+  const snapshot = async (ref: string): Promise<PublicationSnapshot> => {
+    const head = env.heads.get(ref) ?? ref;
+    assert.ok(!blockedHeads.has(head), `Old Git history used: ${ref}`);
+    const tree = env.trees.get(head);
+    assert.ok(tree, `Unknown snapshot: ${ref}`);
+    const lineage = parents.get(head) ?? [];
+    return { head, parents: lineage, parent: lineage.length === 1 ? lineage[0] : undefined,
+      paths: [...tree.keys()], async read(path) { return tree.get(path); } };
+  };
+  const repository: RulesRepository = {
+    ...original,
+    snapshot: (ref = original.branch) => snapshot(ref),
+    async commit(...args) {
+      const head = await original.commit(...args);
+      parents.set(head, [args[1]]);
+      return head;
+    },
+    async lastChange(head, path) {
+      assert.ok(!blockedHeads.has(head), `Old path history used: ${head}`);
+      while (parents.get(head)?.length === 1) {
+        const parent = parents.get(head)![0];
+        if (!isDeepStrictEqual(env.trees.get(head)?.get(path), env.trees.get(parent)?.get(path))) break;
+        head = parent;
+        assert.ok(!blockedHeads.has(head), `Old path history used: ${head}`);
+      }
+      return head;
+    },
+    async download(url) {
+      await downloadFault?.(url);
+      const ref = new URL(url).pathname.split('/')[3];
+      assert.ok(!blockedHeads.has(env.heads.get(ref) ?? ref), `Old artifact address used: ${url}`);
+      return original.download(url);
+    },
+  };
+  const baseline: BaselineTransport = {
+    async snapshot(ref) { return env.heads.has(ref) ? snapshot(ref) : undefined; },
+    async stage(ref, parent, files, message) {
+      await stageFault?.(ref);
+      const tree = new Map(parent ? env.trees.get(parent) : undefined);
+      for (const [path, bytes] of Object.entries(files)) tree.set(path, bytes);
+      const existing = env.heads.get(ref);
+      if (existing) {
+        assert.deepEqual(parents.get(existing), parent ? [parent] : [], `Stage parent changed: ${ref}`);
+        assert.deepEqual(env.trees.get(existing), tree, `Stage bytes changed: ${ref}`);
+        return existing;
+      }
+      const hash = createHash('sha1').update(message).update(parent ?? '');
+      for (const [path, bytes] of [...tree].sort(([a], [b]) => a.localeCompare(b))) hash.update(path).update(bytes);
+      const head = hash.digest('hex');
+      env.trees.set(head, tree); parents.set(head, parent ? [parent] : []); env.heads.set(ref, head);
+      stageWrites.push(ref);
+      return head;
+    },
+  };
+  const refs: MaintenanceRefTransport = {
+    async list() { return [...env.heads].map(([branch, head]) => ({ ref: branch.startsWith('refs/') ? branch : `refs/heads/${branch}`, head })); },
+    async update(changes) {
+      if (!changes.length) return;
+      await beforeRefs?.(changes);
+      assert.equal(new Set(changes.map(change => change.ref)).size, changes.length, 'Duplicate ref transaction');
+      for (const { ref, before } of changes) {
+        assert.ok(ref.startsWith('refs/heads/'), `Unexpected ref: ${ref}`);
+        assert.equal(env.heads.get(ref.slice('refs/heads/'.length)), before, `Stale ref lease: ${ref}`);
+      }
+      for (const { ref, after } of changes) {
+        const branch = ref.slice('refs/heads/'.length);
+        if (after) { assert.ok(env.trees.has(after), `Missing commit: ${after}`); env.heads.set(branch, after); }
+        else env.heads.delete(branch);
+      }
+      refWrites.push(structuredClone(changes));
+      await afterRefs?.(changes);
+    },
+  };
+  env.context.repository = repository;
+  env.context.now = () => now;
+  env.context.cleanup = { baseline, refs };
+  return { ...env, baseline, refs, parents, blockedHeads, stageWrites, refWrites,
+    clock(iso: string) { now = new Date(iso); },
+    failStage(callback?: typeof stageFault) { stageFault = callback; },
+    beforeRefs(callback?: typeof beforeRefs) { beforeRefs = callback; },
+    afterRefs(callback?: typeof afterRefs) { afterRefs = callback; },
+    failDownload(callback?: typeof downloadFault) { downloadFault = callback; },
+    async journal() {
+      const bytes = await (await repository.snapshot()).read(RULE_STATE_PATH);
+      assert.ok(bytes, 'Missing rules journal');
+      return parseRulesJournal(bytes);
+    },
+    reachable(branch = repository.branch) {
+      const result = new Set<string>();
+      const visit = (head: string) => { if (result.has(head)) return; result.add(head); (parents.get(head) ?? []).forEach(visit); };
+      visit(env.heads.get(branch)!);
+      return result;
+    },
+  };
+}

@@ -4,6 +4,8 @@ import { parseRuleDefinition, parseSource } from './configuration.js';
 import type { CommitSourceRecord } from './github-commit.js';
 import type { SourceRecord } from './types.js';
 import { sha256 } from './release.js';
+import type { CleanupCheckpoint, CleanupReport, CleanupRun, LastCleanup } from './rules-cleanup-model.js';
+import { validateCleanupFields } from './rules-cleanup-model.js';
 
 export const RULE_STATE_PATH = 'pipeline/state.json';
 export const RULE_RECEIPT_PATH = 'pipeline/rule-operation.json';
@@ -85,6 +87,9 @@ export interface RulesJournal {
   candidates: Record<string, RuleCandidate>;
   quarantinedCandidates?: Record<string, QuarantinedRuleCandidate>;
   pendingDelivery?: PendingDelivery;
+  cleanupRun?: CleanupRun;
+  cleanupCheckpoint?: CleanupCheckpoint;
+  lastCleanup?: LastCleanup;
   writeId?: string;
 }
 
@@ -104,7 +109,7 @@ export interface RuleResult {
   continueWith?: string;
 }
 export interface RulesResult {
-  operation: 'status' | 'sync' | 'pin' | 'resume';
+  operation: 'status' | 'sync' | 'pin' | 'resume' | 'cleanup';
   dryRun: boolean;
   configurationRevision: string;
   configurationOrigin: string;
@@ -114,6 +119,7 @@ export interface RulesResult {
   results: RuleResult[];
   observedHeads?: { journal: string; stable: string };
   error?: string;
+  cleanup?: CleanupReport;
 }
 
 /** Only resolved input semantics participate; aliases and upstream revisions do not. */
@@ -172,5 +178,6 @@ export function parseRulesJournal(bytes: Buffer): RulesJournal {
   if (pending !== undefined && (!object(pending) || !uuid(pending.id) || !['sync', 'pin', 'delete'].includes(pending.kind)
     || !/^[a-f0-9]{40}$/.test(pending.stableHead) || !object(pending.changes) || !object(pending.afterRule)
     || !Array.isArray(pending.removeCandidates))) throw new Error('RULE_STATE_CORRUPT: pending delivery');
+  validateCleanupFields(value);
   return value as RulesJournal;
 }

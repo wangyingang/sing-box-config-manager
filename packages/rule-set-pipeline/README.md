@@ -2,11 +2,11 @@
 
 包名：`@sing-box-config-manager/rule-set-pipeline`。管理者通过正式配置维护规则集的来源和用途，再用 `sync` 完成新增、更新与删除。合格规则通过稳定 URL 交付给订阅使用者；构建成功、候选发布、稳定入口切换和客户端加载完成是不同的状态。
 
-[Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84) 将日常操作收敛为 `status`、`sync`、`pin`、`resume`。候选保留和完整 cleanup 由 [#85](https://github.com/wangyingang/sing-box-config-manager/issues/85) 交付，配置 push、定时运行及 GitHub 失败通知由 [#86](https://github.com/wangyingang/sing-box-config-manager/issues/86) 接线。本次代码交付不包含生产状态转换或启用。决定及迁移成本见 [配置驱动操作 ADR](docs/adr/0001-configuration-driven-rule-operations.md)。
+[Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84) 将日常操作收敛为 `status`、`sync`、`pin`、`resume`。[Spec #85](https://github.com/wangyingang/sing-box-config-manager/issues/85) 增加一个 `cleanup` 入口，按保留期重建受管历史并保留可选版本。配置 push、定时运行及 GitHub 失败通知仍由 [#86](https://github.com/wangyingang/sing-box-config-manager/issues/86) 接线。本次代码交付不包含生产状态转换或启用。决定及迁移成本见 [配置驱动操作 ADR](docs/adr/0001-configuration-driven-rule-operations.md)。
 
 ## 操作分别产生什么结果
 
-在仓库根目录执行。所有操作支持 `--json`；三种写操作支持 `--dry-run`。
+在仓库根目录执行。所有操作支持 `--json`；四种写操作支持 `--dry-run`。
 
 | 命令 | 可观察的结果 |
 | --- | --- |
@@ -14,6 +14,7 @@
 | `pnpm rules sync` | 处理全部配置差异，并为允许自动更新的规则检查最新来源、构建、验证、发布及交付；不提供单集或来源筛选 |
 | `pnpm rules pin <id> <version>` | 交付该集一个仍保留且兼容的版本，并停止该集全部上游自动处理；可以固定当前版本，重复同一操作幂等 |
 | `pnpm rules resume <id>` | 对齐该集当前正式来源，保存 auto，然后立即检查并更新；失败仍保持 auto，保留原交付 |
+| `pnpm rules cleanup` | 按正式保留期清理非当前候选并重建受管 Git 历史；保护当前交付和 pin，不检查新上游；中断后重跑同一命令继续 |
 
 例如，正式配置一次新增 A、将 B 从 X 换到 Y、删除 C。`sync` 可以交付 A、删除 C，并在 Y 获取失败时报告部分失败。此时 B 已撤销旧 pin，显示期望 Y、控制 auto、实际仍交付 X 的旧版本。修复来源后再次 `sync` 继续处理，无需撤销 A/C 的成功。
 
@@ -24,6 +25,7 @@ pnpm rules sync --dry-run --json
 pnpm rules sync
 pnpm rules pin openai '2026-11-16T12:34:56.789Z~1234abcd' --dry-run
 pnpm rules resume openai --dry-run --json
+pnpm rules cleanup --dry-run --json
 ```
 
 pin 示例的版本仅说明格式。实际操作先从 `status openai` 中选择 `selectable: true` 的 `versionId`；不要把 Git head、Release tag 或证据 URL 当作版本参数。`--dry-run` 检查真实输入和必要的原生验证，但不发布候选、不登记控制或进度、不消费正式版本身份。输出区分已验证条件、预计变化和尚未验证的远端提交/HTTPS 回读；正式执行重新核对前提。
@@ -32,7 +34,7 @@ pin 示例的版本仅说明格式。实际操作先从 `status openai` 中选�
 
 整体结果为 `success`、`partial`、`failed` 或 `pending`。CLI 仅在完全成功、无变化或正常固定跳过时返回 0；部分失败、失败和待核实均返回 1。`pending` 表示提交、回读结果或历史候选归属仍待核实，先查看 status，再根据返回的继续入口处理，不能当作没有发生变更。具体 JSON 字段见 [操作与状态契约](contracts/rules-operations.md)。
 
-旧 `update`、`rebuild`、`check-now`、`activate`、`rollback`、`initialize` 等业务命令和旧 Node API 已退出公开入口。必要的构建、验证和转换仍是内部能力，不提供旧命令兼容层。
+旧 `update`、`rebuild`、`check-now`、`activate`、`rollback`、`initialize` 及 `maintenance-enter/prepare/switch/resume/abort` 等旧命令和 Node API 已退出公开入口。必要的构建、验证和转换仍是内部能力，不提供旧命令兼容层。
 
 ## 正式配置与草稿
 
@@ -46,7 +48,7 @@ pnpm rules sync --config /path/to/rulesets-draft.yml --dry-run --json
 
 草稿可从 [`config/rulesets.yml`](config/rulesets.yml) 复制并编辑。隔离样例 [`samples/rulesets.example.yml`](samples/rulesets.example.yml) 的目标是 `acceptance-example`，须使用匹配的已准备隔离环境，不能据此写生产目标。
 
-配置使用 `schemaVersion: 3`，必须显式声明正整数 `candidateRetentionDays`。正式配置和样例采用已确定的 30 天策略；#84 只校验该字段，按天清理属于 #85。`ruleSets` 必须显式存在。`ruleSets: []` 与空 `sources: {}` 可以表达删除全部受管规则；配置缺失、无法读取、未知字段、无效引用、重复 ID 或重叠稳定路径均在写入前拒绝。
+配置使用 `schemaVersion: 3`，必须显式声明正整数 `candidateRetentionDays`。正式配置和样例采用已确定的 30 天策略；`cleanup` 读取正式值，不自行设置默认保留期。`ruleSets` 必须显式存在。`ruleSets: []` 与空 `sources: {}` 可以表达删除全部受管规则；配置缺失、无法读取、未知字段、无效引用、重复 ID 或重叠稳定路径均在写入前拒绝。
 
 当前正式配置有三个域名集 `openai`、`anthropic`、`google-deepmind`，以及双栈 `china-ip`。同类来源可以更换仓库、资产、路径或列表，无需修改代码：
 
@@ -61,7 +63,7 @@ pnpm rules sync --config /path/to/rulesets-draft.yml --dry-run --json
 
 ## 环境与远端状态
 
-环境须已配置 GitHub 身份，拥有源码读取与产物仓库所需权限。产物仓库固定为 `wangyingang/sing-box-rule-artifacts`，目标分支须已存在且有初始提交。工具不创建仓库、凭据或分支。GitHub 写入使用现有 `gh` 身份；来源读取可使用 `GITHUB_TOKEN` 或 `GH_TOKEN`。
+环境须已配置 GitHub 身份，拥有源码读取与产物仓库所需权限。产物仓库固定为 `wangyingang/sing-box-rule-artifacts`，目标分支须已存在且有初始提交。工具不创建仓库、凭据或目标分支；`cleanup` 仅创建、核验并清理本次维护拥有的临时分支。GitHub 写入使用现有 `gh` 身份；来源读取可使用 `GITHUB_TOKEN` 或 `GH_TOKEN`。
 
 原生构建固定使用 sing-box **1.14.4**、Source Format **4**。可在环境中配置绝对路径 `SING_BOX_BINARY`，也可使用本机 sbvm 已安装的 1.14.4 或 PATH 中的 binary；实际版本与能力仍由原生验证检查。
 
@@ -76,11 +78,31 @@ pnpm rules sync --config /path/to/rulesets-draft.yml --dry-run --json
 
 每次写入绑定配置修订、输入绑定、控制 revision、规则代次和预期 Git head。并发变更或新配置会使旧操作失效。未知提交先核实原操作；共享写入结果不明时停止相关写入，不用另发一次操作掩盖未知结果。
 
-从配置删除一集后，sync 撤销稳定文件、交付记录、候选和可用索引，并保留防迟到任务的最小记录。相同 ID 再新增使用新代次。删除成功不保证旧 Git 历史、CDN 或客户端缓存同步消失；完整历史清理由 #85 处理。
+从配置删除一集后，sync 撤销稳定文件、交付记录、候选和可用索引，并保留防迟到任务的最小记录。相同 ID 再新增使用新代次。删除成功不保证旧 Git 历史、CDN 或客户端缓存同步消失；受管 Git 历史由 `cleanup` 回收。
+
+## 候选保留与历史清理
+
+`cleanup` 以候选首次成功发布的 `publishedAt` 判断年龄。一天为 UTC 连续 24 小时；截止时间为本次 `cleanupObservedAt` 减正式配置的 `candidateRetentionDays`。发布时间等于或晚于 cutoff 的完整候选保留，早于 cutoff 且无保护依赖的候选可删除。
+
+当前交付和 pin 目标不受年龄限制。换源失败时仍在交付的旧源版本也属于当前版本。例如 A 已发布 60 天但仍被固定，30 天保留期不会删除它；B 替代 A 后，A 仍按原始发布时间判断，下次清理即可移除，不从替换当天重新计时。
+
+```sh
+pnpm rules cleanup --dry-run --json
+pnpm rules cleanup --json
+# 中断后使用同一入口；不需要选择内部阶段
+pnpm rules cleanup --json
+pnpm rules status openai
+```
+
+预览列出观察时间、截止时间、保留/删除候选及原因、保留候选与当前稳定文件的逻辑字节数、阻塞项和其他引用，不进入维护或执行恢复。实际执行先隔离写入，再固化本次计划，复制所有保留候选及完整证据、核验并切换受管基线，最后回读稳定入口、清理自己的临时引用并恢复写入。恢复沿用原计划；跨日重跑或调整保留期不能扩大该次删除范围。切换后中断会继续核验和收尾，不回滚到旧基线。
+
+清理保留 `versionId`、`publishedAt`、原始来源以及稳定字节/URL，可重写内部 Git commit 和证据地址。完成后 `status` 仍列出保留候选，兼容版本仍可 `pin`。cleanup 不获取最新上游、不生成新候选、不解除固定；sync 不暗中清理。未完整发布、历史时间不明或仍需核实的操作不能按年龄删除，结果列出阻塞原因，无法证明安全时保持 pending。
+
+受管历史回收同时覆盖 candidates 与 main；单分支隔离目标使用同一流程。工具只删除本次维护拥有且 head 匹配的临时/旧引用，其他分支和标签保留并报告；它们可能继续引用旧历史。不承诺固定仓库体积、GitHub 立即回收对象或旧 SHA 立即不可访问。没有到期候选且没有待回收历史时返回无变化，不重复建立基线。
 
 ## Actions 隔离操作
 
-[`rule-maintenance.yml`](../../.github/workflows/rule-maintenance.yml) 现在只提供手动 `workflow_dispatch`，调用与 CLI 相同的四个应用服务。选择 operation，并提供已经准备的 `acceptance-*` target；status 可选 id，pin 需要 id/version，resume 需要 id，写操作可选 dry_run。工作流和运行时都拒绝 main，当前没有 schedule 或配置 push 触发。
+[`rule-maintenance.yml`](../../.github/workflows/rule-maintenance.yml) 现在只提供手动 `workflow_dispatch`，调用与 CLI 相同的五个应用服务。选择 operation，并提供已经准备的 `acceptance-*` target；status 可选 id，pin 需要 id/version，resume 需要 id，cleanup 不接收 id/version，写操作可选 dry_run。工作流和运行时都拒绝 main，当前没有 schedule 或配置 push 触发。
 
 隔离目标写入使用仓库 Secret `RULE_ARTIFACT_TOKEN`，来源读取使用工作流自身 GitHub token。每次运行把共同结果写入 Step Summary；partial/failed/pending 使 job 失败，摘要作为 artifact 保留。配置仍读取源码 main 当前正式定义，不能通过工作流运行 ref 重放旧定义。生产自动运行与通知接线留给 #86。
 
@@ -90,14 +112,15 @@ pnpm rules sync --config /path/to/rulesets-draft.yml --dry-run --json
 
 ```ts
 import {
-  getRulesStatus, syncRules, pinRuleVersion, resumeRuleUpdates,
+  getRulesStatus, syncRules, pinRuleVersion, resumeRuleUpdates, cleanupRuleHistory,
 } from '@sing-box-config-manager/rule-set-pipeline';
 
 const status = await getRulesStatus({ id: 'openai' });
 const preview = await syncRules({ dryRun: true });
+const cleanupPreview = await cleanupRuleHistory({ dryRun: true });
 ```
 
-`pinRuleVersion({ id, version, dryRun? })` 和 `resumeRuleUpdates({ id, dryRun? })` 使用同一结果模型。宿主可通过可信 `context` 注入当前正式配置读取器、受限仓库、目标与 binary；它是集成/隔离测试边界，不是接受不可信调用者任意目标的 API。`draft` 只供 `syncRules({ draft, dryRun: true })`。
+`pinRuleVersion({ id, version, dryRun? })`、`resumeRuleUpdates({ id, dryRun? })` 和 `cleanupRuleHistory({ dryRun? })` 使用同一结果模型。宿主可通过可信 `context` 注入当前正式配置读取器、受限仓库、目标与 binary；它是集成/隔离测试边界，不是接受不可信调用者任意目标的 API。`draft` 只供 `syncRules({ draft, dryRun: true })`。
 
 ## 稳定订阅与客户端
 
@@ -125,7 +148,7 @@ Recipe／Template v2 跟随稳定入口，管理者 pin 会影响所有引用该
 
 ## 输入与转换边界
 
-以下为内部构建与验证能力，不能绕过四个公开业务入口直接执行运维写入。
+以下为内部构建与验证能力，不能绕过五个公开业务入口直接执行运维写入。
 
 `domain/full/keyword/regexp` 分别映射为 `domain_suffix/domain/domain_keyword/domain_regex`。每种谓词单独放在一条 Headless Rule 中，规则集合保持 OR 语义。只对同类型、同值去重，按上述类型顺序和字符串代码单元顺序排序。规范化会复制为固定 `{type, value}` 结构，调用方的对象字段顺序不影响验证或构建身份。
 
@@ -147,5 +170,7 @@ SING_BOX_TEST_BINARY=/absolute/path/to/sing-box-1.14.4 pnpm --dir packages/rule-
 ```
 
 #84 的验收范围包含新增、换源、删除、pin、resume、部分失败、查询/预览与一次性转换；真实 GitHub 生命周期在专用 `acceptance-*` 分支验证，不写生产分支。场景与远端证据见 [#84 验收记录](../../docs/verification/issue-84.md)，最终源码和交付状态以 [Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84) 的 PR 交付证据为准。
+
+#85 的验收聚焦保留范围、当前版本保护、清理后 status/pin、跨机器恢复、只读预览及受管 refs/可达历史；最终执行结果以对应 PR 和工单的验收证据为准。
 
 已有验收是各自日期与提交的历史事实：[#15 转换](docs/verification/issue-15.md)、[#16 原生验证](docs/verification/issue-16.md)、[#18 候选回读](docs/verification/issue-18.md)、[#19 v1 激活](docs/verification/issue-19.md)、[#20 v1 回滚](docs/verification/issue-20.md)、[#21 客户端故障恢复](docs/verification/issue-21.md)、[#22 重建](docs/verification/issue-22.md)、[#67 四集配置及更名](docs/verification/issue-67.md)。其中旧命令不再是当前操作指南，历史通过不表示 #84 新入口已在生产运行。
