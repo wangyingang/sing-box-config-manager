@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | maintenance-sources：两种布局的四集双来源、CIDR 七文件、source/固定版本/稳定字节、旧地址失效、两轮清理、后续选择 | rules-cleanup：四集含 CIDR 的窗口、截止边界、当前/pin 豁免、多轮清理、旧证据屏蔽后 status/pin；实际来源及完整文件核验 | 人工 enter/prepare/switch、只留当前、旧 rebuild/rollback 索引由 ADR 0002 替代 |
 | maintenance-sources：稳定入口未决写入 | rules-cleanup：真实 pendingDelivery 直接阻塞 cleanup，恢复后可清理 | 不使用旧 activation 索引 |
-| check-now：维护重新确定当前/pin、过期任务拒绝；维护期间拒绝 resume/上游 | rules-cleanup 的保留计划、维护期间三种操作零写入和上游零读取；迟到 sync/pin 不覆盖新事实 | 人工 abort/resume 阶段与旧提交次数退役 |
+| check-now：维护重新确定当前/pin、过期任务拒绝；维护期间拒绝 resume/上游 | rules-cleanup 的保留计划、维护期间三种操作零写入及 resume 零上游读取；迟到 sync/pin 不覆盖新事实 | 人工 abort/resume 阶段与旧提交次数退役 |
 | check-now：候选 files/metadata/evidence 在途阻塞 | rules-recovery 的 building 检查点；rules-cleanup 的 files/metadata/evidence 三种真实中断阻塞 | 保留真实登记，不伪造成功候选 |
 | check-now：隔离提交后断线、稳定 head 移动 | rules-cleanup 的隔离回执丢失续做与外部 head 冲突保护 | 单 cleanup 恢复同一维护计划 |
 | check-now：两布局 resume 提交后中断、来源失败保持恢复、兄弟不变、维护预览 | rules-operations/rules-selection 的 resume/pin 恢复与兄弟保护；rules-cleanup 未决交付/在途候选阻塞 | 旧 resume-check-pending 和 latestChecks/processed 字段随双暂停退役；auto 来源失败本身不应阻塞安全清理 |
@@ -25,4 +25,10 @@
 
 ## 执行状态
 
-尚在实施。迁移测试、真实隔离验收及最终验证结果在执行后补充；未执行不算通过。不会修改生产 refs、变量、开关或运行时实现。
+迁移删除前，两个本地 cleanup 文件 19/19 通过；补充新基线 HTTPS、外部 head 和 PublicationWriteError 故障验证 4/4 通过；transport、历史状态、当前工作流定向检查 26/26 通过。失败、跳过、取消和 todo 均为 0；typecheck 通过。较早测试预期错误的失败日志保留，不算通过。
+
+替代覆盖通过后删除旧 maintenance-sources 与 check-now 全文件。旧 maintenance 常规 suite 的三个 transport 保护完整移至 maintenance-transport（原 suite 后三项），旧调度/维护入口两项退役。remote-status 仅删除已迁移的未归属文件和人工维护预览两项，保留 #99 的历史解析、SRS-only 与损坏拒绝。
+
+旧维护期间禁止所有上游访问的断言不直接移植：当前 sync 在无待写配置变化时可能先读取输入，实际写入仍被 maintenance guard 拒绝；resume 在解除 pin 的写入被拒绝后不访问上游。新测试按五操作当前契约核验，不修改运行时行为。
+
+负向验证将保留窗口比较临时从 `>= cutoff` 改为 `> cutoff`，四集测试在预览集合处失败：恰好边界的域名和 CIDR 两版本被错误排除。恢复原文件后继续验证；运行时源码最终 diff 为空。日志归档到本票证据。

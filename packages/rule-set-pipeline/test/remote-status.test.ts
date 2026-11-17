@@ -3,7 +3,6 @@ import { parseBuildConfiguration } from '../src/configuration.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readRemoteStatus } from '../src/remote-status.js';
-import { manageMaintenance } from '../src/maintenance.js';
 import type { PublicationRepository } from '../src/publication-repository.js';
 import type { PublicationTransport } from '../src/publication.js';
 import { immutableUrl } from '../src/publication.js';
@@ -138,23 +137,6 @@ for (const fault of ['missing', 'schema', 'identity', 'repository', 'branch', 'p
   });
 }
 
-test('维护发现未归属的稳定文件时延期并保留文件', async () => {
-  const env = remote();
-  activate(env, addCandidate(env, 'a1'));
-  const rule = 'stable/untracked/rules.srs';
-  env.stable.set(rule, Buffer.from('untracked stable bytes'));
-  const original = new Map(env.stable);
-  const options = { repository: env.repository, publication: env.publication, activation: env.publication };
-  const status = await readRemoteStatus(options);
-  assert.equal(status.activeRuleVersions.openai.activation.candidateId, 'a1');
-  assert.deepEqual(Object.keys(status.rollbackTargets), ['openai']);
-  assert.deepEqual(status.pendingOperations, []);
-  const result = await manageMaintenance({ ...options, action: 'enter', manual: true, refs: async () => [] });
-  assert.equal(result.status, 'deferred');
-  assert.ok('blockers' in result && result.blockers.some(item => item.id === rule && item.status === 'unidentified-stable-file'));
-  assert.deepEqual(env.stable, original);
-});
-
 test('当前稳定字节损坏与非法历史记录不能被当作正常状态', async () => {
   for (const corrupt of ['bytes', 'history'] as const) {
     const env = remote(), current = addCandidate(env, 'a1'); activate(env, current);
@@ -163,41 +145,4 @@ test('当前稳定字节损坏与非法历史记录不能被当作正常状态',
     await assert.rejects(readRemoteStatus({ repository: env.repository, publication: env.publication, activation: env.publication }),
       corrupt === 'bytes' ? /Stable file integrity/ : /Invalid activation history/);
   }
-});
-
-test('维护预览保留当前规则证据，不按年龄排除固定版本', async () => {
-  const env = remote(), configured = addCandidate(env, 'aa');
-  const completedUnactivated = addCandidate(env, 'cc');
-  configured.activation.history.push({ commit: 'e'.repeat(40), id: 'recent-activation', candidateId: 'cc' });
-  Object.assign(configured.activation, { control: {
-    revision: configured.activation.id, reason: 'manual-activation', pauseAutomaticActivation: true, pauseAutomaticRetry: false,
-  } });
-  activate(env, configured);
-  env.journal.state.latestChecks = {
-    'openai': { operationId: 'ae879b98-1814-4a6e-8ce6-e1f95df2e304', status: 'unchanged', checkedAt: '2026-11-07T01:00:00Z' },
-  };
-  env.saveJournal();
-  const evidencePath = `candidates/${completedUnactivated.activation.candidateId}/readback.json`;
-  const repository = { ...env.repository, async lastChange(_head: string, path: string) {
-    assert.equal(path, evidencePath);
-    return completedUnactivated.activation.candidateEvidenceUrl.split('/')[5];
-  } };
-  const inspect = () => manageMaintenance({ ...env, repository, action: 'preview', manual: true,
-    refs: async () => [], activation: env.publication });
-  const preview = await inspect();
-  assert.equal(preview.status, 'ready');
-  assert.ok('plan' in preview);
-  assert.deepEqual(preview.plan.retain.active.map(entry => entry.record.candidateId).sort(), ['aa']);
-  assert.deepEqual(preview.plan.retain.active.find(entry => entry.record.candidateId === 'aa')!.record.control,
-    Reflect.get(configured.activation, 'control'));
-  assert.deepEqual(Object.keys(preview.plan.retain.progress.latestChecks), ['openai']);
-  assert.deepEqual(preview.plan.discard.candidateIds, [completedUnactivated.activation.candidateId]);
-  assert.deepEqual(preview.plan.discard.activations['stable/openai/activation.json'], configured.activation.history);
-
-  env.history.delete(completedUnactivated.activation.candidateEvidenceUrl);
-  const deferred = await inspect();
-  assert.equal(deferred.status, 'deferred');
-  assert.ok('plan' in deferred);
-  assert.deepEqual(deferred.plan.discard.candidateIds, []);
-  assert.ok(deferred.blockers.some(blocker => blocker.candidateId === 'cc' && blocker.status === 'candidate-completion-unverified'));
 });

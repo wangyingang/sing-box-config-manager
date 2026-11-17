@@ -3,6 +3,7 @@ import test from 'node:test';
 import { cleanupRuleHistory } from '../../src/rules-cleanup.js';
 import { syncRules, pinRuleVersion } from '../../src/rules-operations.js';
 import { getRulesStatus } from '../../src/rules-status.js';
+import { PublicationWriteError } from '../../src/publication-repository.js';
 import { RULE_STATE_PATH, type RulesResult } from '../../src/rules-model.js';
 import { cleanupEnvironment, fourSetCleanupEnvironment } from '../fixtures/cleanup-environment.js';
 
@@ -126,7 +127,7 @@ for (const target of ['acceptance-cleanup-guards', 'main']) {
       const state = args[2][RULE_STATE_PATH];
       const journal = state && JSON.parse(state.toString());
       if (fault === 'isolation' && journal?.cleanupRun?.phase === 'isolated' || fault === 'checkpoint' && journal?.cleanupCheckpoint) {
-        fault = undefined; offline = true; throw new Error('Checkpoint response lost');
+        fault = undefined; offline = true; throw new PublicationWriteError(head, 'Checkpoint response lost');
       }
       return head;
     };
@@ -179,7 +180,10 @@ for (const stage of ['files', 'metadata', 'evidence'] as const) test(`${stage} �
 for (const target of ['acceptance-cleanup-conflict', 'main']) test(`${target}: 新基线 HTTPS 失败不切换，外部 head 改变后原计划保持隔离`, async () => {
   const env = cleanupEnvironment(binary!, target), input = { context: env.context };
   success(await syncRules(input));
-  const before = new Map(env.heads);
+  const before = new Map(env.heads), writesBefore = env.writes.length;
+  const missingTool = await cleanupRuleHistory({ context: { ...env.context, binary: undefined } });
+  assert.notEqual(missingTool.status, 'success');
+  assert.deepEqual(env.heads, before); assert.equal(env.writes.length, writesBefore); assert.equal(env.stageWrites.length, 0);
   env.failDownload(url => {
     const ref = new URL(url).pathname.split('/')[3];
     if (env.stageWrites.some(branch => env.heads.get(branch) === ref) && url.includes('/stable/')) throw new Error('New baseline HTTPS unavailable');
