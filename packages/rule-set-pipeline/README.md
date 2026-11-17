@@ -220,6 +220,8 @@ pnpm --dir packages/rule-set-pipeline test
 SING_BOX_TEST_BINARY=/absolute/path/to/sing-box-1.14.4 pnpm --dir packages/rule-set-pipeline test:integration
 ```
 
+候选完整性、只读查询、版本重选及并发 pin 的当前覆盖集中在 `test/integration/rules-selection.test.ts`：纯结构错误在候选证据边界集中验证，pin 拒绝交付的断言同时检查当前与兄弟集稳定字节。摘要自洽但内容无效的 SRS 仍由真实原生复验拒绝；status 的候选检查是结构验证，不能替代 pin 的原生复验。旧测试逐项去向、保留给后续工单的段落和整理前基线见 [#94 迁移记录](../../docs/verification/issue-94.md)。
+
 #84 的验收范围包含新增、换源、删除、pin、resume、部分失败、查询/预览与一次性转换；真实 GitHub 生命周期在专用 `acceptance-*` 分支验证，不写生产分支。场景与远端证据见 [#84 验收记录](../../docs/verification/issue-84.md)，最终源码和交付状态以 [Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84) 的 PR 交付证据为准。
 
 #85 的验收聚焦保留范围、当前版本保护、清理后 status/pin、跨机器恢复、只读预览及受管 refs/可达历史。#86 聚焦真实配置 push、手工入口一致性、日常编排、失败映射与生产门禁；定时行为的本地测试不冒充原生 schedule 事件，未验证邮箱实收不报告为收到。最终执行结果以各 PR 和工单的验收证据为准。
