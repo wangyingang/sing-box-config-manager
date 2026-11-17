@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import test from 'node:test';
 import { stringify } from 'yaml';
 import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
@@ -16,14 +16,25 @@ import { parseRulesJournal, RULE_STATE_PATH, type RulesResult } from '../../src/
 import { syncRules, pinRuleVersion } from '../../src/rules-operations.js';
 import { cleanupRuleHistory } from '../../src/rules-cleanup.js';
 import { getRulesStatus } from '../../src/rules-status.js';
+import { candidateFiles } from '../../src/candidate-publication.js';
 import { sha256 } from '../../src/release.js';
 
-test('GitHub 隔离清理：窗口内候选可查可 pin，真实历史切换且生产 refs/开关不变', {
-  skip: process.env.RULE_CLEANUP_PROBE !== '1', timeout: 1_200_000,
+test('GitHub 四集 cleanup：保留窗口、切换中断、HTTPS 失败恢复与多轮选择，生产 refs/开关不变', {
+  skip: process.env.RULE_CLEANUP_PROBE !== '1', timeout: 3_600_000,
 }, async t => {
-  const binary = process.env.SING_BOX_TEST_BINARY; assert.ok(binary);
+  const binary = process.env.SING_BOX_TEST_BINARY, evidencePath = process.env.RULE_CLEANUP_EVIDENCE;
+  assert.ok(binary, 'Set SING_BOX_TEST_BINARY'); assert.ok(evidencePath, 'Set RULE_CLEANUP_EVIDENCE to a new file');
+  const exec = promisify(execFile);
+  const sourceIdentity = { commit: (await exec('git', ['rev-parse', 'HEAD'])).stdout.trim(),
+    status: (await exec('git', ['status', '--porcelain'])).stdout,
+    diffSha256: sha256((await exec('git', ['diff', 'HEAD'], { maxBuffer: 10 * 1024 * 1024 })).stdout),
+    probeSha256: sha256(await readFile(new URL(import.meta.url))), binary,
+    command: 'RULE_CLEANUP_PROBE=1 pnpm --dir packages/rule-set-pipeline test:acceptance:cleanup' };
+  const startedAt = new Date().toISOString();
   const token = process.env.GH_TOKEN ?? (await promisify(execFile)('gh', ['auth', 'token'])).stdout.trim();
-  const target = `acceptance-issue-85-${randomUUID()}`;
+  const target = `acceptance-issue-98-${randomUUID()}`;
+  await writeFile(evidencePath, JSON.stringify({ target, sourceIdentity, startedAt, status: 'started' }, null, 2) + '\n', { flag: 'wx' });
+  const readbacks: unknown[] = [];
   const runIds = new Set<string>();
   const ownedHeads = new Map<string, string>();
   const observations: unknown[] = [];
@@ -65,6 +76,8 @@ test('GitHub 隔离清理：窗口内候选可查可 pin，真实历史切换且
     assert.ok(changes.every(change => allowedRef(change.ref)), 'Cleanup attempted to change an unowned ref');
     const before = new Map((await rawRefs.list()).map(({ ref, head }) => [ref, head]));
     for (const change of changes) assert.equal(before.get(change.ref), change.before, `Ref changed before transaction: ${change.ref}`);
+    const switching = changes.some(change => change.ref === branchRef(target) && change.after);
+    if (switching && rejectSwitch) throw new Error('Injected atomic switch interruption');
     let error: unknown;
     try { await rawRefs.update(changes); } catch (caught) { error = caught; }
     const after = new Map((await rawRefs.list()).map(({ ref, head }) => [ref, head]));
@@ -74,6 +87,7 @@ test('GitHub 隔离清理：窗口内候选可查可 pin，真实历史切换且
     }
     observations.push({ label: 'ref-transaction', changes, observed: changes.map(({ ref }) => ({ ref, head: after.get(ref) })), error: error && String(error) });
     if (error) throw error;
+    if (switching) { switchCount++; if (loseReply) { loseReply = false; throw new Error('Injected lost switch reply'); } }
   } };
   const production = async () => ({
     main: (await api('git/ref/heads/main')).object.sha,
@@ -81,45 +95,78 @@ test('GitHub 隔离清理：窗口内候选可查可 pin，真实历史切换且
     variables: await ghJson(['api', 'repos/wangyingang/sing-box-config-manager/actions/variables']),
   });
   const before = await production();
+  let rejectSwitch = false, loseReply = false, switchCount = 0;
+  let stageInterrupted = false, stableOffline = false;
+  const blockedHeads = new Set<string>();
   let passed = false;
   t.after(async () => {
+    const cleanupErrors: string[] = [];
     const live = await rawRefs.list();
     const owned = live.filter(({ ref, head }) => allowedRef(ref) && ownedHeads.get(ref) === head);
-    if (owned.length) await refs.update(owned.map(({ ref, head }) => ({ ref, before: head })));
+    if (owned.length) await refs.update(owned.map(({ ref, head }) => ({ ref, before: head }))).catch(error => cleanupErrors.push(String(error)));
     const remaining = (await rawRefs.list()).filter(({ ref }) => allowedRef(ref));
     const after = await production();
-    const evidence = { target, runIds: [...runIds], before, after, observations, failures, passed,
+    const evidence = { sourceIdentity, startedAt, endedAt: new Date().toISOString(), readbacks, switchCount, cleanupErrors, target, runIds: [...runIds], before, after, observations, failures, passed,
       removedRefs: owned.map(({ ref }) => ref), remaining, at: new Date().toISOString() };
-    if (process.env.RULE_CLEANUP_EVIDENCE) await writeFile(process.env.RULE_CLEANUP_EVIDENCE, JSON.stringify(evidence, null, 2) + '\n');
+    await writeFile(evidencePath, JSON.stringify(evidence, null, 2) + '\n');
+    assert.deepEqual(cleanupErrors, []);
     assert.deepEqual(after, before, 'Production refs or Actions variables changed');
     assert.deepEqual(remaining, [], 'Probe left temporary references with an unknown head');
     console.log(JSON.stringify({ target, runIds: [...runIds], passed, cleaned: true, productionUnchanged: true }));
   });
   try {
     assert.ok(!(await rawRefs.list()).some(({ ref }) => ref === branchRef(target)));
-    const head = await createGitCommit(api, { 'README.md': Buffer.from(`Issue 85 isolated cleanup probe ${target}\n`) }, '隔离候选保留与清理验收');
+    const head = await createGitCommit(api, { 'README.md': Buffer.from(`Issue 98 isolated cleanup probe ${target}\n`) }, '隔离候选保留与清理验收');
     await api('git/refs', { ref: branchRef(target), sha: head });
     const repository = githubRulesRepository(target, request);
-    const download = repository.download;
+    const download = repository.download, snapshot = repository.snapshot;
+    repository.snapshot = async ref => {
+      assert.ok(!blockedHeads.has(ref ?? ''), `Old snapshot used: ${ref}`);
+      return snapshot(ref);
+    };
     repository.download = async url => {
+      const ref = new URL(url).pathname.split('/')[3];
+      assert.ok(!blockedHeads.has(ref), `Old evidence address used: ${url}`);
+      if (stableOffline && ref === target && url.includes('/stable/')) throw new Error('Injected stable HTTPS readback outage');
       try { return await download(url); }
       catch (error) { if (error instanceof TypeError) return download(url); throw error; }
     };
     const baseline = githubBaselineTransport(request);
-    const sourceCache = new Map<string, Response>();
-    let sourceCalls = 0;
-    const sourceFetch: typeof fetch = async (url, init) => {
-      sourceCalls++;
-      const address = String(url).replace(/\/releases\/latest$/, '/releases/tags/20261104112839');
-      const cached = sourceCache.get(address); if (cached) return cached.clone();
-      const endpoint = new URL(address); assert.equal(endpoint.origin, 'https://api.github.com');
-      const accept = new Headers(init?.headers).get('Accept') ?? 'application/vnd.github+json';
-      const { stdout } = await promisify(execFile)('gh', ['api', '-H', `Accept: ${accept}`, endpoint.pathname.slice(1)],
-        { encoding: 'buffer', maxBuffer: 20 * 1024 * 1024 });
-      const response = new Response(new Uint8Array(stdout)); sourceCache.set(address, response.clone()); return response;
+    const originalTag = '20261104112839', updatedTag = '20261108011013';
+    const originalCommit = 'f162630c8cdad6ced5ef59e606cc93919123ac57';
+    const updatedCommit = '62bc1fc8b015bece77271b568e10d6337915bc96';
+    const requests: string[] = [];
+    const sources = new Map<string, Response>();
+    let tag = originalTag, commit = originalCommit;
+    const upstream = async (address: string, init?: RequestInit) => {
+      const cached = sources.get(address); if (cached) return cached.clone();
+      const endpoint = new URL(address);
+      let response: Response;
+      if (endpoint.origin === 'https://api.github.com') {
+        const accept = new Headers(init?.headers).get('Accept') ?? 'application/vnd.github+json';
+        const { stdout } = await exec('gh', ['api', '-H', `Accept: ${accept}`, endpoint.pathname.slice(1) + endpoint.search],
+          { encoding: 'buffer', maxBuffer: 20 * 1024 * 1024 });
+        response = new Response(new Uint8Array(stdout));
+      } else {
+        assert.equal(endpoint.origin, 'https://raw.githubusercontent.com');
+        response = await fetch(address, { ...init, signal: AbortSignal.timeout(120_000) });
+        assert.ok(response.ok, `Source HTTP ${response.status}`);
+      }
+      sources.set(address, response.clone()); return response;
     };
-    const official = parseBuildConfiguration(readOfficialConfiguration());
-    const config = { ...official, sources: { dlc: official.sources.dlc }, ruleSets: official.ruleSets.filter(rule => rule.id === 'openai') };
+    const sourceFetch: typeof fetch = async (url, init) => {
+      const address = String(url); requests.push(address);
+      if (address.endsWith('/branches/ip-lists')) {
+        const branch = await (await upstream(address, init)).json();
+        assert.equal(branch.name, 'ip-lists');
+        assert.match(branch.commit.sha, /^[a-f0-9]{40}$/);
+        const compare = await (await upstream(`https://api.github.com/repos/gaoyifan/china-operator-ip/compare/${commit}...${branch.commit.sha}?per_page=1`, init)).json();
+        assert.equal(compare.merge_base_commit.sha, commit);
+        return Response.json({ name: 'ip-lists', commit: { sha: commit } });
+      }
+      return upstream(address.replace(/\/releases\/latest$/, `/releases/tags/${tag}`), init);
+    };
+    const config = parseBuildConfiguration(readOfficialConfiguration()); config.target.branch = target;
     // The isolated application clock supplies candidate age; upstream bytes,
     // Git history, reference transactions and HTTPS delivery are all real.
     let revision = 1, now = '2026-09-01T00:00:00.000Z';
@@ -132,6 +179,7 @@ test('GitHub 隔离清理：窗口内候选可查可 pin，真实历史切换且
         const state = parseRulesJournal((await snapshot.read(RULE_STATE_PATH))!);
         assert.equal(state.targetBranch, target); assert.equal(state.cleanupRun?.id, match[1]);
         runIds.add(match[1]);
+        if (stageInterrupted && ref.endsWith('-journal')) throw new Error('Injected journal stage interruption');
         const staged = await baseline.stage(ref, parent, files, message);
         ownedHeads.set(branchRef(ref), staged);
         return staged;
@@ -152,39 +200,95 @@ test('GitHub 隔离清理：窗口内候选可查可 pin，真实历史切换且
       };
       await visit(start); return result;
     };
-    const expired = (await check('publish-expired', syncRules(input))).results[0].current!;
-    config.ruleSets[0] = { ...config.ruleSets[0], list: 'anthropic' }; revision++; now = '2026-11-01T00:00:00.000Z';
-    const retained = (await check('publish-retained', syncRules(input))).results[0].current!;
-    config.ruleSets[0] = { ...config.ruleSets[0], list: 'google-deepmind' }; revision++; now = '2026-11-16T00:00:00.000Z';
+    const first = await check('publish-four-expired', syncRules(input));
+    const expired = first.results[0].current!, expiredCidr = first.results[3].current!;
+    const pinned = first.results[1].current!, protectedCurrent = first.results[2].current!;
+    await check('pin-old-anthropic', pinRuleVersion({ ...input, id: 'anthropic', version: pinned.versionId! }));
+    config.ruleSets[0] = { ...config.ruleSets[0], list: 'anthropic' }; revision++; now = '2026-10-17T00:00:00.000Z';
+    commit = updatedCommit;
+    const boundaryResult = await check('publish-boundary', syncRules(input));
+    const boundary = boundaryResult.results[0].current!, cidr = boundaryResult.results[3].current!;
+    config.ruleSets[0] = { ...config.ruleSets[0], list: 'google-deepmind' }; revision++; now = '2026-11-01T00:00:00.000Z';
+    const recent = (await check('publish-recent', syncRules(input))).results[0].current!;
+    config.ruleSets[0] = { ...config.ruleSets[0], list: 'anthropic' }; revision++; now = '2026-11-16T00:00:00.000Z'; tag = updatedTag;
     const current = (await check('publish-current', syncRules(input))).results[0].current!;
+    assert.notEqual(current.candidateId, boundary.candidateId);
+    const retained = [pinned, protectedCurrent, boundary, recent, current, cidr];
     const beforeCleanup = await repository.snapshot();
     const oldHistory = await ancestorHeads(beforeCleanup.head);
-    const sourceCount = sourceCalls;
+    const originalJournal = parseRulesJournal((await beforeCleanup.read(RULE_STATE_PATH))!);
+    const stableBytes = new Map(await Promise.all(beforeCleanup.paths.filter(path => path.startsWith('stable/'))
+      .map(async path => [path, await beforeCleanup.read(path)] as const)));
+    const sourceCount = requests.length;
     const preview = await check('cleanup-preview', cleanupRuleHistory({ ...input, dryRun: true }));
-    assert.deepEqual(preview.cleanup?.plan.discard.candidateIds, [expired.candidateId]);
-    assert.deepEqual(new Set(preview.cleanup?.plan.retain.candidateIds), new Set([retained.candidateId, current.candidateId]));
+    assert.equal(preview.cleanup?.plan.cutoff, '2026-10-17T00:00:00.000Z');
+    assert.deepEqual(new Set(preview.cleanup?.plan.discard.candidateIds), new Set([expired.candidateId, expiredCidr.candidateId]));
+    assert.deepEqual(new Set(preview.cleanup?.plan.retain.candidateIds), new Set(retained.map(x => x.candidateId)));
     assert.equal((await repository.snapshot()).head, beforeCleanup.head);
-    const cleaned = await check('cleanup', cleanupRuleHistory(input));
-    assert.equal(cleaned.cleanup?.phase, 'completed'); assert.equal(sourceCalls, sourceCount);
+    stageInterrupted = true;
+    const interrupted = await cleanupRuleHistory(input); observations.push({ label: 'stage-interrupted', result: interrupted });
+    assert.equal(interrupted.status, 'pending', JSON.stringify(interrupted)); assert.match(interrupted.error!, /Injected journal stage interruption/);
+    assert.equal(interrupted.cleanup?.continueWith, 'cleanup');
+    const maintenanceId = interrupted.cleanup?.maintenanceId; assert.ok(maintenanceId);
+    stageInterrupted = false; rejectSwitch = true;
+    const rejected = await cleanupRuleHistory(input); observations.push({ label: 'switch-interrupted', result: rejected });
+    assert.equal(rejected.status, 'pending', JSON.stringify(rejected)); assert.match(rejected.error!, /Injected atomic switch interruption/);
+    assert.equal(rejected.cleanup?.maintenanceId, maintenanceId); assert.equal(switchCount, 0);
+    rejectSwitch = false; loseReply = true; stableOffline = true;
+    const readbackFailed = await cleanupRuleHistory(input); observations.push({ label: 'stable-readback-failed', result: readbackFailed });
+    assert.equal(readbackFailed.status, 'pending', JSON.stringify(readbackFailed)); assert.match(readbackFailed.error!, /Injected stable HTTPS readback outage/);
+    assert.equal(readbackFailed.cleanup?.maintenanceId, maintenanceId); assert.equal(switchCount, 1);
+    stableOffline = false;
+    const cleaned = await check('cleanup-recovered', cleanupRuleHistory({ context: { ...context } }));
+    assert.equal(cleaned.cleanup?.phase, 'completed'); assert.equal(cleaned.cleanup?.maintenanceId, maintenanceId);
+    assert.equal(requests.length, sourceCount); assert.equal(switchCount, 1);
     const afterCleanup = await repository.snapshot(), newHistory = await ancestorHeads(afterCleanup.head);
     assert.ok([...newHistory].every(head => !oldHistory.has(head)), 'Managed history still reaches the old root');
     assert.ok(newHistory.size < oldHistory.size);
-    assert.ok(!afterCleanup.paths.some(path => path.startsWith(`candidates/${expired.candidateId}/`)));
-    const status = await getRulesStatus(input); observations.push({ label: 'status-after-cleanup', status });
-    assert.equal(status.status, 'success', JSON.stringify(status));
-    assert.equal(status.rules?.[0].current?.candidateId, current.candidateId);
-    assert.deepEqual(new Set(status.rules?.[0].candidates.map(candidate => candidate.versionId)), new Set([retained.versionId, current.versionId]));
-    assert.ok(status.rules?.[0].candidates.every(candidate => candidate.selectable));
-    for (const [path, evidence] of Object.entries(current.files)) {
-      const bytes = await repository.download(`https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${afterCleanup.head}/${path}`);
-      assert.equal(sha256(bytes), evidence.sha256); assert.equal(bytes.length, evidence.byteLength);
-    }
-    const pinned = await check('pin-retained', pinRuleVersion({ ...input, id: 'openai', version: retained.versionId! }));
-    assert.equal(pinned.results[0].current?.versionId, retained.versionId);
-    assert.equal(pinned.results[0].current?.publishedAt, retained.publishedAt);
-    assert.equal(sourceCalls, sourceCount);
+    oldHistory.forEach(head => blockedHeads.add(head));
+    const readBytes = async (url: string, expected?: Buffer) => {
+      const bytes = await repository.download(url);
+      if (expected) assert.deepEqual(bytes, expected);
+      readbacks.push({ url, sha256: sha256(bytes), byteLength: bytes.length, at: new Date().toISOString() });
+      return bytes;
+    };
+    const verifyRetained = async () => {
+      const snapshot = await repository.snapshot();
+      const journal = parseRulesJournal((await snapshot.read(RULE_STATE_PATH))!);
+      const status = await getRulesStatus({ context: { ...context } }); observations.push({ label: 'status-after-cleanup', status });
+      assert.equal(status.status, 'success', JSON.stringify(status)); assert.equal(status.rules?.length, 4);
+      for (const version of retained) {
+        const candidate = journal.candidates[version.candidateId]; assert.ok(candidate);
+        assert.equal(candidate.versionId, version.versionId); assert.equal(candidate.publishedAt, version.publishedAt);
+        assert.deepEqual(candidate.source, version.source);
+        assert.notEqual(candidate.evidenceUrl, originalJournal.candidates[candidate.id].evidenceUrl);
+        assert.ok(status.rules!.find(rule => rule.id === version.logicalId)!.candidates.some(x => x.versionId === version.versionId && x.selectable));
+        for (const file of candidateFiles(candidate.definition)) {
+          const path = `candidates/${candidate.id}/${file}`;
+          await readBytes(`https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${snapshot.head}/${path}`, (await snapshot.read(path))!);
+        }
+      }
+      assert.ok(!journal.candidates[expired.candidateId]); assert.ok(!journal.candidates[expiredCidr.candidateId]);
+      return snapshot;
+    };
+    await verifyRetained();
+    for (const [path, bytes] of stableBytes) await readBytes(`https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${afterCleanup.head}/${path}`, bytes!);
+    const selected = await check('pin-retained-boundary', pinRuleVersion({ ...input, id: 'openai', version: boundary.versionId! }));
+    assert.equal(selected.results[0].current?.versionId, boundary.versionId);
+    assert.equal(selected.results[0].current?.publishedAt, boundary.publishedAt);
+    const secondBefore = await repository.snapshot();
+    const secondBytes = new Map(await Promise.all(secondBefore.paths.filter(path => path.startsWith('stable/'))
+      .map(async path => [path, await secondBefore.read(path)] as const)));
+    const secondHistory = await ancestorHeads(secondBefore.head); now = '2026-11-17T00:00:00.000Z';
+    await check('cleanup-second-round', cleanupRuleHistory(input)); assert.equal(switchCount, 2);
+    secondHistory.forEach(head => blockedHeads.add(head));
+    const second = await verifyRetained();
+    for (const [path, bytes] of secondBytes) await readBytes(`https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${second.head}/${path}`, bytes!);
+    const chosenCidr = await check('pin-retained-cidr', pinRuleVersion({ ...input, id: 'china-ip', version: cidr.versionId! }));
+    assert.equal(chosenCidr.results[0].current?.source.commit, updatedCommit);
+    assert.equal(requests.length, sourceCount);
     observations.push({ label: 'history', before: beforeCleanup.head, after: afterCleanup.head,
-      oldReachableCommits: [...oldHistory], newReachableCommits: [...newHistory], sourceCalls });
+      oldReachableCommits: [...oldHistory], newReachableCommits: [...newHistory], sourceCalls: requests.length });
     passed = true;
   } catch (error) { failures.push(String(error)); throw error; }
 });

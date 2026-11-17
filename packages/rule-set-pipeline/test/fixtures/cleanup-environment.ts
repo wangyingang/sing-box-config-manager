@@ -6,6 +6,7 @@ import type { MaintenanceRefTransport, RefChange } from '../../src/maintenance-r
 import type { PublicationSnapshot } from '../../src/publication-repository.js';
 import { parseRulesJournal, RULE_STATE_PATH } from '../../src/rules-model.js';
 import type { RulesRepository } from '../../src/rules-repository.js';
+import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
 import { rulesEnvironment } from './rules-environment.js';
 
 /** The ordinary rules fixture plus immutable roots and atomic, leased ref updates. */
@@ -116,4 +117,28 @@ export function cleanupEnvironment(binary: string, target = 'acceptance-issue-85
       return result;
     },
   };
+}
+
+/** Four curated sets, real native builds, deterministic Release and Git/CIDR inputs. */
+export function fourSetCleanupEnvironment(binary: string, target: string) {
+  const env = cleanupEnvironment(binary, target);
+  const config = parseBuildConfiguration(readOfficialConfiguration());
+  config.target.branch = target;
+  env.configure(config);
+  const releaseFetch = env.context.fetch!;
+  let revision = 1;
+  const inputs = new Map([[revision, '192.0.2.0/25\n2001:db8:1::/48\n']]);
+  const sourceRequests: string[] = [];
+  env.context.fetch = async (url, init) => {
+    const address = String(url); sourceRequests.push(address);
+    if (address.endsWith('/branches/ip-lists')) return Response.json({ name: 'ip-lists', commit: { sha: String(revision).repeat(40) } });
+    if (address.startsWith('https://raw.githubusercontent.com/gaoyifan/')) {
+      const commit = address.split('/').at(-2)!;
+      const input = inputs.get(Number(commit[0]));
+      assert.equal(commit, commit[0].repeat(40)); assert.ok(input);
+      return new Response(input);
+    }
+    return releaseFetch(url, init);
+  };
+  return { ...env, sourceRequests, changeCidr(input: string) { inputs.set(++revision, input); } };
 }

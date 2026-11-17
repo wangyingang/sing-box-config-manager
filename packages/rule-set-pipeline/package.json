@@ -11,6 +11,8 @@
     "build": "tsc -p tsconfig.build.json",
     "test:integration": "pnpm --filter @sing-box-config-manager/config-compiler generate:validator && node --import tsx --test test/integration/*.test.ts",
     "rules": "node --import tsx src/cli.ts",
+    "test:acceptance:cleanup": "node --import tsx --test test/acceptance/rules-cleanup.test.ts",
+    "test:acceptance:transport": "node --import tsx --test test/acceptance/maintenance-refs.test.ts",
     "test:acceptance:rules": "node --import tsx --test test/acceptance/rules-operations.test.ts"
   },
   "exports": {
