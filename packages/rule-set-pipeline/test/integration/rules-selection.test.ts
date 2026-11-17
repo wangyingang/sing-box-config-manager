@@ -250,6 +250,29 @@ test('status 报告残缺候选但不补证据、不读上游、不推动恢复'
   });
 });
 
+test('当前候选证据丢失或损坏时 status 保留真实交付，候选不可选且不写入', async t => {
+  const env = await versions('main');
+  const current = env.second.results[0].current!;
+  const healthy = (await getRulesStatus({ context: env.context })).rules!.find(rule => rule.id === 'openai')!;
+  for (const fault of ['missing', 'corrupt']) await t.test(fault, async () => {
+    env.restore();
+    const candidate = (await env.journal()).candidates[current.candidateId];
+    const d = await damage(env, candidate);
+    d.replace('readback.json', fault === 'missing' ? undefined : Buffer.from('corrupt evidence'));
+    const heads = new Map(env.heads), writes = env.writes.length, journal = await env.journal();
+    const before = await stableBytes(env), reads = env.requests.length;
+    const status = await getRulesStatus({ context: { ...env.context } });
+    assert.equal(status.status, 'success', JSON.stringify(status));
+    const rule = status.rules!.find(rule => rule.id === 'openai')!;
+    assert.deepEqual(rule.current, current); assert.equal(rule.deliveryState, 'delivered');
+    assert.deepEqual(rule.stableUrls, healthy.stableUrls); assert.deepEqual(rule.control, healthy.control);
+    assert.equal(rule.candidates.find(candidate => candidate.id === current.candidateId)?.selectable, false);
+    assert.equal(rule.candidateCount, 1);
+    assert.deepEqual(env.heads, heads); assert.equal(env.writes.length, writes); assert.equal(env.requests.length, reads);
+    assert.deepEqual(await env.journal(), journal); assert.deepEqual(await stableBytes(env), before);
+  });
+});
+
 test('合格但从未交付的保留候选可以 pin，其他规则的版本不能冒用', async () => {
   const env = await versions('main');
   env.upstream({ openai: 'domain:retained-unselected.example' });
@@ -281,7 +304,7 @@ test('合格但从未交付的保留候选可以 pin，其他规则的版本不�
 for (const target of ['acceptance-selection', 'main']) {
   test(`${target}: 不同规则的 pin 竞争同一 head，失败方不覆盖成功方`, async () => {
     const env = await versions(target);
-    const before = await stableBytes(env);
+    const before = await stableBytes(env), writes = env.writes.length;
     let arrivals = 0, release!: () => void;
     const ready = new Promise<void>(resolve => { release = resolve; });
     env.beforeWrite(async files => {
@@ -301,6 +324,7 @@ for (const target of ['acceptance-selection', 'main']) {
     assert.equal(status.rules!.find(rule => rule.id === losing.id)?.current?.candidateId, losing.current!.candidateId);
     assert.equal(status.rules!.find(rule => rule.id === losing.id)?.control?.mode, 'auto');
     assert.equal((await env.journal()).pendingDelivery, undefined);
+    assert.equal(env.writes.length - writes, 3, 'only the winning registration, stable delivery and completion may commit');
     const after = await stableBytes(env);
     for (const [path, bytes] of before) if (path.startsWith(`stable/${losing.id}/`)) assert.deepEqual(after.get(path), bytes, path);
   });
@@ -311,7 +335,7 @@ for (const target of ['acceptance-selection', 'main']) {
     const old = env.first.results[0].current!;
     for (const mode of ['registration', 'applied', 'not-applied', 'unknown', 'readback']) await t.test(mode, async () => {
       env.restore(); let injected = false, offline = false;
-      const before = await stableBytes(env);
+      const before = await stableBytes(env), originalTotal = env.writes.length;
       const stableWrites = () => env.writes.filter(write => Object.keys(write.files).some(path => path.startsWith('stable/'))).length;
       const originalWrites = stableWrites();
       repo.snapshot = async branch => {
@@ -351,6 +375,7 @@ for (const target of ['acceptance-selection', 'main']) {
         assert.equal(recovered.status, 'success', JSON.stringify(recovered));
         assert.equal(recovered.results[0].current?.candidateId, old.candidateId);
         assert.equal(stableWrites() - originalWrites, 1);
+        assert.equal(env.writes.length - originalTotal, 3, 'lost responses must not duplicate registration, stable delivery or completion');
         assert.equal((await env.journal()).pendingDelivery, undefined);
         for (const [path, bytes] of before) if (path.startsWith('stable/china-ip/')) assert.deepEqual((await stableBytes(env)).get(path), bytes, path);
       } finally { repo.snapshot = snapshot; repo.download = download; repo.commit = commit; }

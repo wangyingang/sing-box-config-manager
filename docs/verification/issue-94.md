@@ -16,9 +16,10 @@
 | S6 | `status 报告残缺候选但不补证据、不读上游、不推动恢复`：files/metadata/evidence 三阶段中断，查询保留 current，列出不可选在途候选；journal、heads、上游读取与写入均不变 |
 | S7 | `合格但从未交付的保留候选可以 pin，其他规则的版本不能冒用`：准备失败后 verified 候选无稳定写入，status 可选，跨规则 pin 失败，本规则成功且兄弟集不变 |
 | S8 | `<target>: 不同规则的 pin 竞争同一 head，失败方不覆盖成功方`：登记前屏障制造两个真实 CAS 竞争，恰好一个成功，失败方保留原版本和 auto |
-| S9 | `<target>: pin 响应丢失先核实远端，查询不恢复且重试不重复交付`：registration/applied/not-applied/unknown/readback；依据 writeId 或交付回执核实，查询零写入，换会话重试最终只写一次稳定文件 |
+| S9 | `<target>: pin 响应丢失先核实远端，查询不恢复且重试不重复交付`：registration/applied/not-applied/unknown/readback；依据 writeId 或交付回执核实，查询零写入，换会话重试最终只写一次稳定文件，总共只提交登记、稳定交付和收尾三次 |
 | S10 | `<target>: 较新的 pin 取代响应未知的旧 pin，迟到会话不能覆盖`：新 pin 在旧响应返回前完成，迟到会话保留新 heads、全部稳定字节和控制修订，后续 sync 不重放 |
 | S11 | `<target>: pin 写入前配置、维护、代次或 head 变化不会被旧会话覆盖`：configuration/maintenance/generation/head；外部权威改变后旧操作不切换稳定文件，不覆盖对方 head |
+| S12 | `当前候选证据丢失或损坏时 status 保留真实交付，候选不可选且不写入`：缺失／损坏 readback 两个变体；current、deliveryState、稳定 URL、控制和字节保留，该候选不可选，journal、heads、读取和写入均不变 |
 
 S8—S11 均执行共享分支 `acceptance-selection` 和双分支 `main` 两种内存 Git 布局；`main` 只模拟布局，不访问 GitHub 产物。S1 在已有 `verifyCandidateEvidence` 边界集中校验，四个代表性错误再经当前 `pinRuleVersion` 拒绝，不为每个结构错误重跑四集生命周期。status 仍是结构检查，摘要自洽但无效的 SRS 由 S2 证明原生 pin 拒绝，没有新增 status 原生复验承诺。
 
@@ -47,7 +48,7 @@ S8—S11 均执行共享分支 `acceptance-selection` 和双分支 `main` 两种
 | remote-faults：三阶段响应丢失、缓存、代次／维护／head、缺状态组 | #95 的恢复范围，非本票删除对象 | 原段落保留，避免提前退役 |
 | remote-status：SRS-only 首项 | #99 一次性历史转换 | 保留样本及历史读取 |
 | remote-status：8 种订阅／文件记录错误，以及当前稳定字节／非法历史记录（含 2 个变体） | 当前行为由 S5 覆盖；旧 `activationRecord` 仍被一次性转换使用 | 保留给 #99：新 schema 的 S5 不能代替旧解析器的损坏拒绝 |
-| remote-status：空状态、待核实当前、有效历史版本、缺／坏证据与残缺阶段 | 当前 status 的 current/candidates/pendingOperation，零写入且不恢复 | 新 status 覆盖通过后删除对应段落 |
+| remote-status：空状态、待核实当前、有效历史版本、缺／坏证据与残缺阶段 | 当前 status 的 current/candidates/pendingOperation，零写入且不恢复；已交付候选证据故障明确由 S12 覆盖 | 新 status 覆盖通过后删除对应段落 |
 | remote-status：历史订阅缺失／不兼容、旧对象仍存在、非法历史索引 | 版本选择看保留候选，不看旧 rollbackTargets／historyComplete | 候选覆盖通过后退役旧字段要求 |
 | remote-status：未归属稳定文件、维护预览 | #98 清理范围 | 保留测试和必要准备 |
 
@@ -83,6 +84,8 @@ node scripts/verify.mjs --out <evidence>/before --binary <absolute-sing-box-1.14
 
 原始基线、进程明细、环境、观测器、归类脚本和 CI job/step 身份保存在 [before.tar.gz](issue-94/before.tar.gz)；解压后的 `before/files.json` 可核对统一验证文件摘要。固定基线原 CI [run 43955404685](https://github.com/wangyingang/sing-box-config-manager/actions/runs/43955404685) 两个检查 job 都成功：Workspace checks 69 s、Native sing-box 575 s。这是既有 Linux runner 事实，不能与本机 macOS 耗时直接作同环境比较。
 
-删除旧测试前，完整迁移 suite 70/70 通过（`selection-migrated.log`）；随后新增“保留登记删除”并加强成功 pin 的不可变字节断言，定向两项 2/2 通过（`selection-additions.log`）。两次临时故障验证均得到预期失败：移除重复产物身份检查时 duplicate-artifact 漏拒绝；停用原生复验时域名和 CIDR 无效 SRS 都被错误接受。mutation 日志和退出码已保存，`src/` 随后逐字还原。typecheck 在新增和退役后均通过。
+删除旧测试前，完整迁移 suite 70/70 通过（`selection-migrated.log`）；随后新增“保留登记删除”并加强成功 pin 的不可变字节断言，定向两项 2/2 通过（`selection-additions.log`）。两次临时故障验证均得到预期失败：移除重复产物身份检查时 duplicate-artifact 漏拒绝；停用原生复验时域名和 CIDR 无效 SRS 都被错误接受。mutation 日志和退出码已保存，`src/` 随后逐字还原。定向日志见 [targeted.tar.gz](issue-94/targeted.tar.gz)。typecheck 在新增和退役后均通过。
+
+本地双轴审查：Standards 0 findings；Spec 发现 2 项 P2，均补充测试处理。第一项补 S12，明确迁移“当前候选证据故障不隐藏真实交付”；第二项为 S9 增加总写入恰三次的断言，S8 也限制仅成功方提交三次。中间一次统一验证因补测主动终止，记录为 SIGINT／未完成，不计为通过；修订后重新执行完整统一验证。
 
 整理后完整统一验证、对比结果与审查状态在本票 PR 交付时补入；生产操作和远端写入验收未执行。
