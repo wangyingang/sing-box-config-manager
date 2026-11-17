@@ -17,14 +17,13 @@
 
 | 旧文件／测试 | 当前契约及去向 | 退役依据或保留边界 |
 | --- | --- | --- |
-| check-sources：四集共享各自来源；CIDR 改变只更新 china-ip，新 commit 同内容不重复发布', async t => { | I1/I2；固定输入恢复复用 rules-source-recovery；pin/resume 竞争复用 rules-selection、rules-performance、rules-operations | 替代通过后退役；pinned 期间继续产生候选、单集筛选及旧批次暂停按当前契约退役 |
-| check-sources：共同输入和单列表失败各自隔离，其他规则集仍能交付变化', async t => { | I1/I2；固定输入恢复复用 rules-source-recovery；pin/resume 竞争复用 rules-selection、rules-performance、rules-operations | 替代通过后退役；pinned 期间继续产生候选、单集筛选及旧批次暂停按当前契约退役 |
-| check-sources：候选提交回复丢失后，新目录续用已固定的两类来源', async t => { | I1/I2；固定输入恢复复用 rules-source-recovery；pin/resume 竞争复用 rules-selection、rules-performance、rules-operations | 替代通过后退役；pinned 期间继续产生候选、单集筛选及旧批次暂停按当前契约退役 |
-| check-sources：String(url)) ? latest.fetcher(url, init) : originalSources.fetcher(url, init) }); | I1/I2；固定输入恢复复用 rules-source-recovery；pin/resume 竞争复用 rules-selection、rules-performance、rules-operations | 替代通过后退役；pinned 期间继续产生候选、单集筛选及旧批次暂停按当前契约退役 |
-| check-sources：恢复 china-ip 验证失败时保留当前规则，且不会访问 V2Fly 或修改其人工固定', async t => { | I1/I2；固定输入恢复复用 rules-source-recovery；pin/resume 竞争复用 rules-selection、rules-performance、rules-operations | 替代通过后退役；pinned 期间继续产生候选、单集筛选及旧批次暂停按当前契约退役 |
-| check-sources：${branch}：旧 CIDR 检查不能覆盖后来人工固定和恢复的决定`, async t => { | I1/I2；固定输入恢复复用 rules-source-recovery；pin/resume 竞争复用 rules-selection、rules-performance、rules-operations | 替代通过后退役；pinned 期间继续产生候选、单集筛选及旧批次暂停按当前契约退役 |
-| check-sources：CIDR 激活待核实期间暂停同批写入，换目录继续时不重复切换', async t => { | I1/I2；固定输入恢复复用 rules-source-recovery；pin/resume 竞争复用 rules-selection、rules-performance、rules-operations | 替代通过后退役；pinned 期间继续产生候选、单集筛选及旧批次暂停按当前契约退役 |
-| check-sources：人工固定期间，新 commit 的内容与已检查候选相同则保留该候选', async t => { | I1/I2；固定输入恢复复用 rules-source-recovery；pin/resume 竞争复用 rules-selection、rules-performance、rules-operations | 替代通过后退役；pinned 期间继续产生候选、单集筛选及旧批次暂停按当前契约退役 |
+| check-sources：四集共享各自来源；CIDR 改变只更新 china-ip，新 commit 同内容不重复发布 | I1/I2；固定输入恢复复用 rules-source-recovery；pin/resume 竞争复用 rules-selection、rules-performance、rules-operations | 替代通过后退役；pinned 期间继续产生候选、单集筛选及旧批次暂停按当前契约退役 |
+| check-sources：共同输入和单列表失败各自隔离，其他规则集仍能交付变化 | I1/I2；固定输入恢复复用 rules-source-recovery；pin/resume 竞争复用 rules-selection、rules-performance、rules-operations | 替代通过后退役；pinned 期间继续产生候选、单集筛选及旧批次暂停按当前契约退役 |
+| check-sources：候选提交回复丢失后，新目录续用已固定的两类来源 | I1/I2；固定输入恢复复用 rules-source-recovery；pin/resume 竞争复用 rules-selection、rules-performance、rules-operations | 替代通过后退役；pinned 期间继续产生候选、单集筛选及旧批次暂停按当前契约退役 |
+| check-sources：恢复 china-ip 验证失败时保留当前规则，且不会访问 V2Fly 或修改其人工固定 | I1/I2；固定输入恢复复用 rules-source-recovery；pin/resume 竞争复用 rules-selection、rules-performance、rules-operations | 替代通过后退役；pinned 期间继续产生候选、单集筛选及旧批次暂停按当前契约退役 |
+| check-sources：${branch}：旧 CIDR 检查不能覆盖后来人工固定和恢复的决定 | I1/I2；固定输入恢复复用 rules-source-recovery；pin/resume 竞争复用 rules-selection、rules-performance、rules-operations | 替代通过后退役；pinned 期间继续产生候选、单集筛选及旧批次暂停按当前契约退役 |
+| check-sources：CIDR 激活待核实期间暂停同批写入，换目录继续时不重复切换 | I1/I2；固定输入恢复复用 rules-source-recovery；pin/resume 竞争复用 rules-selection、rules-performance、rules-operations | 替代通过后退役；pinned 期间继续产生候选、单集筛选及旧批次暂停按当前契约退役 |
+| check-sources：人工固定期间，新 commit 的内容与已检查候选相同则保留该候选 | I1/I2；固定输入恢复复用 rules-source-recovery；pin/resume 竞争复用 rules-selection、rules-performance、rules-operations | 替代通过后退役；pinned 期间继续产生候选、单集筛选及旧批次暂停按当前契约退役 |
 | configured-update：一次 update 共享固定输入，逐集发布独立候选并在新读取中保留结果 | I1/I2/I3；候选验证复用 rules-selection，固定输入拒绝恢复复用 rules-source-recovery | 替代通过后退役；旧 processed 索引、单集增选和本地成功文件不再是当前契约 |
 | configured-update：Anthropic ${failure} 时保留兄弟候选${failure === 'readback' ? '，修复后可单独重试' : ''} | I1/I2/I3；候选验证复用 rules-selection，固定输入拒绝恢复复用 rules-source-recovery | 替代通过后退役；旧 processed 索引、单集增选和本地成功文件不再是当前契约 |
 | configured-update：共同输入摘要损坏时不产生任何候选 | I1/I2/I3；候选验证复用 rules-selection，固定输入拒绝恢复复用 rules-source-recovery | 替代通过后退役；旧 processed 索引、单集增选和本地成功文件不再是当前契约 |

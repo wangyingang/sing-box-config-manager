@@ -74,6 +74,9 @@ test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resum
       .sort((a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name)),
   });
   const before = await production();
+  const checkpoint = async (status: string) => writeFile(evidencePath, JSON.stringify({ target, sourceIdentity, startedAt,
+    status, before, observations, requests, acquisitionAttempts, readbacks }, null, 2) + '\n');
+  await checkpoint('production-snapshotted');
   let created = false;
   t.after(async () => {
     const cleanupErrors: string[] = [];
@@ -186,9 +189,10 @@ test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resum
         }
       }
     }
+    await checkpoint(`completed:${label}`);
     console.log(`${label}: ${result.status}`); return result;
   }
-  async function inspectCandidate(current: RuleDelivery, expectedCount?: number) {
+  async function inspectCandidate(current: RuleDelivery, expectedCount?: number, expectedList = current.logicalId) {
     const prefix = current.candidateEvidenceUrl.replace(/readback.json$/, '');
     const retained = await repository.snapshot();
     const readback = JSON.parse((await readBytes(current.candidateEvidenceUrl)).toString());
@@ -208,16 +212,21 @@ test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resum
     const report = JSON.parse((await readBytes(prefix + 'conversion-report.json')).toString());
     const build = JSON.parse((await readBytes(prefix + 'build.json')).toString());
     assert.equal(manifest.id, current.logicalId); assert.equal(manifest.targetVersion, '1.14.4'); assert.equal(manifest.sourceFormatVersion, 4);
-    assert.equal(build.id, current.logicalId); assert.deepEqual(build.source, current.source); assert.equal(build.validation.status, 'passed');
+    assert.equal(build.id, current.logicalId);
+    assert.equal(build.definition.list, current.logicalId === 'china-ip' ? 'all' : expectedList);
+    assert.deepEqual(build.source, current.source); assert.equal(build.validation.status, 'passed');
     assert.deepEqual(build.source, JSON.parse((await readBytes(prefix + 'source.json')).toString()));
     if (expectedCount !== undefined) assert.equal(report.inputCount, expectedCount);
     assert.deepEqual(manifest.artifacts.map((x: { format: string }) => x.format), ['source', 'binary']);
     assert.deepEqual(manifest.projections.route, manifest.projections[current.logicalId === 'china-ip' ? 'dns-response' : 'dns-query']);
     assert.deepEqual(manifest.projections[current.logicalId === 'china-ip' ? 'dns-query' : 'dns-response'], { unavailable: 'empty' });
     for (const artifact of manifest.artifacts) {
-      await readBytes(artifact.url, artifact); assert.equal(artifact.termCount, report.outputTermCount); assert.deepEqual(artifact.requiredCapabilities, []);
+      await readBytes(artifact.url, artifact); assert.equal(artifact.termCount, report.outputTermCount);
+      if (expectedCount !== undefined) assert.equal(artifact.termCount, expectedCount);
+      assert.deepEqual(artifact.requiredCapabilities, []);
     }
     observations.push({ candidate: current.candidateId, source: current.source, manifest, report, build, readback, files });
+    await checkpoint(`verified-candidate:${current.logicalId}`);
   }
   const first = await check('add-four', () => syncRules(input));
   assert.deepEqual(first.results.map(x => x.id), ['openai', 'anthropic', 'google-deepmind', 'china-ip']);
@@ -250,8 +259,11 @@ test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resum
       config.ruleSets.find(x => x.id === id)!.list = id === 'openai' ? 'anthropic' : 'openai'; revision++;
       await check(`change-list-${id}`, () => syncRules(input), id);
     }
+    const latest = (await getRulesStatus(input)).rules!.find(x => x.id === id)!.current!;
     const pin = await check(`pin-${id}`, () => pinRuleVersion({ ...input, id, version: original.versionId! }), id);
-    assert.equal(pin.results[0].control?.mode, 'pinned'); assert.deepEqual(pin.results[0].current?.files, original.files);
+    assert.equal(pin.results[0].control?.mode, 'pinned');
+    assert.equal(pin.results[0].current?.versionId, original.versionId);
+    assert.deepEqual(pin.results[0].current?.files, original.files);
     for (const path of Object.keys(original.files)) assert.deepEqual(await readBytes(`https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${target}/${path}`, original.files[path]), stableBytes.get(`${original.versionId}/${path}`));
     const start = requests.length;
     const pinned = await check(`pinned-sync-${id}`, () => syncRules(input));
@@ -259,6 +271,8 @@ test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resum
     if (id === 'china-ip') assert.ok(requests.slice(start).every(url => !url.includes('gaoyifan/')));
     const resumed = await check(`resume-${id}`, () => resumeRuleUpdates({ ...input, id }), id);
     assert.equal(resumed.results[0].control?.mode, 'auto'); assert.notEqual(resumed.results[0].current?.versionId, original.versionId);
+    assert.deepEqual(resumed.results[0].current?.files, latest.files);
+    assert.deepEqual(resumed.results[0].current?.source, latest.source);
     // Historical candidate evidence and immutable artifact bytes remain readable.
     await inspectCandidate(original);
   }
@@ -268,7 +282,7 @@ test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resum
   const sample = await check('fixed-original-sample', () => syncRules(input));
   assert.deepEqual(sample.results.find(x => x.id === 'openai')!.current!.source,
     JSON.parse(await readFile(new URL('../fixtures/20261102130044.source.json', import.meta.url), 'utf8')));
-  await inspectCandidate(sample.results.find(x => x.id === 'openai')!.current!, 214);
+  await inspectCandidate(sample.results.find(x => x.id === 'openai')!.current!, 214, 'category-ai-!cn');
   const beforeUnchanged = (await repository.snapshot()).head;
   const unchanged = await check('same-input', () => syncRules(input));
   assert.ok(unchanged.results.every(x => x.status === 'unchanged')); assert.equal((await repository.snapshot()).head, beforeUnchanged);
