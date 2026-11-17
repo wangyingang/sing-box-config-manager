@@ -99,6 +99,11 @@ test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resum
   const head = await createGitCommit((path, input) => api(path, input), { 'README.md': Buffer.from(`Issue 96 isolated probe ${target}\n`) }, '隔离四集交付验收');
   await api('git/refs', { ref: `refs/heads/${target}`, sha: head }); created = true;
   const repository = githubRulesRepository(target, request);
+  const download = repository.download;
+  repository.download = async url => {
+    try { return await download(url); }
+    catch (error) { if (error instanceof TypeError) return download(url); throw error; }
+  };
   const sources = new Map<string, Response>();
   let tag = originalTag, commit = originalCommit;
   const upstream = async (address: string, init?: RequestInit) => {
@@ -137,6 +142,7 @@ test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resum
   };
   const input = { context, onProgress: (event: { stage: string; id?: string }) => console.log(JSON.stringify(event)) };
   const stableBytes = new Map<string, Buffer>();
+  let checkedStatus: Awaited<ReturnType<typeof getRulesStatus>> | undefined;
   async function readBytes(url: string, expected?: { sha256: string; byteLength: number }) {
     const deadline = Date.now() + 480_000; let attempts = 0;
     do {
@@ -172,7 +178,7 @@ test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resum
     assert.equal(result.status, 'success', JSON.stringify(result));
     // New context/session, not a local success index.
     const status = await getRulesStatus({ context: { ...context } }); assert.equal(status.status, 'success', JSON.stringify(status));
-    observations.push({ label, status });
+    observations.push({ label, status }); checkedStatus = status;
     const snapshot = await repository.snapshot();
     for (const rule of status.rules ?? []) {
       for (const [path, expected] of Object.entries(rule.current?.files ?? {})) {
@@ -231,7 +237,7 @@ test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resum
   const first = await check('add-four', () => syncRules(input));
   assert.deepEqual(first.results.map(x => x.id), ['openai', 'anthropic', 'google-deepmind', 'china-ip']);
   assert.ok(first.results.every(x => x.current && ['delivered', 'unchanged'].includes(x.status)));
-  assert.deepEqual((await getRulesStatus(input)).rules?.map(x => x.candidateCount), [1, 1, 1, 1]);
+  assert.deepEqual(checkedStatus?.rules?.map(x => x.candidateCount), [1, 1, 1, 1]);
   for (const [i, entry] of first.results.entries()) {
     const source = entry.current!.source;
     if (i < 3) { assert.ok('tag' in source); assert.equal(source.tag, originalTag); } else assert.equal(source.commit, originalCommit);
