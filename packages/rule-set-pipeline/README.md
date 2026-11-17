@@ -235,7 +235,7 @@ pnpm --dir packages/rule-set-pipeline test:acceptance:rules
 
 探针从空的 `acceptance-issue-96-*` 分支执行四集新增、两类来源独立更新、换列表、逐集 pin/resume 和删除。来源发现固定到官方 Release 与 Git commit，字节仍从真实上游获取；候选七份文件、稳定 URL、历史候选及兄弟集通过真实 HTTPS 回读。每轮保存受测源码、操作和回读记录、生产 refs/Actions variables 前后对照，以及成功或失败后的隔离目标清理结果。门禁开启时缺少前提会失败，不能将默认跳过视为完成验收；默认 CI 和统一本地检查不运行该远端写入入口。
 
-旧 `test:publication`、`test:activation`、`test:rollback`、`test:rebuild` 命令在独有断言迁移完成后移除，不保留兼容别名。`test:release` 通配入口收敛由 #101 负责；不要通过它启动本次远端验收。
+旧 `test:publication`、`test:activation`、`test:rollback`、`test:rebuild` 命令已在独有断言迁移通过后移除，不保留兼容别名。`test:release` 通配入口收敛由 #101 负责；不要通过它启动本次远端验收。
 
 #84 的验收范围包含新增、换源、删除、pin、resume、部分失败、查询/预览与一次性转换；真实 GitHub 生命周期在专用 `acceptance-*` 分支验证，不写生产分支。场景与远端证据见 [#84 验收记录](../../docs/verification/issue-84.md)，最终源码和交付状态以 [Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84) 的 PR 交付证据为准。
 

@@ -98,3 +98,19 @@ Standards 首轮 1 项 P3：映射生成把 fetch 实现片段当作测试名，
 
 - attempt-5：四集新增、候选固定来源／七文件、CIDR-only、Release 更新及 OpenAI 换列表通过；canonical URL 的 `max-age=300` 使逐次等待过长，主动中断，不算完整通过。精确隔离 ref 已清理，保存的本轮生产快照前后相同。后续沿用旧 activation/rollback 的分批回读策略：逐集保留不可变快照和兄弟集比较，全部固定后统一回读 canonical 原版本，全部恢复后统一回读 canonical 最新内容。
 - attempt-6：用户网络中断期间出现顶层 `fetch failed`，全轮失败；自动删除隔离 ref 也因网络失败而未完成。恢复后通过 `gh` 手工删除唯一精确 ref，另存清理证据，确认无残留且生产前后相同。原始失败证据保留，不改写为通过。
+
+## 完整真实 GitHub 结果与远端退役
+
+2026-11-17 第七轮完整通过，受测源码 `1527f51`（干净工作区，probe 字节与后续退役提交相同），总耗时 2282.373 s，1 项通过，失败/跳过/取消/todo 均为 0。588 条 HTTPS 回读覆盖四集首轮七文件、固定来源和独立 termCount/list、CIDR-only、Release 更新、三域名逐集换列表、四集 pin、全部固定时零上游读取、四集 resume、原候选历史字节、固定旧 Release 的完整来源身份与 214 项输出、无变化零提交及删除全部。
+
+两轮集中 canonical 回读分别核验原始固定内容与恢复后的最新内容；每次版本操作仍保留不可变快照及兄弟集字节/记录比较。隔离目标 `acceptance-issue-96-f4f968a9-f3e7-4a64-9626-04da031db1e8` 已删除，`remaining=[]`、`cleanupErrors=[]`，生产 main/candidates 和源码仓库 Actions variables 前后相同。配置及固定发现由受限测试 context 提供，上游来源字节、Git 写入与 HTTPS 回读均真实执行；不冒充 #100 的真实配置 push/dispatch。
+
+替代覆盖通过后删除旧 publication、configured-publication、configured-activation、configured-rollback、rebuild、configured-rebuild 六个 acceptance 文件，并移除四个同名旧命令，无兼容别名。旧 official-rulesets-lifecycle 中已迁移的四集来源、独立更新和 pin/resume 业务断言分段删除，保留清理断言及构造清理样本的必要准备，测试名明确标记待 #98 迁移。未执行旧清理验收，不据此宣称 #98 或父 #93 完成。
+
+## Standards
+
+首轮 1 项 P3（伪映射条目）已修复，复核无剩余问题。
+
+## Spec
+
+首轮 1 项 P2（固定样本独立断言）已修复；分批 canonical 策略复核无新增问题。完整真实验收已补做通过，最终退役增量仍需复核。
