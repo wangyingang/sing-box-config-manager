@@ -75,4 +75,94 @@
 
 旧基线 [CI 运行](https://github.com/wangyingang/sing-box-config-manager/actions/runs/43955404685) 的 Workspace checks 为 69 s，Native sing-box 为 575 s。主机负载、文件并发和执行范围变化均影响耗时。#99 数字仅用于历史对照，未包含 T7 与本次收尾；Linux CI 和本机结果分别解读。
 
-依本次执行限制，最终提交的完整本地验证、同环境全量测量、CI 两个 job 的实际结果及 CI step/job／墙钟对照待完成。已有快照和定向验证仅证明各自记录的源码和范围，#101 和父 Spec #93 的全量验收保持待完成。
+前次收尾受执行限制，未运行最终完整本地验证、同环境全量测量或 CI；上述历史快照和定向验证只证明各自记录的源码与范围。2026-11-18 按维护者补充授权完成的回归与对比见下节。
+
+
+## 2026-11-18 最终完整回归与提速核验
+
+受测源码为干净的 `6766f1801969483db88f1e9857aded0688cba836`，已包含 #94—#101 全部迁移和退役变更。本次后续提交只补充本文与证据，不修改测试、业务实现、CI 或生产设置。#101 和父 Spec #93 已由维护者在前次收尾时关闭，本节补齐当时明确留下的完整回归与性能证据，不将“已关闭”作为通过依据。
+
+### 范围与可复查证据
+
+本地运行 README 指定的统一入口，范围为 `check-native`：
+
+```sh
+NODE_OPTIONS=--import=<evidence>/baseline/observe-processes.mjs \
+RULE_TEST_PROCESS_LOG=<evidence>/final-processes.jsonl \
+node scripts/verify.mjs --out <evidence>/final --binary <absolute-sing-box-1.14.4>
+```
+
+固定旧基线继续使用 #94 的 `7075bfc3f6a900c67a07e32e53e5a8aabc4ed1b4`，未重复建立基线。旧证据与本次证据分别经 `inspect-evidence.mjs` 校验，原运行结果、文件大小与 SHA-256 均通过（各 1/1）。完整日志、客户端证据、原生进程明细、归类脚本、测试文件清单、suite 测试体耗时和工具身份见 [本次证据归档](issue-101/final-20261118/evidence.tar.gz)；[归档清单](issue-101/final-20261118/manifest.json) 记录归档摘要与归档内文件摘要，[比较摘要](issue-101/final-20261118/comparison.json) 可直接读取。
+
+两次使用相同的 macOS 27.2.1 arm64、Apple M2 Max（12 核、32 GiB）、Node v26.13.0、pnpm 10.33.2、sing-box 1.14.4。binary SHA-256 均为 `6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2`。沿用 #94 原观察器，SHA-256 为 `05b66ab1853025cec5aa6e6564d4dae61ea63cd8d810053f57e9c73d3b9f8b4a`；只观察 child_process 调用，不改变原生命令参数、字节或退出状态。
+
+本轮没有运行 Release 下载验收或任何远端写入验收。Release 的两项只读结果仍见上文；T3/T5/T7 的隔离远端证据沿用前表。没有修改生产配置、启停用户的 sing-box 服务、修改生产开关或运行生产 sync/cleanup/迁移。
+
+### 完整本地结果与同环境对比
+
+本次 707 项全部通过：工具 167、Compiler 常规 99、Pipeline 常规 175、Compiler 原生 28、Pipeline 原生 238；失败、跳过、取消、todo 均为 0。源码 clean，tracked diff SHA-256 为 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`。
+
+| 指标 | 固定旧基线 `7075bfc` | 最终源码 `6766f18` | 变化 |
+| --- | ---: | ---: | ---: |
+| 测试文件（工具 / Compiler 常规 / Pipeline 常规 / Compiler 原生 / Pipeline 原生） | 6 / 12 / 21 / 8 / 26 | 7 / 12 / 21 / 8 / 16 | Pipeline 原生文件减少 10 个 |
+| 常规测试项 | 396 | 441 | +45 |
+| 原生测试项 | 307 | 266 | −41 |
+| 测试项合计 | 703 | 707 | +4 |
+| 常规检查 | 43.497 s | 78.121 s | +34.624 s |
+| 原生集成 | 251.773 s | 134.998 s | −116.775 s（−46.4%） |
+| 完整入口总墙钟 | 295.514 s | 213.361 s | −82.153 s（−27.8%） |
+| 直接 binary／副本调用 | 16,070 | 11,810 | −4,260（−26.5%） |
+| 故障 wrapper 调用 | 114 | 22 | −92 |
+
+检查层级相同，但执行集合按迁移目标发生变化：旧有效断言迁入当前测试，旧契约断言退役，同时增加了工具与自动化探针测试。工具用例增加 52 项，其中新增 `scripts/test/pr-closeout.test.mjs`；不能将常规阶段变慢或总墙钟变化全部归因于旧测试删除。两端 Compiler 和 Pipeline 的 `src/` 无差异，本次没有修改运行时算法来降低调用量。
+
+本次相对固定旧基线，完整检查节省约 1 分 22 秒；原生阶段节省约 1 分 57 秒。这是 #94—#101 累计整理后的实际观测，不是单独 #101 的收益。它也不同于 #107 把全量测试移出逐次提交的等待时间收益。两端各一轮、旧基线取自归档，未做多次抽样；主机负载和文件并发有噪声，不能据此承诺固定百分比或耗时。
+
+### 原生调用用途与主要 suite
+
+直接 binary／副本调用包含统一入口预检和负向场景；故障 wrapper 单列，不将 shell 内部子进程再加一次。
+
+| 用途 | 旧基线直接调用 | 最终直接调用 | 旧 wrapper | 最终 wrapper |
+| --- | ---: | ---: | ---: | ---: |
+| version | 3,264 | 2,384 | 28 | 8 |
+| rule-set compile | 3,113 | 2,267 | 25 | 7 |
+| rule-set decompile | 3,114 | 2,268 | 24 | 6 |
+| rule-set match | 6,423 | 4,731 | 37 | 1 |
+| schema | 74 | 76 | 0 | 0 |
+| check | 77 | 79 | 0 | 0 |
+| run | 5 | 5 | 0 | 0 |
+
+原生 `schema/check/run` 覆盖没有随旧 suite 退役而减少。旧基线最长的顶层测试体合计为 check-now 246.843 s、configured-activation 115.325 s、maintenance-sources 92.979 s。最终最长的六个 suite 如下；其全部动态名称均匹配到受测源码，未匹配数为 0。
+
+| 最终 Pipeline suite | 顶层测试体合计 |
+| --- | ---: |
+| rules-cleanup | 130.238 s |
+| rules-selection | 113.973 s |
+| rules-inputs | 101.296 s |
+| rules-cleanup-guards | 87.663 s |
+| rules-performance | 66.080 s |
+| rules-operations | 65.349 s |
+
+上述数值是日志中的顶层测试体时间总和，不含启动；不同文件并发执行，不能相加作为完整检查墙钟时间。迁移前后 suite 职责变化，旧 suite 与新 suite 也不是逐行一对一的速度比较。
+
+### GitHub Actions 全量回归
+
+[本次手动全量运行 44160005864](https://github.com/wangyingang/sing-box-config-manager/actions/runs/44160005864) 使用任务分支上的受测源码 `6766f18`，显式 `full_native=true`；Detect changes、Workspace checks、Native sing-box 均实际执行且成功。原生 Compiler 28 + Pipeline 238 = 266 项通过，零失败／跳过／取消／todo。工作区命令成功，但其中两个既有 build 测试因该 job 不提供 binary 而跳过（441 项中 439 通过、2 跳过）；本地显式 binary 的 441 项结果已覆盖这两项，不把 CI 工作区成功称为无跳过的完整本地验证。
+
+与 [固定旧基线运行 43955404685](https://github.com/wangyingang/sing-box-config-manager/actions/runs/43955404685) 分别按 job、step 和整轮比较；两次均为 ubuntu-24.04、Node 24、pnpm 10.33.2、sing-box 1.14.4，安装、版本／摘要检查和日志步骤保留。GitHub 托管 runner 不是同一台物理机器，环境调度噪声与本机测量分开说明。
+
+| CI 指标 | 旧基线 | 最终源码 | 变化 |
+| --- | ---: | ---: | ---: |
+| Workspace checks job | 69 s | 74 s | +5 s |
+| Check workspace step | 47 s | 62 s | +15 s |
+| Native sing-box job | 575 s | 458 s | −117 s（−20.3%） |
+| Run native integration tests step | 547 s | 416 s | −131 s（−23.9%） |
+| 整轮墙钟 | 585 s | 463 s | −122 s（−20.9%） |
+
+整轮墙钟统一取 `run_started_at` 到最后一个 job 的 `completed_at`；原始 run、job 与全部 step 时间戳均在归档中，摘要另见 [CI 对比](issue-101/final-20261118/ci-comparison.json)。旧事件为 main push，本次为显式全量 dispatch；两次都执行常规与原生检查，但调度／取消策略已按 #107 更新，所以整轮降幅同时包含编排差异。原生测试 step 的对比更接近测试集合本身的执行成本；它也不能与 macOS 秒数混算。
+
+### 验收结论与边界
+
+本次补齐 #101 的完整本地回归、同环境工具与调用统计、主要 suite 耗时，以及真实双 job CI 和 step/job／墙钟对照。结果支持“迁移并退役旧测试降低了重复原生调用和完整回归时间”，不支持固定耗时承诺，也不表示全部常规检查都变快。
+
+后续文档 PR 的 head 只增加验收记录和证据；本节完整回归与全量 CI 的受测提交固定为 `6766f18`，不将其冒称为后续文档提交已重新全量执行。PR 最新 CI 与云端审查状态更新在 PR 和 #101 交付评论中。真实 schedule 与邮件实收仍沿用 #100 的未观察边界，不属于本次本地回归／性能补验；本次没有执行生产操作。

@@ -1,0 +1,352 @@
+{
+  "before": {
+    "head": "7075bfc3f6a900c67a07e32e53e5a8aabc4ed1b4",
+    "runId": 43955404685,
+    "event": "push",
+    "status": "success",
+    "wallSeconds": 585.0,
+    "jobs": [
+      {
+        "name": "Detect changes",
+        "conclusion": "success",
+        "seconds": 5.0,
+        "steps": [
+          {
+            "name": "Set up job",
+            "seconds": 0.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "seconds": 1.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Decide whether full checks are needed",
+            "seconds": 1.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "seconds": 0.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "seconds": 0.0,
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "name": "Native sing-box",
+        "conclusion": "success",
+        "seconds": 575.0,
+        "steps": [
+          {
+            "name": "Set up job",
+            "seconds": 3.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "seconds": 5.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Run pnpm/action-setup@f520eceda224fe1a4aed5a2a27a194379a409996",
+            "seconds": 8.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+            "seconds": 6.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Install dependencies",
+            "seconds": 2.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Read sing-box build configuration",
+            "seconds": 0.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Install verified sing-box release",
+            "seconds": 0.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Run native integration tests",
+            "seconds": 547.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Preserve native logs",
+            "seconds": 1.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+            "seconds": 0.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run pnpm/action-setup@f520eceda224fe1a4aed5a2a27a194379a409996",
+            "seconds": 0.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "seconds": 0.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "seconds": 0.0,
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "name": "Workspace checks",
+        "conclusion": "success",
+        "seconds": 69.0,
+        "steps": [
+          {
+            "name": "Set up job",
+            "seconds": 2.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "seconds": 1.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Run pnpm/action-setup@f520eceda224fe1a4aed5a2a27a194379a409996",
+            "seconds": 8.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+            "seconds": 3.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Install dependencies",
+            "seconds": 1.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Check workspace",
+            "seconds": 47.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Preserve check log",
+            "seconds": 2.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+            "seconds": 0.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run pnpm/action-setup@f520eceda224fe1a4aed5a2a27a194379a409996",
+            "seconds": 0.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "seconds": 0.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "seconds": 0.0,
+            "conclusion": "success"
+          }
+        ]
+      }
+    ]
+  },
+  "final": {
+    "head": "6766f1801969483db88f1e9857aded0688cba836",
+    "runId": 44160005864,
+    "event": "workflow_dispatch",
+    "status": "success",
+    "wallSeconds": 463.0,
+    "jobs": [
+      {
+        "name": "Detect changes",
+        "conclusion": "success",
+        "seconds": 12.0,
+        "steps": [
+          {
+            "name": "Set up job",
+            "seconds": 2.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "seconds": 5.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Decide whether workspace checks are needed",
+            "seconds": 4.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "seconds": 0.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "seconds": 0.0,
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "name": "Native sing-box",
+        "conclusion": "success",
+        "seconds": 458.0,
+        "steps": [
+          {
+            "name": "Set up job",
+            "seconds": 4.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "seconds": 7.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Run pnpm/action-setup@f520eceda224fe1a4aed5a2a27a194379a409996",
+            "seconds": 12.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+            "seconds": 10.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Install dependencies",
+            "seconds": 1.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Read sing-box build configuration",
+            "seconds": 0.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Install verified sing-box release",
+            "seconds": 1.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Run native integration tests",
+            "seconds": 416.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Preserve native logs",
+            "seconds": 2.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+            "seconds": 0.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run pnpm/action-setup@f520eceda224fe1a4aed5a2a27a194379a409996",
+            "seconds": 0.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "seconds": 0.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "seconds": 0.0,
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "name": "Workspace checks",
+        "conclusion": "success",
+        "seconds": 74.0,
+        "steps": [
+          {
+            "name": "Set up job",
+            "seconds": 1.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "seconds": 1.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Run pnpm/action-setup@f520eceda224fe1a4aed5a2a27a194379a409996",
+            "seconds": 4.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+            "seconds": 1.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Install dependencies",
+            "seconds": 1.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Check workspace",
+            "seconds": 62.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Preserve check log",
+            "seconds": 1.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+            "seconds": 0.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run pnpm/action-setup@f520eceda224fe1a4aed5a2a27a194379a409996",
+            "seconds": 0.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "seconds": 0.0,
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "seconds": 0.0,
+            "conclusion": "success"
+          }
+        ]
+      }
+    ]
+  }
+}
