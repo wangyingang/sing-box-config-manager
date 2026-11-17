@@ -230,7 +230,8 @@ test('GitHub 四集 cleanup：保留窗口、切换中断、HTTPS 失败恢复�
     const beforeCleanup = await repository.snapshot();
     const oldHistory = await ancestorHeads(beforeCleanup.head);
     const originalJournal = parseRulesJournal((await beforeCleanup.read(RULE_STATE_PATH))!);
-    const stableBytes = new Map(await Promise.all(beforeCleanup.paths.filter(path => path.startsWith('stable/'))
+    let expectedStatus = await getRulesStatus(input); assert.equal(expectedStatus.status, 'success');
+    const stableBytes = new Map(await Promise.all(beforeCleanup.paths.filter(path => path.startsWith('stable/') && !path.endsWith('/activation.json'))
       .map(async path => [path, await beforeCleanup.read(path)] as const)));
     const sourceCount = requests.length;
     const preview = await check('cleanup-preview', () => cleanupRuleHistory({ ...input, dryRun: true }));
@@ -270,6 +271,16 @@ test('GitHub 四集 cleanup：保留窗口、切换中断、HTTPS 失败恢复�
       const journal = parseRulesJournal((await snapshot.read(RULE_STATE_PATH))!);
       const status = await getRulesStatus({ context: { ...context } }); observations.push({ label: 'status-after-cleanup', status });
       assert.equal(status.status, 'success', JSON.stringify(status)); assert.equal(status.rules?.length, 4);
+      for (const expected of expectedStatus.rules!) {
+        const actual = status.rules!.find(rule => rule.id === expected.id)!;
+        const { candidateEvidenceUrl: oldAddress, ...oldIdentity } = expected.current!;
+        const { candidateEvidenceUrl: newAddress, ...newIdentity } = actual.current!;
+        assert.deepEqual(newIdentity, oldIdentity); assert.deepEqual(actual.control, expected.control);
+        assert.notEqual(newAddress, oldAddress);
+        assert.equal(newAddress, journal.candidates[actual.current!.candidateId].evidenceUrl);
+        const path = `${journal.rules[expected.id].definition.stablePath}/activation.json`;
+        await readBytes(`https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${snapshot.head}/${path}`, (await snapshot.read(path))!);
+      }
       for (const version of retained) {
         const candidate = journal.candidates[version.candidateId]; assert.ok(candidate);
         assert.equal(candidate.versionId, version.versionId); assert.equal(candidate.publishedAt, version.publishedAt);
@@ -289,8 +300,9 @@ test('GitHub 四集 cleanup：保留窗口、切换中断、HTTPS 失败恢复�
     const selected = await check('pin-retained-boundary', () => pinRuleVersion({ ...input, id: 'openai', version: boundary.versionId! }));
     assert.equal(currentOf(selected, 'openai').versionId, boundary.versionId);
     assert.equal(currentOf(selected, 'openai').publishedAt, boundary.publishedAt);
+    expectedStatus = await getRulesStatus(input); assert.equal(expectedStatus.status, 'success');
     const secondBefore = await repository.snapshot();
-    const secondBytes = new Map(await Promise.all(secondBefore.paths.filter(path => path.startsWith('stable/'))
+    const secondBytes = new Map(await Promise.all(secondBefore.paths.filter(path => path.startsWith('stable/') && !path.endsWith('/activation.json'))
       .map(async path => [path, await secondBefore.read(path)] as const)));
     const secondHistory = await ancestorHeads(secondBefore.head); now = '2026-11-17T00:00:00.000Z';
     await check('cleanup-second-round', () => cleanupRuleHistory(input)); assert.equal(switchCount, 2);
