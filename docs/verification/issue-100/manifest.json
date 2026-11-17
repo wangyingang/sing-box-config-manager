@@ -1,0 +1,520 @@
+{
+  "scope": "issue-100-targeted-only",
+  "sourceCommit": "6af9fe468d34a00921ceb40ee78e6dc9f1375804",
+  "sourceBranch": "codex/issue-100",
+  "probeSha256": "47c6154114216ab8a2d886c16772032711f05a5b894bf817e7132b10e85adfb5",
+  "archiveSha256": "c8eefb59b99111f2f8141a73c967749bc4a9b48cc50cc0204831329f34110883",
+  "archiveBytes": 57791,
+  "files": [
+    {
+      "path": "issue-100-local/cloud-comments.json",
+      "size": 4941,
+      "sha256": "48b3556c0b13695b34a26ab9a12fbee624e237392963eb00e2315ed015d23d28"
+    },
+    {
+      "path": "issue-100-local/cloud-inline.json",
+      "size": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "path": "issue-100-local/cloud-reviews.json",
+      "size": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "path": "issue-100-local/cloud-threads.json",
+      "size": 103,
+      "sha256": "41aeb6f0b1637a4efc5c37cb0e47797c832b8582b70af2ac844f38a484b3a0b8"
+    },
+    {
+      "path": "issue-100-local/native-tail.log",
+      "size": 4275,
+      "sha256": "ff32e44898f2f287fd3a68314a522ccea6458604e6d81c4af903366b586a6203"
+    },
+    {
+      "path": "issue-100-local/opt-in-closed.log",
+      "size": 483,
+      "sha256": "d63f0da260e29c6d2ca34a167874a0dd11c55e4f78a8b43e01a3bd24a83750eb"
+    },
+    {
+      "path": "issue-100-local/refusal-final.log",
+      "size": 949,
+      "sha256": "32e70ba757fbc013720348ea24f8cd7db973d2db5337f2fed6cf9ef46f187d55"
+    },
+    {
+      "path": "issue-100-local/summary.json",
+      "size": 6966,
+      "sha256": "a5ef1833c11382806c88c34db54466344ef5b2914a43fb56c5c93971e8639ab1"
+    },
+    {
+      "path": "issue-100-local/typecheck.log",
+      "size": 173,
+      "sha256": "7146dae686e24a89f065c37cc1a62890312d6d188b4d693b36a57b7bba8617f8"
+    },
+    {
+      "path": "issue-100-local/unit.log",
+      "size": 2986,
+      "sha256": "c8691bb36eaeb71278328b5ee4fddcc5d79bb7ae14dbcec2773546a34f6bdde8"
+    },
+    {
+      "path": "issue-100-local/workflow-syntax.log",
+      "size": 37,
+      "sha256": "257d0cdadf2776dbb3c9183776da793a1611a155e21789f095b5a3562510ef94"
+    },
+    {
+      "path": "issue-100-rejected-sha/evidence.json",
+      "size": 1399,
+      "sha256": "d47f8ff6b7bc510bd2e0f5c169019c604f4d00db818908b743610fea1efa559a"
+    },
+    {
+      "path": "issue-100-remote-1/evidence.json",
+      "size": 1506,
+      "sha256": "45c4beb9501dc16fb3a6115ff0dc5e0b0d5ba5addc3d883f665254286ac3dfee"
+    },
+    {
+      "path": "issue-100-remote-1.log",
+      "size": 1548,
+      "sha256": "1f5610f57c9289d53635d0dc63ce9c670246714fb6a3daca5d8c6c0080b74571"
+    },
+    {
+      "path": "issue-100-remote-2/baseline-push/rule-execution.json",
+      "size": 233,
+      "sha256": "a5bcee4b184fbbf489535225a7ea2750ce2a93b0dfdf190550a3d904a80feb35"
+    },
+    {
+      "path": "issue-100-remote-2/baseline-push/rule-maintenance-summary.md",
+      "size": 569,
+      "sha256": "144c91fac68898d0e2ad01f9e26e3197a3b2faeed898a7d553899af996837212"
+    },
+    {
+      "path": "issue-100-remote-2/baseline-push/rule-result.json",
+      "size": 738,
+      "sha256": "15b4363ecc1da3a011ec2e3a9a05f5374943eafb48b148ac5d75e9c720448490"
+    },
+    {
+      "path": "issue-100-remote-2/evidence.json",
+      "size": 38025,
+      "sha256": "ac687b150d95f235315f10e540f8f480bf1740f04e9acce0e314a3e948392866"
+    },
+    {
+      "path": "issue-100-remote-2.log",
+      "size": 2602,
+      "sha256": "7e4fc42d96bc6f42e9535d8b17929c1375f95004e442407169f960cb7cfe94cd"
+    },
+    {
+      "path": "issue-100-remote-3/baseline-push/rule-execution.json",
+      "size": 233,
+      "sha256": "51d11a418e512b51b1d9d5d87c33e6bb91dce7e4aed58ead57069726502f7154"
+    },
+    {
+      "path": "issue-100-remote-3/baseline-push/rule-maintenance-summary.md",
+      "size": 8853,
+      "sha256": "d31d383e97d147af2f784597934dd552bec7e6d1a484d98f49a8bec734d177a0"
+    },
+    {
+      "path": "issue-100-remote-3/baseline-push/rule-result.json",
+      "size": 13523,
+      "sha256": "60c33a5b0b97152ee0dcc79b688d6f7d83d7e89546ae88fec26230e89e1427c7"
+    },
+    {
+      "path": "issue-100-remote-3/evidence.json",
+      "size": 275549,
+      "sha256": "6950155630cb60e36419a3e1cffde97d6835e9831befd08d904b104f07bca0f6"
+    },
+    {
+      "path": "issue-100-remote-3/mixed-push/rule-execution.json",
+      "size": 233,
+      "sha256": "6bea853dc1a264a7ceaf8e707816d2d8e5130eab6f77dde28e0ab32ed71d9fa5"
+    },
+    {
+      "path": "issue-100-remote-3/mixed-push/rule-maintenance-summary.md",
+      "size": 9038,
+      "sha256": "3cb0317e803cefc54e13cd7cba7a5c7b73ef5a4320e3bb52e34ce545b8a46273"
+    },
+    {
+      "path": "issue-100-remote-3/mixed-push/rule-result.json",
+      "size": 13790,
+      "sha256": "824ee2b2cbe6796833ff7a4354bec9b0e5073628f6defb868e433e51ff9c8ea6"
+    },
+    {
+      "path": "issue-100-remote-3/partial-failure-push/rule-execution.json",
+      "size": 233,
+      "sha256": "83d7eaf47197b824b40b5dbfcb087767d509709e99720ac54ca056af98ae55e5"
+    },
+    {
+      "path": "issue-100-remote-3/partial-failure-push/rule-maintenance-summary.md",
+      "size": 8809,
+      "sha256": "e8a445c6a6458fa5f3ad4ede14ce2dfc3dc30aff86441e2c993a614fbe2f43cf"
+    },
+    {
+      "path": "issue-100-remote-3/partial-failure-push/rule-result.json",
+      "size": 13409,
+      "sha256": "fa82353279d4278c022aa5e06c7aa79bc17bcad8f041fc3098b2d1c53f505ded"
+    },
+    {
+      "path": "issue-100-remote-3/pin-fixed/rule-execution.json",
+      "size": 233,
+      "sha256": "a2dd4b8851c2e7db51d7144db51238918ca0d717965808c724d18987336133eb"
+    },
+    {
+      "path": "issue-100-remote-3/pin-fixed/rule-maintenance-summary.md",
+      "size": 3312,
+      "sha256": "a4cd5c0afd2f9dbffbc700a98e93c209782bb97ace42ab160a99b98623d5fb07"
+    },
+    {
+      "path": "issue-100-remote-3/pin-fixed/rule-result.json",
+      "size": 4974,
+      "sha256": "9bbeb56fd5097317ae262b9dde21aa6b013b10acbc45cdc2c16e602034524b11"
+    },
+    {
+      "path": "issue-100-remote-3/resume-fixed/rule-execution.json",
+      "size": 233,
+      "sha256": "6755c34ab8c2cac25dcebf1dee5937edb1bb8b8458a56dea41d22f56ab4ac023"
+    },
+    {
+      "path": "issue-100-remote-3/resume-fixed/rule-maintenance-summary.md",
+      "size": 3368,
+      "sha256": "85d8b98070871042069b5442110b99e186394247eb0684703567f3b00e65606b"
+    },
+    {
+      "path": "issue-100-remote-3/resume-fixed/rule-result.json",
+      "size": 5067,
+      "sha256": "84ecc89c1d0d6b6cbdbaa0ddc44ec437381c310d903551b52d167f375b6f0f73"
+    },
+    {
+      "path": "issue-100-remote-3/resume-preview/rule-execution.json",
+      "size": 233,
+      "sha256": "e3e443044f99d56b865b69b2cb992149be30801adcad6309935f1016ade941e0"
+    },
+    {
+      "path": "issue-100-remote-3/resume-preview/rule-maintenance-summary.md",
+      "size": 3413,
+      "sha256": "33c425196d52cf2feb64e7b2117eab46aaa7d5868cc23421be18352d04fc2f44"
+    },
+    {
+      "path": "issue-100-remote-3/resume-preview/rule-result.json",
+      "size": 5186,
+      "sha256": "7019ee5a0afc7e978b5b7cbc0ca1712aefcbd853b3f63d681b7ec3b254de56fb"
+    },
+    {
+      "path": "issue-100-remote-3.log",
+      "size": 2360,
+      "sha256": "36ebfd12b2e43d110900c183c37ad27644522654a24b3e5ae0d9484e8fb21c6b"
+    },
+    {
+      "path": "issue-100-remote-4/baseline-push/rule-execution.json",
+      "size": 233,
+      "sha256": "f8cd5478d513848bfffdec28d0de741d46b8e795a1dc7d9ae9c671327603fa6c"
+    },
+    {
+      "path": "issue-100-remote-4/baseline-push/rule-maintenance-summary.md",
+      "size": 8853,
+      "sha256": "6dcf304cb63aa449365930055ded9a28b7365a2d5cbff8d67f2d6cfaed831dfa"
+    },
+    {
+      "path": "issue-100-remote-4/baseline-push/rule-result.json",
+      "size": 13523,
+      "sha256": "7786769bd39c7cc248969f7099cc791235b6470f936dff77282bf034d873266c"
+    },
+    {
+      "path": "issue-100-remote-4/evidence.json",
+      "size": 307614,
+      "sha256": "db6e86ff2992288b09e0cc63ca54edeb3e76746d89974311753dce2f738ede6b"
+    },
+    {
+      "path": "issue-100-remote-4/mixed-push/rule-execution.json",
+      "size": 233,
+      "sha256": "fb71b381cf39240ed3e2025857620ab6c0498e7af7311d85cad2313b89771135"
+    },
+    {
+      "path": "issue-100-remote-4/mixed-push/rule-maintenance-summary.md",
+      "size": 9038,
+      "sha256": "ddca59d556582907689b1570520cc1ba8940c1e10cada16f8ceb75f99adaf3ea"
+    },
+    {
+      "path": "issue-100-remote-4/mixed-push/rule-result.json",
+      "size": 13790,
+      "sha256": "e71b27463b90b3689cd999316a121bf1976e2b813a12e7f822f4b927cc829879"
+    },
+    {
+      "path": "issue-100-remote-4/old-event-rerun/rule-execution.json",
+      "size": 233,
+      "sha256": "9c14612c8b0208c1ca3310721577958bf09b7226fe1cfadae8427e3a635f2aa5"
+    },
+    {
+      "path": "issue-100-remote-4/old-event-rerun/rule-maintenance-summary.md",
+      "size": 8712,
+      "sha256": "80396813fe12198ab63533f03d7a6479f93f537647801492c1caf81a14f721b4"
+    },
+    {
+      "path": "issue-100-remote-4/old-event-rerun/rule-result.json",
+      "size": 13275,
+      "sha256": "e791eb0438275210f23bc05ec19c41c7f7973c6bbd467f8fb0a40d91a8574c62"
+    },
+    {
+      "path": "issue-100-remote-4/partial-failure-push/rule-execution.json",
+      "size": 233,
+      "sha256": "3dff515507ed5a1d439480f4db698fc5a9c6a4fdee610d6e21029c14b3482990"
+    },
+    {
+      "path": "issue-100-remote-4/partial-failure-push/rule-maintenance-summary.md",
+      "size": 8809,
+      "sha256": "f79d337376ddcbf9ec68def11fe400b26f208f77276f8ea8c6f568bd01f601e2"
+    },
+    {
+      "path": "issue-100-remote-4/partial-failure-push/rule-result.json",
+      "size": 13409,
+      "sha256": "5017b5ccd26c11303849472f711545c5f4d4604b6b6ac40755cd2e666b162755"
+    },
+    {
+      "path": "issue-100-remote-4/pin-fixed/rule-execution.json",
+      "size": 233,
+      "sha256": "80851bd39ffb35908fd2278d5ce7c6885dda2013e0ddaadf95f310eb32bc8521"
+    },
+    {
+      "path": "issue-100-remote-4/pin-fixed/rule-maintenance-summary.md",
+      "size": 3312,
+      "sha256": "b3e37995783c7590a5ec23c386efdc5894d6e9830fa4ce669a511d49e4e23bc0"
+    },
+    {
+      "path": "issue-100-remote-4/pin-fixed/rule-result.json",
+      "size": 4974,
+      "sha256": "0092d8207e22f2f4faf8e2070d9794788139374951a3161bab627b21244b660b"
+    },
+    {
+      "path": "issue-100-remote-4/resume-fixed/rule-execution.json",
+      "size": 233,
+      "sha256": "13d0d8cb0c945f8063a9701a8da126f4b6f4a6e6a95ecc2d8cb94ce169d4f30a"
+    },
+    {
+      "path": "issue-100-remote-4/resume-fixed/rule-maintenance-summary.md",
+      "size": 3368,
+      "sha256": "0207583bf782a429756a6354cdb1eca6f7ef721a27ec502e61a63d0d9745ba3c"
+    },
+    {
+      "path": "issue-100-remote-4/resume-fixed/rule-result.json",
+      "size": 5067,
+      "sha256": "d2e59504b4527ac1925e2f74c205e31f76d8ef8bbb8aa624b4084c490e17abc9"
+    },
+    {
+      "path": "issue-100-remote-4/resume-preview/rule-execution.json",
+      "size": 233,
+      "sha256": "e42c19e1aae6d528864c354fb8869d0d5a65047b7185af29172b65ad503aa132"
+    },
+    {
+      "path": "issue-100-remote-4/resume-preview/rule-maintenance-summary.md",
+      "size": 3413,
+      "sha256": "6527ae2d1c2f5e5f7b103067a44b128556821232cd276820bee7869b5b66e2a2"
+    },
+    {
+      "path": "issue-100-remote-4/resume-preview/rule-result.json",
+      "size": 5186,
+      "sha256": "a924647de84dcd10d10a06021380ad96380edb28fc346ea7a27ddc9752e14ba1"
+    },
+    {
+      "path": "issue-100-remote-4.log",
+      "size": 1628,
+      "sha256": "865ec950f5e7829802d9fea93e9839d30968ceef1f22dac4d4a48c3a094f8e8e"
+    }
+  ],
+  "verification": {
+    "scope": "issue-100-targeted-only",
+    "baseCommit": "458f456733f2d1e9a25d158beffdfde6bb9bdc5a",
+    "implementationCommit": "6af9fe468d34a00921ceb40ee78e6dc9f1375804",
+    "branch": "codex/issue-100",
+    "platform": "macOS-27.2.1-arm64-arm-64bit",
+    "node": "v26.13.0",
+    "pnpm": "10.33.2",
+    "binary": {
+      "version": "sing-box version 1.14.4",
+      "sha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2"
+    },
+    "tests": {
+      "regular": {
+        "files": [
+          "test/automation-probe.test.ts",
+          "test/rule-subscriptions.test.ts",
+          "test/rule-workflow.test.ts"
+        ],
+        "tests": 22,
+        "pass": 22,
+        "fail": 0,
+        "skipped": 0,
+        "cancelled": 0,
+        "todo": 0
+      },
+      "native": {
+        "files": [
+          "test/integration/rule-workflow.test.ts"
+        ],
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0,
+        "cancelled": 0,
+        "todo": 0,
+        "log": "native-tail.log; initial progress lines only available in tool transcript",
+        "sourceNote": "Native test, fixtures and application sources are unchanged in implementationCommit; executed before commit while acceptance probe edits were in progress."
+      },
+      "finalRefusalRetest": {
+        "tests": 8,
+        "pass": 8,
+        "fail": 0,
+        "skipped": 0
+      },
+      "optInClosed": {
+        "tests": 1,
+        "pass": 0,
+        "skipped": 1,
+        "note": "Expected gate behavior; not remote acceptance success"
+      }
+    },
+    "checks": {
+      "pipelineTypecheck": "passed",
+      "workflowYamlAndBashSyntax": "passed",
+      "diffCheck": "passed"
+    },
+    "notRun": [
+      "full local tests",
+      "full native tests",
+      "CI"
+    ],
+    "remote": {
+      "rejectedSha": "operator supplied an incorrect SHA; refused before ref creation",
+      "attempt1": "TLS handshake timeout creating source blob; artifact ref removed",
+      "attempt2": "actual push ran; execution/configuration identities matched; RULE_ACCEPTANCE_TOKEN returned HTTP 401; both refs removed; lifecycle incomplete",
+      "attempt3": "Six business stages matched expectations; rerun request ended with network EOF; both refs removed, production unchanged; overall failed.",
+      "attempt4": {
+        "passed": true,
+        "target": "acceptance-automation-b13da05c-faba-436c-a852-f82855603757",
+        "observations": [
+          {
+            "label": "baseline-push",
+            "runId": 44143942851,
+            "attempt": 1,
+            "event": "push",
+            "conclusion": "success",
+            "execution": {
+              "runId": "44143942851",
+              "runAttempt": "1",
+              "eventSha": "4548e7b9476b35be2e52ec7c1b21beae9d6ebaba",
+              "workflowSha": "4548e7b9476b35be2e52ec7c1b21beae9d6ebaba",
+              "checkoutCommit": "4548e7b9476b35be2e52ec7c1b21beae9d6ebaba"
+            },
+            "configurationRevision": "4548e7b9476b35be2e52ec7c1b21beae9d6ebaba",
+            "status": "success"
+          },
+          {
+            "label": "pin-fixed",
+            "runId": 44144711702,
+            "attempt": 1,
+            "event": "workflow_dispatch",
+            "conclusion": "success",
+            "execution": {
+              "runId": "44144711702",
+              "runAttempt": "1",
+              "eventSha": "6af9fe468d34a00921ceb40ee78e6dc9f1375804",
+              "workflowSha": "6af9fe468d34a00921ceb40ee78e6dc9f1375804",
+              "checkoutCommit": "6af9fe468d34a00921ceb40ee78e6dc9f1375804"
+            },
+            "configurationRevision": "4548e7b9476b35be2e52ec7c1b21beae9d6ebaba",
+            "status": "success"
+          },
+          {
+            "label": "mixed-push",
+            "runId": 44145023048,
+            "attempt": 1,
+            "event": "push",
+            "conclusion": "success",
+            "execution": {
+              "runId": "44145023048",
+              "runAttempt": "1",
+              "eventSha": "d97db93b766d0ccf70f09c461cd7dbff7f30dd55",
+              "workflowSha": "d97db93b766d0ccf70f09c461cd7dbff7f30dd55",
+              "checkoutCommit": "d97db93b766d0ccf70f09c461cd7dbff7f30dd55"
+            },
+            "configurationRevision": "d97db93b766d0ccf70f09c461cd7dbff7f30dd55",
+            "status": "success"
+          },
+          {
+            "label": "resume-preview",
+            "runId": 44145617133,
+            "attempt": 1,
+            "event": "workflow_dispatch",
+            "conclusion": "success",
+            "execution": {
+              "runId": "44145617133",
+              "runAttempt": "1",
+              "eventSha": "6af9fe468d34a00921ceb40ee78e6dc9f1375804",
+              "workflowSha": "6af9fe468d34a00921ceb40ee78e6dc9f1375804",
+              "checkoutCommit": "6af9fe468d34a00921ceb40ee78e6dc9f1375804"
+            },
+            "configurationRevision": "d97db93b766d0ccf70f09c461cd7dbff7f30dd55",
+            "status": "success"
+          },
+          {
+            "label": "resume-fixed",
+            "runId": 44145781962,
+            "attempt": 1,
+            "event": "workflow_dispatch",
+            "conclusion": "success",
+            "execution": {
+              "runId": "44145781962",
+              "runAttempt": "1",
+              "eventSha": "6af9fe468d34a00921ceb40ee78e6dc9f1375804",
+              "workflowSha": "6af9fe468d34a00921ceb40ee78e6dc9f1375804",
+              "checkoutCommit": "6af9fe468d34a00921ceb40ee78e6dc9f1375804"
+            },
+            "configurationRevision": "d97db93b766d0ccf70f09c461cd7dbff7f30dd55",
+            "status": "success"
+          },
+          {
+            "label": "partial-failure-push",
+            "runId": 44146179207,
+            "attempt": 1,
+            "event": "push",
+            "conclusion": "failure",
+            "execution": {
+              "runId": "44146179207",
+              "runAttempt": "1",
+              "eventSha": "e8964855658595389568a552f9b6d9774341db69",
+              "workflowSha": "e8964855658595389568a552f9b6d9774341db69",
+              "checkoutCommit": "e8964855658595389568a552f9b6d9774341db69"
+            },
+            "configurationRevision": "e8964855658595389568a552f9b6d9774341db69",
+            "status": "partial"
+          },
+          {
+            "label": "old-event-rerun",
+            "runId": 44145023048,
+            "attempt": 2,
+            "event": "push",
+            "conclusion": "failure",
+            "execution": {
+              "runId": "44145023048",
+              "runAttempt": "2",
+              "eventSha": "d97db93b766d0ccf70f09c461cd7dbff7f30dd55",
+              "workflowSha": "d97db93b766d0ccf70f09c461cd7dbff7f30dd55",
+              "checkoutCommit": "e8964855658595389568a552f9b6d9774341db69"
+            },
+            "configurationRevision": "e8964855658595389568a552f9b6d9774341db69",
+            "status": "partial"
+          }
+        ],
+        "productionUnchanged": true,
+        "remaining": [],
+        "cleanupErrors": []
+      }
+    },
+    "review": {
+      "standards": "0 findings; full diff checked",
+      "cloud": {
+        "commit": "6af9fe468d34a00921ceb40ee78e6dc9f1375804",
+        "findings": 0,
+        "reviewThreads": 0,
+        "inlineComments": 0
+      },
+      "spec": "0 findings; full diff and retained gate/recovery coverage checked"
+    }
+  }
+}
