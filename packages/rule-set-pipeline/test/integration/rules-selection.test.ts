@@ -87,7 +87,8 @@ test('候选证据边界逐项拒绝损坏；status 只读且 pin 保留当前�
     ['wrong-rule', /identity mismatch/, d => d.change('manifest.json', m => { m.id = 'china-ip'; })],
     ['duplicate-artifact', /Duplicate artifact identity/, d => d.change('manifest.json', m => { m.artifacts[1].id = m.artifacts[0].id; })],
     ['extra-artifact', /Unsupported candidate projections/, d => d.change('manifest.json', m => { m.artifacts.push({ ...m.artifacts[0], id: 'extra' }); })],
-    ...['domains.srs', 'build.json', 'readback.json'].map(file => [`missing-${file}`, /404/, (d: Awaited<ReturnType<typeof damage>>) => d.replace(file)] as typeof cases[number]),
+    ...['domains.json', 'domains.srs', 'manifest.json', 'source.json', 'conversion-report.json', 'build.json', 'readback.json']
+      .map(file => [`missing-${file}`, /404/, (d: Awaited<ReturnType<typeof damage>>) => d.replace(file)] as typeof cases[number]),
     ['missing-readback', /Missing complete readback/, async d => { d.evidence.readback.pop(); await d.saveEvidence(); }],
     ['registered-digest', /registered evidence/, async d => d.replace('readback.json', Buffer.concat([await d.read('readback.json'), Buffer.from('\n')]))],
     ['readback-digest', /Readback integrity mismatch/, d => d.replace('domains.srs', Buffer.from('tampered'))],
@@ -100,6 +101,10 @@ test('候选证据边界逐项拒绝损坏；status 只读且 pin 保留当前�
     ['projection-mapping', /Projection mapping/, d => d.change('manifest.json', m => { m.projections['dns-query'].artifactIds = ['missing', m.artifacts[0].id]; })],
     ['build-identity', /Configured build identity/, d => d.change('build.json', b => { b.id = 'china-ip'; })],
     ['build-target', /Configured build identity/, d => d.change('build.json', b => { b.target.branch = 'other'; })],
+    ...[null, { artifactManifest: 2, sourceFormat: 4, buildRecord: 2 },
+      { artifactManifest: 1, sourceFormat: 4 }, { artifactManifest: 1, sourceFormat: 4, buildRecord: 3 }]
+      .map((contracts, index) => [`build-contracts-${index}`, /Unsupported build contracts/,
+        (d: Awaited<ReturnType<typeof damage>>) => d.change('build.json', b => { b.contracts = contracts; })] as typeof cases[number]),
     ['retained-replacement', /differs from retained/, d => { env.trees.get(env.heads.get(env.context.repository.branch)!)!.set(`candidates/${candidate.id}/domains.srs`, Buffer.from('replaced retained bytes')); }],
   ];
   for (const [fault, expected, corrupt] of cases) await t.test(fault, async () => {
