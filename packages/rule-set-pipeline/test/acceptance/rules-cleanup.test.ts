@@ -15,7 +15,7 @@ import type { RulesContext } from '../../src/rules-context.js';
 import { parseRulesJournal, RULE_STATE_PATH, type RulesResult } from '../../src/rules-model.js';
 import { syncRules, pinRuleVersion } from '../../src/rules-operations.js';
 import { cleanupRuleHistory } from '../../src/rules-cleanup.js';
-import { getRulesStatus } from '../../src/rules-status.js';
+import { getRulesStatus, type RuleStatus } from '../../src/rules-status.js';
 import { candidateFiles } from '../../src/candidate-publication.js';
 import { sha256 } from '../../src/release.js';
 
@@ -272,7 +272,7 @@ test('GitHub 四集 cleanup：保留窗口、切换中断、HTTPS 失败恢复�
       const status = await getRulesStatus({ context: { ...context } }); observations.push({ label: 'status-after-cleanup', status });
       assert.equal(status.status, 'success', JSON.stringify(status)); assert.equal(status.rules?.length, 4);
       for (const expected of expectedStatus.rules!) {
-        const actual = status.rules!.find(rule => rule.id === expected.id)!;
+        const actual: RuleStatus = status.rules!.find(rule => rule.id === expected.id)!;
         const { candidateEvidenceUrl: oldAddress, ...oldIdentity } = expected.current!;
         const { candidateEvidenceUrl: newAddress, ...newIdentity } = actual.current!;
         assert.deepEqual(newIdentity, oldIdentity); assert.deepEqual(actual.control, expected.control);
