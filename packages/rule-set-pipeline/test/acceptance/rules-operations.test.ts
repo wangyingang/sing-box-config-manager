@@ -43,7 +43,7 @@ test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resum
   const immutable = new Map<string, Promise<any>>();
   const request: typeof ghJson = async (args, input) => {
     const endpoint = args[1], method = args.includes('--method') ? args[args.indexOf('--method') + 1] : 'GET';
-    assert.ok(endpoint.startsWith(`repos/${ARTIFACT_REPOSITORY}/`));
+    assert.ok(endpoint === `repos/${ARTIFACT_REPOSITORY}` || endpoint.startsWith(`repos/${ARTIFACT_REPOSITORY}/`));
     if (method !== 'GET') {
       assert.ok(/^repos\/[^/]+\/[^/]+\/git\/(blobs|trees|commits|refs(?:\/heads\/[^/]+)?)$/.test(endpoint), endpoint);
       if (endpoint.endsWith('/git/refs')) assert.equal((input as { ref: string }).ref, `refs/heads/${target}`);
