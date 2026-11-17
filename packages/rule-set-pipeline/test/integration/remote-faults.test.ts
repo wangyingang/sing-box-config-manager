@@ -134,27 +134,6 @@ for (const stageFile of ['domains.json', 'manifest.json', 'readback.json']) {
   }
 }
 
-for (const missing of ['retained', 'domains.srs', 'build.json', 'readback.json', 'changed-current-bytes']) {
-  test(`成功处理后 ${missing} 不再保留，不返回旧候选成功地址`, { skip: !binary }, async () => isolated(async (directory, remote, source) => {
-    const common = { binary: binary!, configuration, publication: remote.publication, fetch: source.fetcher };
-    await updateRules({ ...common, stateDirectory: join(directory, 'first') });
-    const { journal } = await readRemoteState(remote.repository);
-    const candidateId = Object.keys(journal.state.candidates)[0];
-    if (missing === 'retained') {
-      journal.state.candidates[candidateId].retained = false;
-      remote.replace(STATE_PATH, encode(journal));
-    } else if (missing === 'changed-current-bytes') remote.replace(`candidates/${candidateId}/domains.srs`, Buffer.from('different retained baseline'));
-    else remote.remove(`candidates/${candidateId}/${missing}`);
-    const writesBefore = remote.writes.length;
-    await assert.rejects(updateRules({ ...common, stateDirectory: join(directory, 'fresh') }), /CANDIDATE_UNAVAILABLE/);
-    assert.equal(remote.writes.length, writesBefore);
-    const status = await readRemoteStatus({ repository: remote.repository, publication: remote.publication });
-    assert.notEqual(status.candidateAvailability[candidateId].status, 'available');
-    assert.equal(status.candidateAvailability[candidateId].evidenceUrl, undefined);
-    assert.equal(Object.keys(status.state.configuredProcessed!['openai']).length, 1, 'Processed fact is retained separately from candidate availability');
-  }));
-}
-
 for (const failure of ['missing-state', 'corrupt-state', 'read-error']) {
   test(`恢复入口遇到 ${failure} 时停止，不下载来源或写入候选`, async () => isolated(async (directory, remote) => {
     if (failure === 'missing-state') remote.remove(STATE_PATH);

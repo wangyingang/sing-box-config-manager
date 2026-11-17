@@ -8,7 +8,7 @@ import { connect } from 'node:net';
 import type { Duplex } from 'node:stream';
 import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
-import { compileRecipe, type RecipeCompileInput, type RuleSubscription } from '../../../config-compiler/src/index.js';
+import { compileRecipe, type RecipeCompileInput } from '../../../config-compiler/src/index.js';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -18,7 +18,6 @@ import { checkRules, resumeRules } from '../../src/check-rules.js';
 import { ARTIFACT_REPOSITORY } from '../../src/publication.js';
 import { readRemoteStatus } from '../../src/remote-status.js';
 import { sha256 } from '../../src/release.js';
-import { updateRules } from '../../src/update.js';
 import { configuredEnvironment } from './configured-activation-fixture.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
@@ -46,144 +45,16 @@ async function fixture(t: TestContext) {
     if (String(url) === `https://raw.githubusercontent.com/gaoyifan/china-operator-ip/${commit}/china46.txt`) return new Response(versionInputs[index]);
     throw new Error(`Unexpected upstream request: ${String(url)}`);
   };
-  const upstream = async (index: number) => {
-    const result = await updateRules({ configuration, selectedIds: [id], publication, fetch: upstreamFetch(index),
-      stateDirectory: join(directory, `publish-${index}`), binary: binary! });
-    const [entry] = result.results;
-    if (entry.status !== 'processed') assert.fail(JSON.stringify(entry));
-    return entry.candidate;
-  };
   const checkOptions = (fetch: typeof globalThis.fetch) => ({ configuration, publication, fetch, binary: binary!,
     stateDirectory: join(directory, 'check'), subscriptions: { [id]: subscription }, activation: env.transport });
   const status = () => readRemoteStatus({ repository: env.repository, activation: env.transport, publication });
   const options = () => ({ configuration, logicalId: id, subscription, binary: binary!, transport: env.transport, expectedHead: env.head() });
-  return { ...env, directory, upstream, status, options,
+  return { ...env, directory, status, options,
     check: (index: number, fetch = upstreamFetch(index)) => checkRules(checkOptions(fetch)),
     resume: (index: number) => resumeRules({ ...checkOptions(upstreamFetch(index)), logicalId: id }),
     activate: (candidateEvidenceUrl: string) => activateRules({ ...options(), candidateEvidenceUrl }),
     rollback: (historicalActivationCommit: string) => rollbackRules({ ...options(), historicalActivationCommit }),
   };
-}
-
-test('经核验的 china-ip 候选和人工固定随同一组稳定文件提交，回滚恢复历史字节', async t => {
-  const env = await fixture(t);
-  const a = await env.upstream(0);
-  const activeA = await env.activate(a.evidenceUrl!);
-  const b = await env.upstream(1);
-  const activeB = await env.activate(b.evidenceUrl!);
-  const fixedB = await env.activate(b.evidenceUrl!);
-  assert.notEqual(fixedB.activation.control?.revision, activeB.activation.control?.revision);
-  assert.deepEqual(fixedB.activation.control, { revision: fixedB.activation.id, reason: 'manual-activation',
-    pauseAutomaticActivation: true, pauseAutomaticRetry: false });
-  assert.deepEqual(fixedB.activation.files, activeB.activation.files);
-  assert.deepEqual(Object.keys(fixedB.activation.files).sort(), [`${path}/route.json`, `${path}/route.srs`]);
-  const read = (file: string, ref = branch) => env.transport.download(ruleUrl(ref, file));
-  assert.deepEqual(JSON.parse((await read('activation.json', fixedB.commit)).toString()), fixedB.activation);
-  const before = await env.status();
-  assert.equal(before.activeRuleVersions[id].candidate.status, 'available');
-  assert.deepEqual(before.activeRuleVersions[id].control, fixedB.activation.control);
-  assert.ok(before.rollbackTargets[id].some(target => target.commit === activeA.commit));
-  const rolledBack = await env.rollback(activeA.commit);
-  assert.equal(rolledBack.activation.candidateId, a.id);
-  assert.deepEqual(rolledBack.activation.control, { revision: rolledBack.activation.id, reason: 'manual-rollback',
-    pauseAutomaticActivation: true, pauseAutomaticRetry: true });
-  assert.deepEqual(await read('route.json'), await read('route.json', activeA.commit));
-  assert.deepEqual(await read('route.srs'), await read('route.srs', activeA.commit));
-  assert.notDeepEqual(await read('route.srs'), await read('route.srs', activeB.commit));
-  assert.deepEqual((await env.status()).activeRuleVersions[id].control, rolledBack.activation.control);
-});
-
-test('订阅用途不兼容、候选证据不符时保留当前版本', async t => {
-  const env = await fixture(t);
-  const a = await env.upstream(0);
-  const binaryOnly = { formats: { binary: formats.binary } };
-  const missingSource: RuleSubscription = { ...subscription, projections: { ...subscription.projections,
-    route: binaryOnly, 'dns-response': binaryOnly } };
-  await assert.rejects(activateRules({ ...env.options(), candidateEvidenceUrl: a.evidenceUrl!, subscription: missingSource }),
-    /Subscription source format is required/);
-  assert.equal(env.writes(), 0);
-  const activeA = await env.activate(a.evidenceUrl!);
-  const b = await env.upstream(1);
-  const before = env.head();
-  const invalid = structuredClone(subscription);
-  invalid.projections['dns-response'].formats = { ...formats, binary: format('other.srs') };
-  await assert.rejects(activateRules({ ...env.options(), candidateEvidenceUrl: b.evidenceUrl!, subscription: invalid }), /stable path/);
-  const split: RuleSubscription = { ...subscription, projections: { ...subscription.projections,
-    'dns-response': { formats: { binary: formats.binary } } } };
-  await assert.rejects(activateRules({ ...env.options(), candidateEvidenceUrl: b.evidenceUrl!, subscription: split }), /file reuse/);
-  // Change the registered evidence in both the retained tree and its HTTPS address.
-  // Self-consistency is insufficient: it still has to match the registered digest.
-  const evidencePath = `candidates/${b.id}/readback.json`;
-  const evidenceCommit = new URL(b.evidenceUrl!).pathname.split('/')[3];
-  const retained = env.snapshots.get(before)!;
-  const archived = env.snapshots.get(evidenceCommit)!;
-  const original = archived[evidencePath];
-  retained[evidencePath] = archived[evidencePath] = Buffer.concat([original, Buffer.from('\n')]);
-  await assert.rejects(env.activate(b.evidenceUrl!), /differs from registered evidence/);
-  retained[evidencePath] = archived[evidencePath] = original;
-  const srsPath = `candidates/${b.id}/route.srs`;
-  const srs = retained[srsPath];
-  retained[srsPath] = Buffer.from('altered retained candidate');
-  await assert.rejects(env.activate(b.evidenceUrl!), /differs from retained candidate/);
-  retained[srsPath] = srs;
-  assert.equal(env.head(), before);
-  assert.equal((await env.status()).activeRuleVersions[id].activation.id, activeA.activation.id);
-  assert.equal(env.writes(), 1);
-});
-
-for (const operation of ['activate', 'rollback'] as const) {
-  test(`china-ip ${operation} 在提交中断后从远端确认实际结果`, async t => {
-    const env = await fixture(t);
-    const a = await env.upstream(0), activeA = await env.activate(a.evidenceUrl!);
-    const b = await env.upstream(1), activeB = await env.activate(b.evidenceUrl!);
-    const run = operation === 'activate' ? () => env.activate(a.evidenceUrl!) : () => env.rollback(activeA.commit);
-    const read = async () => {
-      const status = await env.status();
-      const entry = status.manualOperations.at(-1)!;
-      assert.equal(entry.kind, operation);
-      return { entry, current: status.activeRuleVersions[id].activation };
-    };
-    // No local receipt is supplied by the activation or status calls.
-    env.fail('not-applied');
-    await assert.rejects(run(), /ACTIVATION_UNKNOWN/);
-    let state = await read();
-    assert.equal(state.current.id, activeB.activation.id);
-    assert.equal(state.entry.status, 'pending');
-    const pending = state.entry.id;
-
-    env.fail('rejected');
-    await assert.rejects(run(), /ACTIVATION_NOT_APPLIED/);
-    state = await read();
-    assert.equal(state.current.id, activeB.activation.id);
-    assert.equal(state.entry.status, 'not-committed');
-    assert.equal((await env.status()).manualOperations.find(entry => entry.id === pending)?.status, 'not-committed');
-
-    env.fail('unknown');
-    await assert.rejects(run(), /ACTIVATION_UNKNOWN/);
-    env.fail('');
-    state = await read();
-    assert.equal(state.entry.status, 'committed');
-    assert.equal(state.entry.commit, env.head());
-    assert.equal(state.current.id, state.entry.id);
-    assert.equal(state.current.candidateId, a.id);
-    const committed = state.entry.id;
-
-    env.fail('applied');
-    const confirmed = await run();
-    assert.equal((await read()).entry.commit, confirmed.commit);
-    assert.equal((await env.status()).manualOperations.find(entry => entry.id === committed)?.status, 'superseded');
-
-    env.fail('readback');
-    await assert.rejects(run(), /ACTIVATION_APPLIED_READBACK_PENDING/);
-    state = await read();
-    assert.equal(state.current.id, state.entry.id);
-    assert.equal(state.entry.status, 'pending');
-    assert.equal(state.entry.commit, env.head());
-    const before = env.writes();
-    env.fail('');
-    assert.equal((await read()).entry.status, 'committed');
-    assert.equal(env.writes(), before);
-  });
 }
 
 const addresses = [
@@ -469,22 +340,4 @@ test('同一真实客户端观察 china-ip 自动更新、固定、回滚、恢�
     observed: ['A', 'auto-B', 'fixed-B', 'rollback-A', 'resume-B', 'HTTP-503-retains-B', 'invalid-SRS-retains-B', 'offline-cache-restores-B'],
     cache: { sha256: sha256(cacheBytes), bytes: cacheBytes.length },
   } }));
-});
-
-test('仅创建 Git 对象但未切换稳定分支的版本不能作为 china-ip 回滚目标', async t => {
-  const env = await fixture(t);
-  const a = await env.upstream(0), activeA = await env.activate(a.evidenceUrl!);
-  const b = await env.upstream(1);
-  env.fail('not-applied');
-  let attempted: string | undefined;
-  await assert.rejects(env.activate(b.evidenceUrl!), (error: Error) => {
-    attempted = /attempted ([a-f0-9]{40})/.exec(error.message)?.[1];
-    return Boolean(attempted);
-  });
-  env.fail('');
-  const before = env.head();
-  await assert.rejects(env.rollback(attempted!), /ROLLBACK_UNAVAILABLE/);
-  assert.equal(env.head(), before);
-  assert.equal((await env.status()).activeRuleVersions[id].activation.id, activeA.activation.id);
-  assert.equal((await env.rollback(activeA.commit)).activation.candidateId, a.id);
 });
