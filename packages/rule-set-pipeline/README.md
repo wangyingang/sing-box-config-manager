@@ -224,6 +224,8 @@ SING_BOX_TEST_BINARY=/absolute/path/to/sing-box-1.14.4 pnpm --dir packages/rule-
 
 四集双来源同步覆盖位于 `test/integration/rules-inputs.test.ts`：共享来源读取、CIDR 独立变化、同语义不新增版本、共同来源和单列表故障、独立成功保留，以及合法 ID `constructor`。订阅对象的字段顺序语义复用 `rules-selection.test.ts` 的当前 pin 覆盖。[#96 映射与验收证据](../../docs/verification/issue-96.md)说明各旧断言的迁移落点；清理断言及其必要准备继续保留给 #98。
 
+真实客户端覆盖位于 `test/integration/rules-domain-client.test.ts` 与 `rules-cidr-client.test.ts`：当前 sync/pin/resume 驱动同一进程从原稳定 URL 更新域名 DNS/Route 与双栈 CIDR，Recipe、发布快照和配置文件不变。CIDR 场景保留 503、无效 SRS 和有效缓存断网重启；独立 `client-failure-recovery.test.ts` 继续覆盖域名下载／加载故障及持久缓存恢复。它们均由原生集成通配入口执行，隔离 harness 的轮询和缓存设置不修改生产客户端。[#97 映射及证据](../../docs/verification/issue-97.md)记录迁移与退役依据。
+
 真实 GitHub 交付验收使用独立入口；命令不会自动启用门禁。显式启用后必须提供真实 binary、可写隔离分支的 `gh` 登录和一个尚不存在的证据文件路径：
 
 ```sh

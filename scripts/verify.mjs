@@ -122,6 +122,8 @@ async function main() {
     const env = { ...process.env, PATH: `${binDirectory}${delimiter}${process.env.PATH ?? ''}`, NO_COLOR: '1' };
     // Evidence paths are always owned by this run, never inherited from another task.
     delete env.RULE_ACTIVATION_CLIENT_EVIDENCE;
+    delete env.RULE_DOMAIN_CLIENT_EVIDENCE;
+    delete env.RULE_CIDR_CLIENT_EVIDENCE;
     delete env.RULE_CLIENT_FAILURE_EVIDENCE;
     if (!values['check-only']) {
       const binary = values.binary ?? process.env.SING_BOX_TEST_BINARY;
@@ -134,7 +136,8 @@ async function main() {
       if (identity.split(/\r?\n/)[0] !== `sing-box version ${expectedVersion}`) throw new Error(`Expected sing-box ${expectedVersion}; got ${identity.split(/\r?\n/)[0]}`);
       summary.tools.singBox.version = expectedVersion;
       env.SING_BOX_TEST_BINARY = resolved;
-      env.RULE_ACTIVATION_CLIENT_EVIDENCE = join(output, 'client-update-rollback.json');
+      env.RULE_DOMAIN_CLIENT_EVIDENCE = join(output, 'client-domain-operations.json');
+      env.RULE_CIDR_CLIENT_EVIDENCE = join(output, 'client-cidr-operations.json');
       env.RULE_CLIENT_FAILURE_EVIDENCE = join(output, 'client-failure-cache.json');
     }
     const steps = [{ name: 'check', command: [join(binDirectory, 'pnpm'), 'check'], cwd: root }];
