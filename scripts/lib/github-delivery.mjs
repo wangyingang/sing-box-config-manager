@@ -5,7 +5,7 @@ const query = `query($owner:String!,$name:String!,$number:Int!,$cursor:String){
   repository(owner:$owner,name:$name){
     nameWithOwner defaultBranchRef{name}
     pullRequest(number:$number){
-      number url state isDraft baseRefName headRefOid mergeCommit{oid}
+      number url state isDraft baseRefName headRefOid headRefName headRepository{nameWithOwner} mergeCommit{oid}
       closingIssuesReferences(first:100,after:$cursor){
         nodes{number repository{nameWithOwner}} pageInfo{hasNextPage endCursor}
       }
@@ -32,7 +32,7 @@ export function github(...args) {
   catch { throw new Error(`GitHub 返回无效 JSON（gh ${args.slice(0, 2).join(' ')}）`); }
 }
 
-export function readPullRequest(repository, number) {
+export function readPullRequest(repository, number, { includeHead = false } = {}) {
   const [owner, name] = repository.split('/');
   let snapshot, cursor;
   const seenCursors = new Set(), references = new Set();
@@ -49,6 +49,11 @@ export function readPullRequest(repository, number) {
     const current = { repository: repo.nameWithOwner, defaultBranch: repo.defaultBranchRef.name,
       pullRequest: { number: pr.number, url: pr.url, state: pr.state, draft: pr.isDraft,
         baseBranch: pr.baseRefName, headCommit: pr.headRefOid, mergeCommit: pr.mergeCommit?.oid ?? null } };
+    if (includeHead) {
+      requireThat(nonempty(pr.headRefName) && repositoryName(pr.headRepository?.nameWithOwner), 'PR 来源分支或仓库身份缺失');
+      current.pullRequest.headBranch = pr.headRefName;
+      current.pullRequest.headRepository = pr.headRepository.nameWithOwner;
+    }
     requireThat(!snapshot || isDeepStrictEqual(snapshot, current), '分页期间 PR 或默认分支发生变化，请重试');
     snapshot = current;
     const connection = pr.closingIssuesReferences;
@@ -73,7 +78,7 @@ export function readIssue(repository, number) {
   return { number: issue.number, url: issue.url, state: issue.state, stateReason: issue.stateReason };
 }
 
-export function deliveryErrors(snapshot, issues, expected, phase) {
+export function deliveryErrors(snapshot, issues, expected, phase, { allowOpenIssues = false } = {}) {
   const { pullRequest: pr } = snapshot, errors = [];
   const references = expected.map(number => `${snapshot.repository.toLowerCase()}#${number}`);
   if (pr.baseBranch !== snapshot.defaultBranch) errors.push(`PR 目标为 ${pr.baseBranch}，需要默认分支 ${snapshot.defaultBranch}`);
@@ -86,6 +91,9 @@ export function deliveryErrors(snapshot, issues, expected, phase) {
   } else {
     if (pr.state !== 'MERGED' || !pr.mergeCommit) errors.push('PR 尚未确认合并，或缺少合并提交');
     for (const issue of issues) {
+      // The closeout writer may defer OPEN issues only while performing an
+      // explicitly authorized completion. Final and read-only checks stay strict.
+      if (allowOpenIssues && issue.state === 'OPEN') continue;
       if (issue.state !== 'CLOSED' || issue.stateReason !== 'COMPLETED') errors.push(`工单 #${issue.number} 尚未以 completed 关闭：${issue.state}/${issue.stateReason ?? '无原因'}`);
     }
   }
