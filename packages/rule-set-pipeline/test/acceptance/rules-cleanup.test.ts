@@ -9,7 +9,7 @@ import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/co
 import { createGitCommit } from '../../src/publication-repository.js';
 import { ARTIFACT_REPOSITORY, GitHubHttpError, ghJson } from '../../src/publication.js';
 import { githubRulesRepository } from '../../src/rules-repository.js';
-import { githubBaselineTransport } from '../../src/maintenance-baseline-transport.js';
+import { githubBaselineTransport, filePaths } from '../../src/maintenance-baseline-transport.js';
 import { branchRef, gitMaintenanceRefs, type RefChange } from '../../src/maintenance-refs.js';
 import type { RulesContext } from '../../src/rules-context.js';
 import { parseRulesJournal, RULE_STATE_PATH, type RulesResult } from '../../src/rules-model.js';
@@ -231,7 +231,7 @@ test('GitHub 四集 cleanup：保留窗口、切换中断、HTTPS 失败恢复�
     const oldHistory = await ancestorHeads(beforeCleanup.head);
     const originalJournal = parseRulesJournal((await beforeCleanup.read(RULE_STATE_PATH))!);
     let expectedStatus = await getRulesStatus(input); assert.equal(expectedStatus.status, 'success');
-    const stableBytes = new Map(await Promise.all(beforeCleanup.paths.filter(path => path.startsWith('stable/') && !path.endsWith('/activation.json'))
+    const stableBytes = new Map(await Promise.all(filePaths(beforeCleanup.paths).filter(path => path.startsWith('stable/') && !path.endsWith('/activation.json'))
       .map(async path => [path, await beforeCleanup.read(path)] as const)));
     const sourceCount = requests.length;
     const preview = await check('cleanup-preview', () => cleanupRuleHistory({ ...input, dryRun: true }));
@@ -302,7 +302,7 @@ test('GitHub 四集 cleanup：保留窗口、切换中断、HTTPS 失败恢复�
     assert.equal(currentOf(selected, 'openai').publishedAt, boundary.publishedAt);
     expectedStatus = await getRulesStatus(input); assert.equal(expectedStatus.status, 'success');
     const secondBefore = await repository.snapshot();
-    const secondBytes = new Map(await Promise.all(secondBefore.paths.filter(path => path.startsWith('stable/') && !path.endsWith('/activation.json'))
+    const secondBytes = new Map(await Promise.all(filePaths(secondBefore.paths).filter(path => path.startsWith('stable/') && !path.endsWith('/activation.json'))
       .map(async path => [path, await secondBefore.read(path)] as const)));
     const secondHistory = await ancestorHeads(secondBefore.head); now = '2026-11-17T00:00:00.000Z';
     await check('cleanup-second-round', () => cleanupRuleHistory(input)); assert.equal(switchCount, 2);
