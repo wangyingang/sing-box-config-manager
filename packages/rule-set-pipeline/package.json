@@ -14,7 +14,8 @@
     "test:publication": "node --import tsx --test test/acceptance/publication.test.ts",
     "test:rollback": "pnpm --filter @sing-box-config-manager/config-compiler generate:validator && node --import tsx --test test/acceptance/configured-rollback.test.ts",
     "test:activation": "pnpm --filter @sing-box-config-manager/config-compiler generate:validator && node --import tsx --test test/acceptance/configured-activation.test.ts",
-    "rules": "node --import tsx src/cli.ts"
+    "rules": "node --import tsx src/cli.ts",
+    "test:acceptance:rules": "node --import tsx --test test/acceptance/rules-operations.test.ts"
   },
   "exports": {
     ".": {

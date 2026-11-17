@@ -47,7 +47,7 @@
 | check-now：候选各提交阶段都使维护延期，远端登记在任务中断后仍然有效 | T5：原测试及必要准备保留 | 本票不删清理断言 |
 | check-now：隔离已提交后断线，新调用续做保留集合。稳定 head 改变后保持隔离 | T5：原测试及必要准备保留 | 本票不删清理断言 |
 | check-now：恢复只解除选中集的限制，并允许重新采用刚回滚掉的最新版本 | I1/I2；恢复、七阶段故障/竞争复用 rules-recovery、rules-source-recovery、rules-performance、rules-selection、rules-operations | 替代通过后退役；旧双暂停、批次恢复/selectedIds/本地回执字段退役；共享状态损坏遵从当前停止全部写入契约 |
-| check-now：${branch} 恢复决定提交后断线，换机检查失败仍保持恢复并能再次更新 | I1/I2；恢复、七阶段故障/竞争复用 rules-recovery、rules-source-recovery、rules-performance、rules-selection、rules-operations | 替代通过后退役；旧双暂停、批次恢复/selectedIds/本地回执字段退役；共享状态损坏遵从当前停止全部写入契约 |
+| check-now：${branch} 恢复决定提交后断线，换机检查失败仍保持恢复并能再次更新 | T5：其中维护预览阻塞断言尚未迁移 | 两种分支布局的原测试及必要准备保留，不由本票删除 |
 | check-now：${branch} 自动检查登记后人工固定并恢复，最早任务仍不能发布或激活 | I1/I2；恢复、七阶段故障/竞争复用 rules-recovery、rules-source-recovery、rules-performance、rules-selection、rules-operations | 替代通过后退役；旧双暂停、批次恢复/selectedIds/本地回执字段退役；共享状态损坏遵从当前停止全部写入契约 |
 | check-now：维护期间拒绝保存恢复决定或访问上游 | T5：原测试及必要准备保留 | 本票不删清理断言 |
 | check-now：恢复 OpenAI 立即检查最新来源，Anthropic 保留原批次和已发布的候选文件 | I1/I2；恢复、七阶段故障/竞争复用 rules-recovery、rules-source-recovery、rules-performance、rules-selection、rules-operations | 替代通过后退役；旧双暂停、批次恢复/selectedIds/本地回执字段退役；共享状态损坏遵从当前停止全部写入契约 |
@@ -75,3 +75,11 @@
 | official-rulesets-lifecycle：清理代次、保留、pin、旧候选不可选及清理后回读/恢复 | T5 | 不在本票退役，必要旧业务调用仅作清理准备 |
 
 运行结果与最终删除范围将在验证后补充；未执行或跳过不算通过。
+
+## 本地替代覆盖通过后的退役
+
+2026-11-17：`rules-inputs` 13/13、操作/七阶段/恢复/来源/选择五个 suite 共 175/175 通过，均零跳过。由此删除 `check-sources` 8 项、`configured-update` 剩余 8 项，并从 `check-now` 分段移除已迁移的同步、恢复、竞争和过时批次断言。`check-now` 的维护预览、保留、清理切换、中断恢复及跨清理回读保留，包含“恢复决定提交后断线”中的维护阻塞保护；其必要旧业务准备不提前删除。
+
+旧“一个当前记录损坏仍交付兄弟集”由 `test/rules-state.test.ts` 五项当前状态保护代替：损坏共享状态时停止全部写入；正常来源或列表失败则由 I2 保留独立成功。旧来源绑定/订阅校验分别落在 `rules-operations` 换源与路径保护及 `rules-selection` S5；旧七阶段/人工控制竞争落在 `rules-performance` 和 `rules-selection`，不是减少守卫。配置增选改为当前定义新增，不恢复 selectedIds；constructor 不再依赖旧 processed 索引。
+
+`test:release` 的通配收敛留给 #101，本票只接线 `test:acceptance:rules`。尚有调用者的 legacy workflow、configured activation 和客户端 fixture 保留。

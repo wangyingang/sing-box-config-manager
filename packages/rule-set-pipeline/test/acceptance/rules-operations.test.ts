@@ -37,6 +37,7 @@ test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resum
     probeSha256: sha256(await readFile(new URL(import.meta.url))), binary,
     command: 'RULE_OPERATIONS_PROBE=1 pnpm --dir packages/rule-set-pipeline test:acceptance:rules' };
   const observations: unknown[] = [], requests: string[] = [], readbacks: unknown[] = [];
+  const acquisitionAttempts: { label: string; attempt: number; requests: string[] }[] = [];
   const startedAt = new Date().toISOString();
   // Reserve the evidence destination before the first remote mutation.
   await writeFile(evidencePath, JSON.stringify({ target, sourceIdentity, startedAt, status: 'started' }, null, 2) + '\n', { flag: 'wx' });
@@ -56,7 +57,10 @@ test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resum
         headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
         body: input === undefined ? undefined : JSON.stringify(input), signal: AbortSignal.timeout(120_000) });
       const body = await response.text();
-      if (!response.ok) throw new GitHubHttpError(response.status, `${method} ${endpoint}: HTTP ${response.status}`);
+      if (!response.ok) {
+        let reason = ''; try { reason = JSON.parse(body).message ?? ''; } catch { /* Non-JSON gateway response. */ }
+        throw new GitHubHttpError(response.status, `${method} ${endpoint}: HTTP ${response.status} ${reason}`);
+      }
       return body ? JSON.parse(body) : null;
     })();
     if (cacheable) { immutable.set(endpoint, call); call.catch(() => immutable.delete(endpoint)); }
@@ -85,7 +89,7 @@ test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resum
     });
     const after = await production().catch(error => { cleanupErrors.push(String(error)); return null; });
     await writeFile(evidencePath, JSON.stringify({ target, sourceIdentity, startedAt, endedAt: new Date().toISOString(),
-      before, after, observations, requests, readbacks, created, remaining, cleanupErrors }, null, 2) + '\n');
+      before, after, observations, requests, acquisitionAttempts, readbacks, created, remaining, cleanupErrors }, null, 2) + '\n');
     assert.deepEqual(cleanupErrors, []); assert.deepEqual(remaining, []); assert.deepEqual(after, before);
     console.log(JSON.stringify({ target, cleaned: true, productionUnchanged: true, evidencePath }));
   });
@@ -128,7 +132,7 @@ test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resum
     readConfiguration: async () => ({ revision: String(revision).padStart(40, '0'), origin: 'isolated-github-probe', content: stringify(config) }),
     fetch: sourceFetch,
   };
-  const input = { context };
+  const input = { context, onProgress: (event: { stage: string; id?: string }) => console.log(JSON.stringify(event)) };
   const stableBytes = new Map<string, Buffer>();
   async function readBytes(url: string, expected?: { sha256: string; byteLength: number }) {
     const deadline = Date.now() + 480_000; let attempts = 0;
@@ -146,7 +150,22 @@ test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resum
   async function check(label: string, operation: () => Promise<RulesResult>, onlyId?: string) {
     const prior = await getRulesStatus(input); assert.equal(prior.status, 'success', JSON.stringify(prior));
     const oldHead = (await repository.snapshot()).head;
-    const result = await operation(); observations.push({ label, result });
+    const runAttempt = async (attempt: number) => {
+      const start = requests.length;
+      const result = await operation();
+      acquisitionAttempts.push({ label, attempt, requests: requests.slice(start) });
+      observations.push({ label, attempt, result }); return result;
+    };
+    let result = await runAttempt(1);
+    for (let attempt = 2; result.status !== 'success' && attempt <= 3; attempt++) {
+      const failures = result.results.filter(x => x.status === 'failed' || x.status === 'pending');
+      const transient = /HTTP 5\d\d|HTTP 422.*(?:taking too long|try again)|fetch failed|timeout/i;
+      if (!failures.length || !failures.every(x => transient.test(x.error ?? ''))) break;
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Retry the public operation. Its normal session/heads/writeId reconciliation
+      // decides what was applied; never replay a low-level ref request here.
+      result = await runAttempt(attempt);
+    }
     assert.equal(result.status, 'success', JSON.stringify(result));
     // New context/session, not a local success index.
     const status = await getRulesStatus({ context: { ...context } }); assert.equal(status.status, 'success', JSON.stringify(status));
@@ -156,7 +175,8 @@ test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resum
       for (const [path, expected] of Object.entries(rule.current?.files ?? {})) {
         const immutableBytes = await readBytes(`https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${snapshot.head}/${path}`, expected);
         assert.deepEqual(await readBytes(`https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${target}/${path}`, expected), immutableBytes);
-        stableBytes.set(`${rule.current!.versionId}/${path}`, immutableBytes);
+        const key = `${rule.current!.versionId}/${path}`;
+        if (!stableBytes.has(key)) stableBytes.set(key, immutableBytes);
       }
       if (onlyId && rule.id !== onlyId) {
         assert.deepEqual(rule.current, prior.rules?.find(x => x.id === rule.id)?.current);
@@ -200,7 +220,9 @@ test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resum
     observations.push({ candidate: current.candidateId, source: current.source, manifest, report, build, readback, files });
   }
   const first = await check('add-four', () => syncRules(input));
-  assert.deepEqual(first.results.map(x => [x.id, x.status]), ['openai', 'anthropic', 'google-deepmind', 'china-ip'].map(id => [id, 'delivered']));
+  assert.deepEqual(first.results.map(x => x.id), ['openai', 'anthropic', 'google-deepmind', 'china-ip']);
+  assert.ok(first.results.every(x => x.current && ['delivered', 'unchanged'].includes(x.status)));
+  assert.deepEqual((await getRulesStatus(input)).rules?.map(x => x.candidateCount), [1, 1, 1, 1]);
   for (const [i, entry] of first.results.entries()) {
     const source = entry.current!.source;
     if (i < 3) { assert.ok('tag' in source); assert.equal(source.tag, originalTag); } else assert.equal(source.commit, originalCommit);
@@ -209,15 +231,19 @@ test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resum
   const domainSource = first.results[0].current!.source;
   assert.ok('yaml' in domainSource);
   for (const suffix of ['/latest', `/assets/${domainSource.yaml.id}`, `/assets/${domainSource.checksum.id}`, '/branches/ip-lists', '/china46.txt']) {
-    assert.equal(requests.filter(url => url.endsWith(suffix)).length, 1, suffix);
+    assert.equal(acquisitionAttempts[0].requests.filter(url => url.endsWith(suffix)).length, 1, suffix);
   }
   commit = updatedCommit;
   const cidr = await check('cidr-only', () => syncRules(input), 'china-ip');
-  assert.deepEqual(cidr.results.map(x => x.status), ['unchanged', 'unchanged', 'unchanged', 'delivered']);
+  assert.deepEqual(cidr.results.slice(0, 3).map(x => x.status), ['unchanged', 'unchanged', 'unchanged']);
+  assert.notEqual(cidr.results[3].current?.versionId, first.results[3].current?.versionId);
   assert.equal(cidr.results[3].current?.source.commit, updatedCommit);
   tag = updatedTag;
   const updated = await check('release-update', () => syncRules(input));
-  assert.deepEqual(updated.results.map(x => x.status), ['unchanged', 'delivered', 'unchanged', 'unchanged']);
+  assert.ok(updated.results.filter(x => x.id !== 'anthropic').every(x => x.status === 'unchanged'));
+  const updatedAnthropic = updated.results.find(x => x.id === 'anthropic')!.current!;
+  assert.ok('tag' in updatedAnthropic.source); assert.equal(updatedAnthropic.source.tag, updatedTag);
+  assert.notEqual(updatedAnthropic.versionId, first.results[1].current?.versionId);
   for (const id of ['openai', 'anthropic', 'google-deepmind', 'china-ip']) {
     const original = first.results.find(x => x.id === id)!.current!;
     if (id !== 'china-ip') {
