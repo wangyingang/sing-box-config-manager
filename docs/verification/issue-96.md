@@ -82,3 +82,19 @@
 旧“一个当前记录损坏仍交付兄弟集”由 `test/rules-state.test.ts` 五项当前状态保护代替：损坏共享状态时停止全部写入；正常来源或列表失败则由 I2 保留独立成功。旧来源绑定/订阅校验分别落在 `rules-operations` 换源与路径保护及 `rules-selection` S5；旧七阶段/人工控制竞争落在 `rules-performance` 和 `rules-selection`，不是减少守卫。配置增选改为当前定义新增，不恢复 selectedIds；constructor 不再依赖旧 processed 索引。
 
 `test:release` 的通配收敛留给 #101，本票只接线 `test:acceptance:rules`。尚有调用者的 legacy workflow、configured activation 和客户端 fixture 保留。
+
+## 审查与未通过的远端运行
+
+Standards 首轮 1 项 P3：映射生成把 fetch 实现片段当作测试名，已删除伪条目并清理测试名中的代码尾段。Spec 首轮 1 项 P2：固定官方样本的独立输出数量和来源列表断言遗漏，已补齐三域名的 25/19/49、旧单集样本的 214，以及 `build.definition.list`；pin 明确检查请求版本，resume 对照固定前最新来源和字节。双轴静态复核均无剩余问题。
+
+远端前四轮均不计通过：
+
+- attempt-1：探针的 API 路径限制误拒绝仓库元信息读取，尚未进入业务。隔离目标已清理，生产 refs/variables 前后相同。
+- attempt-2：三域名交付成功，CIDR 的 ref 更新返回 HTTP 422；全轮失败。隔离目标已清理，生产前后相同。后续仅对明确临时服务错误重试公开操作，仍由正常 session/heads/writeId 核实已应用结果，不直接重放底层写请求。
+- attempt-3：为补齐本地审查断言主动 SIGINT；不算完成。手工删除精确隔离 ref 后确认没有残留。原始进程未及时落盘本轮初始生产快照，因此归档明确以 attempt-2 的结束快照作最近已记录参照，不能把它冒称为本轮初始快照。后续版本增加初始快照及每个完成阶段的即时落盘。
+- attempt-4：四集新增和稳定 HTTPS 回读成功；一次额外 status 查询的 OpenAI 可选计数降为 0，触发断言失败。此前已保存的查询中四集均可选；失败查询本身未保存候选 reason，具体网络原因未证实。隔离目标已清理，生产前后相同。后续复用已记录查询，并恢复原探针对下载 TypeError 的一次重试；不放宽摘要、字节、身份或原生校验。
+
+显式门禁下缺少 binary、缺少 evidence 路径均已执行拒绝验证，业务未运行。关闭语义去重的临时 mutation 使四集测试按预期失败，源码随后逐字还原。根 `src/` 和模块业务源码没有最终差异。
+
+- attempt-5：四集新增、候选固定来源／七文件、CIDR-only、Release 更新及 OpenAI 换列表通过；canonical URL 的 `max-age=300` 使逐次等待过长，主动中断，不算完整通过。精确隔离 ref 已清理，保存的本轮生产快照前后相同。后续沿用旧 activation/rollback 的分批回读策略：逐集保留不可变快照和兄弟集比较，全部固定后统一回读 canonical 原版本，全部恢复后统一回读 canonical 最新内容。
+- attempt-6：用户网络中断期间出现顶层 `fetch failed`，全轮失败；自动删除隔离 ref 也因网络失败而未完成。恢复后通过 `gh` 手工删除唯一精确 ref，另存清理证据，确认无残留且生产前后相同。原始失败证据保留，不改写为通过。
