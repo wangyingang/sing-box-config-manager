@@ -128,7 +128,10 @@ test('候选合格但交付准备失败时单独保存 verified，不登记 pend
 });
 
 for (const rival of ['sync', 'pin', 'change-source', 'delete', 'cleanup'] as const) {
-  test(`候选阶段与 ${rival} 并发时，迟到写入不覆盖最新状态`, { skip: !binary }, async () => {
+  // Exercise later actual writes in the existing concurrency matrix as well:
+  // metadata must retain the pin/CAS guard, evidence the configuration guard.
+  const stage = rival === 'pin' ? 'manifest.json' : rival === 'change-source' ? 'readback.json' : '.srs';
+  test(`候选 ${stage} 阶段与 ${rival} 并发时，迟到写入不覆盖最新状态`, { skip: !binary }, async () => {
     const env = cleanupEnvironment(binary!, 'main');
     const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
     const first = await syncRules({ context: env.context }); assert.equal(first.status, 'success');
@@ -138,7 +141,7 @@ for (const rival of ['sync', 'pin', 'change-source', 'delete', 'cleanup'] as con
     env.beforeWrite(async files => {
       const registering = files['pipeline/state.json'] && Object.values(parseRulesJournal(files['pipeline/state.json']!).candidates)
         .some(candidate => candidate.status === 'building');
-      if (rival === 'cleanup' ? !registering : !Object.keys(files).some(path => path.endsWith('.srs'))) return;
+      if (rival === 'cleanup' ? !registering : !Object.keys(files).some(path => path.endsWith(stage))) return;
       env.beforeWrite();
       const request = { context: { ...env.context } };
       if (rival === 'pin') rivalResult = await pinRuleVersion({ ...request, id: 'openai', version });
