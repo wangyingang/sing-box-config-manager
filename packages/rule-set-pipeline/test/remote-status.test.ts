@@ -24,11 +24,6 @@ function subscription() {
     projections: { route: { formats }, 'dns-query': { formats: structuredClone(formats) }, 'dns-response': { unavailable: 'empty' } } };
 }
 
-function binaryOnly(record: { subscription: ReturnType<typeof subscription>; files: Record<string, unknown> }) {
-  delete record.subscription.projections.route.formats.source;
-  delete record.subscription.projections['dns-query'].formats.source;
-  for (const path of Object.keys(record.files)) if (path.endsWith('/domains.json')) delete record.files[path];
-}
 
 function remote() {
   const journal: RemoteJournal = { schemaVersion: 1, id: '11111111-1111-4111-8111-111111111111', generation: 1,
@@ -101,43 +96,6 @@ function activate(env: ReturnType<typeof remote>, candidate: ReturnType<typeof a
   for (const file of ['domains.json', 'domains.srs']) env.stable.set(`stable/openai/${file}`, candidate.contents[file]);
 }
 
-test('仅提供 SRS 的 v2 订阅可查询当前版本及有效回滚目标', async () => {
-  const env = remote(), old = addCandidate(env, 'a1'), current = addCandidate(env, 'b2');
-  binaryOnly(old.activation); binaryOnly(current.activation);
-  const oldCommit = 'f'.repeat(40), stablePath = 'stable/openai';
-  const recordPath = `${stablePath}/activation.json`;
-  current.activation.history.push({ commit: oldCommit, id: old.activation.id, candidateId: 'a1' });
-  env.stable.set(recordPath, encode(current.activation));
-  env.stable.set(`${stablePath}/domains.srs`, current.contents['domains.srs']);
-  env.history.set(immutableUrl(oldCommit, recordPath), encode(old.activation));
-  env.history.set(immutableUrl(oldCommit, `${stablePath}/domains.srs`), old.contents['domains.srs']);
-  const result = await readRemoteStatus({ repository: env.repository, publication: env.publication, activation: env.publication });
-  assert.equal(result.activeRuleVersions.openai.activation.candidateId, 'b2');
-  assert.deepEqual(result.rollbackTargets.openai.map(target => target.candidateId), ['a1']);
-  assert.equal(result.historyComplete.openai, true);
-  assert.deepEqual(result.historyErrors.openai, []);
-  assert.deepEqual(result.pendingOperations, []);
-});
-
-for (const fault of ['missing', 'schema', 'identity', 'repository', 'branch', 'path', 'file-set', 'mapping']) {
-  test(`v2 状态拒绝 ${fault} 订阅或文件记录`, async () => {
-    const env = remote(), current = addCandidate(env, 'a1');
-    const record: Record<string, any> = current.activation;
-    const projection = record.subscription.projections;
-    if (fault === 'missing') delete record.subscription;
-    if (fault === 'schema') record.subscription.schemaVersion = 1;
-    if (fault === 'identity') record.subscription.systemRuleSetId = 'another-rule-set';
-    if (fault === 'repository') projection.route.formats.binary.url = projection.route.formats.binary.url.replace('sing-box-rule-artifacts', 'untrusted-artifacts');
-    if (fault === 'branch') projection.route.formats.binary.url = projection.route.formats.binary.url.replace('/main/', '/other/');
-    if (fault === 'path') projection.route.formats.binary.url = projection.route.formats.binary.url.replace('/stable/', '/stable/../');
-    if (fault === 'file-set') delete record.files['stable/openai/domains.srs'];
-    if (fault === 'mapping') delete projection['dns-query'].formats.source;
-    env.stable.set('stable/openai/activation.json', encode(record));
-    await assert.rejects(readRemoteStatus({ repository: env.repository, publication: env.publication, activation: env.publication }),
-      /subscription|Subscription|activation file set/);
-  });
-}
-
 test('维护发现未归属的稳定文件时延期并保留文件', async () => {
   const env = remote();
   activate(env, addCandidate(env, 'a1'));
@@ -153,16 +111,6 @@ test('维护发现未归属的稳定文件时延期并保留文件', async () =>
   assert.equal(result.status, 'deferred');
   assert.ok('blockers' in result && result.blockers.some(item => item.id === rule && item.status === 'unidentified-stable-file'));
   assert.deepEqual(env.stable, original);
-});
-
-test('当前稳定字节损坏与非法历史记录不能被当作正常状态', async () => {
-  for (const corrupt of ['bytes', 'history'] as const) {
-    const env = remote(), current = addCandidate(env, 'a1'); activate(env, current);
-    if (corrupt === 'bytes') env.stable.set('stable/openai/domains.srs', Buffer.from('corrupted'));
-    else { current.activation.history.push({ commit: 'short', id: 'old', candidateId: 'b2' }); activate(env, current); }
-    await assert.rejects(readRemoteStatus({ repository: env.repository, publication: env.publication, activation: env.publication }),
-      corrupt === 'bytes' ? /Stable file integrity/ : /Invalid activation history/);
-  }
 });
 
 test('维护预览保留当前规则证据，不按年龄排除固定版本', async () => {

@@ -1,154 +1,177 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import test from 'node:test';
-import { stringify } from 'yaml';
-import { activateRules } from '../../src/activation.js';
-import { checkRules } from '../../src/check-rules.js';
-import { parseBuildConfiguration } from '../../src/configuration.js';
-import type { RulesContext } from '../../src/rules-context.js';
 import { migrateRulesState } from '../../src/rules-migration.js';
 import { encodeRecord, parseRulesJournal, RULE_STATE_PATH } from '../../src/rules-model.js';
 import { syncRules } from '../../src/rules-operations.js';
 import { readRemoteState } from '../../src/remote-state.js';
+import { activationRecord, verifyStableFiles } from '../../src/remote-status.js';
 import { getRulesStatus } from '../../src/rules-status.js';
-import { configuredEnvironment, upstream } from './configured-activation-fixture.js';
+import type { RuleWrites } from '../../src/rules-repository.js';
+import { historicalEnvironment } from '../fixtures/historical-environment.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
-for (const target of ['acceptance-issue-84-migration', 'main']) {
-  test(`${target}: 旧状态转换保留稳定字节和有效固定，缺失时间不编造，预览零写入`, { skip: !binary }, async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'rule-migration-'));
-    try {
-      const env = await configuredEnvironment(binary!, directory, target);
-      const built = await checkRules({ binary: binary!, configuration: env.configuration, stateDirectory: directory,
-        fetch: upstream(1).fetcher, publication: { repository: env.repository, commit: env.publish, download: env.transport.download },
-        activation: env.transport, subscriptions: Object.fromEntries(env.ids.map(id => [id, env.subscription(id)])) });
-      assert.equal(built.exitCode, 0, JSON.stringify(built));
-      const oldStable = await env.repository.snapshot(target);
-      const openai = JSON.parse((await oldStable.read('stable/openai/activation.json'))!.toString());
-      await activateRules(env.options('openai', openai.candidateEvidenceUrl));
-      const currentStable = await env.repository.snapshot(target);
-      const stableBytes = new Map(await Promise.all(currentStable.paths.filter(path => path.startsWith('stable/') && !path.endsWith('/activation.json'))
-        .map(async path => [path, await currentStable.read(path)] as const)));
-      let writes = 0;
-      let interruptFinal = target === 'main';
-      let content = env.configuration;
-      const context: RulesContext = { binary: binary!, targetBranch: target, allowWrites: true,
-        readConfiguration: async () => ({ revision: 'f'.repeat(40), origin: 'migration-fixture', content }),
-        repository: { branch: env.repository.branch, snapshot: env.repository.snapshot,
-          lastChange: env.repository.lastChange!, download: env.transport.download,
-          async commit(branch, expected, files, message, guard) {
-            await guard(); writes++;
-            assert.ok(Object.values(files).every(Buffer.isBuffer));
-            if (interruptFinal && files[RULE_STATE_PATH] && JSON.parse(files[RULE_STATE_PATH]!.toString()).schemaVersion === 2) {
-              interruptFinal = false; throw new Error('Interrupted before final journal commit');
-            }
-            return branch === env.repository.branch
-              ? env.repository.commit(expected, files as Record<string, Buffer>, message)
-              : env.transport.commit(expected, files as Record<string, Buffer>, message);
-          } } };
-      if (target === 'main') {
-        const configuration = parseBuildConfiguration(content);
-        configuration.ruleSets.find(rule => rule.id === 'openai')!.list = 'openai-alt';
-        content = stringify(configuration);
-      }
-      const beforeHead = (await context.repository.snapshot()).head;
-      const preview = await migrateRulesState({ context, dryRun: true });
-      assert.equal(preview.status, 'planned');
-      assert.equal(writes, 0);
-      assert.equal((await context.repository.snapshot()).head, beforeHead);
-      assert.equal((await context.repository.snapshot(target)).head, currentStable.head);
-      assert.ok(preview.migration.pending.every(message => /historical publication time unavailable/.test(message)));
-      if (target === 'main') {
-        await assert.rejects(migrateRulesState({ context }), /RULE_MIGRATION_PENDING/);
-        const checkpoint = JSON.parse((await (await context.repository.snapshot()).read(RULE_STATE_PATH))!.toString());
-        assert.equal(checkpoint.schemaVersion, 1);
-        assert.equal(checkpoint.maintenance, 'maintenance');
-        const blocked = await getRulesStatus({ context });
-        assert.equal(blocked.status, 'failed');
-      }
-      const migrated = await migrateRulesState({ context });
-      assert.equal(migrated.status, 'converted');
-      assert.equal(writes, target === 'main' ? 4 : 1);
-      const next = parseRulesJournal((await (await context.repository.snapshot()).read(RULE_STATE_PATH))!);
-      assert.equal(next.rules.openai.control.mode, target === 'main' ? 'auto' : 'pinned');
-      assert.equal(next.rules.anthropic.control.mode, 'auto');
-      const newStable = await context.repository.snapshot(target);
-      for (const [path, bytes] of stableBytes) assert.deepEqual(await newStable.read(path), bytes, path);
-      for (const candidate of Object.values(next.candidates)) {
-        assert.equal(candidate.publishedAt, undefined);
-        assert.equal(candidate.versionId, undefined);
-        assert.match(candidate.migrationPending!, /Historical publication time is unavailable/);
-      }
-      const status = await getRulesStatus({ context });
-      assert.equal(status.status, 'success', JSON.stringify(status));
-      const selected = status.rules!.find(rule => rule.id === 'openai')!;
-      assert.equal(selected.deliveryState, 'delivered');
-      assert.equal(selected.current!.candidateId, openai.candidateId);
-      assert.ok(selected.candidates.every(candidate => !candidate.selectable && /Historical publication time/.test(candidate.reason!)));
-      assert.equal((await migrateRulesState({ context })).status, 'already-converted');
-      assert.equal(writes, target === 'main' ? 4 : 1);
-    } finally { await rm(directory, { recursive: true, force: true }); }
+for (const name of ['shared', 'split'] as const) {
+  test(`${name}: 固定历史转换保留来源、字节、有效固定及未知时间，预览与重复执行零写入`, { skip: !binary }, async () => {
+    const env = await historicalEnvironment(name, binary!);
+    const { context } = env;
+    const { journal: legacy } = await readRemoteState(env.legacyRepository);
+    const stable = await context.repository.snapshot(context.targetBranch);
+    const openai = JSON.parse((await stable.read('stable/openai/activation.json'))!.toString());
+    const stableBytes = new Map(await Promise.all(stable.paths.filter(path => path.startsWith('stable/') && !path.endsWith('/activation.json'))
+      .map(async path => [path, await stable.read(path)] as const)));
+    if (name === 'split') {
+      const configuration = env.config();
+      configuration.ruleSets.find(rule => rule.id === 'openai')!.list = 'openai-alt';
+      env.configure(configuration);
+    }
+    const heads = new Map(env.heads);
+    const preview = await migrateRulesState({ context, dryRun: true });
+    assert.equal(preview.status, 'planned');
+    assert.equal(env.writes.length, 0);
+    assert.deepEqual(env.heads, heads);
+    assert.equal(preview.migration.pending.length, 3);
+    assert.ok(preview.migration.pending.every(message => /historical publication time unavailable/.test(message)));
+    if (name === 'split') {
+      let interrupt = true;
+      env.beforeWrite(files => {
+        if (interrupt && files[RULE_STATE_PATH] && JSON.parse(files[RULE_STATE_PATH]!.toString()).schemaVersion === 2) {
+          interrupt = false; throw new Error('Interrupted before final journal commit');
+        }
+      });
+      await assert.rejects(migrateRulesState({ context }), /RULE_MIGRATION_PENDING/);
+      const checkpoint = JSON.parse((await (await context.repository.snapshot()).read(RULE_STATE_PATH))!.toString());
+      assert.equal(checkpoint.schemaVersion, 1);
+      assert.equal(checkpoint.maintenance, 'maintenance');
+      assert.equal((await getRulesStatus({ context })).status, 'failed');
+    }
+    assert.equal((await migrateRulesState({ context })).status, 'converted');
+    assert.equal(env.writes.length, name === 'split' ? 3 : 1);
+    const next = parseRulesJournal((await (await context.repository.snapshot()).read(RULE_STATE_PATH))!);
+    assert.equal(next.rules.openai.control.mode, name === 'split' ? 'auto' : 'pinned');
+    if (next.rules.openai.control.mode === 'pinned') assert.equal(next.rules.openai.control.candidateId, openai.candidateId);
+    assert.equal(next.rules.anthropic.control.mode, 'auto');
+    const newStable = await context.repository.snapshot(context.targetBranch);
+    for (const [path, bytes] of stableBytes) assert.deepEqual(await newStable.read(path), bytes, path);
+    for (const candidate of Object.values(next.candidates)) {
+      assert.equal(candidate.publishedAt, undefined);
+      assert.equal(candidate.versionId, undefined);
+      assert.match(candidate.migrationPending!, /Historical publication time is unavailable/);
+      assert.equal(candidate.buildId, legacy.state.candidates[candidate.id].buildId);
+      assert.equal(candidate.evidenceUrl, legacy.state.candidates[candidate.id].evidenceUrl);
+      const source = JSON.parse((await (await context.repository.snapshot()).read(`candidates/${candidate.id}/source.json`))!.toString());
+      assert.deepEqual(candidate.source, source);
+      assert.equal(candidate.source.repository, 'v2fly/domain-list-community');
+      assert.equal('releaseId' in candidate.source && candidate.source.releaseId, 1);
+    }
+    const status = await getRulesStatus({ context });
+    assert.equal(status.status, 'success', JSON.stringify(status));
+    const selected = status.rules!.find(rule => rule.id === 'openai')!;
+    assert.equal(selected.deliveryState, 'delivered');
+    assert.equal(selected.current!.candidateId, openai.candidateId);
+    assert.ok(selected.candidates.length > 0);
+    assert.ok(selected.candidates.every(candidate => !candidate.selectable && /Historical publication time/.test(candidate.reason!)));
+    if (name === 'split') assert.equal(env.writes.filter(write => write.branch === context.targetBranch).length, 1);
+    const convertedHeads = new Map(env.heads);
+    assert.equal((await migrateRulesState({ context })).status, 'already-converted');
+    assert.equal(env.writes.length, name === 'split' ? 3 : 1);
+    assert.deepEqual(env.heads, convertedHeads);
   });
 }
 
-
-test('迁移隔离的未完成候选随定义删除；未知归属保持 pending', { skip: !binary }, async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'rule-quarantine-'));
-  try {
-    const target = 'acceptance-issue-84-quarantine';
-    const env = await configuredEnvironment(binary!, directory, target);
-    const built = await checkRules({ binary: binary!, configuration: env.configuration, stateDirectory: directory, selectedIds: ['openai'],
-      fetch: upstream(1).fetcher, publication: { repository: env.repository, commit: env.publish, download: env.transport.download },
-      activation: env.transport, subscriptions: Object.fromEntries(env.ids.map(id => [id, env.subscription(id)])) });
-    assert.equal(built.exitCode, 0, JSON.stringify(built));
-    const { snapshot, journal } = await readRemoteState(env.repository);
-    const original = Object.values(journal.state.candidates).find(candidate => candidate.logicalId === 'openai')!;
-    const candidateId = randomUUID(), operationId = randomUUID();
-    const incomplete = { ...original, id: candidateId, operationId, status: 'building' as const, phase: 'registered' as const };
-    for (const key of ['buildId', 'filesCommit', 'metadataCommit', 'evidenceCommit', 'manifestUrl', 'evidenceUrl', 'evidenceSha256'] as const) delete incomplete[key];
-    journal.state.candidates[candidateId] = incomplete;
-    journal.state.pendingOperation = { ...journal.state.pendingOperation!, id: operationId, status: 'pending', candidateIds: [candidateId] };
-    const partialPath = `candidates/${candidateId}/domains.json`;
-    await env.repository.commit(snapshot.head, { [RULE_STATE_PATH]: encodeRecord(journal), [partialPath]: Buffer.from('partial') }, 'fixture: incomplete legacy publication');
-    let content = env.configuration;
-    const context: RulesContext = { binary: binary!, targetBranch: target, allowWrites: true,
-      readConfiguration: async () => ({ revision: 'e'.repeat(40), origin: 'migration-fixture', content }),
-      repository: { branch: env.repository.branch, snapshot: env.repository.snapshot, lastChange: env.repository.lastChange!, download: env.transport.download,
-        async commit(_branch, expected, files, message, guard) {
-          await guard();
-          // The old fixture supports additive writes. Extend its stored tree to
-          // exercise the same explicit path deletion as RulesRepository.
-          const kept = Object.fromEntries(Object.entries(files).filter((entry): entry is [string, Buffer] => entry[1] !== null));
-          const head = await env.repository.commit(expected, kept, message);
-          const tree = env.snapshots.get(head)!;
-          for (const [path, bytes] of Object.entries(files)) if (bytes === null) delete tree[path];
-          return head;
-        } } };
-    await migrateRulesState({ context });
-    const status = await getRulesStatus({ context, id: 'openai' });
-    const partial = status.rules![0].candidates.find(candidate => candidate.id === candidateId)!;
-    assert.equal(partial.selectable, false);
-    assert.match(partial.reason!, /Incomplete historical publication/);
-    assert.equal(status.quarantinedCandidates![candidateId].logicalId, 'openai');
-    const configuration = parseBuildConfiguration(content);
-    content = stringify({ ...configuration, sources: {}, ruleSets: [] });
-    const deleted = await syncRules({ context });
-    assert.equal(deleted.status, 'success', JSON.stringify(deleted));
-    const final = await context.repository.snapshot();
-    assert.equal(await final.read(partialPath), undefined);
-    const next = parseRulesJournal((await final.read(RULE_STATE_PATH))!);
-    assert.equal(next.quarantinedCandidates?.[candidateId], undefined);
-    assert.equal(next.rules.openai.lifecycle, 'deleted');
-    const orphan = randomUUID();
-    next.quarantinedCandidates = { [orphan]: { id: orphan, reason: 'Historical candidate ownership is unresolved' } };
-    await context.repository.commit(target, final.head, { [RULE_STATE_PATH]: encodeRecord(next), [`candidates/${orphan}/domains.json`]: Buffer.from('unowned') }, 'fixture: unknown owner', async () => {});
-    const pending = await syncRules({ context });
-    assert.equal(pending.status, 'pending');
-    assert.match(pending.error!, /ownership is unresolved/);
-    assert.equal((await getRulesStatus({ context })).status, 'pending');
-    assert.ok(await (await context.repository.snapshot()).read(`candidates/${orphan}/domains.json`));
-  } finally { await rm(directory, { recursive: true, force: true }); }
+test('SRS-only 历史订阅读取与转换保留；现行定义要求双格式时零写入拒绝', { skip: !binary }, async () => {
+  const env = await historicalEnvironment('srs-only', binary!);
+  const { context } = env;
+  const stable = await context.repository.snapshot(context.targetBranch);
+  const path = 'stable/openai/activation.json';
+  const { record } = activationRecord(JSON.parse((await stable.read(path))!.toString()), path, context.targetBranch);
+  assert.deepEqual(Object.keys(record.files), ['stable/openai/domains.srs']);
+  await verifyStableFiles(record, file => stable.read(file));
+  assert.equal(await stable.read('stable/openai/domains.json'), undefined);
+  const heads = new Map(env.heads);
+  await assert.rejects(migrateRulesState({ context }), /subscription contract changed/);
+  assert.equal(env.writes.length, 0);
+  assert.deepEqual(env.heads, heads);
+  // Absent current definitions retain their actual historical subscription.
+  const configuration = env.config(); configuration.ruleSets = []; configuration.sources = {};
+  env.configure(configuration);
+  assert.equal((await migrateRulesState({ context, dryRun: true })).status, 'planned');
+  assert.equal(env.writes.length, 0);
+  assert.equal((await migrateRulesState({ context })).status, 'converted');
+  const converted = await context.repository.snapshot(context.targetBranch);
+  const delivery = JSON.parse((await converted.read(path))!.toString());
+  assert.equal(delivery.schemaVersion, 2);
+  assert.equal(delivery.candidateId, record.candidateId);
+  assert.deepEqual(delivery.subscription, record.subscription);
+  assert.deepEqual(delivery.source, record.source);
+  assert.deepEqual(await converted.read('stable/openai/domains.srs'), await stable.read('stable/openai/domains.srs'));
+  assert.equal(await converted.read('stable/openai/domains.json'), undefined);
+  assert.equal((await migrateRulesState({ context })).status, 'already-converted');
 });
+
+test('真实文件阶段中断样本被隔离，定义删除回收；无法归属时保留待处理', { skip: !binary }, async () => {
+  for (const unknown of [false, true]) {
+    const env = await historicalEnvironment('incomplete', binary!);
+    const { context } = env;
+    const { snapshot, journal } = await readRemoteState(env.legacyRepository);
+    const original = Object.values(journal.state.candidates)[0];
+    const partialPath = `candidates/${original.id}/domains.json`;
+    const originalBytes = await snapshot.read(partialPath);
+    assert.ok(originalBytes);
+    if (unknown) {
+      // Explicit fault: ownership metadata was lost from a real captured publication.
+      delete journal.state.candidates[original.id].logicalId;
+      delete journal.state.candidates[original.id].definition;
+      delete journal.state.pendingOperation;
+      await context.repository.commit(context.repository.branch, snapshot.head, { [RULE_STATE_PATH]: encodeRecord(journal) }, 'fault: lost ownership', async () => {});
+    }
+    await migrateRulesState({ context });
+    const status = await getRulesStatus({ context });
+    assert.equal(status.quarantinedCandidates![original.id].logicalId, unknown ? undefined : 'openai');
+    assert.match(status.quarantinedCandidates![original.id].reason, unknown ? /ownership.*unresolved/ : /Incomplete historical publication/);
+    if (!unknown) {
+      const partial = status.rules!.find(rule => rule.id === 'openai')!.candidates.find(candidate => candidate.id === original.id)!;
+      assert.equal(partial.selectable, false);
+      assert.match(partial.reason!, /Incomplete historical publication/);
+    }
+    const configuration = env.config(); configuration.sources = {}; configuration.ruleSets = [];
+    env.configure(configuration);
+    const deleted = await syncRules({ context });
+    const final = await context.repository.snapshot();
+    const next = parseRulesJournal((await final.read(RULE_STATE_PATH))!);
+    if (unknown) {
+      assert.equal(deleted.status, 'pending');
+      assert.match(deleted.error!, /ownership.*unresolved/);
+      assert.equal((await getRulesStatus({ context })).status, 'pending');
+      assert.deepEqual(await final.read(partialPath), originalBytes);
+      assert.ok(next.quarantinedCandidates?.[original.id]);
+    } else {
+      assert.equal(deleted.status, 'success', JSON.stringify(deleted));
+      assert.equal(await final.read(partialPath), undefined);
+      assert.equal(next.quarantinedCandidates?.[original.id], undefined);
+      assert.equal(next.rules.openai.lifecycle, 'deleted');
+    }
+  }
+});
+
+for (const fault of ['stable-bytes', 'candidate-evidence', 'missing-current-file', 'journal-json', 'source-identity'] as const) {
+  test(`历史转换遇到 ${fault} 拒绝且不写入`, { skip: !binary }, async () => {
+    const env = await historicalEnvironment('shared', binary!);
+    const { context } = env;
+    const { snapshot, journal } = await readRemoteState(env.legacyRepository);
+    const id = Object.values(journal.state.candidates).find(candidate => candidate.logicalId === 'openai')!.id;
+    const files: RuleWrites = fault === 'stable-bytes' ? { 'stable/openai/domains.srs': Buffer.from('corrupt') }
+      : fault === 'candidate-evidence' ? { [`candidates/${id}/readback.json`]: Buffer.from('{}') }
+      : fault === 'missing-current-file' ? { [`candidates/${id}/domains.srs`]: null }
+      : fault === 'journal-json' ? { [RULE_STATE_PATH]: Buffer.from('{broken-json') }
+      : (() => {
+        Object.values(journal.state.pinned)[0].identity!.yaml.id = -1;
+        return { [RULE_STATE_PATH]: encodeRecord(journal) };
+      })();
+    await context.repository.commit(context.repository.branch, snapshot.head, files, `fault: ${fault}`, async () => {});
+    const heads = new Map(env.heads), writes = env.writes.length;
+    await assert.rejects(migrateRulesState({ context }), fault === 'stable-bytes' ? /Stable file integrity/
+      : fault === 'journal-json' ? /JSON/ : fault === 'source-identity' ? /STATE_CORRUPT/ : /evidence|Candidate|candidate|retained|readback/i);
+    assert.equal(env.writes.length, writes);
+    assert.deepEqual(env.heads, heads);
+  });
+}
