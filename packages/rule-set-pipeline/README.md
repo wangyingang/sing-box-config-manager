@@ -222,6 +222,21 @@ SING_BOX_TEST_BINARY=/absolute/path/to/sing-box-1.14.4 pnpm --dir packages/rule-
 
 候选完整性、只读查询、版本重选及并发 pin 的当前覆盖集中在 `test/integration/rules-selection.test.ts`：纯结构错误在候选证据边界集中验证，pin 拒绝交付的断言同时检查当前与兄弟集稳定字节。摘要自洽但内容无效的 SRS 仍由真实原生复验拒绝；status 的候选检查是结构验证，不能替代 pin 的原生复验。旧测试逐项去向、保留给后续工单的段落和整理前基线见 [#94 迁移记录](../../docs/verification/issue-94.md)。
 
+四集双来源同步覆盖位于 `test/integration/rules-inputs.test.ts`：共享来源读取、CIDR 独立变化、同语义不新增版本、共同来源和单列表故障、独立成功保留，以及合法 ID `constructor`。订阅对象的字段顺序语义复用 `rules-selection.test.ts` 的当前 pin 覆盖。[#96 映射与验收证据](../../docs/verification/issue-96.md)说明各旧断言的迁移落点；清理断言及其必要准备继续保留给 #98。
+
+真实 GitHub 交付验收使用独立入口；命令不会自动启用门禁。显式启用后必须提供真实 binary、可写隔离分支的 `gh` 登录和一个尚不存在的证据文件路径：
+
+```sh
+RULE_OPERATIONS_PROBE=1 \
+RULE_OPERATIONS_EVIDENCE=/absolute/path/to/new-evidence.json \
+SING_BOX_TEST_BINARY=/absolute/path/to/sing-box-1.14.4 \
+pnpm --dir packages/rule-set-pipeline test:acceptance:rules
+```
+
+探针从空的 `acceptance-issue-96-*` 分支执行四集新增、两类来源独立更新、换列表、逐集 pin/resume 和删除。来源发现固定到官方 Release 与 Git commit，字节仍从真实上游获取；候选七份文件、稳定 URL、历史候选及兄弟集通过真实 HTTPS 回读。每轮保存受测源码、操作和回读记录、生产 refs/Actions variables 前后对照，以及成功或失败后的隔离目标清理结果。门禁开启时缺少前提会失败，不能将默认跳过视为完成验收；默认 CI 和统一本地检查不运行该远端写入入口。
+
+旧 `test:publication`、`test:activation`、`test:rollback`、`test:rebuild` 命令已在独有断言迁移通过后移除，不保留兼容别名。`test:release` 通配入口收敛由 #101 负责；不要通过它启动本次远端验收。
+
 #84 的验收范围包含新增、换源、删除、pin、resume、部分失败、查询/预览与一次性转换；真实 GitHub 生命周期在专用 `acceptance-*` 分支验证，不写生产分支。场景与远端证据见 [#84 验收记录](../../docs/verification/issue-84.md)，最终源码和交付状态以 [Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84) 的 PR 交付证据为准。
 
 #85 的验收聚焦保留范围、当前版本保护、清理后 status/pin、跨机器恢复、只读预览及受管 refs/可达历史。#86 聚焦真实配置 push、手工入口一致性、日常编排、失败映射与生产门禁；定时行为的本地测试不冒充原生 schedule 事件，未验证邮箱实收不报告为收到。最终执行结果以各 PR 和工单的验收证据为准。
