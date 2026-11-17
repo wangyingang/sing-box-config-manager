@@ -83,14 +83,29 @@ node scripts/check-spec-delivery.mjs --spec 66 --out .verification/spec-report -
 SING_BOX_TEST_BINARY=/absolute/path/to/sing-box pnpm test:integration
 ```
 
-[CI](.github/workflows/ci.yml) 在 PR、推送到 `main` 和手动触发时启动。它先检查变更范围：
+[CI](.github/workflows/ci.yml) 区分快速反馈与全量原生回归：
 
-- 完整差异非空，且所有变更路径都以 `.md` 结尾时，跳过两个完整检查 job。
-- 手动触发、包含其他文件、差异为空或变更判断失败时，执行完整检查。
+| 触发方式 | 工作区 `pnpm check` | 原生 `pnpm test:integration` |
+| --- | --- | --- |
+| PR、推送到 `main` | 执行；完整差异非空且仅修改 Markdown 时跳过 | 不执行 |
+| 手动 `workflow_dispatch` | 执行 | 执行 |
+| 每日计划（UTC 23:17，北京时间次日 07:17） | 执行 | 执行 |
 
-完整检查分别运行工作区 `pnpm check` 和真实 sing-box 集成测试。原生 job 下载配置指定的官方 linux-amd64 发布包，核对归档 SHA-256 后执行 `pnpm test:integration`，测试继续核对 Schema 摘要。两个 job 使用锁文件安装依赖，检查日志作为含提交 SHA 的 artifact 保留 14 天（失败时也尝试上传）。
+变更检测失败、差异为空或包含非 Markdown 文件时，PR／push 仍运行工作区检查。工作区检查包括工具脚本测试、类型检查、常规测试、构建及工作区引用检查。普通提交不再等待全量原生回归；它的通过只证明本次执行的快速检查通过。
 
-因此，“CI workflow 已运行”不一定表示本次运行了原生测试。判断结果时，应查看具体 job 是否执行。是否强制阻止合并由 GitHub 分支保护另行配置。
+在 GitHub Actions 的 **CI → Run workflow** 选择分支，可手动运行工作区和全量原生检查。CLI 等价入口为：
+
+```sh
+gh workflow run ci.yml --ref <待验证分支>
+```
+
+手动运行采用所选分支的当时提交；完成后核对运行及 job 摘要中的实际 commit。每日计划采用默认分支，仅在工作流合入默认分支后生效，平台可能延迟调度。PR、push、手动和计划各自按分支取消同类旧运行，普通提交不会取消手动／计划回归。
+
+普通测试整理使用快速 CI 和相关定向测试，无需每次提交都补跑全量原生测试。修改实际规则交付、恢复、cleanup 或原生验证行为时，合并前应对最终待合并提交补一次全量原生验证。未纳入快速检查的问题可能到手动或每日回归才被发现；不能将快速 CI 全绿表述为全量验收通过。
+
+原生 job 保留完整集成测试集合：下载配置指定的官方 linux-amd64 发布包，核对归档 SHA-256 后执行 `pnpm test:integration`，测试继续核对 Schema 摘要。两个检查 job 使用锁文件安装依赖；执行范围和源码 commit 写入 job 摘要，日志以含提交 SHA 的 artifact 保留 14 天（失败时也尝试上传）。默认检查不执行 GitHub 远端写入验收。完整本地验证入口及其范围保持不变。
+
+是否强制阻止合并由 GitHub 分支保护另行配置；查看结果时应区分已执行、失败和跳过的检查。
 
 CI 的 sing-box 版本读取自 [Schema 构建配置](packages/config-compiler/schemas/build.json) 的 `version`，Linux 发布包摘要读取自 `releaseAssets.linux-amd64.sha256`。下载地址和解压路径自动生成。升级时更新该配置，并同步核验 Schema、原生校验器和测试基线，无需修改 workflow。
 

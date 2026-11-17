@@ -5,12 +5,15 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    # Daily at 07:17 Asia/Shanghai (23:17 UTC).
+    - cron: '17 23 * * *'
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 defaults:
@@ -29,7 +32,7 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - name: Decide whether full checks are needed
+      - name: Decide whether workspace checks are needed
         id: detect
         run: node scripts/ci-changes.mjs
 
@@ -54,6 +57,14 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Record workspace scope
+        run: |
+          {
+            echo '## Workspace checks'
+            echo "Tested commit: $(git rev-parse HEAD)"
+            echo 'Runs pnpm check (tools, types, regular tests, build and workspace smoke).'
+            echo 'Full native regression runs only on workflow_dispatch or schedule; this job does not certify it.'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Check workspace
         run: |
           {
@@ -73,12 +84,8 @@ jobs:
 
   native:
     name: Native sing-box
-    needs: changes
-    # A failed detector or missing output must never silently skip required checks.
-    if: >-
-      ${{ !cancelled() &&
-          (needs.changes.result != 'success' ||
-           needs.changes.outputs.run_tests != 'false') }}
+    # Full native regression is independent of PR/push and Markdown detection.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -123,6 +130,13 @@ jobs:
             "$binary" version
             echo "SING_BOX_TEST_BINARY=$binary" >> "$GITHUB_ENV"
           } 2>&1 | tee "$RUNNER_TEMP/native-install.log"
+      - name: Record native scope
+        run: |
+          {
+            echo '## Full native regression'
+            echo "Tested commit: $(git rev-parse HEAD)"
+            echo 'Runs pnpm test:integration with the verified sing-box release; no remote publication acceptance.'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Run native integration tests
         run: |
           {
