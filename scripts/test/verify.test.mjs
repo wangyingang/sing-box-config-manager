@@ -189,7 +189,9 @@ test('full verification runs ordered checks, captures separate suites and client
       fs.appendFileSync('calls.txt', process.argv[2] + '\\n');
       if (!['check', 'test:integration'].includes(process.argv[2])) throw new Error('Unexpected pnpm command');
       if (process.argv[2] === 'test:integration') {
-        fs.writeFileSync(process.env.RULE_ACTIVATION_CLIENT_EVIDENCE, '{"update":"fixture"}');
+        if (process.env.RULE_ACTIVATION_CLIENT_EVIDENCE) throw new Error('Retired client evidence variable must be cleared');
+        fs.writeFileSync(process.env.RULE_DOMAIN_CLIENT_EVIDENCE, '{"domain":"fixture"}');
+        fs.writeFileSync(process.env.RULE_CIDR_CLIENT_EVIDENCE, '{"cidr":"fixture"}');
         fs.writeFileSync(process.env.RULE_CLIENT_FAILURE_EVIDENCE, '{"cache":"fixture"}');
       }
       console.log('compiler: # tests 2\\ncompiler: # pass 2\\ncompiler: # fail 0\\ncompiler: # skipped 0');
@@ -210,6 +212,7 @@ test('full verification runs ordered checks, captures separate suites and client
   const outside = join(root, 'other-task.json');
   const result = await launch(['--pnpm', launcher, '--binary', binary, '--out', output, '--release'], {
     RULE_ACTIVATION_CLIENT_EVIDENCE: outside, RULE_CLIENT_FAILURE_EVIDENCE: outside,
+    RULE_DOMAIN_CLIENT_EVIDENCE: outside, RULE_CIDR_CLIENT_EVIDENCE: outside,
     RULE_PUBLICATION_STATE: root, RULE_PUBLICATION_EVIDENCE: outside,
   });
   assert.equal(result.code, 0, result.stderr + await readFile(join(output, 'release.log'), 'utf8').catch(() => ''));
@@ -222,7 +225,10 @@ test('full verification runs ordered checks, captures separate suites and client
   assert.equal(summary.steps[2].suites[0].pass, 2);
   await assert.rejects(readFile(outside), { code: 'ENOENT' });
   const files = JSON.parse(await readFile(join(output, 'files.json'), 'utf8')).files;
-  assert.ok(files.some(file => file.path === 'client-update-rollback.json'));
+  assert.ok(files.some(file => file.path === 'client-domain-operations.json'));
+  assert.ok(files.some(file => file.path === 'client-cidr-operations.json'));
+  assert.equal(await readFile(join(output, 'client-domain-operations.json'), 'utf8'), '{"domain":"fixture"}');
+  assert.equal(await readFile(join(output, 'client-cidr-operations.json'), 'utf8'), '{"cidr":"fixture"}');
   assert.ok(files.some(file => file.path === 'client-failure-cache.json'));
 }));
 

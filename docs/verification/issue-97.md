@@ -24,4 +24,6 @@
 
 替代通过后删除旧 activation-client、剩余 china-ip-delivery 和仅被旧域名流程使用的 synthetic candidate fixture。其他工单的 configured-activation fixture、legacy workflow、清理与历史转换覆盖保留；独立故障恢复文件原样保留。完整验证与 CI 结果待补充。
 
+本地两轴审查发现统一验证入口仍向旧客户端变量写证据，会漏归档迁移后的场景。先修改已有 verify 脚本测试，确认旧入口失败，再接入由本轮覆盖的 domain/cidr 路径并清除继承变量；脚本测试通过后重跑统一验证。旧轮主动终止，不计入完整通过统计。
+
 默认 CI 与本地验证不执行远端写入验收；本票不修改生产行为、profile、生产开关、更新周期或缓存设置。
