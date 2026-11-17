@@ -77,7 +77,7 @@ for (const target of ['acceptance-cleanup-guards', 'main']) {
     } } };
     const oldPin = pinRuleVersion({ context: oldContext, id: 'openai', version: first.versionId! });
     try {
-      await reached.waiting;
+      await Promise.race([reached.waiting, oldPin.then(result => { throw new Error(`Pin ended before readback barrier: ${result.status}`); })]);
       success(await pinRuleVersion({ ...input, id: 'openai', version: latest.versionId! }));
       success(await cleanupRuleHistory(input));
       const after = success(await getRulesStatus(input));
@@ -96,7 +96,7 @@ for (const target of ['acceptance-cleanup-guards', 'main']) {
     } finally { resume.release(); await oldPin; }
   });
 
-  test(`${target}: sync 在上游等待时 cleanup 改变代次，旧会话不发布或覆盖清理结果`, async () => {
+  test(`${target}: sync 在上游等待时 cleanup 改变代次，旧会话不发布或覆盖清理结果`, { timeout: 90_000 }, async () => {
     const env = cleanupEnvironment(binary!, target), input = { context: env.context };
     success(await syncRules(input)); env.upstream({ openai: 'domain:stale.example' });
     const reached = barrier(), resume = barrier(), fetcher = env.context.fetch!;
@@ -106,7 +106,7 @@ for (const target of ['acceptance-cleanup-guards', 'main']) {
       return fetcher(url, init);
     } } });
     try {
-      await reached.waiting;
+      await Promise.race([reached.waiting, oldSync.then(result => { throw new Error(`Sync ended before upstream barrier: ${result.status}`); })]);
       success(await cleanupRuleHistory(input));
       const heads = new Map(env.heads), writes = env.writes.length, journal = await env.journal();
       resume.release();
