@@ -1,10 +1,13 @@
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, readFileSync } from 'node:fs';
 
-// Default to full checks unless a complete diff proves every changed path is Markdown.
+// Default to workspace checks unless a complete diff proves every changed path is Markdown.
 function detect() {
   if (process.env.GITHUB_EVENT_NAME === 'workflow_dispatch') {
     return { runTests: true, reason: 'Manual run' };
+  }
+  if (process.env.GITHUB_EVENT_NAME === 'schedule') {
+    return { runTests: true, reason: 'Daily regression' };
   }
   const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
   let base, head, comparison;
@@ -38,7 +41,7 @@ let decision;
 try {
   decision = detect();
 } catch {
-  decision = { runTests: true, reason: 'Change detection failed; running full checks' };
+  decision = { runTests: true, reason: 'Change detection failed; running workspace checks' };
 }
 console.log(JSON.stringify(decision));
 appendFileSync(process.env.GITHUB_OUTPUT, `run_tests=${decision.runTests}\n`);

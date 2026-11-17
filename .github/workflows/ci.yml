@@ -1,16 +1,26 @@
 name: CI
+run-name: CI · ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_native)) && 'Full native regression' || 'Workspace checks' }} · ${{ github.head_ref || github.ref_name }}
 
 on:
   pull_request:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      full_native:
+        description: Also run the full native sing-box regression suite
+        type: boolean
+        default: false
+  schedule:
+    # 03:37 Asia/Shanghai, on the latest default-branch commit.
+    - cron: '37 19 * * *'
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # New fast checks must not cancel an explicitly requested full regression.
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_native)) && 'full' || 'fast' }}
   cancel-in-progress: true
 
 defaults:
@@ -29,7 +39,7 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - name: Decide whether full checks are needed
+      - name: Decide whether workspace checks are needed
         id: detect
         run: node scripts/ci-changes.mjs
 
@@ -73,12 +83,10 @@ jobs:
 
   native:
     name: Native sing-box
-    needs: changes
-    # A failed detector or missing output must never silently skip required checks.
+    # Full native coverage is opt-in or daily; PR/push only run workspace checks.
     if: >-
-      ${{ !cancelled() &&
-          (needs.changes.result != 'success' ||
-           needs.changes.outputs.run_tests != 'false') }}
+      ${{ github.event_name == 'schedule' ||
+          (github.event_name == 'workflow_dispatch' && inputs.full_native) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:

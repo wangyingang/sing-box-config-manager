@@ -47,7 +47,7 @@ function fixture(t) {
 
 const pr = (base, head) => ({ pull_request: { base: { sha: base }, head: { sha: head } } });
 
-test('Markdown-only PR and push skip full checks, including unusual filenames', t => {
+test('Markdown-only PR and push skip workspace checks, including unusual filenames', t => {
   const f = fixture(t);
   f.write('README.md', 'updated');
   f.write('docs/spaces and\nnewline.md');
@@ -124,9 +124,12 @@ test('JSON evidence under docs and workflow changes require checks', t => {
   }
 });
 
-test('manual and unsupported events run full checks', t => {
+test('manual, daily and unsupported events run workspace checks', t => {
   const f = fixture(t);
   assert.equal(f.run('workflow_dispatch', 'invalid JSON', true).runTests, true);
+  assert.deepEqual(f.run('schedule', { schedule: '37 19 * * *' }), {
+    runTests: true, reason: 'Daily regression',
+  });
   assert.equal(f.run('unknown', {}).runTests, true);
 });
 
