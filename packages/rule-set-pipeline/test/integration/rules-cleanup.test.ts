@@ -4,9 +4,10 @@ import { cleanupRuleHistory } from '../../src/rules-cleanup.js';
 import { syncRules, pinRuleVersion, resumeRuleUpdates } from '../../src/rules-operations.js';
 import { getRulesStatus } from '../../src/rules-status.js';
 import { encodeRecord, RULE_STATE_PATH, type RulesResult } from '../../src/rules-model.js';
-import { cleanupEnvironment } from '../fixtures/cleanup-environment.js';
+import { cleanupEnvironment, fourSetCleanupEnvironment } from '../fixtures/cleanup-environment.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
+if (!binary) throw new Error('Set SING_BOX_TEST_BINARY to an absolute 1.14.4 binary path');
 const success = (result: RulesResult) => { assert.equal(result.status, 'success', JSON.stringify(result)); return result; };
 type Environment = ReturnType<typeof cleanupEnvironment>;
 const request = (env: Environment) => ({ context: env.context });
@@ -19,27 +20,36 @@ async function stableBytes(env: Environment) {
 }
 
 async function retainedFixture(target: string) {
-  const env = cleanupEnvironment(binary!, target);
+  const env = fourSetCleanupEnvironment(binary!, target);
   env.clock('2026-09-01T00:00:00.000Z');
   const first = success(await syncRules(request(env)));
   const expired = current(first);
   const pinned = current(first, 'anthropic');
+  const protectedCurrent = current(first, 'google-deepmind');
+  const cidr = [current(first, 'china-ip')];
   success(await pinRuleVersion({ ...request(env), id: 'anthropic', version: pinned.versionId! }));
   env.clock('2026-10-17T00:00:00.000Z');
   env.upstream({ openai: 'domain:boundary.example' });
-  const boundary = current(success(await syncRules(request(env))));
+  env.changeCidr('192.0.2.128/25\n2001:db8:2::/48\n');
+  const boundaryResult = success(await syncRules(request(env)));
+  const boundary = current(boundaryResult); cidr.push(current(boundaryResult, 'china-ip'));
   env.clock('2026-11-01T00:00:00.000Z');
   env.upstream({ openai: 'domain:recent.example' });
-  const recent = current(success(await syncRules(request(env))));
+  env.changeCidr('198.51.100.0/25\n2001:db8:3::/48\n');
+  const recentResult = success(await syncRules(request(env)));
+  const recent = current(recentResult); cidr.push(current(recentResult, 'china-ip'));
   env.clock('2026-11-16T00:00:00.000Z');
   env.upstream({ openai: 'domain:current.example' });
-  const latest = current(success(await syncRules(request(env))));
-  return { env, expired, pinned, boundary, recent, latest };
+  env.changeCidr('198.51.100.128/25\n2001:db8:4::/48\n');
+  const latestResult = success(await syncRules(request(env)));
+  const latest = current(latestResult); cidr.push(current(latestResult, 'china-ip'));
+  return { env, expired, pinned, boundary, recent, latest, cidr, protectedCurrent,
+    retained: [pinned, protectedCurrent, boundary, recent, latest, ...cidr.slice(1)] };
 }
 
 for (const target of ['acceptance-issue-85', 'main']) {
-  test(`${target}: 按首次发布时间保留多版本，两轮清理后旧历史不可用仍可查询和 pin`, { skip: !binary, timeout: 120_000 }, async () => {
-    const { env, expired, pinned, boundary, recent, latest } = await retainedFixture(target);
+  test(`${target}: 四集含 CIDR 按首次发布时间保留多版本，两轮清理后旧历史不可用仍可查询和 pin`, { skip: !binary, timeout: 120_000 }, async () => {
+    const { env, expired, pinned, boundary, recent, latest, cidr, retained } = await retainedFixture(target);
     const beforeBytes = await stableBytes(env);
     const beforeJournal = await env.journal();
     const oldHeads = new Set(env.trees.keys());
@@ -52,8 +62,8 @@ for (const target of ['acceptance-issue-85', 'main']) {
     assert.equal(preview.cleanup?.phase, 'preview');
     assert.equal(preview.cleanup?.plan.candidateRetentionDays, 30);
     assert.equal(preview.cleanup?.plan.cutoff, '2026-10-17T00:00:00.000Z');
-    assert.deepEqual(preview.cleanup?.plan.discard.candidateIds, [expired.candidateId]);
-    assert.deepEqual(new Set(preview.cleanup?.plan.retain.candidateIds), new Set([pinned, boundary, recent, latest].map(version => version.candidateId)));
+    assert.deepEqual(new Set(preview.cleanup?.plan.discard.candidateIds), new Set([expired.candidateId, cidr[0].candidateId]));
+    assert.deepEqual(new Set(preview.cleanup?.plan.retain.candidateIds), new Set(retained.map(version => version.candidateId)));
     assert.ok(preview.cleanup!.plan.retainedBytes > 0);
     assert.ok(preview.cleanup!.plan.otherRefs.some(ref => ref.ref === 'refs/heads/unrelated-work'));
     assert.ok(preview.cleanup!.plan.otherRefs.some(ref => ref.ref === 'refs/tags/unrelated-tag'));
@@ -75,18 +85,32 @@ for (const target of ['acceptance-issue-85', 'main']) {
     assert.equal(after.rules?.find(rule => rule.id === 'anthropic')?.current?.candidateId, pinned.candidateId);
     assert.deepEqual(after.rules?.find(rule => rule.id === 'anthropic')?.control, beforeJournal.rules.anthropic.control);
     const kept = await env.journal();
-    for (const version of [pinned, boundary, recent, latest]) {
+    for (const version of retained) {
       assert.equal(kept.candidates[version.candidateId].versionId, version.versionId);
       assert.equal(kept.candidates[version.candidateId].publishedAt, version.publishedAt);
+      assert.deepEqual(kept.candidates[version.candidateId].source, version.source);
+      assert.notEqual(kept.candidates[version.candidateId].evidenceUrl, beforeJournal.candidates[version.candidateId].evidenceUrl);
+      const candidate = kept.candidates[version.candidateId];
+      const snapshot = await env.context.repository.snapshot();
+      const files = snapshot.paths.filter(path => path.startsWith(`candidates/${candidate.id}/`));
+      assert.equal(files.length, 7);
+      for (const path of files) assert.ok((await snapshot.read(path))!.length, path);
+      const proof = JSON.parse((await snapshot.read(`candidates/${candidate.id}/readback.json`))!.toString());
+      assert.equal(proof.candidateId, candidate.id);
+      assert.equal(proof.versionId, candidate.versionId);
     }
     assert.ok(!kept.candidates[expired.candidateId]);
-    assert.ok(after.rules?.find(rule => rule.id === 'openai')?.candidates.every(candidate => candidate.selectable));
+    assert.equal(after.rules?.length, 4);
+    assert.ok(after.rules?.every(rule => rule.candidates.every(candidate => candidate.selectable)));
+    for (const version of retained) assert.ok(after.rules!.find(rule => rule.id === version.logicalId)!.candidates.some(candidate => candidate.versionId === version.versionId && candidate.selectable));
     const untouched = { heads: new Map(env.heads), stages: env.stageWrites.length, writes: env.writes.length };
     assert.equal(success(await cleanupRuleHistory(request(env))).cleanup?.phase, 'unchanged');
     assert.deepEqual(env.heads, untouched.heads); assert.equal(env.stageWrites.length, untouched.stages); assert.equal(env.writes.length, untouched.writes);
 
     const selected = success(await pinRuleVersion({ ...request(env), id: 'openai', version: boundary.versionId! }));
     assert.equal(current(selected).candidateId, boundary.candidateId);
+    const selectedCidr = success(await pinRuleVersion({ ...request(env), id: 'china-ip', version: cidr[1].versionId! }));
+    assert.equal(current(selectedCidr, 'china-ip').candidateId, cidr[1].candidateId);
     const secondBytes = await stableBytes(env);
     env.clock('2026-11-17T00:00:00.000Z');
     const secondHistory = new Set(env.reachable());
@@ -96,7 +120,7 @@ for (const target of ['acceptance-issue-85', 'main']) {
     assert.deepEqual(await stableBytes(env), secondBytes);
     const second = await getRulesStatus(request(env)); success(second);
     assert.equal(second.rules?.find(rule => rule.id === 'openai')?.current?.candidateId, boundary.candidateId);
-    for (const version of [pinned, boundary, recent, latest]) {
+    for (const version of retained) {
       const retained = (await env.journal()).candidates[version.candidateId];
       assert.equal(retained.versionId, version.versionId); assert.equal(retained.publishedAt, version.publishedAt);
     }
@@ -109,7 +133,7 @@ for (const target of ['acceptance-issue-85', 'main']) {
 
 for (const phase of ['before-switch', 'after-switch'] as const) {
   test(`${phase}: 一个 cleanup 恢复同一维护计划，跨日及保留期变更不扩大删除集合`, { skip: !binary, timeout: 90_000 }, async () => {
-    const { env, boundary, latest } = await retainedFixture(phase === 'before-switch' ? 'acceptance-issue-85-recovery' : 'main');
+    const { env, boundary, latest, retained } = await retainedFixture(phase === 'before-switch' ? 'acceptance-issue-85-recovery' : 'main');
     const stable = await stableBytes(env);
     let interrupted = false;
     if (phase === 'before-switch') {
@@ -134,8 +158,10 @@ for (const phase of ['before-switch', 'after-switch'] as const) {
     env.upstream({ openai: 'domain:blocked-by-maintenance.example' });
     assert.notEqual((await syncRules(request(env))).status, 'success');
     assert.notEqual((await pinRuleVersion({ ...request(env), id: 'openai', version: latest.versionId! })).status, 'success');
+    const resumeSourceCalls = env.sourceRequests.length;
     assert.notEqual((await resumeRuleUpdates({ ...request(env), id: 'anthropic' })).status, 'success');
     assert.equal(env.writes.length, writes, 'Rule operations may not write through maintenance isolation');
+    assert.equal(env.sourceRequests.length, resumeSourceCalls, 'Blocked resume cannot access upstream');
     env.clock('2026-12-31T00:00:00.000Z');
     const configuration = env.config(); configuration.candidateRetentionDays = 1; env.configure(configuration);
     const heads = new Map(env.heads), stages = env.stageWrites.length, transactions = env.refWrites.length;
@@ -147,6 +173,11 @@ for (const phase of ['before-switch', 'after-switch'] as const) {
     assert.equal(recovered.cleanup?.maintenanceId, id); assert.deepEqual(recovered.cleanup?.plan, plan);
     assert.equal((await env.journal()).candidates[boundary.candidateId].publishedAt, boundary.publishedAt);
     assert.equal((await env.journal()).maintenance, 'open');
+    for (const version of retained) {
+      const candidate = (await env.journal()).candidates[version.candidateId];
+      assert.equal(candidate.versionId, version.versionId); assert.equal(candidate.publishedAt, version.publishedAt);
+      assert.deepEqual(candidate.source, version.source);
+    }
     assert.deepEqual(await stableBytes(env), stable);
     assert.equal(env.refWrites.filter(changes => changes.some(change => change.ref === `refs/heads/${env.context.repository.branch}`)).length, 1,
       'A resumed cleanup must not switch a second baseline');
