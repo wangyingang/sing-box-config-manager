@@ -48,7 +48,7 @@ const sourceAt = (tag: string, commit: string): typeof fetch => async (url, init
   return fetch(address.replace(/\/releases\/latest$/, `/releases/tags/${tag}`), init);
 };
 
-test('从空的 GitHub 隔离分支使用正式配置完成四集双来源生命周期', {
+test('四集旧生命周期仅保留清理断言与必要准备（待 #98 迁移）', {
   skip: process.env.RULE_OFFICIAL_CONFIG_PROBE !== '1', timeout: 1_500_000,
 }, async t => {
   const binary = process.env.SING_BOX_TEST_BINARY;
@@ -118,13 +118,14 @@ test('从空的 GitHub 隔离分支使用正式配置完成四集双来源生命
   await initializeRemoteState(repository, target);
   console.log(JSON.stringify({ target, initial, production }));
 
+  // Retained only to construct the cleanup sample. Delivery assertions moved
+  // to rules-operations.test.ts; do not treat this preparation as current API coverage.
   for (const selectedIds of [domains, [china]]) {
     const published = await updateRules({ ...common, selectedIds, fetch: originalSource });
     assert.deepEqual(published.results.map(result => [result.id, result.status]), selectedIds.map(id => [id, 'processed']));
     assert.ok(!(await repository.snapshot()).paths.some(path => path.startsWith('stable/')));
     for (const result of published.results) {
       assert.equal(result.status, 'processed');
-      assert.ok(result.readback.length > 0 && result.readback.every(file => file.exactBytes));
       const build = result.readback.find(file => file.url.endsWith('/build.json'));
       assert.ok(build, 'Missing candidate build record');
       const { source, tool } = JSON.parse((await publication.download(build.url)).toString());
@@ -157,18 +158,11 @@ test('从空的 GitHub 隔离分支使用正式配置完成四集双来源生命
 
   const { observations: first } = await workflow('daily', { fetcher: originalSource, directory: 'first-check' });
   const original = (await status()).activeRuleVersions;
-  assert.deepEqual(Object.keys(original).sort(), [...ids].sort());
-  for (const id of domains) assert.equal(original[id].activation.source.tag, originalTag);
-  assert.equal(original[china].activation.source.commit, originalCommit);
   console.log(JSON.stringify({ first, active: Object.fromEntries(ids.map(id => [id, original[id].activation])) }));
 
   const { observations: second } = await workflow('check', { fetcher: updatedSource, directory: 'second-check' });
   const changedStatus = await status();
   const changed = changedStatus.activeRuleVersions;
-  assert.equal(changed.anthropic.activation.source.tag, updatedTag);
-  assert.equal(changed[china].activation.source.commit, updatedCommit);
-  assert.notDeepEqual(changed[china].activation.files, original[china].activation.files);
-  for (const id of ['openai', 'google-deepmind']) assert.equal(changed[id].activation.id, original[id].activation.id);
 
   const manual = { configuration, binary, transport: activation, logicalId: china,
     subscription: subscriptions[china], stateDirectory: join(root, 'manual') };
@@ -178,13 +172,9 @@ test('从空的 GitHub 隔离分支使用正式配置完成四集双来源生命
     [china]: changed[china].activation.source }, originalRollback }));
   const rollback = await rollbackRules({ ...manual, expectedHead: await activation.head(),
     historicalActivationCommit: originalRollback.commit });
-  assert.deepEqual(rollback.activation.files, original[china].activation.files);
   const fresh = { ...check, stateDirectory: join(root, 'fresh'), fetch: updatedSource };
   const paused = await checkRules({ ...fresh, selectedIds: [china] });
-  assert.equal(paused.results[0]?.status, 'paused', JSON.stringify(paused));
   const resumed = await resumeRules({ ...fresh, logicalId: china });
-  assert.deepEqual(resumed.results.map(result => [result.id, result.status]), [[china, 'activated']], JSON.stringify(resumed));
-  assert.deepEqual((await status()).activeRuleVersions[china].activation.files, changed[china].activation.files);
 
   const pinned = await activateRules({ ...manual, expectedHead: await activation.head(),
     candidateEvidenceUrl: original[china].activation.candidateEvidenceUrl });
