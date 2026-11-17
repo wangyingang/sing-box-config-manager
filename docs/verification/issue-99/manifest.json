@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "issue": 99,
+  "sourceCommits": {
+    "full": {
+      "commit": "7ed0129e7b9b80486457c1efa850059eba051144",
+      "clean": true,
+      "status": "",
+      "trackedDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "final": {
+      "commit": "efc4b59e56261b574f55b9cd506eb1c2cef5375c",
+      "clean": true,
+      "status": "",
+      "trackedDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "files": [
+    {
+      "path": "evidence.tar.gz",
+      "bytes": 518049,
+      "sha256": "7f4b8b299290a7769277a9ff8861135384dc83195fb0fc5b3dfc5c5cac580e36"
+    },
+    {
+      "path": "historical-samples.json",
+      "bytes": 3915,
+      "sha256": "1a9536fb813000acb7176847e149d0bbfcd7c6aa04484ca317f0ed9aeee3831c"
+    }
+  ],
+  "note": "完整统一验证和原生调用观测；无生产操作或真实远端写入验收。样本 capture.ts 需放回固定 writer 源码 1f9ad68 的 .verification/issue-99/ 执行，不是当前测试的依赖。"
+}
