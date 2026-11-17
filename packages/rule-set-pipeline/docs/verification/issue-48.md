@@ -29,8 +29,8 @@
 - [`remote-recovery.test.ts`](https://github.com/wangyingang/sing-box-config-manager/blob/7075bfc3f6a900c67a07e32e53e5a8aabc4ed1b4/packages/rule-set-pipeline/test/integration/remote-recovery.test.ts)：文件阶段中断、新目录原 Release 恢复、批次失败集单独重试、完整候选不依赖上游恢复，以及 `status` 原生复验。
 - [`remote-faults.test.ts`](https://github.com/wangyingang/sing-box-config-manager/blob/7075bfc3f6a900c67a07e32e53e5a8aabc4ed1b4/packages/rule-set-pipeline/test/integration/remote-faults.test.ts)：三阶段提交回复丢失且核实失败、本地缓存写失败、维护／代次／head 竞争、候选移除及远端读取故障。
 - [`remote-legacy-recovery.test.ts`](https://github.com/wangyingang/sing-box-config-manager/blob/7075bfc3f6a900c67a07e32e53e5a8aabc4ed1b4/packages/rule-set-pipeline/test/integration/remote-legacy-recovery.test.ts)：旧单集 update/rebuild 的同等恢复、幂等与保留门禁。
-- [`remote-state.test.ts`](../../test/remote-state.test.ts)、[`remote-status.test.ts`](../../test/remote-status.test.ts)：初始化、损坏状态、当前激活事实、候选完整性及历史回滚目标。
-- [`remote-status-binary.test.ts`](../../test/integration/remote-status-binary.test.ts)：真实原生候选经 `activateRules` 仅激活 SRS 后，`status` 核验当前版本和历史回滚目标。
+- [`remote-state.test.ts`](https://github.com/wangyingang/sing-box-config-manager/blob/7075bfc3f6a900c67a07e32e53e5a8aabc4ed1b4/packages/rule-set-pipeline/test/remote-state.test.ts)、[`remote-status.test.ts`](https://github.com/wangyingang/sing-box-config-manager/blob/7075bfc3f6a900c67a07e32e53e5a8aabc4ed1b4/packages/rule-set-pipeline/test/remote-status.test.ts)：初始化、损坏状态、当前激活事实、候选完整性及历史回滚目标。
+- [`remote-status-binary.test.ts`](https://github.com/wangyingang/sing-box-config-manager/blob/7075bfc3f6a900c67a07e32e53e5a8aabc4ed1b4/packages/rule-set-pipeline/test/integration/remote-status-binary.test.ts)：真实原生候选经 `activateRules` 仅激活 SRS 后，`status` 核验当前版本和历史回滚目标。
 - [`publication-repository.test.ts`](../../test/publication-repository.test.ts)：Git API 的唯一父提交、非强制更新、不可变候选、未知提交身份及可靠 tree/blob 读取。
 - [`cli.test.ts`](../../test/cli.test.ts)：初始化与状态查询的分支/config 路由、错误退出和远端权威标识。
 

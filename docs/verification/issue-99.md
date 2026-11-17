@@ -12,11 +12,11 @@
 | remote-status：SRS-only 首项、8 种订阅／文件错误、稳定字节损坏及非法 history | 现有 activationRecord / verifyStableFiles 历史读取边界；转换入口损坏拒绝 | 保留历史解析器拒绝；移除旧 status 返回字段要求 |
 | remote-state：初始化、状态缺失、读失败、JSON 损坏、来源资产身份损坏 | 固定 schema 1 journal 的只读解析，转换入口拒绝且零写入 | 初始化不是当前公开能力，不继续测试 legacy writer |
 | remote-legacy-recovery：隔离分支 update/rebuild；文件阶段恢复及幂等；三阶段回复丢失；rebuild 保留 processed；固定来源下载失败；不再保留候选；完成证据离线恢复（9 项） | 当前 rules-operations / rules-recovery / rules-candidate-validation 覆盖运行恢复；本票固定 schema 1 样本覆盖一次性转换 | 替代转换通过后删除整文件，不继续承诺旧单集 writer 长期运行 |
-| remote-status：未归属稳定文件、维护预览 | #98 当前 cleanup 覆盖，#99 不重复更改 | #98 尚未合入 main，本票保留两项，交由 #98 收尾 |
+| remote-status：未归属稳定文件、维护预览 | #98 当前 cleanup 覆盖，#99 不重复更改 | #98 尚未合入 main，首轮保留两项；整合 #98 后双方段落全部迁移，整文件删除 |
 
 ## 共享 fixture 清理条件
 
-`configured-activation-fixture.ts` 仍供 check-now、maintenance-sources、acceptance/maintenance-switch 使用（包括 upstream）；`fixtures/publication-repository.ts` 仍供旧维护、publication/rebuild 等测试使用；`fixtures/legacy-workflow.ts` 仍供 legacy-workflow、official-rulesets-lifecycle 使用。本票仅解除历史转换对它们的依赖，不删除共享 fixture；其余调用者全部迁移后由最后一票清理。
+编辑前调用者：`configured-activation-fixture.ts` 仍供 check-now、maintenance-sources、acceptance/maintenance-switch 使用（包括 upstream）；`fixtures/publication-repository.ts` 仍供旧维护、publication/rebuild 等测试使用；`fixtures/legacy-workflow.ts` 仍供 legacy-workflow、official-rulesets-lifecycle 使用。原计划仅解除本票依赖，其他调用者迁移后再清理。实施期间 #98 合入 main（`3347fbd`），随后重新扫描：configured-activation-fixture 与 publication-repository 两份 fixture 已无任何调用者，本票作为最后一票删除；legacy-workflow 仍被 legacy-workflow.test.ts 使用，继续保留，待该常规 suite 完成迁移后清理。
 
 ## 验证记录
 
@@ -46,3 +46,7 @@
 | 完成证据后离线恢复不重发 | rules-recovery 完整证据恢复、上游失败保留当前交付；本票转换 fetch 强制拒绝上游，来源／候选身份保持 |
 
 替代的 25 项定向测试及类型检查通过后，删除 remote-legacy-recovery 与 remote-status-binary 整文件；remote-status 中移除 SRS-only 旧返回字段要求，8 种订阅／文件错误及非法历史、稳定字节损坏移到 historical-records 的现有历史解析边界。remote-state 保留缺状态、未初始化、HTTP 失败、损坏 JSON 与资产身份损坏的只读拒绝，解除初始化 writer 依赖。
+
+## 本地审查与整合
+
+code-review Standards 首轮 1 项 P3：#48 的 remote-status-binary 历史链接失效，已改为固定旧基线；同一历史段落的 remote-state、remote-status 也固定到旧源码，避免将历史验收说明链接到新边界。Spec 首轮零 findings。整合 `3347fbd` 后重新核对共享调用者和分段映射，未修改生产代码。
