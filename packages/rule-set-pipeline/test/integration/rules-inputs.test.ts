@@ -89,6 +89,7 @@ for (const fault of ['release-offline', 'checksum', 'yaml', 'missing-list', 'inv
     const expected = commonFailure ? ['failed', 'failed', 'failed', 'delivered']
       : fault === 'cidr' ? ['delivered', 'delivered', 'unchanged', 'failed'] : ['failed', 'delivered', 'unchanged', 'delivered'];
     assert.deepEqual(result.results.map(x => x.status), expected);
+    if (commonFailure) assert.deepEqual((await getRulesStatus(request)).rules?.map(x => x.candidateCount), [1, 1, 1, 2]);
     for (let i = 0; i < 4; i++) {
       const entry = result.results[i];
       if (entry.status === 'failed' || entry.status === 'unchanged') {
@@ -105,6 +106,50 @@ for (const fault of ['release-offline', 'checksum', 'yaml', 'missing-list', 'inv
     for (let i = 0; i < 4; i++) if (expected[i] === 'delivered') assert.deepEqual(retried.results[i].current, result.results[i].current);
   });
 }
+
+test('首次同步缺少单列表时该集未交付且无候选，其他三集独立成功', async () => {
+  const env = fourSources(), request = { context: env.context }, fetcher = env.context.fetch!;
+  const body = JSON.stringify({ lists: [
+    { name: 'anthropic', length: 1, rules: ['domain:anthropic.example'] },
+    { name: 'google-deepmind', length: 1, rules: ['domain:deepmind.example'] },
+  ] });
+  env.context.fetch = async (url, init) => String(url).endsWith('/assets/11') ? new Response(body)
+    : String(url).endsWith('/assets/12') ? new Response(`${sha256(body)}  dlc.dat_plain.yml\n`) : fetcher(url, init);
+  const result = await syncRules(request);
+  assert.equal(result.status, 'partial', JSON.stringify(result)); assert.equal(result.exitCode, 1);
+  assert.deepEqual(result.results.map(x => x.status), ['failed', 'delivered', 'delivered', 'delivered']);
+  assert.equal(result.results[0].current, undefined);
+  const status = await getRulesStatus({ context: { ...env.context } });
+  assert.equal(status.rules?.[0].deliveryState, 'not-delivered');
+  assert.deepEqual(status.rules?.map(x => x.candidateCount), [0, 1, 1, 1]);
+});
+
+test('CIDR resume 输入失败保留当前并解除固定，不访问域名来源或改变兄弟固定', async () => {
+  const env = fourSources(), request = { context: env.context };
+  const first = await syncRules(request); assert.equal(first.status, 'success', JSON.stringify(first));
+  for (const id of ['openai', 'china-ip']) {
+    const current = first.results.find(x => x.id === id)!.current!;
+    assert.equal((await pinRuleVersion({ ...request, id, version: current.versionId! })).status, 'success');
+  }
+  const before = await getRulesStatus(request);
+  env.changeCidr('invalid CIDR'); env.requests.length = 0;
+  const failed = await resumeRuleUpdates({ ...request, id: 'china-ip' });
+  assert.equal(failed.status, 'failed'); assert.equal(failed.exitCode, 1);
+  assert.equal(failed.results.length, 1); assert.equal(failed.results[0].control?.mode, 'auto');
+  assert.deepEqual(failed.results[0].current, before.rules?.find(x => x.id === 'china-ip')?.current);
+  assert.ok(env.requests.length > 0 && env.requests.every(url => url.includes('gaoyifan/china-operator-ip')));
+  const after = await getRulesStatus(request);
+  for (const id of ['openai', 'anthropic', 'google-deepmind']) {
+    const old = before.rules!.find(x => x.id === id)!, current = after.rules!.find(x => x.id === id)!;
+    assert.deepEqual(current.current, old.current); assert.deepEqual(current.control, old.control);
+  }
+  env.changeCidr('198.51.100.0/24\n');
+  const retry = await syncRules({ context: { ...env.context } });
+  assert.equal(retry.status, 'success', JSON.stringify(retry));
+  assert.equal(retry.results.find(x => x.id === 'openai')?.status, 'pinned-skipped');
+  assert.equal(retry.results.find(x => x.id === 'china-ip')?.status, 'delivered');
+  assert.equal(retry.results.find(x => x.id === 'china-ip')?.control?.revision, failed.results[0].control?.revision);
+});
 
 test('合法 ID constructor 经 sync、独立会话 status、pin 和 resume 保留版本身份', async () => {
   const env = rulesEnvironment(binary!); const config = env.config();
