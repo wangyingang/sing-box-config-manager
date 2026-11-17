@@ -117,6 +117,16 @@ jobs:
             [[ -n "$GH_TOKEN" ]] || { echo 'RULE_ACCEPTANCE_TOKEN is required for isolated Actions runs'; exit 1; }
           fi
           unset RULE_ARTIFACT_TOKEN RULE_ACCEPTANCE_TOKEN
+          node --input-type=module <<'NODE'
+          import { execFileSync } from 'node:child_process';
+          import { writeFileSync } from 'node:fs';
+          const env = process.env;
+          writeFileSync(`${env.RUNNER_TEMP}/rule-execution.json`, JSON.stringify({
+            runId: env.GITHUB_RUN_ID, runAttempt: env.GITHUB_RUN_ATTEMPT,
+            eventSha: env.GITHUB_SHA, workflowSha: env.GITHUB_WORKFLOW_SHA,
+            checkoutCommit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+          }, null, 2) + '\n');
+          NODE
           trap 'cp "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/rule-maintenance-summary.md"' EXIT
           node --import tsx src/rule-workflow.ts
       - name: Preserve rule operation results
@@ -128,5 +138,6 @@ jobs:
           path: |
             ${{ runner.temp }}/rule-maintenance-summary.md
             ${{ runner.temp }}/rule-result.json
+            ${{ runner.temp }}/rule-execution.json
           retention-days: 14
           if-no-files-found: warn
