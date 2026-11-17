@@ -7,7 +7,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test test/*.test.ts",
-    "test:release": "pnpm --filter @sing-box-config-manager/config-compiler generate:validator && node --import tsx --test test/acceptance/*.test.ts",
+    "test:release": "pnpm --filter @sing-box-config-manager/config-compiler generate:validator && node --import tsx --test test/acceptance/release.test.ts test/acceptance/configured-release.test.ts",
     "build": "tsc -p tsconfig.build.json",
     "test:integration": "pnpm --filter @sing-box-config-manager/config-compiler generate:validator && node --import tsx --test test/integration/*.test.ts",
     "rules": "node --import tsx src/cli.ts",
