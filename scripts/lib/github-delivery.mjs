@@ -78,7 +78,7 @@ export function readIssue(repository, number) {
   return { number: issue.number, url: issue.url, state: issue.state, stateReason: issue.stateReason };
 }
 
-export function deliveryErrors(snapshot, issues, expected, phase) {
+export function deliveryErrors(snapshot, issues, expected, phase, { allowOpenIssues = false } = {}) {
   const { pullRequest: pr } = snapshot, errors = [];
   const references = expected.map(number => `${snapshot.repository.toLowerCase()}#${number}`);
   if (pr.baseBranch !== snapshot.defaultBranch) errors.push(`PR 目标为 ${pr.baseBranch}，需要默认分支 ${snapshot.defaultBranch}`);
@@ -91,6 +91,9 @@ export function deliveryErrors(snapshot, issues, expected, phase) {
   } else {
     if (pr.state !== 'MERGED' || !pr.mergeCommit) errors.push('PR 尚未确认合并，或缺少合并提交');
     for (const issue of issues) {
+      // The closeout writer may defer OPEN issues only while performing an
+      // explicitly authorized completion. Final and read-only checks stay strict.
+      if (allowOpenIssues && issue.state === 'OPEN') continue;
       if (issue.state !== 'CLOSED' || issue.stateReason !== 'COMPLETED') errors.push(`工单 #${issue.number} 尚未以 completed 关闭：${issue.state}/${issue.stateReason ?? '无原因'}`);
     }
   }

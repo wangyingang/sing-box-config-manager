@@ -322,3 +322,42 @@ for (const mode of ['独立 pushurl', '多 pushurl', '合并后 pushurl 变化']
   assert.equal(f.git(f.main, 'rev-parse', 'refs/heads/codex/test'), f.head);
   if (mode !== '合并后 pushurl 变化') assert.deepEqual(mutations(result.calls), []);
 });
+
+
+for (const fault of ['lost-merge-response', 'issue-close-failure']) test(`${fault} 后显式 --merge 补关已合并 PR 的工单`, t => {
+  const f = fixture(t); f.data.noAutoClose = true;
+  if (fault === 'lost-merge-response') f.data.lostMergeResponse = true;
+  else f.data.failWrite = 'issue close';
+  const first = f.run(['--apply']);
+  assert.equal(first.code, 1);
+  assert.ok(first.remote.merged); assert.ok(existsSync(f.task));
+  delete f.data.failWrite; delete f.data.lostMergeResponse;
+  const second = f.run(['--apply']);
+  assert.equal(second.code, 0, second.stdout);
+  assert.equal(second.report.issues[0].stateReason, 'COMPLETED');
+  assert.equal(existsSync(f.task), false);
+  assert.equal(second.calls.filter(args => args[0] === 'pr' && args[1] === 'merge').length, 0);
+  assert.equal(second.calls.filter(args => args[0] === 'issue' && args[1] === 'close').length, 1);
+  assert.deepEqual(second.remote.records.map(record => record.kind), ['pr comment', 'issue comment']);
+});
+
+test('已合并 PR 的工单仍 open 时，清理授权不隐含关单授权', t => {
+  const f = fixture(t); f.data.noAutoClose = true; f.data.lostMergeResponse = true;
+  assert.equal(f.run(['--apply']).code, 1);
+  const result = f.run(['--apply', '--cleanup', '--main-worktree', f.main, '--task-worktree', f.task,
+    '--evidence', f.evidence], { actions: false });
+  assert.equal(result.code, 1);
+  assert.deepEqual(mutations(result.calls), []);
+  assert.ok(existsSync(f.task));
+});
+
+test('显式恢复不会将 NOT_PLANNED 冒充 completed', t => {
+  const f = fixture(t);
+  assert.equal(f.run(['--apply', '--merge', '--subject', 'test: 先合并'], { actions: false }).code, 0);
+  f.data.closeReason = 'NOT_PLANNED';
+  const result = f.run(['--apply']);
+  assert.equal(result.code, 1);
+  assert.match(result.report.errors.join('\n'), /NOT_PLANNED/);
+  assert.deepEqual(mutations(result.calls), []);
+  assert.ok(existsSync(f.task));
+});

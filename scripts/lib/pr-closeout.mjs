@@ -14,8 +14,8 @@ function writeGitHub(...args) {
   execFileSync('gh', args, { encoding: 'utf8', timeout: 60_000, maxBuffer: 4 * 1024 * 1024,
     stdio: ['ignore', 'pipe', 'pipe'] });
 }
-function checkDelivery(snapshot, issues, expected, phase) {
-  const errors = deliveryErrors(snapshot, issues, expected, phase);
+function checkDelivery(snapshot, issues, expected, phase, allowOpenIssues = false) {
+  const errors = deliveryErrors(snapshot, issues, expected, phase, { allowOpenIssues });
   requireThat(errors.length === 0, errors.join('; '));
 }
 function checkEvidence(evidence, head, allowedSkips) {
@@ -70,7 +70,7 @@ export async function closePullRequest(options) {
     report.before = initial;
     report.issues = options.issues.map(number => readIssue(repository, number));
     const phase = initial.pullRequest.state === 'MERGED' ? 'after-merge' : 'before-merge';
-    checkDelivery(initial, report.issues, options.issues, phase);
+    checkDelivery(initial, report.issues, options.issues, phase, options.merge && phase === 'after-merge');
     report.evidence = readPullRequestEvidence(initial);
     checkEvidence(report.evidence, initial.pullRequest.headCommit, options.allowedSkips);
     report.runs = options.ciRuns.map(id => {
@@ -100,6 +100,8 @@ export async function closePullRequest(options) {
       requireThat(snapshot.pullRequest.headCommit === options.expectedHead, '合并后的 PR head 身份变化');
       requireThat(snapshot.pullRequest.state === 'MERGED' && snapshot.pullRequest.mergeCommit, '未确认实际合并，停止工单收尾');
       report.issues = options.issues.map(number => readIssue(repository, number));
+    }
+    if (options.merge) {
       for (const issue of report.issues.filter(issue => issue.state === 'OPEN')) {
         await step(`close-issue-${issue.number}`, () => writeGitHub('issue', 'close', String(issue.number), '--repo', repository, '--reason', 'completed'));
         Object.assign(issue, readIssue(repository, issue.number));

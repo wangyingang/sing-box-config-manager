@@ -38,7 +38,7 @@ else if (args[0] === 'api' && args[1] === 'graphql') {
   }
 } else if (args[0] === 'issue' && args[1] === 'view') {
   const closed = data.merged && !data.noAutoClose || data.closed;
-  result = { number: Number(args[2]), url: `https://github.com/${repo}/issues/${args[2]}`, state: closed ? 'CLOSED' : 'OPEN', stateReason: closed ? 'COMPLETED' : null };
+  result = { number: Number(args[2]), url: `https://github.com/${repo}/issues/${args[2]}`, state: closed ? 'CLOSED' : 'OPEN', stateReason: closed ? data.closeReason ?? 'COMPLETED' : null };
 } else if (args[0] === 'run' && args[1] === 'view') result = { headSha: data.runHead ?? data.head, status: 'completed', conclusion: 'success',
   url: 'https://example.com/run', jobs: [{ status: 'completed', conclusion: 'success', name: 'Native sing-box' }] };
 else {
