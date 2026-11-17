@@ -1,0 +1,104 @@
+{
+  "archive": "evidence.tar.gz",
+  "byteLength": 602372,
+  "sha256": "294870ffb6f7b06806c36682896499681d9d159cdddeab1550989869233c2ed2",
+  "archiveSourceAtCreation": "9f68f88458e9d006a41af8bf2e50fdee7739f592",
+  "fixedPoint": "1f9ad68",
+  "local": {
+    "source": {
+      "commit": "aa1293f5df8ac66c1fa0e93b4dd17756c87a9e36",
+      "clean": true,
+      "status": "",
+      "trackedDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "scope": "check-native",
+    "status": "passed",
+    "steps": [
+      {
+        "name": "check",
+        "seconds": 49.467,
+        "suites": [
+          {
+            "name": "node:test",
+            "tests": 115,
+            "pass": 115,
+            "fail": 0,
+            "cancelled": 0,
+            "skipped": 0,
+            "todo": 0
+          },
+          {
+            "name": "packages/config-compiler test:",
+            "tests": 99,
+            "pass": 99,
+            "fail": 0,
+            "cancelled": 0,
+            "skipped": 0,
+            "todo": 0
+          },
+          {
+            "name": "packages/rule-set-pipeline test:",
+            "tests": 172,
+            "pass": 172,
+            "fail": 0,
+            "cancelled": 0,
+            "skipped": 0,
+            "todo": 0
+          }
+        ]
+      },
+      {
+        "name": "integration",
+        "seconds": 130.91,
+        "suites": [
+          {
+            "name": "packages/config-compiler test:integration:",
+            "tests": 28,
+            "pass": 28,
+            "fail": 0,
+            "cancelled": 0,
+            "skipped": 0,
+            "todo": 0
+          },
+          {
+            "name": "packages/rule-set-pipeline test:integration:",
+            "tests": 242,
+            "pass": 242,
+            "fail": 0,
+            "cancelled": 0,
+            "skipped": 0,
+            "todo": 0
+          }
+        ]
+      }
+    ]
+  },
+  "remoteCleanup": {
+    "sourceIdentity": {
+      "commit": "c526b3591e772379d6712414cc5e89fb52b052c9",
+      "status": "",
+      "diffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "probeSha256": "d71a06b15378bbe920136bf77b016ee39abd579994c3586db75888d7f9b0acea",
+      "binary": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+      "command": "RULE_CLEANUP_PROBE=1 pnpm --dir packages/rule-set-pipeline test:acceptance:cleanup"
+    },
+    "target": "acceptance-issue-98-c7ba020f-8b0c-47f6-b313-474b9f828002",
+    "passed": true,
+    "runIds": [
+      "c37e1e87-e8d8-4876-a12b-5bff8ae45b09",
+      "c6193e75-06a6-45ed-87d5-816a5a761241"
+    ],
+    "readbacks": 108,
+    "switchCount": 2,
+    "remaining": [],
+    "productionUnchanged": true
+  },
+  "remoteTransport": {
+    "log": "issue-98/transport-remote.log",
+    "passedTests": 1
+  },
+  "limitations": [
+    "Remote rounds 1 and 2 failed and were cleaned; round 3 was deliberately aborted and explicitly cleaned. Round 3 has only an abort-cleanup before/after production comparison, not a finalized original-run comparison.",
+    "Local full validation predates the acceptance-only assertion/type fixes and retirement; targeted typecheck and the real isolated probe cover those changes. CI and cloud-review coverage is recorded separately in the PR delivery record."
+  ]
+}
