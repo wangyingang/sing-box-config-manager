@@ -15,4 +15,4 @@
 node scripts/verify.mjs --out <新证据目录> --binary <1.14.4绝对路径> --release
 ```
 
-定向场景位于 [check-now.test.ts](../../test/integration/check-now.test.ts)。真实产物仓库的原子切换、切换后验收和临时引用清理由 [#54](https://github.com/wangyingang/sing-box-config-manager/issues/54) 交付。
+定向场景位于 [check-now.test.ts](https://github.com/wangyingang/sing-box-config-manager/blob/7075bfc3f6a900c67a07e32e53e5a8aabc4ed1b4/packages/rule-set-pipeline/test/integration/check-now.test.ts)。真实产物仓库的原子切换、切换后验收和临时引用清理由 [#54](https://github.com/wangyingang/sing-box-config-manager/issues/54) 交付。

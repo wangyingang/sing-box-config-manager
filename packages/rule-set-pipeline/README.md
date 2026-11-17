@@ -222,7 +222,7 @@ SING_BOX_TEST_BINARY=/absolute/path/to/sing-box-1.14.4 pnpm --dir packages/rule-
 
 候选完整性、只读查询、版本重选及并发 pin 的当前覆盖集中在 `test/integration/rules-selection.test.ts`：纯结构错误在候选证据边界集中验证，pin 拒绝交付的断言同时检查当前与兄弟集稳定字节。摘要自洽但内容无效的 SRS 仍由真实原生复验拒绝；status 的候选检查是结构验证，不能替代 pin 的原生复验。旧测试逐项去向、保留给后续工单的段落和整理前基线见 [#94 迁移记录](../../docs/verification/issue-94.md)。
 
-四集双来源同步覆盖位于 `test/integration/rules-inputs.test.ts`：共享来源读取、CIDR 独立变化、同语义不新增版本、共同来源和单列表故障、独立成功保留，以及合法 ID `constructor`。订阅对象的字段顺序语义复用 `rules-selection.test.ts` 的当前 pin 覆盖。[#96 映射与验收证据](../../docs/verification/issue-96.md)说明各旧断言的迁移落点；清理断言及其必要准备继续保留给 #98。
+四集双来源同步覆盖位于 `test/integration/rules-inputs.test.ts`：共享来源读取、CIDR 独立变化、同语义不新增版本、共同来源和单列表故障、独立成功保留，以及合法 ID `constructor`。订阅对象的字段顺序语义复用 `rules-selection.test.ts` 的当前 pin 覆盖。[#96 映射与验收证据](../../docs/verification/issue-96.md)说明各旧断言的迁移落点；cleanup 的四集保留、中断恢复及交付交错覆盖见 [#98 映射与验收证据](../../docs/verification/issue-98.md)。
 
 真实客户端覆盖位于 `test/integration/rules-domain-client.test.ts` 与 `rules-cidr-client.test.ts`：当前 sync/pin/resume 驱动同一进程从原稳定 URL 更新域名 DNS/Route 与双栈 CIDR，Recipe、发布快照和配置文件不变。CIDR 场景保留 503、无效 SRS 和有效缓存断网重启；独立 `client-failure-recovery.test.ts` 继续覆盖域名下载／加载故障及持久缓存恢复。它们均由原生集成通配入口执行，隔离 harness 的轮询和缓存设置不修改生产客户端。[#97 映射及证据](../../docs/verification/issue-97.md)记录迁移与退役依据。
 
@@ -236,6 +236,19 @@ pnpm --dir packages/rule-set-pipeline test:acceptance:rules
 ```
 
 探针从空的 `acceptance-issue-96-*` 分支执行四集新增、两类来源独立更新、换列表、逐集 pin/resume 和删除。来源发现固定到官方 Release 与 Git commit，字节仍从真实上游获取；候选七份文件、稳定 URL、历史候选及兄弟集通过真实 HTTPS 回读。每轮保存受测源码、操作和回读记录、生产 refs/Actions variables 前后对照，以及成功或失败后的隔离目标清理结果。门禁开启时缺少前提会失败，不能将默认跳过视为完成验收；默认 CI 和统一本地检查不运行该远端写入入口。
+
+cleanup 的真实隔离验收使用单独入口，四集包含域名与 CIDR，验证首次发布时间窗口、当前/pin 豁免、切换中断、HTTPS 回读失败恢复及两轮清理后版本选择：
+
+```sh
+RULE_CLEANUP_PROBE=1 \
+RULE_CLEANUP_EVIDENCE=/absolute/new-cleanup-evidence.json \
+SING_BOX_TEST_BINARY=/absolute/path/to/sing-box \
+pnpm --dir packages/rule-set-pipeline test:acceptance:cleanup
+```
+
+必须提供尚不存在的证据文件，探针在首次远端写入前保留源码身份。只创建随机 `acceptance-issue-98-*` 目标及其维护临时引用，真实来源/Git/HTTPS 与原生验证继续执行。证据记录成功或失败、运行/回读、生产 main/candidates 与 Actions variables 前后对照，以及临时引用清理结果。默认 CI 和完整本地验证不打开门禁。
+
+原子引用与租约是独立 transport 能力；使用 `RULE_MAINTENANCE_REF_PROBE=1 pnpm --dir packages/rule-set-pipeline test:acceptance:transport` 显式验收。该入口保留随机隔离引用、原子更新与陈旧租约拒绝，不调用旧人工维护阶段。常规 transport 保护在 `test/maintenance-transport.test.ts`；候选清理与交错保护在 `test/integration/rules-cleanup*.test.ts`。
 
 旧 `test:publication`、`test:activation`、`test:rollback`、`test:rebuild` 命令已在独有断言迁移通过后移除，不保留兼容别名。`test:release` 通配入口收敛由 #101 负责；不要通过它启动本次远端验收。
 

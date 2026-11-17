@@ -1,5 +1,7 @@
 # Issue #54 基线切换验收
 
+历史验收记录：下列旧命令仅对应[当时的探针源码](https://github.com/wangyingang/sing-box-config-manager/blob/7075bfc3f6a900c67a07e32e53e5a8aabc4ed1b4/packages/rule-set-pipeline/test/acceptance/maintenance-switch.test.ts)，该探针已由 #98 退役；当前 cleanup 与独立 transport 入口见[模块当前说明](../../README.md#自动化验证)。
+
 [工单 #54](https://github.com/wangyingang/sing-box-config-manager/issues/54) 增加 `maintenance-switch`，以及 `maintenance-resume` 在切换后的恢复路径。生产自动更新和清理的启用属于独立操作。
 
 | 场景 | 验收行为 |
@@ -15,7 +17,7 @@
 node scripts/verify.mjs --out <新证据目录> --binary <1.14.4绝对路径> --release
 ```
 
-[原生集成测试](../../test/integration/check-now.test.ts) 通过公开操作覆盖两轮清理、真实 sing-box 和故障注入。Git refs 与 HTTPS 在测试 transport 中隔离。
+[原生集成测试](https://github.com/wangyingang/sing-box-config-manager/blob/7075bfc3f6a900c67a07e32e53e5a8aabc4ed1b4/packages/rule-set-pipeline/test/integration/check-now.test.ts) 通过公开操作覆盖两轮清理、真实 sing-box 和故障注入。Git refs 与 HTTPS 在测试 transport 中隔离。
 
 真实 GitHub 验收会在产物仓库创建随机命名的 `acceptance-*` 分支和配套维护引用，测试结束后按当前 heads 清理这些引用。它需要具有相应隔离分支写权限的 `gh` 登录。测试输入使用受控 Release fixture，Git 推送、远端 refs、HTTPS 及 sing-box 均使用真实接口。从 `packages/rule-set-pipeline` 目录执行：
 
