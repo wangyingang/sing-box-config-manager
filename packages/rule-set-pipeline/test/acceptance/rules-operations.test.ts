@@ -22,7 +22,7 @@ const updatedCommit = '62bc1fc8b015bece77271b568e10d6337915bc96';
 
 /** Only discovery is pinned. Source bytes, Git writes and HTTPS readback are real. */
 test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resume、删除，生产 refs/开关不变', {
-  skip: process.env.RULE_OPERATIONS_PROBE !== '1', timeout: 2_400_000,
+  skip: process.env.RULE_OPERATIONS_PROBE !== '1', timeout: 3_600_000,
 }, async t => {
   const binary = process.env.SING_BOX_TEST_BINARY, evidencePath = process.env.RULE_OPERATIONS_EVIDENCE;
   assert.ok(binary, 'Set SING_BOX_TEST_BINARY');
