@@ -5,7 +5,7 @@ const query = `query($owner:String!,$name:String!,$number:Int!,$cursor:String){
   repository(owner:$owner,name:$name){
     nameWithOwner defaultBranchRef{name}
     pullRequest(number:$number){
-      number url state isDraft baseRefName headRefOid mergeCommit{oid}
+      number url state isDraft baseRefName headRefOid headRefName headRepository{nameWithOwner} mergeCommit{oid}
       closingIssuesReferences(first:100,after:$cursor){
         nodes{number repository{nameWithOwner}} pageInfo{hasNextPage endCursor}
       }
@@ -32,7 +32,7 @@ export function github(...args) {
   catch { throw new Error(`GitHub 返回无效 JSON（gh ${args.slice(0, 2).join(' ')}）`); }
 }
 
-export function readPullRequest(repository, number) {
+export function readPullRequest(repository, number, { includeHead = false } = {}) {
   const [owner, name] = repository.split('/');
   let snapshot, cursor;
   const seenCursors = new Set(), references = new Set();
@@ -49,6 +49,11 @@ export function readPullRequest(repository, number) {
     const current = { repository: repo.nameWithOwner, defaultBranch: repo.defaultBranchRef.name,
       pullRequest: { number: pr.number, url: pr.url, state: pr.state, draft: pr.isDraft,
         baseBranch: pr.baseRefName, headCommit: pr.headRefOid, mergeCommit: pr.mergeCommit?.oid ?? null } };
+    if (includeHead) {
+      requireThat(nonempty(pr.headRefName) && repositoryName(pr.headRepository?.nameWithOwner), 'PR 来源分支或仓库身份缺失');
+      current.pullRequest.headBranch = pr.headRefName;
+      current.pullRequest.headRepository = pr.headRepository.nameWithOwner;
+    }
     requireThat(!snapshot || isDeepStrictEqual(snapshot, current), '分页期间 PR 或默认分支发生变化，请重试');
     snapshot = current;
     const connection = pr.closingIssuesReferences;

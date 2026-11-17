@@ -142,9 +142,8 @@ function cloudReviews(comments) {
   return records.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
 }
 
-function auditPullRequest(repository, number, issues) {
-  const snapshot = readPullRequest(repository, number);
-  const expected = issues.map(issue => issue.number);
+/** Shared paginated CI and review inventory; callers decide their delivery phase. */
+export function readPullRequestEvidence(snapshot) {
   const comments = prConnection(snapshot, 'comments', commentFields);
   validateComments(comments);
   const reviews = prConnection(snapshot, 'reviews', 'id url body state author{login} commit{oid} submittedAt');
@@ -156,6 +155,13 @@ function auditPullRequest(repository, number, issues) {
     thread.comments = readThreadComments(thread); validateComments(thread.comments);
   }
   const ci = readChecks(snapshot), cloud = cloudReviews(comments);
+  return { comments, reviews, threads, ci, cloud };
+}
+
+function auditPullRequest(repository, number, issues) {
+  const snapshot = readPullRequest(repository, number);
+  const expected = issues.map(issue => issue.number);
+  const { comments, reviews, threads, ci, cloud } = readPullRequestEvidence(snapshot);
   requireThat(isDeepStrictEqual(snapshot, readPullRequest(repository, number)), `PR #${number} 在审计期间发生变化，请重试`);
   const warnings = deliveryErrors(snapshot, issues, expected, 'after-merge');
   if (!ci.checks.length) warnings.push('没有可核对的 CI 检查');

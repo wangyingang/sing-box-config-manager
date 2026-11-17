@@ -46,6 +46,8 @@ Skill 要求“发布到 issue tracker”时，创建 GitHub issue；要求“�
 
 清理已获授权删除的分支和 worktree 前，归档必要的验证证据。收尾报告列出工单最终状态；仍为 open 时说明原因。
 
+合并收尾可使用 `node scripts/close-pr.mjs --help` 查看统一入口。默认只读预览；实际执行须显式选择已获用户授权的合并、任务清理或 main 同步动作。工具复用现有交付校验，失败即停，并在清理前核实工作区、分支身份与证据归档。验收是否完成仍由 Agent 对照需求和证据判断。
+
 ## Pull requests as a triage surface
 
 **PRs as a request surface: no.**
