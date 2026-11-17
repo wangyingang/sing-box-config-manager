@@ -1,5 +1,7 @@
 # Issue #67：正式配置和三集更名验收
 
+历史验收记录：下列旧命令仅对应[当时的探针源码](https://github.com/wangyingang/sing-box-config-manager/blob/7075bfc3f6a900c67a07e32e53e5a8aabc4ed1b4/packages/rule-set-pipeline/test/acceptance/official-rulesets-lifecycle.test.ts)，该探针已由 #98 退役；当前四集规则操作与 cleanup 入口见[模块当前说明](../../README.md#自动化验证)。
+
 [工单 #67](https://github.com/wangyingang/sing-box-config-manager/issues/67) 对应 [Spec #66](https://github.com/wangyingang/sing-box-config-manager/issues/66) 的 A18、A19。正式配置从空状态初始化 `openai`、`anthropic`、`google-deepmind`。本验收不迁移旧配置、历史或客户端，不启用生产更新和清理。以下三集探针对应 #67 的源码版本；当前四集探针见 [#73](issue-73.md)。
 
 - **规则内容与用途：** 旧定义（`e144fff`）与正式配置使用 V2Fly Release `20261104112839` 和同一个 sing-box 1.14.4。比较三集的转换报告、用途映射和六个 JSON／SRS 文件。固定 Release 测试复核原 JSON 摘要，并验证新构建的 JSON／SRS 可重复。运行 `node scripts/verify.mjs --out <新目录> --binary <绝对路径> --release`，证据记录完整来源、工具身份及产物摘要。

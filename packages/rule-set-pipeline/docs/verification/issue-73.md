@@ -1,5 +1,7 @@
 # #73 四集工作流与隔离验收
 
+历史验收记录：下列旧命令仅对应[当时的探针源码](https://github.com/wangyingang/sing-box-config-manager/blob/7075bfc3f6a900c67a07e32e53e5a8aabc4ed1b4/packages/rule-set-pipeline/test/acceptance/official-rulesets-lifecycle.test.ts)，该探针已由 #98 退役；当前四集规则操作与 cleanup 入口见[模块当前说明](../../README.md#自动化验证)。
+
 [工单 #73](https://github.com/wangyingang/sing-box-config-manager/issues/73) 对应 [Spec #66](https://github.com/wangyingang/sing-box-config-manager/issues/66) 的 A20，并汇总 A1–A19 的验证入口。工作流和 CLI 共用 [正式配置](../../config/rulesets.yml)：`openai`、`anthropic`、`google-deepmind` 和 `china-ip`。隔离运行写入专用目标分支及其维护引用。日常入口检查四集，然后按计划评估维护；手动入口可分别检查和清理。执行步骤开始后，GitHub Actions Summary 记录实际执行的操作；生成的摘要另存为 `rule-maintenance-summary` artifact。
 
 | 证据 | 验证范围 |

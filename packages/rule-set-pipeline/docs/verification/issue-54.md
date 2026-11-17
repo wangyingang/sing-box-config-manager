@@ -1,5 +1,7 @@
 # Issue #54 基线切换验收
 
+历史验收记录：下列旧命令仅对应[当时的探针源码](https://github.com/wangyingang/sing-box-config-manager/blob/7075bfc3f6a900c67a07e32e53e5a8aabc4ed1b4/packages/rule-set-pipeline/test/acceptance/maintenance-switch.test.ts)，该探针已由 #98 退役；当前 cleanup 与独立 transport 入口见[模块当前说明](../../README.md#自动化验证)。
+
 [工单 #54](https://github.com/wangyingang/sing-box-config-manager/issues/54) 增加 `maintenance-switch`，以及 `maintenance-resume` 在切换后的恢复路径。生产自动更新和清理的启用属于独立操作。
 
 | 场景 | 验收行为 |

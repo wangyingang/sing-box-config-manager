@@ -39,4 +39,59 @@
 
 ## Spec
 
-本地审查无未解决 findings。README 已补 cleanup、transport 入口及必填证据路径。远端探针尚在执行，旧远端测试仍保留；不把本地全绿当作真实远端验收完成。
+本地审查无未解决 findings。README 已补 cleanup、transport 入口及必填证据路径。修正探针已于北京时间 2026-11-18 完成真实隔离验收；通过后退役对应旧远端测试。
+
+
+## 完整本地验证及基线对照
+
+干净提交 `aa1293f5df8ac66c1fa0e93b4dd17756c87a9e36` 的统一入口通过，范围 `check-native`，tracked diff SHA-256 为 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`：
+
+```sh
+node scripts/verify.mjs --out .verification/issue-98/complete --binary /absolute/path/to/sing-box-1.14.4
+```
+
+常规 386 项（tools 115、Compiler 99、Pipeline 172）、原生 270 项（Compiler 28、Pipeline 242），共 656 项全部通过，失败、跳过、取消和 todo 均为 0。typecheck、build、workspace/browser smoke 同轮执行；证据读取器核对文件大小与摘要通过。此前干净 `ad29e40` 的同范围验证也通过并保留为中间证据。
+
+工具为 Node v26.13.0、pnpm 10.33.2、sing-box 1.14.4；binary SHA-256 `6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2`。环境仍为 macOS arm64、Apple M2 Max，沿用 #94 的同一进程观测器及归类脚本，suite 统计仅调整输出目录。
+
+| 同机测量 | 固定旧基线 `7075bfc` | 本轮 `aa1293f` |
+| --- | ---: | ---: |
+| 常规文件（tools / Compiler / Pipeline） | 6 / 12 / 21 | 6 / 12 / 20 |
+| 原生文件（Compiler / Pipeline） | 8 / 26 | 8 / 18 |
+| 常规 / 原生用例 | 396 / 307 | 386 / 270 |
+| 真实路径或副本的原生调用 | 16,070 | 12,125 |
+| wrapper 分组调用 | 114 | 22 |
+| 常规检查 / 原生阶段耗时 | 43.497 / 251.773 s | 49.467 / 130.910 s |
+| 总墙钟 | 295.514 s | 180.611 s |
+
+此比较累计包含 #94—#98，不能把全部差值归因于本票。本票相对实施起点的原生用例净减少 1 项（删除旧 16 项、新增当前 guards 15 项），常规净减少 4 项；已有保留与恢复样本扩充到四集。wrapper 分组减少的 92 次来自旧 check-now 中仅改变可执行文件身份的转发 wrapper；真实跨工具恢复仍由 rules-cleanup-baseline 覆盖，原生能力故障矩阵未删除。每次调用的用途、退出码与耗时保留在进程明细；真实路径/副本、转发及故障 wrapper 的分类沿用基线，不重复计 shell 子进程。
+
+测量期间另有隔离远端探针运行，墙钟可能受并发负载和系统噪声影响；这不是严格隔离的性能基准，也不承诺固定加速比。调用数量和实际执行范围单独记录，不用耗时下降替代覆盖证明。
+
+完整本地验证之后，已完成的修改仅涉及远端验收断言、类型与目录筛选。旧远端测试在第四轮真实验收通过后退役。最新类型检查、真实隔离运行及 CI 覆盖提交分别记录，不把旧提交的完整验证当作后续全部变更已经同轮重跑。
+
+
+## 真实隔离验收与远端退役
+
+第四轮从干净提交 `c526b3591e772379d6712414cc5e89fb52b052c9` 运行显式 `test:acceptance:cleanup`，于北京时间 2026-11-18 00:24:46 完成。1/1 通过，失败、跳过、取消和 todo 均为 0，测试体约 1,673.027 秒。四集使用真实固定 Release/Git 来源、真实 GitHub 引用和 HTTPS，以及真实 sing-box 1.14.4；只用隔离应用时钟构造候选年龄，不冒充历史真实发布时间。
+
+首轮 cleanup 注入 journal 阶段中断、原子切换拒绝、已切换但回复丢失及稳定 HTTPS 回读失败，随后用同一公开 cleanup 和同一维护身份恢复。第二轮改变 cutoff，继续保护当前与 pin、保留窗口内非当前版本。两轮实际只切换 2 次，保留的 6 个候选均可查询、原生复验并通过新地址读取完整七文件；域名边界版本和 CIDR 版本选择成功。交付记录仅允许证据地址重写，业务身份、首次发布时间、来源、订阅、control 与规则字节均保持。
+
+测试在外部下载边界屏蔽旧历史 SHA 地址后继续验证新基线，不宣称 GitHub 已物理回收旧对象。真实管理分支的可达图已与旧历史分离；其他引用不删除。两次维护 ID、固定输入、每项操作、回读地址/摘要/长度及清理结果均保存在原始记录中。
+
+| 轮次 / 受测提交 | 实际结果 | 隔离清理与生产对照 |
+| --- | --- | --- |
+| 1 / `bea41fd` | CIDR 来源 `fetch failed`，未进入 cleanup；不算通过 | remaining=[]、cleanupErrors=[]，生产前后相同 |
+| 2 / `aa1293f` | Git 目录项被误当文件读取，检查器失败；不算通过 | remaining=[]、cleanupErrors=[]，生产前后相同 |
+| 3 / `0cba8e9` | 已知目录断言错误后主动停止；不算通过 | 现有 leased transport 显式清空目标；仅具备终止后清理的生产前后对照，原轮完整对照未完成 |
+| 4 / `c526b35` | 完整 cleanup 场景 1/1 通过 | remaining=[]、cleanupErrors=[]，生产 refs/Actions variables 前后相同 |
+
+此前还修正了 pin 后结果重排、证据地址按契约重写及 TypeScript 推断错误；失败日志和对应提交全部保留，未把旧结果改记成新提交通过。第四轮开始后没有为小修正终止或并行启动新完整轮次。第四轮通过后直接退役、归档和交付，没有新增通用恢复框架。
+
+独立 `test:acceptance:transport` 已真实运行 1/1 通过，保留原子更新、陈旧租约拒绝及隔离 refs 删除。默认 CI 与统一完整本地入口均不执行远端写入验收。
+
+替代覆盖通过后，删除旧 `acceptance/maintenance-switch.test.ts` 与 `official-rulesets-lifecycle.test.ts`，不保留旧阶段别名。其历史命令保留在历史记录并链接当时源码；当前操作见模块 README。legacy workflow fixture 仍有 #101 的常规测试调用者，不在本票删除。运行时旧实现没有清理。
+
+[evidence.tar.gz](issue-98/evidence.tar.gz) 包含完整本地验证、进程统计、工具/环境身份、定向及负向验证、两轴审查、四轮远端原始记录和所有清理证据；[manifest.json](issue-98/manifest.json) 记录归档摘要、源码身份、范围、统计及限制。后续最终 CI 与云端审查覆盖的 commit 更新到 PR/工单交付记录，不为刷新状态新增源码提交。
+
+第四轮目标 `acceptance-issue-98-c7ba020f-8b0c-47f6-b313-474b9f828002`；维护 ID `c37e1e87-e8d8-4876-a12b-5bff8ae45b09`、`c6193e75-06a6-45ed-87d5-816a5a761241`；归档独立 HTTPS 回读 108 条。源码身份和 probe SHA-256 以原始 JSON 为准。
