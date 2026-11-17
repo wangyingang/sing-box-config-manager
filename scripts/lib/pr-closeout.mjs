@@ -6,7 +6,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { createReportDirectory } from './audit-output.mjs';
 import { github, readPullRequest, readIssue, deliveryErrors, requireThat } from './github-delivery.mjs';
 import { readPullRequestEvidence } from './spec-delivery.mjs';
-import { git, assertClean, assertMain, inspectWorkspace, assertTask, archiveEvidence, verifyArchives, remoteHead } from './closeout-workspace.mjs';
+import { git, assertClean, assertMain, inspectWorkspace, assertTask, assertBranchUnused, archiveEvidence, verifyArchives, remoteHead } from './closeout-workspace.mjs';
 
 function writeGitHub(...args) {
   // A failed write is never retried: the receipt may be unknown. The report
@@ -56,7 +56,7 @@ export async function closePullRequest(options) {
   const output = await createReportDirectory(options.out, options.evidence);
   const report = { schemaVersion: 1, status: 'failed', startedAt: new Date().toISOString(), output,
     actions: { merge: options.merge, cleanup: options.cleanup, syncMain: options.syncMain, publishRecord: options.publishRecord },
-    steps: [], archives: [], errors: [], acceptance: 'agent-evaluated' };
+    steps: [], archives: [], errors: [], acceptance: 'not-evaluated' };
   let currentStep;
   const save = () => writeFile(join(output, 'report.json'), JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
   async function step(name, work) {
@@ -130,8 +130,11 @@ export async function closePullRequest(options) {
         if (remote) await step('delete-remote-branch', () => git(workspace.main, 'push', 'origin', '--delete', workspace.branch,
           `--force-with-lease=refs/heads/${workspace.branch}:${options.expectedHead}`));
         await assertTask(workspace, options.expectedHead); await verifyArchives(report.archives);
-        await step('remove-task-worktree', () => git(workspace.main, 'worktree', 'remove', '--force', workspace.task));
-        await step('delete-local-branch', () => git(workspace.main, 'branch', '--delete', '--force', workspace.branch));
+        await step('remove-task-worktree', () => git(workspace.main, 'worktree', 'remove', workspace.task));
+        await step('delete-local-branch', () => {
+          assertBranchUnused(workspace);
+          git(workspace.main, 'update-ref', '--no-deref', '-d', `refs/heads/${workspace.branch}`, options.expectedHead);
+        });
         requireThat(!remoteHead(workspace.main, workspace.branch), '远端任务分支仍存在');
         requireThat(git(workspace.main, 'branch', '--list', workspace.branch) === '', '本地任务分支仍存在');
         requireThat(!existsSync(workspace.task), '任务 worktree 仍存在');

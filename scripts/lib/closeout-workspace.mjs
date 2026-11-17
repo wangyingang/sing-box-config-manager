@@ -18,6 +18,16 @@ function remoteRepository(value) {
   const match = /^(?:https:\/\/github\.com\/|git@github\.com:)([^/?#]+\/[^/?#]+?)(?:\.git)?\/?$/.exec(value);
   return match?.[1].toLowerCase();
 }
+function assertOrigin(directory, repository) {
+  const expected = repository.toLowerCase();
+  const configured = git(directory, 'config', '--get-all', 'remote.origin.url').split('\n');
+  requireThat(configured.length === 1 && remoteRepository(configured[0]) === expected, 'origin 与 PR 仓库身份不同或配置了多个 URL');
+  const fetch = git(directory, 'remote', 'get-url', '--all', 'origin').split('\n');
+  const push = git(directory, 'remote', 'get-url', '--push', '--all', 'origin').split('\n');
+  requireThat(fetch.length === 1 && push.length === 1 && (fetch[0] === push[0]
+    || remoteRepository(fetch[0]) === expected && remoteRepository(push[0]) === expected), 'origin 的有效 fetch/push 目标不一致或不唯一');
+}
+
 function registeredWorktrees(directory) {
   return git(directory, 'worktree', 'list', '--porcelain', '-z').split('\0\0').filter(Boolean).map(record => {
     const fields = Object.fromEntries(record.split('\0').filter(Boolean).map(field => {
@@ -34,7 +44,7 @@ export async function inspectWorkspace(options, snapshot, output) {
   if (!options.cleanup && !options.syncMain) return undefined;
   const main = await realpath(options.mainWorktree);
   requireThat(git(main, 'rev-parse', '--show-toplevel') === main, 'main-worktree 必须指向工作区根目录');
-  requireThat(remoteRepository(git(main, 'config', '--get', 'remote.origin.url')) === snapshot.repository.toLowerCase(), 'origin 与 PR 仓库身份不同');
+  assertOrigin(main, snapshot.repository);
   requireThat(git(main, 'branch', '--show-current') === snapshot.defaultBranch, '保留工作区当前分支不是默认分支');
   assertClean(main);
   const workspaces = registeredWorktrees(main);
@@ -67,7 +77,7 @@ export async function inspectWorkspace(options, snapshot, output) {
 }
 
 export function assertMain(state) {
-  requireThat(remoteRepository(git(state.main, 'config', '--get', 'remote.origin.url')) === state.repository.toLowerCase(), '保留工作区 origin 仓库身份变化');
+  assertOrigin(state.main, state.repository);
   requireThat(git(state.main, 'branch', '--show-current') === state.defaultBranch, '保留工作区分支变化');
   assertClean(state.main);
 }
@@ -75,7 +85,7 @@ export function assertMain(state) {
 // Regenerable outputs are the only ignored files disposable without an archive.
 const generated = /^(?:node_modules\/|apps\/web\/node_modules\/|packages\/(?:config-compiler|rule-set-pipeline)\/(?:node_modules\/|dist\/)|packages\/config-compiler\/src\/generated\/validate\.cjs$)/;
 export async function assertTask(state, expectedHead) {
-  requireThat(remoteRepository(git(state.main, 'config', '--get', 'remote.origin.url')) === state.repository.toLowerCase(), '清理前 origin 仓库身份变化');
+  assertOrigin(state.main, state.repository);
   assertClean(state.task);
   const entries = registeredWorktrees(state.main);
   const registered = entries.find(entry => entry.path === state.task);
@@ -87,6 +97,10 @@ export async function assertTask(state, expectedHead) {
   for (const path of git(state.task, 'ls-files', '--others', '--ignored', '--exclude-standard', '-z').split('\0').filter(Boolean)) {
     requireThat(generated.test(path) || state.evidence.some(root => contains(root, resolve(state.task, path))), `未归档的 ignored 文件：${path}`);
   }
+}
+
+export function assertBranchUnused(state) {
+  requireThat(!registeredWorktrees(state.main).some(entry => entry.branch === `refs/heads/${state.branch}`), '任务分支已被其他 worktree 占用，停止删除');
 }
 
 async function inventory(root, prefix = '') {

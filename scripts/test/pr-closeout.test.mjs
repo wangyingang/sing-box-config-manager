@@ -33,8 +33,26 @@ function fixture(t) {
   copyFileSync(ghFixture, join(bin, 'gh')); chmodSync(join(bin, 'gh'), 0o755);
   const dataPath = join(root, 'github.json'), callsPath = join(root, 'calls.jsonl');
   const data = { origin, head, base };
+  const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim();
   let run = 0;
   return { root, origin, main, task, evidence, head, data, git,
+    raceAtRemoval(mode) {
+      writeFileSync(join(bin, 'git'), `#!/usr/bin/env node
+const cp = require('node:child_process'), fs = require('node:fs');
+const args = process.argv.slice(2);
+const removing = args.includes('worktree') && args.includes('remove');
+if (removing && ${JSON.stringify(mode)} === 'new-file') fs.writeFileSync(${JSON.stringify(join(task, 'late-user.txt'))}, 'preserve me');
+const result = cp.spawnSync(${JSON.stringify(realGit)}, args, { stdio: 'inherit' });
+if (removing && result.status === 0 && ${JSON.stringify(mode)} === 'new-head') {
+  const state = JSON.parse(fs.readFileSync(process.env.CLOSEOUT_DATA));
+  cp.execFileSync(${JSON.stringify(realGit)}, ['-C', ${JSON.stringify(main)}, 'update-ref', 'refs/heads/codex/test', state.merge]);
+}
+if (removing && result.status === 0 && ${JSON.stringify(mode)} === 'new-worktree') {
+  cp.execFileSync(${JSON.stringify(realGit)}, ['-C', ${JSON.stringify(main)}, 'worktree', 'add', ${JSON.stringify(join(root, 'other-task'))}, 'codex/test']);
+}
+process.exit(result.status ?? 1);
+`, { mode: 0o755 });
+    },
     commands: () => readFileSync(callsPath, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line)),
     run(extra = [], { actions = true, issues = [48] } = {}) {
       const output = join(root, `report-${++run}`);
@@ -254,4 +272,53 @@ test('显式无关联工单时只发布 PR 记录，不修改其他工单', t =>
   assert.deepEqual(result.report.issues, []);
   assert.ok(!result.calls.some(args => args[0] === 'issue'));
   assert.deepEqual(result.remote.records.map(record => record.kind), ['pr comment']);
+});
+
+
+test('worktree 移除后本地分支被并发推进时，CAS 保留新 head', t => {
+  const f = fixture(t); f.raceAtRemoval('new-head');
+  const result = f.run(['--apply']);
+  assert.equal(result.code, 1);
+  assert.equal(result.report.steps.at(-1).name, 'delete-local-branch');
+  assert.equal(f.git(f.main, 'rev-parse', 'refs/heads/codex/test'), result.remote.merge);
+  assert.ok(!result.remote.records);
+});
+
+test('最终移除前出现未跟踪文件时，Git 自身检查保留文件及 worktree', t => {
+  const f = fixture(t); f.raceAtRemoval('new-file');
+  const result = f.run(['--apply']);
+  assert.equal(result.code, 1);
+  assert.equal(result.report.steps.at(-1).name, 'remove-task-worktree');
+  assert.equal(readFileSync(join(f.task, 'late-user.txt'), 'utf8'), 'preserve me');
+  assert.equal(f.git(f.main, 'rev-parse', 'refs/heads/codex/test'), f.head);
+  assert.ok(!result.remote.records);
+});
+
+
+test('移除后任务分支被新的 worktree 占用时拒绝删除 ref', t => {
+  const f = fixture(t); f.raceAtRemoval('new-worktree');
+  const result = f.run(['--apply']);
+  assert.equal(result.code, 1);
+  assert.equal(result.report.steps.at(-1).name, 'delete-local-branch');
+  assert.equal(f.git(f.main, 'rev-parse', 'refs/heads/codex/test'), f.head);
+  assert.ok(existsSync(join(f.root, 'other-task')));
+});
+
+for (const mode of ['独立 pushurl', '多 pushurl', '合并后 pushurl 变化']) test(`${mode} 不得删除另一仓库分支`, t => {
+  const f = fixture(t), other = join(f.root, 'other.git');
+  f.git(f.root, 'clone', '--bare', f.origin, other);
+  if (mode === '合并后 pushurl 变化') {
+    const path = join(f.main, '.git/config');
+    f.data.injectAfterMerge = { path, content: readFileSync(path, 'utf8')+'\n[remote "origin"]\n  pushurl = '+other+'\n' };
+  } else {
+    f.git(f.main, 'config', '--add', 'remote.origin.pushurl', other);
+    if (mode === '多 pushurl') f.git(f.main, 'config', '--add', 'remote.origin.pushurl', f.origin);
+  }
+  const result = f.run(['--apply']);
+  assert.equal(result.code, 1);
+  assert.match(result.report.errors.join('\n'), /fetch\/push/);
+  assert.equal(f.git(other, 'rev-parse', 'refs/heads/codex/test'), f.head);
+  assert.ok(existsSync(f.task));
+  assert.equal(f.git(f.main, 'rev-parse', 'refs/heads/codex/test'), f.head);
+  if (mode !== '合并后 pushurl 变化') assert.deepEqual(mutations(result.calls), []);
 });
