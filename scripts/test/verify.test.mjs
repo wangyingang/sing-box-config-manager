@@ -223,6 +223,9 @@ test('full verification runs ordered checks, captures separate suites and client
   assert.deepEqual(summary.steps.map(step => step.name), ['check', 'integration', 'release']);
   assert.deepEqual(summary.steps[0].suites.map(suite => suite.pass), [2, 3]);
   assert.equal(summary.steps[2].suites[0].pass, 2);
+  const pipelinePackage = JSON.parse(await readFile(new URL('../../packages/rule-set-pipeline/package.json', import.meta.url), 'utf8'));
+  const packageReleaseCommand = pipelinePackage.scripts['test:release'].split(' && ').at(-1);
+  assert.equal(packageReleaseCommand, ['node', ...summary.steps[2].command.slice(1)].join(' '));
   await assert.rejects(readFile(outside), { code: 'ENOENT' });
   const files = JSON.parse(await readFile(join(output, 'files.json'), 'utf8')).files;
   assert.ok(files.some(file => file.path === 'client-domain-operations.json'));

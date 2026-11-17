@@ -264,7 +264,7 @@ pnpm --dir packages/rule-set-pipeline test:acceptance:automation
 
 证据目录保存本地探针源码身份、受审查 branch/SHA、每次配置内容与 commit、运行及 attempt、实际工作流/checkout SHA、摘要与业务结果、生产 refs/Actions variables 前后对照及隔离清理结果。门禁未打开时跳过，不能作为验收通过。默认 CI 与完整本地验证不会启用此远端写入入口；本地拒绝测试使用外部 `gh` 故障模拟，不能代替真实 push/dispatch，也不能把手工通过表述为 schedule 已观察或邮件已实收。当前覆盖、旧 suite 退役及实际执行证据见 [#100 记录](../../docs/verification/issue-100.md)。
 
-旧 `test:publication`、`test:activation`、`test:rollback`、`test:rebuild` 命令已在独有断言迁移通过后移除，不保留兼容别名。`test:release` 通配入口收敛由 #101 负责；不要通过它启动本次远端验收。
+旧 `test:publication`、`test:activation`、`test:rollback`、`test:rebuild` 命令已在独有断言迁移通过后移除，不保留兼容别名。`test:release` 只运行固定官方 Release 的单列表与正式配置中的 V2Fly 三集构建两项只读验收，范围与统一验证的 `--release` 一致。单独运行时，设置 `SING_BOX_TEST_BINARY` 为 sing-box 1.14.4 的绝对路径，再运行 `pnpm --dir packages/rule-set-pipeline test:release`。规则、清理、自动化和 transport 的远端写入验收均使用上文的独立入口。迁移去向和执行证据见 [#101 记录](../../docs/verification/issue-101.md)。
 
 #84 的验收范围包含新增、换源、删除、pin、resume、部分失败、查询/预览与一次性转换；真实 GitHub 生命周期在专用 `acceptance-*` 分支验证，不写生产分支。场景与远端证据见 [#84 验收记录](../../docs/verification/issue-84.md)，最终源码和交付状态以 [Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84) 的 PR 交付证据为准。
 
