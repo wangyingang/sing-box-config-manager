@@ -101,11 +101,11 @@ test('GitHub 四集 cleanup：保留窗口、切换中断、HTTPS 失败恢复�
   let passed = false;
   t.after(async () => {
     const cleanupErrors: string[] = [];
-    const live = await rawRefs.list();
+    const live = await rawRefs.list().catch(error => { cleanupErrors.push(String(error)); return []; });
     const owned = live.filter(({ ref, head }) => allowedRef(ref) && ownedHeads.get(ref) === head);
     if (owned.length) await refs.update(owned.map(({ ref, head }) => ({ ref, before: head }))).catch(error => cleanupErrors.push(String(error)));
-    const remaining = (await rawRefs.list()).filter(({ ref }) => allowedRef(ref));
-    const after = await production();
+    const remaining = await rawRefs.list().then(refs => refs.filter(({ ref }) => allowedRef(ref))).catch(error => { cleanupErrors.push(String(error)); return null; });
+    const after = await production().catch(error => { cleanupErrors.push(String(error)); return null; });
     const evidence = { sourceIdentity, startedAt, endedAt: new Date().toISOString(), readbacks, switchCount, cleanupErrors, target, runIds: [...runIds], before, after, observations, failures, passed,
       removedRefs: owned.map(({ ref }) => ref), remaining, at: new Date().toISOString() };
     await writeFile(evidencePath, JSON.stringify(evidence, null, 2) + '\n');
@@ -186,8 +186,21 @@ test('GitHub 四集 cleanup：保留窗口、切换中断、HTTPS 失败恢复�
       } } },
     };
     const input = { context };
-    const check = async (label: string, operation: Promise<RulesResult>) => {
-      const result = await operation; observations.push({ label, result });
+    const currentOf = (result: RulesResult, id: string) => {
+      const current = result.results.find(rule => rule.id === id)?.current;
+      assert.ok(current, `Missing current ${id}: ${result.status}`); return current;
+    };
+    const check = async (label: string, operation: () => Promise<RulesResult>) => {
+      let result!: RulesResult;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        result = await operation(); observations.push({ label, attempt, result });
+        if (result.status === 'success') break;
+        const errors = [result.error, ...result.results.filter(rule => ['failed', 'pending'].includes(rule.status)).map(rule => rule.error)].filter(Boolean);
+        const transient = /fetch failed|timeout|HTTP 5\d\d|HTTP 404|HTTP 422.*(?:taking too long|try again)|committed HTTPS readback differs/i;
+        if (!errors.length || !errors.every(error => transient.test(error!)) || attempt === 3) break;
+        console.log(`${label}: transient failure, retrying public operation (${attempt})`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
       assert.equal(result.status, 'success', JSON.stringify(result));
       console.log(`${label}: ${result.status}`); return result;
     };
@@ -200,18 +213,18 @@ test('GitHub 四集 cleanup：保留窗口、切换中断、HTTPS 失败恢复�
       };
       await visit(start); return result;
     };
-    const first = await check('publish-four-expired', syncRules(input));
-    const expired = first.results[0].current!, expiredCidr = first.results[3].current!;
-    const pinned = first.results[1].current!, protectedCurrent = first.results[2].current!;
-    await check('pin-old-anthropic', pinRuleVersion({ ...input, id: 'anthropic', version: pinned.versionId! }));
+    const first = await check('publish-four-expired', () => syncRules(input));
+    const expired = currentOf(first, 'openai'), expiredCidr = currentOf(first, 'china-ip');
+    const pinned = currentOf(first, 'anthropic'), protectedCurrent = currentOf(first, 'google-deepmind');
+    await check('pin-old-anthropic', () => pinRuleVersion({ ...input, id: 'anthropic', version: pinned.versionId! }));
     config.ruleSets[0] = { ...config.ruleSets[0], list: 'anthropic' }; revision++; now = '2026-10-17T00:00:00.000Z';
     commit = updatedCommit;
-    const boundaryResult = await check('publish-boundary', syncRules(input));
-    const boundary = boundaryResult.results[0].current!, cidr = boundaryResult.results[3].current!;
+    const boundaryResult = await check('publish-boundary', () => syncRules(input));
+    const boundary = currentOf(boundaryResult, 'openai'), cidr = currentOf(boundaryResult, 'china-ip');
     config.ruleSets[0] = { ...config.ruleSets[0], list: 'google-deepmind' }; revision++; now = '2026-11-01T00:00:00.000Z';
-    const recent = (await check('publish-recent', syncRules(input))).results[0].current!;
+    const recent = currentOf(await check('publish-recent', () => syncRules(input)), 'openai');
     config.ruleSets[0] = { ...config.ruleSets[0], list: 'anthropic' }; revision++; now = '2026-11-16T00:00:00.000Z'; tag = updatedTag;
-    const current = (await check('publish-current', syncRules(input))).results[0].current!;
+    const current = currentOf(await check('publish-current', () => syncRules(input)), 'openai');
     assert.notEqual(current.candidateId, boundary.candidateId);
     const retained = [pinned, protectedCurrent, boundary, recent, current, cidr];
     const beforeCleanup = await repository.snapshot();
@@ -220,7 +233,7 @@ test('GitHub 四集 cleanup：保留窗口、切换中断、HTTPS 失败恢复�
     const stableBytes = new Map(await Promise.all(beforeCleanup.paths.filter(path => path.startsWith('stable/'))
       .map(async path => [path, await beforeCleanup.read(path)] as const)));
     const sourceCount = requests.length;
-    const preview = await check('cleanup-preview', cleanupRuleHistory({ ...input, dryRun: true }));
+    const preview = await check('cleanup-preview', () => cleanupRuleHistory({ ...input, dryRun: true }));
     assert.equal(preview.cleanup?.plan.cutoff, '2026-10-17T00:00:00.000Z');
     assert.deepEqual(new Set(preview.cleanup?.plan.discard.candidateIds), new Set([expired.candidateId, expiredCidr.candidateId]));
     assert.deepEqual(new Set(preview.cleanup?.plan.retain.candidateIds), new Set(retained.map(x => x.candidateId)));
@@ -239,7 +252,7 @@ test('GitHub 四集 cleanup：保留窗口、切换中断、HTTPS 失败恢复�
     assert.equal(readbackFailed.status, 'pending', JSON.stringify(readbackFailed)); assert.match(readbackFailed.error!, /Injected stable HTTPS readback outage/);
     assert.equal(readbackFailed.cleanup?.maintenanceId, maintenanceId); assert.equal(switchCount, 1);
     stableOffline = false;
-    const cleaned = await check('cleanup-recovered', cleanupRuleHistory({ context: { ...context } }));
+    const cleaned = await check('cleanup-recovered', () => cleanupRuleHistory({ context: { ...context } }));
     assert.equal(cleaned.cleanup?.phase, 'completed'); assert.equal(cleaned.cleanup?.maintenanceId, maintenanceId);
     assert.equal(requests.length, sourceCount); assert.equal(switchCount, 1);
     const afterCleanup = await repository.snapshot(), newHistory = await ancestorHeads(afterCleanup.head);
@@ -273,19 +286,19 @@ test('GitHub 四集 cleanup：保留窗口、切换中断、HTTPS 失败恢复�
     };
     await verifyRetained();
     for (const [path, bytes] of stableBytes) await readBytes(`https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${afterCleanup.head}/${path}`, bytes!);
-    const selected = await check('pin-retained-boundary', pinRuleVersion({ ...input, id: 'openai', version: boundary.versionId! }));
-    assert.equal(selected.results[0].current?.versionId, boundary.versionId);
-    assert.equal(selected.results[0].current?.publishedAt, boundary.publishedAt);
+    const selected = await check('pin-retained-boundary', () => pinRuleVersion({ ...input, id: 'openai', version: boundary.versionId! }));
+    assert.equal(currentOf(selected, 'openai').versionId, boundary.versionId);
+    assert.equal(currentOf(selected, 'openai').publishedAt, boundary.publishedAt);
     const secondBefore = await repository.snapshot();
     const secondBytes = new Map(await Promise.all(secondBefore.paths.filter(path => path.startsWith('stable/'))
       .map(async path => [path, await secondBefore.read(path)] as const)));
     const secondHistory = await ancestorHeads(secondBefore.head); now = '2026-11-17T00:00:00.000Z';
-    await check('cleanup-second-round', cleanupRuleHistory(input)); assert.equal(switchCount, 2);
+    await check('cleanup-second-round', () => cleanupRuleHistory(input)); assert.equal(switchCount, 2);
     secondHistory.forEach(head => blockedHeads.add(head));
     const second = await verifyRetained();
     for (const [path, bytes] of secondBytes) await readBytes(`https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${second.head}/${path}`, bytes!);
-    const chosenCidr = await check('pin-retained-cidr', pinRuleVersion({ ...input, id: 'china-ip', version: cidr.versionId! }));
-    assert.equal(chosenCidr.results[0].current?.source.commit, updatedCommit);
+    const chosenCidr = await check('pin-retained-cidr', () => pinRuleVersion({ ...input, id: 'china-ip', version: cidr.versionId! }));
+    assert.equal(currentOf(chosenCidr, 'china-ip').source.commit, updatedCommit);
     assert.equal(requests.length, sourceCount);
     observations.push({ label: 'history', before: beforeCleanup.head, after: afterCleanup.head,
       oldReachableCommits: [...oldHistory], newReachableCommits: [...newHistory], sourceCalls: requests.length });
