@@ -156,7 +156,7 @@ test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resum
     } while (Date.now() < deadline);
     throw new Error(`HTTPS failed to converge: ${url}`);
   }
-  async function check(label: string, operation: () => Promise<RulesResult>, onlyId?: string) {
+  async function check(label: string, operation: () => Promise<RulesResult>, onlyId?: string, canonical = true) {
     const prior = await getRulesStatus(input); assert.equal(prior.status, 'success', JSON.stringify(prior));
     const oldHead = (await repository.snapshot()).head;
     const runAttempt = async (attempt: number) => {
@@ -183,7 +183,7 @@ test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resum
     for (const rule of status.rules ?? []) {
       for (const [path, expected] of Object.entries(rule.current?.files ?? {})) {
         const immutableBytes = await readBytes(`https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${snapshot.head}/${path}`, expected);
-        assert.deepEqual(await readBytes(`https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${target}/${path}`, expected), immutableBytes);
+        if (canonical) assert.deepEqual(await readBytes(`https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${target}/${path}`, expected), immutableBytes);
         const key = `${rule.current!.versionId}/${path}`;
         if (!stableBytes.has(key)) stableBytes.set(key, immutableBytes);
       }
@@ -259,29 +259,41 @@ test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resum
   const updatedAnthropic = updated.results.find(x => x.id === 'anthropic')!.current!;
   assert.ok('tag' in updatedAnthropic.source); assert.equal(updatedAnthropic.source.tag, updatedTag);
   assert.notEqual(updatedAnthropic.versionId, first.results[1].current?.versionId);
-  for (const id of ['openai', 'anthropic', 'google-deepmind', 'china-ip']) {
+  const ids = ['openai', 'anthropic', 'google-deepmind', 'china-ip'];
+  for (const id of ids.filter(id => id !== 'china-ip')) {
+    config.ruleSets.find(x => x.id === id)!.list = id === 'openai' ? 'anthropic' : 'openai'; revision++;
+    await check(`change-list-${id}`, () => syncRules(input), id, false);
+  }
+  const latest = new Map((await getRulesStatus(input)).rules!.map(rule => [rule.id, rule.current!]));
+  async function canonicalReadback(label: string) {
+    const status = await getRulesStatus(input); assert.equal(status.status, 'success', JSON.stringify(status));
+    await Promise.all((status.rules ?? []).flatMap(rule => Object.entries(rule.current!.files).map(async ([path, expected]) => {
+      const bytes = await readBytes(`https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${target}/${path}`, expected);
+      assert.deepEqual(bytes, stableBytes.get(`${rule.current!.versionId}/${path}`));
+    })));
+    observations.push({ label, status }); await checkpoint(label);
+  }
+  // Preserve every intermediate immutable snapshot; observe canonical URLs only
+  // once all four switches settle, as in the old activation/rollback probes.
+  for (const id of ids) {
     const original = first.results.find(x => x.id === id)!.current!;
-    if (id !== 'china-ip') {
-      config.ruleSets.find(x => x.id === id)!.list = id === 'openai' ? 'anthropic' : 'openai'; revision++;
-      await check(`change-list-${id}`, () => syncRules(input), id);
-    }
-    const latest = (await getRulesStatus(input)).rules!.find(x => x.id === id)!.current!;
-    const pin = await check(`pin-${id}`, () => pinRuleVersion({ ...input, id, version: original.versionId! }), id);
-    assert.equal(pin.results[0].control?.mode, 'pinned');
-    assert.equal(pin.results[0].current?.versionId, original.versionId);
+    const pin = await check(`pin-${id}`, () => pinRuleVersion({ ...input, id, version: original.versionId! }), id, false);
+    assert.equal(pin.results[0].control?.mode, 'pinned'); assert.equal(pin.results[0].current?.versionId, original.versionId);
     assert.deepEqual(pin.results[0].current?.files, original.files);
-    for (const path of Object.keys(original.files)) assert.deepEqual(await readBytes(`https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${target}/${path}`, original.files[path]), stableBytes.get(`${original.versionId}/${path}`));
-    const start = requests.length;
-    const pinned = await check(`pinned-sync-${id}`, () => syncRules(input));
-    assert.equal(pinned.results.find(x => x.id === id)?.status, 'pinned-skipped');
-    if (id === 'china-ip') assert.ok(requests.slice(start).every(url => !url.includes('gaoyifan/')));
-    const resumed = await check(`resume-${id}`, () => resumeRuleUpdates({ ...input, id }), id);
+  }
+  await canonicalReadback('canonical-all-pinned');
+  const start = requests.length;
+  const pinned = await check('all-pinned-sync', () => syncRules(input), undefined, false);
+  assert.ok(pinned.results.every(x => x.status === 'pinned-skipped')); assert.equal(requests.length, start);
+  for (const id of ids) {
+    const original = first.results.find(x => x.id === id)!.current!;
+    const resumed = await check(`resume-${id}`, () => resumeRuleUpdates({ ...input, id }), id, false);
     assert.equal(resumed.results[0].control?.mode, 'auto'); assert.notEqual(resumed.results[0].current?.versionId, original.versionId);
-    assert.deepEqual(resumed.results[0].current?.files, latest.files);
-    assert.deepEqual(resumed.results[0].current?.source, latest.source);
-    // Historical candidate evidence and immutable artifact bytes remain readable.
+    assert.deepEqual(resumed.results[0].current?.files, latest.get(id)!.files);
+    assert.deepEqual(resumed.results[0].current?.source, latest.get(id)!.source);
     await inspectCandidate(original);
   }
+  await canonicalReadback('canonical-all-resumed');
   // Preserve the single-publication probe's independent fixed identity/SHA assertion
   // through the current operation, using a real source/list change on one rule.
   tag = '20261102130044'; config.ruleSets[0].list = 'category-ai-!cn'; revision++;
