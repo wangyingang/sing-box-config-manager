@@ -1,0 +1,93 @@
+[
+  {
+    "file": "packages/rule-set-pipeline/test/fixtures/historical/incomplete.json",
+    "sha256": "c33e4b15b29b7c8101bee8c774b7e285e1602f443a8d85b38101234c3bc80b0b",
+    "bytes": 11045,
+    "target": "acceptance-issue-99-history",
+    "branch": "acceptance-issue-99-history",
+    "heads": {
+      "acceptance-issue-99-history": "0000000000000000000000000000000000000009"
+    },
+    "candidateIds": [
+      "143e43ba-4de8-40cc-8478-2c959c296051"
+    ],
+    "provenance": {
+      "sourceCommit": "1f9ad68d5bf99915e0ce57834023f3b6b7796e98",
+      "recipe": "checkRules(upstream(1), selectedIds=[openai]); repository commit interrupted before manifest.json",
+      "fixture": "test/integration/configured-activation-fixture.ts",
+      "binaryVersion": "1.14.4",
+      "binarySha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2",
+      "network": "in-memory external Git/Release transport; no production data",
+      "variant": "incomplete"
+    }
+  },
+  {
+    "file": "packages/rule-set-pipeline/test/fixtures/historical/shared.json",
+    "sha256": "4c6a7c8cd7d4ac6f2885315988d28b8f6883ee49003c2cd97e8f4e95efbf00c8",
+    "bytes": 163475,
+    "target": "acceptance-issue-99-history",
+    "branch": "acceptance-issue-99-history",
+    "heads": {
+      "acceptance-issue-99-history": "0000000000000000000000000000000000000027"
+    },
+    "candidateIds": [
+      "a98979e6-56a6-43a0-941d-58d03067eec6",
+      "98cffc5e-baae-4fca-9a41-1eae7717df62",
+      "263621ca-8eab-4217-8527-8af1a9de2b3a"
+    ],
+    "provenance": {
+      "sourceCommit": "1f9ad68d5bf99915e0ce57834023f3b6b7796e98",
+      "recipe": "checkRules(upstream(1)) then activateRules(openai)",
+      "fixture": "test/integration/configured-activation-fixture.ts",
+      "binaryVersion": "1.14.4",
+      "binarySha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2",
+      "network": "in-memory external Git/Release transport; no production data",
+      "variant": "shared"
+    }
+  },
+  {
+    "file": "packages/rule-set-pipeline/test/fixtures/historical/split.json",
+    "sha256": "a5aa8d7073902a3c07475b72d066d71c213fc0e311008807fe1b3f1fdb9f510d",
+    "bytes": 141520,
+    "target": "main",
+    "branch": "candidates",
+    "heads": {
+      "candidates": "0000000000000000000000000000000000000026",
+      "main": "0000000000000000000000000000000000000027"
+    },
+    "candidateIds": [
+      "ebb381cc-531c-430c-be93-aef51b5fa6fa",
+      "b6f42496-43c9-43ed-ba57-8c3aafcd404d",
+      "0a3a9878-fb4e-4659-a536-f39476312710"
+    ],
+    "provenance": {
+      "sourceCommit": "1f9ad68d5bf99915e0ce57834023f3b6b7796e98",
+      "recipe": "checkRules(upstream(1)) then activateRules(openai)",
+      "fixture": "test/integration/configured-activation-fixture.ts",
+      "binaryVersion": "1.14.4",
+      "binarySha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2",
+      "network": "in-memory external Git/Release transport; no production data",
+      "variant": "split"
+    }
+  },
+  {
+    "file": "packages/rule-set-pipeline/test/fixtures/historical/srs-only.json",
+    "sha256": "82c010ed7c8f9824f1385090a26022ad19cdaa9d3aa1c5b59892b5bc58caf7de",
+    "bytes": 59275,
+    "target": "acceptance-issue-99-history",
+    "branch": "acceptance-issue-99-history",
+    "heads": {
+      "acceptance-issue-99-history": "000000000000000000000000000000000000000c"
+    },
+    "candidateIds": [],
+    "provenance": {
+      "sourceCommit": "1f9ad68d5bf99915e0ce57834023f3b6b7796e98",
+      "recipe": "configuredEnvironment.candidates() (configured updateRules) then activateRules(openai, SRS-only)",
+      "fixture": "test/integration/configured-activation-fixture.ts",
+      "binaryVersion": "1.14.4",
+      "binarySha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2",
+      "network": "in-memory external Git/Release transport; no production data",
+      "variant": "srs-only"
+    }
+  }
+]
