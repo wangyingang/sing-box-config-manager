@@ -8,21 +8,22 @@ import { connect } from 'node:net';
 import type { Duplex } from 'node:stream';
 import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
-import { compileRecipe, type RecipeCompileInput } from '../../../config-compiler/src/index.js';
+import { compileRecipe, renderSubscription, type RecipeCompileInput } from '../../../config-compiler/src/index.js';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test, { type TestContext } from 'node:test';
-import { activateRules, rollbackRules } from '../../src/activation.js';
-import { checkRules, resumeRules } from '../../src/check-rules.js';
+import { syncRules, pinRuleVersion, resumeRuleUpdates } from '../../src/rules-operations.js';
+import { getRulesStatus } from '../../src/rules-status.js';
+import { parseBuildConfiguration } from '../../src/configuration.js';
+import { publishRecipe, readPublication } from '../../../config-compiler/src/publisher.js';
 import { ARTIFACT_REPOSITORY } from '../../src/publication.js';
-import { readRemoteStatus } from '../../src/remote-status.js';
 import { sha256 } from '../../src/release.js';
-import { configuredEnvironment } from './configured-activation-fixture.js';
+import { rulesEnvironment } from '../fixtures/rules-environment.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
 if (!binary) throw new Error('Set SING_BOX_TEST_BINARY to an absolute 1.14.4 binary path');
-const branch = 'acceptance-issue-70';
+const branch = 'acceptance-issue-97-cidr';
 const id = 'china-ip';
 const path = 'stable/china-ip';
 const ruleUrl = (ref: string, file: string) => `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${ref}/${path}/${file}`;
@@ -32,29 +33,21 @@ const subscription = { schemaVersion: 2 as const, systemRuleSetId: id, targetVer
   projections: { route: { formats }, 'dns-query': { unavailable: 'empty' as const }, 'dns-response': { formats } } };
 const versionInputs = ['192.0.2.0/25\n2001:db8:1::/48\n', '192.0.2.128/25\n2001:db8:2::/48\n'];
 
-async function fixture(t: TestContext) {
-  const directory = await mkdtemp(join(tmpdir(), 'china-ip-delivery-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
-  const env = await configuredEnvironment(binary!, directory, branch);
-  const configuration = (await readFile(new URL('../../config/china-ip.yml', import.meta.url), 'utf8'))
-    .replace('branch: main', `branch: ${branch}`);
-  const publication = { repository: env.repository, download: env.transport.download, commit: env.publish };
-  const upstreamFetch = (index: number): typeof fetch => async url => {
-    const commit = String(index + 1).repeat(40);
-    if (String(url).endsWith('/branches/ip-lists')) return Response.json({ name: 'ip-lists', commit: { sha: commit } });
-    if (String(url) === `https://raw.githubusercontent.com/gaoyifan/china-operator-ip/${commit}/china46.txt`) return new Response(versionInputs[index]);
-    throw new Error(`Unexpected upstream request: ${String(url)}`);
+async function fixture() {
+  const env = rulesEnvironment(binary!, branch);
+  const configuration = parseBuildConfiguration(await readFile(new URL('../../config/china-ip.yml', import.meta.url), 'utf8'));
+  env.configure({ ...configuration, target: { ...configuration.target, branch } });
+  let revision = 0;
+  const requests: string[] = [];
+  env.context.fetch = async url => {
+    const address = String(url);
+    requests.push(address);
+    const commit = String(revision + 1).repeat(40);
+    if (address.endsWith('/branches/ip-lists')) return Response.json({ name: 'ip-lists', commit: { sha: commit } });
+    if (address === `https://raw.githubusercontent.com/gaoyifan/china-operator-ip/${commit}/china46.txt`) return new Response(versionInputs[revision]);
+    throw new Error(`Unexpected upstream request: ${address}`);
   };
-  const checkOptions = (fetch: typeof globalThis.fetch) => ({ configuration, publication, fetch, binary: binary!,
-    stateDirectory: join(directory, 'check'), subscriptions: { [id]: subscription }, activation: env.transport });
-  const status = () => readRemoteStatus({ repository: env.repository, activation: env.transport, publication });
-  const options = () => ({ configuration, logicalId: id, subscription, binary: binary!, transport: env.transport, expectedHead: env.head() });
-  return { ...env, directory, status, options,
-    check: (index: number, fetch = upstreamFetch(index)) => checkRules(checkOptions(fetch)),
-    resume: (index: number) => resumeRules({ ...checkOptions(upstreamFetch(index)), logicalId: id }),
-    activate: (candidateEvidenceUrl: string) => activateRules({ ...options(), candidateEvidenceUrl }),
-    rollback: (historicalActivationCommit: string) => rollbackRules({ ...options(), historicalActivationCommit }),
-  };
+  return { ...env, requests, changeInput(index: number) { revision = index; } };
 }
 
 const addresses = [
@@ -118,13 +111,14 @@ function dnsProbe(port: number, index: number) {
   });
 }
 
-test('同一真实客户端观察 china-ip 自动更新、固定、回滚、恢复和缓存恢复', { timeout: 70_000 }, async t => {
-  const env = await fixture(t);
-  const first = await env.check(0);
-  assert.equal(first.results[0].status, 'activated', JSON.stringify(first));
-  const firstCommit = first.results[0].current?.commit;
-  assert.ok(firstCommit);
-  const activeA = (await env.status()).activeRuleVersions[id];
+test('同一真实客户端观察 china-ip sync、pin、resume 和缓存恢复', { timeout: 70_000 }, async t => {
+  const env = await fixture();
+  const request = { context: env.context };
+  const first = await syncRules(request);
+  assert.equal(first.status, 'success', JSON.stringify(first));
+  assert.equal(first.results[0].status, 'delivered');
+  const activeA = first.results[0].current!;
+  assert.deepEqual(activeA.subscription, subscription);
 
   const clientDir = await mkdtemp(join(tmpdir(), 'china-ip-client-'));
   const servers: Server[] = [], sockets = new Set<Duplex>();
@@ -164,7 +158,7 @@ test('同一真实客户端观察 china-ip 自动更新、固定、回滚、恢�
     deliveries++;
     if (mode === 'download-failure') { res.writeHead(503).end(); return; }
     try {
-      res.end(mode === 'load-failure' ? Buffer.from('invalid SRS bytes') : await env.transport.download(stableUrl));
+      res.end(mode === 'load-failure' ? Buffer.from('invalid SRS bytes') : await env.context.repository.download(stableUrl));
     } catch { res.writeHead(500).end(); }
   });
   servers.push(tls);
@@ -214,7 +208,7 @@ test('同一真实客户端观察 china-ip 自动更新、固定、回滚、恢�
       dnsServers: [{ type: 'udp', tag: 'loopback', server: '127.0.0.1', server_port: dnsPort }],
     }, platformDnsServers: {}, routePresets: {}, dnsPresets: {}, ecsResponseTags: [],
   } satisfies RecipeCompileInput['dependencies']['templates'][number];
-  const input = { params: { ecs: null }, dependencies: { templates: [template], nodes: [], subscriptions: [activeA.activation.subscription] },
+  const input = { params: { ecs: null }, dependencies: { templates: [template], nodes: [], subscriptions: [activeA.subscription] },
     recipe: { schemaVersion: 2, id: template.id, revision: '1', profile: 'macos-standalone', templateRef: { id: template.id, revision: '1' },
       resources: { ruleSets: [{ kind: 'subscription', tag: 'china-ip', subscriptionRef: { systemRuleSetId: id, usages: ['route', 'dns-response'] } }] },
       routeSteps: [
@@ -235,13 +229,19 @@ test('同一真实客户端观察 china-ip 自动更新、固定、回滚、恢�
   } } });
   assert.equal(invalid.ok, false);
   assert.ok(invalid.diagnostics.some(diagnostic => diagnostic.code === 'ARTIFACT_PROJECTION_EMPTY'), JSON.stringify(invalid.diagnostics));
-  const compiled = compileRecipe(input);
-  assert.ok(compiled.ok, JSON.stringify(compiled.diagnostics));
-  const config = compiled.value.config;
+  const publicationDir = join(clientDir, 'publication');
+  const publication = await publishRecipe(input, { binary, directory: publicationDir });
+  assert.ok(publication.ok, JSON.stringify(publication.diagnostics));
+  const retained = await readPublication(publicationDir);
+  const publicationBytes = JSON.stringify(retained), recipeBytes = JSON.stringify(input.recipe);
+  const rendered = await renderSubscription(retained, input.params);
+  assert.ok(rendered.ok, JSON.stringify(rendered.diagnostics));
+  const config = rendered.value;
   const route = config.route as { rule_set: { url: string; update_interval?: string; http_client?: string }[]; rules: Record<string, unknown>[] };
   assert.deepEqual(route.rule_set.map(set => set.url), [stableUrl]);
   const cache = join(clientDir, 'cache.db');
   // Harness only: accelerate polling and redirect the chosen outbounds to loopback.
+  assert.equal(route.rule_set[0].update_interval, undefined);
   route.rule_set[0].update_interval = '1s';
   route.rule_set[0].http_client = 'rules';
   (config.dns as Record<string, unknown>).disable_cache = true;
@@ -275,49 +275,72 @@ test('同一真实客户端观察 china-ip 自动更新、固定、回滚、恢�
     }
     assert.fail(`${description}: ${String(latest)}\n${log.slice(-6000)}`);
   }
+  const observations: unknown[] = [];
   async function probe(version: number) {
-    await Promise.all(addresses.map(async ({ literal, bytes, version: hit }, index) => {
+    const results = await Promise.all(addresses.map(async ({ literal, bytes, version: hit }, index) => {
       const matched = version === hit;
       const [route, dns] = await Promise.all([routeProbe(routePort, literal), dnsProbe(routePort, index)]);
       assert.equal(route, matched ? 'matched' : 'fallback', literal);
       assert.deepEqual(dns, matched ? { rcode: 3, count: 0, answer: '' } : { rcode: 0, count: 1, answer: bytes }, literal);
+      return { literal, route, dns };
     }));
+    const observation = { version, pid: child!.pid, results, observedAt: new Date().toISOString() };
+    observations.push(observation);
+    return observation;
   }
   const observe = (version: number) => until(async () => { await probe(version); return true; }, `Expected CIDRs from version ${version}`);
   const pid = await start();
   await observe(0);
-  const automatic = await env.check(1);
-  assert.equal(automatic.results[0].status, 'activated', JSON.stringify(automatic));
+  env.changeInput(1);
+  const automatic = await syncRules(request);
+  assert.equal(automatic.status, 'success', JSON.stringify(automatic));
+  assert.equal(automatic.results[0].status, 'delivered');
   await observe(1);
-  const activeB = (await env.status()).activeRuleVersions[id].activation;
-  await env.activate(activeB.candidateEvidenceUrl);
-  const fixed = (await env.status()).activeRuleVersions[id];
-  assert.equal(fixed.control?.reason, 'manual-activation');
-  const paused = await env.check(0);
-  assert.equal(paused.results[0].status, 'paused', JSON.stringify(paused));
-  assert.equal(paused.results[0].current?.id, fixed.activation.id);
+  const activeB = automatic.results[0].current!;
+  assert.notEqual(activeB.versionId, activeA.versionId);
+  const fixed = await pinRuleVersion({ ...request, id, version: activeB.versionId! });
+  assert.equal(fixed.status, 'success', JSON.stringify(fixed));
+  assert.equal(fixed.results[0].control?.mode, 'pinned');
+  env.changeInput(0);
+  const sourceReads = env.requests.length;
+  const writes = env.writes.length;
+  const paused = await syncRules(request);
+  assert.equal(paused.status, 'success', JSON.stringify(paused));
+  assert.equal(paused.results[0].status, 'pinned-skipped');
+  assert.equal(paused.results[0].current?.versionId, activeB.versionId);
+  assert.equal(env.requests.length, sourceReads);
+  assert.equal(env.writes.length, writes);
   const beforeFixedRefresh = deliveries;
   await until(() => deliveries > beforeFixedRefresh, 'Refresh the same URL while manually pinned');
   await probe(1);
-  const rollback = await env.rollback(firstCommit);
+  const pinnedA = await pinRuleVersion({ ...request, id, version: activeA.versionId! });
+  assert.equal(pinnedA.status, 'success', JSON.stringify(pinnedA));
+  assert.equal(pinnedA.results[0].control?.mode, 'pinned');
+  assert.equal(pinnedA.results[0].current?.versionId, activeA.versionId);
+  assert.deepEqual(pinnedA.results[0].current?.source, activeA.source);
   await observe(0);
-  let sourceRead = false;
-  const rolledBack = await env.check(1, async () => { sourceRead = true; throw new Error('Unexpected source access'); });
-  assert.equal(rolledBack.results[0].status, 'paused', JSON.stringify(rolledBack));
-  assert.equal(rolledBack.results[0].current?.id, rollback.activation.id);
-  assert.equal(sourceRead, false);
-  const resumed = await env.resume(1);
-  assert.equal(resumed.results[0].status, 'activated', JSON.stringify(resumed));
+  env.changeInput(1);
+  const readsBeforeSkipped = env.requests.length;
+  const rolledBack = await syncRules(request);
+  assert.equal(rolledBack.status, 'success', JSON.stringify(rolledBack));
+  assert.equal(rolledBack.results[0].status, 'pinned-skipped');
+  assert.equal(rolledBack.results[0].current?.versionId, activeA.versionId);
+  assert.equal(env.requests.length, readsBeforeSkipped);
+  const resumed = await resumeRuleUpdates({ ...request, id });
+  assert.equal(resumed.status, 'success', JSON.stringify(resumed));
   assert.equal(resumed.results[0].current?.candidateId, activeB.candidateId);
-  assert.equal(resumed.results[0].control?.reason, 'manual-resume');
+  assert.equal(resumed.results[0].current?.versionId, activeB.versionId);
+  assert.equal(resumed.results[0].control?.mode, 'auto');
   await observe(1);
   assert.equal(child!.pid, pid);
+  const faults = [];
   for (const [fault, pattern] of [['download-failure', /fetch rule-set china-ip:.*503/],
     ['load-failure', /fetch rule-set china-ip:.*invalid sing-box rule-set file/]] as const) {
     const before = log.length;
     mode = fault;
     await until(() => pattern.test(log.slice(before)), fault);
     await probe(1);
+    faults.push({ fault, log: log.slice(before), retainedVersion: 1, sameProcess: child!.pid === pid });
     assert.equal(child!.pid, pid);
   }
   await stop();
@@ -326,18 +349,32 @@ test('同一真实客户端观察 china-ip 自动更新、固定、回滚、恢�
   for (const socket of sockets) socket.destroy();
   await close(tls);
   const offline = log.length, delivered = deliveries;
-  await start();
+  const restartedPid = await start();
+  assert.notEqual(restartedPid, pid);
   await observe(1);
   await until(() => /fetch rule-set china-ip:/.test(log.slice(offline)), 'Offline refresh must fail');
   await probe(1);
   assert.equal(deliveries, delivered);
   assert.equal(await readFile(configPath, 'utf8'), configBytes);
-  console.log(JSON.stringify({ chinaIpClient: {
-    source: 'controlled CIDR inputs and loopback delivery', stableUrl, configSha256: sha256(configBytes),
-    srs: [activeA.activation, fixed.activation].map(record => ({ commit: record.source.commit,
+  assert.equal(JSON.stringify(input.recipe), recipeBytes);
+  assert.equal(JSON.stringify(await readPublication(publicationDir)), publicationBytes);
+  const status = await getRulesStatus(request);
+  assert.equal(status.status, 'success', JSON.stringify(status));
+  assert.equal(status.rules?.[0].current?.versionId, activeB.versionId);
+  assert.deepEqual(status.rules?.[0].current?.subscription, subscription);
+  const evidence = {
+    source: 'controlled CIDR inputs and in-memory Git; real sing-box and loopback HTTPS',
+    operations: { first, automatic, fixed, paused, pinnedA, rolledBack, resumed },
+    stableUrl, configSha256: sha256(configBytes), recipeSha256: sha256(recipeBytes),
+    publicationId: retained.id, publicationSha256: sha256(publicationBytes),
+    client: { pid, restartedPid, binary, sameProcessUntilCacheRestart: true },
+    srs: [activeA, activeB].map(record => ({ commit: record.source.commit,
       inputSha256: record.source.inputSha256, artifact: record.files[`${path}/route.srs`] })),
     probes: addresses.map(({ literal }) => literal),
-    observed: ['A', 'auto-B', 'fixed-B', 'rollback-A', 'resume-B', 'HTTP-503-retains-B', 'invalid-SRS-retains-B', 'offline-cache-restores-B'],
-    cache: { sha256: sha256(cacheBytes), bytes: cacheBytes.length },
-  } }));
+    observed: ['A', 'sync-B', 'pin-B', 'pinned-sync-B', 'pin-A', 'pinned-sync-A', 'resume-B', 'HTTP-503-retains-B', 'invalid-SRS-retains-B', 'offline-cache-restores-B'],
+    observations, faults, offlineFailureLog: log.slice(offline),
+    cache: { sha256: sha256(cacheBytes), bytes: cacheBytes.length, noRuleBytesDelivered: deliveries === delivered },
+  };
+  console.log(JSON.stringify({ rulesCidrClient: evidence }));
+  if (process.env.RULE_CIDR_CLIENT_EVIDENCE) await writeFile(process.env.RULE_CIDR_CLIENT_EVIDENCE, JSON.stringify(evidence, null, 2) + '\n');
 });

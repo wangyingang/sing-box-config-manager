@@ -189,7 +189,7 @@ v2 不接受该绑定。迁移需要新 Recipe／Template 修订、显式改绑�
 绑定可写为 `subscriptionRef: { systemRuleSetId: 'china-ip', usages: ['route', 'dns-response'] }`。
 两种用途共用稳定 SRS，DNS 响应匹配仍须引用已经执行 `evaluate` 的响应。
 绑定 `china-ip` 的 `dns-query` 会导致编译失败。参见 [三集可编译示例](examples/three-rule-subscriptions-v2.json)
-和 [双栈客户端集成测试](../rule-set-pipeline/test/integration/china-ip-delivery.test.ts)。
+和 [双栈客户端集成测试](../rule-set-pipeline/test/integration/rules-cidr-client.test.ts)。
 单集订阅的初次交付范围见 [#17 验证记录](docs/verification/issue-17.md)。
 
 ### 固定规则产物
