@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
+import { deserialize, serialize } from 'node:v8';
 import type { BuildConfiguration } from '../../src/configuration.js';
 import { stringify } from 'yaml';
 import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
@@ -10,12 +11,32 @@ interface RulesFixtureHistory {
   heads: Map<string, string>;
   trees: Map<string, Map<string, Buffer>>;
   parents: Map<string, string>;
+  state?: {
+    sequence: number;
+    config: BuildConfiguration;
+    revision: number;
+    upstreamRevision: number;
+    contents: Record<string, string>;
+    history: Map<number, Record<string, string>>;
+    cidrRevision: number;
+    cidrInputs: Map<number, string>;
+  };
+}
+
+/** Save Buffers as Buffers, including shared blob references within one Git graph. */
+export function checkpointFixture<T>(state: T): () => T {
+  const bytes = serialize(state);
+  // Each deserialization can expose views into its input Buffer.
+  return () => deserialize(Buffer.from(bytes)) as T;
 }
 
 /** Real in-memory Git snapshots/CAS, with the same external boundary as GitHub. */
 export function rulesEnvironment(binary: string, target = 'acceptance-issue-84', persisted?: RulesFixtureHistory) {
-  let sequence = 2;
-  if (persisted) for (const head of persisted.trees.keys()) sequence = Math.max(sequence, Number.parseInt(head, 16));
+  const state = persisted?.state;
+  let sequence = state?.sequence ?? 2;
+  if (persisted && !state) {
+    for (const head of persisted.trees.keys()) sequence = Math.max(sequence, Number.parseInt(head, 16));
+  }
   const journalBranch = target === 'main' ? 'candidates' : target;
   const heads = persisted?.heads ?? new Map([[target, '1'.padStart(40, '0')], [journalBranch, '1'.padStart(40, '0')]]);
   const trees = persisted?.trees ?? new Map<string, Map<string, Buffer>>([['1'.padStart(40, '0'), new Map()]]);
@@ -23,13 +44,15 @@ export function rulesEnvironment(binary: string, target = 'acceptance-issue-84',
   const writes: { branch: string; files: RuleWrites }[] = [];
   const requests: string[] = [];
   const official = parseBuildConfiguration(readOfficialConfiguration());
-  let config: BuildConfiguration = { ...official, target: { ...official.target, branch: target }, sources: { dlc: official.sources.dlc },
+  let config: BuildConfiguration = state?.config ?? { ...official, target: { ...official.target, branch: target }, sources: { dlc: official.sources.dlc },
     ruleSets: official.ruleSets.filter(rule => ['openai', 'anthropic'].includes(rule.id)) };
-  let revision = 1;
-  let upstreamRevision = 1;
+  let revision = state?.revision ?? 1;
+  let upstreamRevision = state?.upstreamRevision ?? 1;
+  let cidrRevision = state?.cidrRevision ?? 1;
   let sourceFailure: boolean | string = false;
-  const contents: Record<string, string> = {};
-  const history = new Map<number, Record<string, string>>([[1, {}]]);
+  const contents = state?.contents ?? {};
+  const history = state?.history ?? new Map<number, Record<string, string>>([[1, {}]]);
+  const cidrInputs = state?.cidrInputs ?? new Map([[1, '192.0.2.0/25\n2001:db8:1::/48\n']]);
   let beforeWrite: ((files: RuleWrites) => Promise<void>) | undefined;
   const repository: RulesRepository = {
     branch: journalBranch,
@@ -65,8 +88,22 @@ export function rulesEnvironment(binary: string, target = 'acceptance-issue-84',
     },
   };
   const fetcher: typeof fetch = async address => {
-    const url = String(address); requests.push(url);
-    if (sourceFailure === true || typeof sourceFailure === 'string' && url.includes(sourceFailure)) throw new Error('Upstream unavailable');
+    const url = String(address);
+    requests.push(url);
+    const cidrBranch = url === 'https://api.github.com/repos/gaoyifan/china-operator-ip/branches/ip-lists';
+    const cidrBody = url.startsWith('https://raw.githubusercontent.com/gaoyifan/china-operator-ip/');
+    if (sourceFailure === true || typeof sourceFailure === 'string' && url.includes(sourceFailure)) {
+      throw new Error('Upstream unavailable');
+    }
+    if (cidrBranch) {
+      return Response.json({ name: 'ip-lists', commit: { sha: String(cidrRevision).repeat(40) } });
+    }
+    if (cidrBody) {
+      const commit = new URL(url).pathname.split('/')[3];
+      const input = cidrInputs.get(Number(commit[0]));
+      if (commit !== commit[0].repeat(40) || input === undefined) throw new Error(`Unknown CIDR fixture revision: ${commit}`);
+      return new Response(input);
+    }
     const match = /repos\/([^/]+\/[^/]+)\//.exec(url);
     const repository = match?.[1] ?? 'v2fly/domain-list-community';
     const requested = /\/releases\/(\d+)$/.exec(url)?.[1];
@@ -90,6 +127,12 @@ export function rulesEnvironment(binary: string, target = 'acceptance-issue-84',
     now: () => new Date('2026-11-16T08:15:30.123Z'),
     readConfiguration: async () => ({ revision: String(revision).padStart(40, '0'), content: stringify(config, { aliasDuplicateObjects: false }), origin: 'isolated-fixture' }) };
   return { context, writes, requests, heads, trees, parents,
+    checkpoint() {
+      return checkpointFixture<RulesFixtureHistory>({ heads, trees, parents, state: {
+        sequence, config, revision, upstreamRevision, contents, history, cidrRevision, cidrInputs,
+      } });
+    },
+    changeCidr(input: string) { cidrInputs.set(++cidrRevision, input); },
     config: () => structuredClone(config),
     configure(next: typeof config) { config = next; revision++; },
     upstream(rules: Record<string, string>) { Object.assign(contents, rules); upstreamRevision++; history.set(upstreamRevision, { ...contents }); },
