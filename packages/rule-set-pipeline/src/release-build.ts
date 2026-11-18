@@ -39,7 +39,7 @@ export async function buildRelease(options: ReleaseOptions): Promise<BuildResult
   return { ok: true, status: 'built-unvalidated', source: input.source, list: TARGET_LIST, report: converted.report,
     tools: { pipeline: packageInfo.version,
       implementationSha256: sha256(Buffer.concat(await Promise.all(
-        ['release-build', 'release', 'yaml-input', 'convert', 'types', 'projection', 'native', 'semantics'].map(name =>
+        ['release-build', 'release', 'yaml-input', 'convert', 'types', 'projection', 'native'].map(name =>
           readFile(new URL(`./${name}.${import.meta.url.endsWith('.ts') ? 'ts' : 'js'}`, import.meta.url))),
       ))), conversionPolicy: 'v2fly-domain-v1', node: process.versions.node, yaml: yamlPackage.version, sourceFormat: 4 },
     json, artifact, usages: { route: artifact, 'dns-query': artifact, 'dns-response': { status: 'unavailable', reason: 'empty' } } };

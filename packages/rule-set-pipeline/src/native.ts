@@ -3,22 +3,22 @@ import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { promisify } from 'node:util';
-import { sameSemantics } from './semantics.js';
 import { sha256 } from './release.js';
-import { decodedTerms, projectTerms, renderRuleJson, USAGES, type BuildTerm, type Usage } from './projection.js';
+import { projectTerms, renderRuleJson, USAGES, type BuildTerm, type Usage } from './projection.js';
 
 const exec = promisify(execFile);
 export interface NativeTool { path: string; version: '1.14.4'; identity: string; sha256: string }
 export interface NativeStep { args: string[]; stdout: string; stderr: string }
-export interface BuiltArtifact {
-  file: string; format: 'source' | 'binary'; sha256: string; bytes: number; termCount: number;
-  requiredCapabilities: []; content: Buffer;
-}
+export const NATIVE_VALIDATION_POLICY = 'native-compile-load-v1';
+export interface NativeValidation { status: 'passed'; policy: typeof NATIVE_VALIDATION_POLICY; steps: NativeStep[] }
+export type BuiltArtifact = {
+  file: string; sha256: string; bytes: number; requiredCapabilities: []; content: Buffer;
+} & ({ format: 'source'; termCount: number } | { format: 'binary'; termCount?: never });
 export interface NativeBuild {
   status: 'built-validated'; tool: NativeTool; buildId: string;
   artifacts: BuiltArtifact[];
   usages: Record<Usage, { artifactFiles: string[] } | { status: 'unavailable'; reason: 'empty' }>;
-  validation: { status: 'passed'; semanticRoundTrip: true; steps: NativeStep[] };
+  validation: NativeValidation;
 }
 export class NativeBuildError extends Error {
   constructor(message: string, public readonly steps: NativeStep[] = []) { super(message); }
@@ -32,6 +32,19 @@ export async function inspectBinary(binary: string): Promise<NativeTool> {
     if (!/^sing-box version 1\.14\.4\r?\n/.test(stdout)) throw new Error(`Expected sing-box 1.14.4, got ${stdout.trim()}`);
     return { path, version: '1.14.4', identity: stdout.trim(), sha256: sha256(await readFile(path)) };
   } catch (error) { throw new NativeBuildError(`Binary validation failed: ${error instanceof Error ? error.message : error}`); }
+}
+
+export function nativeBuildIdentity(toolSha256: string, terms: readonly BuildTerm[]) {
+  return sha256(JSON.stringify({ policy: NATIVE_VALIDATION_POLICY, sourceFormat: 4, tool: toolSha256, terms }));
+}
+
+export function nativeArtifactCommands(source: string, srs: string): string[][] {
+  // match initializes both formats, including the Go regexp engine.
+  return [
+    ['rule-set', 'compile', source, '-o', srs],
+    ['rule-set', 'match', source, 'native-validation.invalid', '--format', 'source'],
+    ['rule-set', 'match', srs, 'native-validation.invalid', '--format', 'binary'],
+  ];
 }
 
 /** Local validated bytes only: no remote URLs, publication or activation state. */
@@ -61,24 +74,13 @@ export async function buildNative(terms: readonly BuildTerm[], binary: string): 
       const existing = filesByContent.get(json);
       if (existing) { usages[usage] = { artifactFiles: existing }; continue; }
       const stem = usage === 'route' && projected.every(term => term.type !== 'ip_cidr') ? 'domains' : usage;
-      const source = `${stem}.json`, srs = `${stem}.srs`, decoded = `${stem}.decoded.json`;
+      const source = `${stem}.json`, srs = `${stem}.srs`;
       await writeFile(join(directory, source), json);
-      await run(['rule-set', 'compile', source, '-o', srs]);
-      await run(['rule-set', 'decompile', srs, '-o', decoded]);
-      let decodedProjection: BuildTerm[];
-      try {
-        decodedProjection = decodedTerms(JSON.parse(await readFile(join(directory, decoded), 'utf8')));
-        if (!sameSemantics(projected, decodedProjection)) {
-          throw new Error('Decoded semantics differ from projected Rule IR');
-        }
-      } catch (error) { throw new NativeBuildError(`Semantic round trip failed: ${String(error)}`, steps); }
-      // match loads and initializes the actual file (including the Go regexp engine),
-      // unlike configuration-only check. A non-match is a successful load too.
+      for (const args of nativeArtifactCommands(source, srs)) await run(args);
       for (const [file, format] of [[source, 'source'], [srs, 'binary']] as const) {
-        await run(['rule-set', 'match', file, 'native-validation.invalid', '--format', format]);
         const content = await readFile(join(directory, file));
-        artifacts.push({ file, format, sha256: sha256(content), bytes: content.length,
-          termCount: format === 'source' ? projected.length : decodedProjection.length, requiredCapabilities: [], content });
+        const metadata = { file, sha256: sha256(content), bytes: content.length, requiredCapabilities: [] as [], content };
+        artifacts.push(format === 'source' ? { ...metadata, format, termCount: projected.length } : { ...metadata, format });
       }
       const files = [source, srs];
       filesByContent.set(json, files);
@@ -86,9 +88,8 @@ export async function buildNative(terms: readonly BuildTerm[], binary: string): 
     }
     // Guard against a binary replaced during validation; no passed record on drift.
     if (sha256(await readFile(tool.path)) !== tool.sha256) throw new NativeBuildError('Binary changed during build', steps);
-    const buildId = sha256(JSON.stringify({ policy: 'native-projection-v2', sourceFormat: 4,
-      tool: tool.sha256, terms: projections.route }));
+    const buildId = nativeBuildIdentity(tool.sha256, projections.route);
     return { status: 'built-validated', tool, buildId, artifacts, usages,
-      validation: { status: 'passed', semanticRoundTrip: true, steps } };
+      validation: { status: 'passed', policy: NATIVE_VALIDATION_POLICY, steps } };
   } finally { await rm(directory, { recursive: true, force: true }); }
 }

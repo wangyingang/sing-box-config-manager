@@ -33,20 +33,19 @@ export function renderRuleJson(terms: readonly BuildTerm[]): string {
   }) }, null, 2) + '\n';
 }
 
-/** Accept decoder version/scalar changes, but never flatten AND/logical rules into OR. */
-export function decodedTerms(value: unknown): BuildTerm[] {
+/** Read generated Source Format v4 without flattening AND/logical rules into OR. */
+export function readSourceTerms(value: unknown): BuildTerm[] {
   const source = value as { version?: unknown; rules?: unknown };
-  if (!source || !Number.isInteger(source.version) || Number(source.version) < 1 || Number(source.version) > 4
-      || !Array.isArray(source.rules) || !source.rules.length) throw new Error('Invalid decoded source');
+  if (!source || source.version !== 4
+      || !Array.isArray(source.rules) || !source.rules.length) throw new Error('Invalid candidate source rules');
   const terms: BuildTerm[] = [];
   for (const rule of source.rules) {
-    if (!rule || typeof rule !== 'object' || Array.isArray(rule)) throw new Error('Invalid decoded rule');
+    if (!rule || typeof rule !== 'object' || Array.isArray(rule)) throw new Error('Invalid candidate rule');
     const entries = Object.entries(rule);
-    if (entries.length !== 1) throw new Error('Decoded rule is not an independent OR predicate');
-    const [type, raw] = entries[0];
-    if (!BUILD_TERM_TYPES.includes(type as BuildTerm['type'])) throw new Error(`Unexpected decoded field ${type}`);
-    const values = Array.isArray(raw) ? raw : [raw];
-    if (!values.length || values.some(value => typeof value !== 'string' || !value)) throw new Error('Invalid decoded value');
+    if (entries.length !== 1) throw new Error('Candidate rule is not an independent OR predicate');
+    const [type, values] = entries[0];
+    if (!BUILD_TERM_TYPES.includes(type as BuildTerm['type'])) throw new Error(`Unexpected candidate rule field ${type}`);
+    if (!Array.isArray(values) || !values.length || values.some(value => typeof value !== 'string' || !value)) throw new Error('Invalid candidate rule values');
     terms.push(...values.map(value => ({ type, value }) as BuildTerm));
   }
   return normalizeTerms(terms);

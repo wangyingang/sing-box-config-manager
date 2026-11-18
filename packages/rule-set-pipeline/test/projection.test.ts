@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildNative } from '../src/native.js';
-import { decodedTerms, projectTerms, renderRuleJson, type BuildTerm } from '../src/projection.js';
+import { readSourceTerms, projectTerms, renderRuleJson, type BuildTerm } from '../src/projection.js';
 
 const domain: BuildTerm = { type: 'domain_suffix', value: 'example.test' };
 const ip: BuildTerm = { type: 'ip_cidr', value: '192.0.2.0/24' };
@@ -17,13 +17,13 @@ test('pure IP and mixed IR project independently, deduplicate and preserve OR', 
   assert.throws(() => renderRuleJson([]));
 });
 
-test('decoder normalization tolerates only version, scalar, ordering and exact duplicate differences', () => {
-  assert.deepEqual(decodedTerms({ version: 2, rules: [{ ip_cidr: ip.value }, { domain_suffix: domain.value }] }), [domain, ip]);
+test('generated v4 JSON yields independent OR predicates for candidate validation', () => {
+  assert.deepEqual(readSourceTerms(JSON.parse(renderRuleJson([ip, domain]))), [domain, ip]);
   for (const rules of [[], [{}], [{ domain: 'a', ip_cidr: ip.value }], [{ type: 'logical', mode: 'and', rules: [] }],
-    [{ domain: [] }], [{ source_ip_cidr: ip.value }], [{ domain: 42 }]]) {
-    assert.throws(() => decodedTerms({ version: 4, rules }));
+    [{ domain: [] }], [{ domain: 'a' }], [{ source_ip_cidr: ip.value }], [{ domain: 42 }]]) {
+    assert.throws(() => readSourceTerms({ version: 4, rules }));
   }
-  assert.throws(() => decodedTerms({ version: 99, rules: [{ domain: 'a' }] }));
+  assert.throws(() => readSourceTerms({ version: 99, rules: [{ domain: 'a' }] }));
 });
 
 test('missing, relative and wrong-version binaries explicitly fail without a passed build', async () => {

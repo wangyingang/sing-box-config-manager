@@ -1,6 +1,6 @@
 # 配置驱动操作、状态与版本契约
 
-本页描述 [Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84)、[Spec #85](https://github.com/wangyingang/sing-box-config-manager/issues/85)、[Spec #86](https://github.com/wangyingang/sing-box-config-manager/issues/86) 及 [Spec #90 恢复修复](https://github.com/wangyingang/sing-box-config-manager/issues/90) 的应用服务结果、自动运行边界及远端持久事实。它不是 Compiler 的输入契约；Compiler 继续消费 [Rule Subscription v2](rule-subscription-v2.md) 或固定 [Artifact Manifest v1](README.md)。
+本页描述 [Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84)、[Spec #85](https://github.com/wangyingang/sing-box-config-manager/issues/85)、[Spec #86](https://github.com/wangyingang/sing-box-config-manager/issues/86) 及 [Spec #90 恢复修复](https://github.com/wangyingang/sing-box-config-manager/issues/90) 的应用服务结果、自动运行边界及远端持久事实。它不是 Compiler 的输入契约；Compiler 继续消费 [Rule Subscription v2](rule-subscription-v2.md) 或固定 [Artifact Manifest v2](README.md)。
 
 ## 配置
 
@@ -93,6 +93,8 @@ status 只读取，不登记操作、更新检查时间、恢复维护或发送�
 
 稳定写入先登记操作，再核对配置、日志 head 和维护状态，按预期 parent 非强制更新目标 ref，并读回验证。响应丢失时先识别同一次操作；不明确时返回 pending。删除移除当前受管路径及候选，保留最小代次记录防止旧任务复活，不承诺清除 Git 历史或客户端缓存。
 
+构建记录（正式配置的 `buildRecord: 3`）和 `readback.json`（`schemaVersion: 2`）记录 `native-compile-load-v1`、通过的实际命令及工具内容摘要。命令包括每组源 JSON 的 `rule-set compile`，以及两种格式各一次的 `rule-set match` 加载。回读证据记录固定 HTTPS 地址、实际字节长度、SHA-256 和逐字节相等结果。候选复验还会重新编译、加载并与已下载字节比较。cleanup 保留原始构建验证记录，并为重写后的地址记录回读及复验工具。新策略切换从空目标开始，见 [Pipeline README](../README.md#从空产物状态启用新验证策略)。
+
 ## 清理计划与恢复
 
 `cleanupRuleHistory({ dryRun? })` 对整份受管状态执行维护，不接受规则 ID、版本或内部阶段参数。共同结果的 `cleanup` 包含：
@@ -119,6 +121,8 @@ status 只读取，不登记操作、更新检查时间、恢复维护或发送�
 历史重建覆盖 candidates 和 main，隔离目标支持单分支。其他分支/标签只报告，它们可能使旧历史继续可达；不承诺 GitHub 立即物理回收。cleanup 不访问最新上游、不改变当前选择、不解除 pin；无候选到期且无待回收历史时不重复创建基线。
 
 ## 一次性转换
+
+以下为早期操作契约的历史转换。原生验证策略切换按上文从空状态启用。
 
 schema 1 旧状态不能直接交给新编排，也不以缺失状态覆盖已有文件。内部转换须先核实旧状态、稳定交付和候选证据，再生成新模型；未知 schema 或无法安全归属的状态必须明确拒绝。转换预览只读，生产执行另行授权。
 

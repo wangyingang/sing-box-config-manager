@@ -22,7 +22,9 @@ export function responseInput(): RecipeCompileInput {
   const request = artifactInput();
   if (request.recipe.schemaVersion !== 1) throw new Error('Historical fixed-artifact fixture must remain v1');
   const manifest = request.dependencies.manifests![0]!;
-  const artifact = manifest.artifacts[0]!;
+  const source = manifest.artifacts[0]!;
+  if (source.format !== 'source') throw new Error('Expected a source artifact in the Manifest example');
+  const { termCount: _termCount, ...artifact } = source;
   const id = 'synthetic:ips@1:binary';
   manifest.artifacts.push({ ...artifact, id, format: 'binary', url: 'https://rules.example.invalid/1/ips.srs', sha256: 'b'.repeat(64) });
   manifest.projections['dns-response'] = { artifactIds: [id] };

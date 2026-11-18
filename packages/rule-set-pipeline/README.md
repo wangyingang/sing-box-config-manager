@@ -2,7 +2,7 @@
 
 包名：`@sing-box-config-manager/rule-set-pipeline`。管理者通过正式配置维护规则集的来源和用途，再用 `sync` 完成新增、更新与删除。合格规则通过稳定 URL 交付给订阅使用者；构建成功、候选发布、稳定入口切换和客户端加载完成是不同的状态。
 
-[Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84) 将日常操作收敛为 `status`、`sync`、`pin`、`resume`。[Spec #85](https://github.com/wangyingang/sing-box-config-manager/issues/85) 增加一个 `cleanup` 入口，按保留期重建受管历史并保留可选版本。[Spec #86](https://github.com/wangyingang/sing-box-config-manager/issues/86) 将配置 push、定时运行和手工 Actions 接到同一应用服务，并使用 GitHub 原生失败通知。本次代码交付不包含生产状态转换或启用。决定及迁移成本见 [配置驱动操作 ADR](docs/adr/0001-configuration-driven-rule-operations.md)。
+[Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84) 将日常操作收敛为 `status`、`sync`、`pin`、`resume`。[Spec #85](https://github.com/wangyingang/sing-box-config-manager/issues/85) 增加一个 `cleanup` 入口，按保留期重建受管历史并保留可选版本。[Spec #86](https://github.com/wangyingang/sing-box-config-manager/issues/86) 将配置 push、定时运行和手工 Actions 接到同一应用服务，并使用 GitHub 原生失败通知。首次切换见下文的[空产物状态](#从空产物状态启用新验证策略)。操作决定见 [配置驱动操作 ADR](docs/adr/0001-configuration-driven-rule-operations.md)。
 
 ## 操作分别产生什么结果
 
@@ -86,7 +86,7 @@ pnpm rules sync --config /path/to/rulesets-draft.yml --dry-run --json
 
 隔离目标仅限 `acceptance-*`，不会写产物 main/candidates。默认 CLI/API 仍读取源码 main 当前配置；可信隔离宿主可通过 `RULE_CONFIG_BRANCH` 选择与目标同名的 acceptance 分支，不能用隔离配置授权生产写入。Actions 的隔离运行固定使用同名配置分支。源码配置分支和产物目标须事先准备，配置修订每次从当前 head 解析。环境变量和凭据属于宿主部署配置，不是日常命令参数；启用生产开关、转换生产旧状态及实际运行都需要对应授权。
 
-`sync` 可以为没有受管内容的目标建立缺失状态；发现未知 schema 或未管理的已有内容时拒绝覆盖。正式状态完全保存在远端，换机器不依赖本地缓存。schema 1 历史状态须先通过内部一次性转换，保留稳定 URL、字节、来源和有效固定。转换的待处理条件及边界见 [状态契约](contracts/rules-operations.md#一次性转换)。
+`sync` 可以为没有受管内容的目标建立缺失状态；发现未知 schema 或未管理的已有内容时拒绝覆盖。正式状态完全保存在远端，换机器不依赖本地缓存。早期操作升级的一次性转换见[历史状态契约](contracts/rules-operations.md#一次性转换)。原生验证策略切换采用下文的空状态流程。
 
 每次写入绑定配置修订、输入绑定、控制 revision、规则代次和预期 Git head。并发变更或新配置会使旧操作失效。未知提交先核实原操作；共享写入结果不明时停止相关写入，不用另发一次操作掩盖未知结果。
 
@@ -177,7 +177,7 @@ const cleanupPreview = await cleanupRuleHistory({ dryRun: true });
 
 Rule Subscription v2 保持逻辑 ID、稳定 URL、用途、格式、目标版本与能力约束。域名的 Route/DNS Query 复用 `domains.json` 和 `domains.srs`，DNS Response 不可用；CIDR 的 Route/DNS Response 复用 `route.json` 和 `route.srs`，DNS Query 不可用。每次交付前都复验候选、来源、实际规则字节和订阅兼容性。
 
-Recipe／Template v2 跟随稳定入口，管理者 pin 会影响所有引用该集的订阅使用者，但不更改 Recipe。配置快照固定不表示规则字节固定。Compiler 只消费可信宿主提供的内存契约，不下载规则、不调用 Pipeline。详见 [Rule Subscription v2](contracts/rule-subscription-v2.md) 和 [Artifact Manifest v1](contracts/README.md)。
+Recipe／Template v2 跟随稳定入口，管理者 pin 会影响所有引用该集的订阅使用者，但不更改 Recipe。配置快照固定不表示规则字节固定。Compiler 只消费可信宿主提供的内存契约，不下载规则、不调用 Pipeline。详见 [Rule Subscription v2](contracts/rule-subscription-v2.md) 和 [Artifact Manifest v2](contracts/README.md)。
 
 ## 客户端更新失败与缓存恢复
 
@@ -205,11 +205,17 @@ Recipe／Template v2 跟随稳定入口，管理者 pin 会影响所有引用该
 
 非正则值的 `:@attr1,@attr2` 尾部被分离；属性记录仍转换，不在本地筛选。regexp 保留表达式；字面 `:@` 导致失败。保留大小写、Unicode、尾点和正则转义，不执行 IDNA 或表达式改写。空值、非法字符、域名空 label／非法边界／超长 label 均失败。正则不使用 JavaScript 引擎预判，目标 Go 引擎由原生加载步骤检查。1.14.4 在 regexp 匹配前将请求域名转为小写，但不改写表达式；大写字面表达式不会因此变成大小写无关。
 
-IP 语义比较使用固定 `ipaddr.js 2.5.0` 解析地址，按 IPv4／IPv6 地址区间集合比较，接受目标引擎对相邻或包含 CIDR 的等价表示；地址集合扩大或缺失均失败。该规范化只用于比较，不聚合或改写生成 JSON 的 CIDR。JSON 的 `termCount` 按投影 IR 计数，SRS 按实际解码 term 计数，两者可能因原生归并而不同。
+CIDR 输入使用固定 `ipaddr.js 2.5.0` 解析 IPv4／IPv6 并规范化地址。生成 JSON 保留去重后的独立 CIDR 条目。原生验证依赖指定的官方 1.14.4 编译器生成 SRS，再分别使用 `rule-set match` 实际加载 JSON 和 SRS。真实集成测试用域名、正则和双栈边界验证匹配表现。
 
 YAML 解析使用固定版本的 [yaml](https://eemeli.org/yaml/)，拒绝语法错误、重复 key、未知 tag、多个文档和 alias。记录级诊断包含文件、列表、从零开始的记录 index，以及从一开始的 line／column。列表级诊断以文件与目标列表定位。
 
-每个非空用途分别生成 JSON／SRS，内容相同的用途复用同一组物理文件。纯域名文件同时供 Route 和 DNS 请求复用。纯 IP 的 Route／DNS 响应同样复用，混合 IR 分别输出三组文件。当前官方纯域名列表的 DNS 响应用途为 `{ status: "unavailable", reason: "empty" }`，不生成空匹配文件。`build.json` 是本地构建记录，不能作为 Compiler 的 Artifact Manifest 使用。[固定产物 Manifest v1](contracts/README.md) 继续保持原有契约，Compiler 不导入 Pipeline 运行时代码。
+每个非空用途分别生成 JSON／SRS，内容相同的用途复用同一组物理文件。纯域名文件同时供 Route 和 DNS 请求复用。纯 IP 的 Route／DNS 响应同样复用，混合 IR 分别输出三组文件。当前官方纯域名列表的 DNS 响应用途为 `{ status: "unavailable", reason: "empty" }`，不生成空匹配文件。`build.json` 记录构建工具内容摘要、验证策略和实际命令。[固定产物 Manifest v2](contracts/README.md) 为 Compiler 定义独立的内存契约。输入和转换报告保留逻辑计数，JSON 的 `termCount` 按投影条目计数。SRS 记录格式、字节长度、摘要与能力。
+
+## 从空产物状态启用新验证策略
+
+[#125](https://github.com/wangyingang/sing-box-config-manager/issues/125) 从空状态启用新策略。`main` 和 `candidates` 的开发期候选、订阅、证据、版本编号、pin 和未完成操作可以一并清除，旧订阅在切换期间可能不可用。切换是独立操作。先停用生产更新和清理门禁，再准备两个没有 `pipeline/`、`candidates/`、`stable/` 内容的受管分支。必要时可重新初始化产物仓库。
+
+新版从正式配置运行首次 `sync`，初始化远端状态并构建四集。在更新门禁授权的环境执行后，用 `status --json` 核对每集已交付且有可选候选。按回读记录核对完整 commit 固定的文件及两种格式稳定地址的 HTTPS 字节长度和 SHA-256。新策略建立的候选可继续 pin、恢复和 cleanup。清理重写物理证据地址时保留业务版本、构建身份、首次发布时间、来源和稳定订阅字节。
 
 ## 自动化验证
 
@@ -235,7 +241,9 @@ SING_BOX_TEST_BINARY=/absolute/path/to/sing-box-1.14.4 \
 pnpm --dir packages/rule-set-pipeline test:acceptance:rules
 ```
 
-探针从空的 `acceptance-issue-96-*` 分支执行四集新增、两类来源独立更新、换列表、逐集 pin/resume 和删除。来源发现固定到官方 Release 与 Git commit，字节仍从真实上游获取；候选七份文件、稳定 URL、历史候选及兄弟集通过真实 HTTPS 回读。每轮保存受测源码、操作和回读记录、生产 refs/Actions variables 前后对照，以及成功或失败后的隔离目标清理结果。门禁开启时缺少前提会失败，不能将默认跳过视为完成验收；默认 CI 和统一本地检查不运行该远端写入入口。
+设置 `RULE_OPERATIONS_FIRST_ONLY=1` 可只验收空状态初始化与四集首次交付。探针直接计数实际原生子进程，确认没有反编译，仍执行编译和两种格式的加载，并用 Compiler 读取 HTTPS 回读的 Manifest。
+
+完整探针从空的 `acceptance-issue-96-*` 分支执行四集新增、两类来源独立更新、换列表、逐集 pin/resume 和删除。来源发现固定到官方 Release 与 Git commit，字节仍从真实上游获取；候选七份文件、稳定 URL、历史候选及兄弟集通过真实 HTTPS 回读。每轮保存受测源码、操作和回读记录、生产 refs/Actions variables 前后对照，以及成功或失败后的隔离目标清理结果。门禁开启时缺少前提会失败，不能将默认跳过视为完成验收；默认 CI 和统一本地检查不运行该远端写入入口。
 
 cleanup 的真实隔离验收使用单独入口，四集包含域名与 CIDR，验证首次发布时间窗口、当前/pin 豁免、切换中断、HTTPS 回读失败恢复及两轮清理后版本选择：
 

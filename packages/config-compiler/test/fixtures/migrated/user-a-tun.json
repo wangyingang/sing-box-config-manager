@@ -1402,7 +1402,7 @@
     ],
     "manifests": [
       {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "id": "legacy:Javdb",
         "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
         "targetVersion": "1.14.4",
@@ -1433,7 +1433,7 @@
         }
       },
       {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "id": "legacy:Development",
         "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
         "targetVersion": "1.14.4",
@@ -1466,7 +1466,7 @@
         }
       },
       {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "id": "legacy:Docker",
         "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
         "targetVersion": "1.14.4",
@@ -1478,8 +1478,7 @@
             "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Docker.srs",
             "format": "binary",
             "requiredCapabilities": [],
-            "byteLength": 1,
-            "termCount": 1
+            "byteLength": 1
           }
         ],
         "projections": {
@@ -1497,7 +1496,7 @@
         }
       },
       {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "id": "legacy:Apple",
         "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
         "targetVersion": "1.14.4",
@@ -1511,8 +1510,7 @@
             "requiredCapabilities": [
               "processMatching"
             ],
-            "byteLength": 1,
-            "termCount": 1
+            "byteLength": 1
           }
         ],
         "projections": {
@@ -1530,7 +1528,7 @@
         }
       },
       {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "id": "legacy:Speedtest",
         "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
         "targetVersion": "1.14.4",
@@ -1542,8 +1540,7 @@
             "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Speedtest.srs",
             "format": "binary",
             "requiredCapabilities": [],
-            "byteLength": 1,
-            "termCount": 1
+            "byteLength": 1
           }
         ],
         "projections": {
@@ -1561,7 +1558,7 @@
         }
       },
       {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "id": "legacy:OpenAI",
         "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
         "targetVersion": "1.14.4",
@@ -1573,8 +1570,7 @@
             "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/OpenAI.srs",
             "format": "binary",
             "requiredCapabilities": [],
-            "byteLength": 1,
-            "termCount": 1
+            "byteLength": 1
           }
         ],
         "projections": {
@@ -1592,7 +1588,7 @@
         }
       },
       {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "id": "legacy:DNS_OpenAI_domain",
         "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
         "targetVersion": "1.14.4",
@@ -1604,8 +1600,7 @@
             "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/DNS_OpenAI_domain.srs",
             "format": "binary",
             "requiredCapabilities": [],
-            "byteLength": 1,
-            "termCount": 1
+            "byteLength": 1
           }
         ],
         "projections": {
@@ -1623,7 +1618,7 @@
         }
       },
       {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "id": "legacy:Anthropic",
         "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
         "targetVersion": "1.14.4",
@@ -1635,8 +1630,7 @@
             "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Anthropic.srs",
             "format": "binary",
             "requiredCapabilities": [],
-            "byteLength": 1,
-            "termCount": 1
+            "byteLength": 1
           }
         ],
         "projections": {
@@ -1656,7 +1650,7 @@
         }
       },
       {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "id": "legacy:Claude",
         "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
         "targetVersion": "1.14.4",
@@ -1668,8 +1662,7 @@
             "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Claude.srs",
             "format": "binary",
             "requiredCapabilities": [],
-            "byteLength": 1,
-            "termCount": 1
+            "byteLength": 1
           }
         ],
         "projections": {
@@ -1689,7 +1682,7 @@
         }
       },
       {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "id": "legacy:Gemini",
         "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
         "targetVersion": "1.14.4",
@@ -1701,8 +1694,7 @@
             "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/Gemini.srs",
             "format": "binary",
             "requiredCapabilities": [],
-            "byteLength": 1,
-            "termCount": 1
+            "byteLength": 1
           }
         ],
         "projections": {
@@ -1722,7 +1714,7 @@
         }
       },
       {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "id": "legacy:OneDrive",
         "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
         "targetVersion": "1.14.4",
@@ -1736,8 +1728,7 @@
             "requiredCapabilities": [
               "processMatching"
             ],
-            "byteLength": 1,
-            "termCount": 1
+            "byteLength": 1
           }
         ],
         "projections": {
@@ -1755,7 +1746,7 @@
         }
       },
       {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "id": "legacy:Microsoft",
         "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
         "targetVersion": "1.14.4",
@@ -1769,8 +1760,7 @@
             "requiredCapabilities": [
               "processMatching"
             ],
-            "byteLength": 1,
-            "termCount": 1
+            "byteLength": 1
           }
         ],
         "projections": {
@@ -1788,7 +1778,7 @@
         }
       },
       {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "id": "legacy:Google",
         "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
         "targetVersion": "1.14.4",
@@ -1802,8 +1792,7 @@
             "requiredCapabilities": [
               "processMatching"
             ],
-            "byteLength": 1,
-            "termCount": 1
+            "byteLength": 1
           }
         ],
         "projections": {
@@ -1821,7 +1810,7 @@
         }
       },
       {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "id": "legacy:DNS_Google_domain",
         "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
         "targetVersion": "1.14.4",
@@ -1833,8 +1822,7 @@
             "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/DNS_Google_domain.srs",
             "format": "binary",
             "requiredCapabilities": [],
-            "byteLength": 1,
-            "termCount": 1
+            "byteLength": 1
           }
         ],
         "projections": {
@@ -1852,7 +1840,7 @@
         }
       },
       {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "id": "legacy:YouTube",
         "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
         "targetVersion": "1.14.4",
@@ -1864,8 +1852,7 @@
             "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/YouTube.srs",
             "format": "binary",
             "requiredCapabilities": [],
-            "byteLength": 1,
-            "termCount": 1
+            "byteLength": 1
           }
         ],
         "projections": {
@@ -1883,7 +1870,7 @@
         }
       },
       {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "id": "legacy:海外媒体",
         "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
         "targetVersion": "1.14.4",
@@ -1897,8 +1884,7 @@
             "requiredCapabilities": [
               "processMatching"
             ],
-            "byteLength": 1,
-            "termCount": 1
+            "byteLength": 1
           }
         ],
         "projections": {
@@ -1916,7 +1902,7 @@
         }
       },
       {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "id": "legacy:Global",
         "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
         "targetVersion": "1.14.4",
@@ -1930,8 +1916,7 @@
             "requiredCapabilities": [
               "processMatching"
             ],
-            "byteLength": 1,
-            "termCount": 1
+            "byteLength": 1
           }
         ],
         "projections": {
@@ -1949,7 +1934,7 @@
         }
       },
       {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "id": "legacy:DNS_Global_domain",
         "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
         "targetVersion": "1.14.4",
@@ -1961,8 +1946,7 @@
             "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/DNS_Global_domain.srs",
             "format": "binary",
             "requiredCapabilities": [],
-            "byteLength": 1,
-            "termCount": 1
+            "byteLength": 1
           }
         ],
         "projections": {
@@ -1980,7 +1964,7 @@
         }
       },
       {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "id": "legacy:DNS_Global_ipcidr",
         "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
         "targetVersion": "1.14.4",
@@ -1992,8 +1976,7 @@
             "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/DNS_Global_ipcidr.srs",
             "format": "binary",
             "requiredCapabilities": [],
-            "byteLength": 1,
-            "termCount": 1
+            "byteLength": 1
           }
         ],
         "projections": {
@@ -2011,7 +1994,7 @@
         }
       },
       {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "id": "legacy:ChinaIPs",
         "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
         "targetVersion": "1.14.4",
@@ -2023,8 +2006,7 @@
             "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/ChinaIPs.srs",
             "format": "binary",
             "requiredCapabilities": [],
-            "byteLength": 1,
-            "termCount": 1
+            "byteLength": 1
           }
         ],
         "projections": {
@@ -2044,7 +2026,7 @@
         }
       },
       {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "id": "legacy:ChinaMaxNoIP",
         "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
         "targetVersion": "1.14.4",
@@ -2058,8 +2040,7 @@
             "requiredCapabilities": [
               "processMatching"
             ],
-            "byteLength": 1,
-            "termCount": 1
+            "byteLength": 1
           }
         ],
         "projections": {
@@ -2077,7 +2058,7 @@
         }
       },
       {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "id": "legacy:DNS_ChinaMaxNoIP_domain",
         "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
         "targetVersion": "1.14.4",
@@ -2089,8 +2070,7 @@
             "url": "https://raw.githubusercontent.com/wangyingang/sing-box-geosite/34364dc11cc922443d3ecdfd310951be0bd64f9c/rule/DNS_ChinaMaxNoIP_domain.srs",
             "format": "binary",
             "requiredCapabilities": [],
-            "byteLength": 1,
-            "termCount": 1
+            "byteLength": 1
           }
         ],
         "projections": {
@@ -2108,7 +2088,7 @@
         }
       },
       {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "id": "legacy:ChinaMax",
         "revision": "34364dc11cc922443d3ecdfd310951be0bd64f9c",
         "targetVersion": "1.14.4",
@@ -2122,8 +2102,7 @@
             "requiredCapabilities": [
               "processMatching"
             ],
-            "byteLength": 1,
-            "termCount": 1
+            "byteLength": 1
           }
         ],
         "projections": {

@@ -1,10 +1,14 @@
 import type { RuleDefinition } from './configuration.js';
 import type { SourceReference } from './update.js';
 import { buildNative, type NativeBuild } from './native.js';
-import { decodedTerms } from './projection.js';
+import { readSourceTerms } from './projection.js';
 import { immutableUrl, type PublicationTransport } from './publication.js';
 import { sha256 } from './release.js';
 import { isDeepStrictEqual } from 'node:util';
+
+export const ARTIFACT_MANIFEST_VERSION = 2;
+export const CANDIDATE_READBACK_VERSION = 2;
+export const LEGACY_BUILD_RECORD = 2;
 
 export function candidateArtifactFiles(definition?: RuleDefinition) {
   const route = definition?.usages.route;
@@ -81,16 +85,17 @@ export async function publishCandidate(options: {
   };
   const downloaded = new Map<string, Buffer>();
   for (const [path, bytes] of Object.entries(files)) downloaded.set(path, await verify(path, bytes, filesCommit));
-  // Recompile, decompile and load actual HTTPS JSON, then compare downloaded SRS.
+  // Compile the HTTPS JSON and load both formats, then verify the actual downloaded bytes.
   const route = native.usages.route;
   const json = 'artifactFiles' in route && downloaded.get(`${prefix}/${route.artifactFiles[0]}`);
   if (!json) throw new Error('Remote native JSON is missing');
-  const remoteNative = await buildNative(decodedTerms(JSON.parse(json.toString('utf8'))), binary);
+  const remoteNative = await buildNative(readSourceTerms(JSON.parse(json.toString('utf8'))), binary);
+  if (remoteNative.tool.sha256 !== native.tool.sha256) throw new Error('Binary changed between build and readback');
   if (remoteNative.artifacts.length !== native.artifacts.length || remoteNative.artifacts.some(artifact =>
     !downloaded.get(`${prefix}/${artifact.file}`)?.equals(artifact.content))) throw new Error('Remote native content mismatch');
   for (const [path, bytes] of Object.entries(records)) await verify(path, bytes, metadataCommit);
   options.beforeEvidence?.();
-  const evidence = Buffer.from(JSON.stringify({ schemaVersion: 1, candidateId: candidate.id, status: 'remote-verified',
+  const evidence = Buffer.from(JSON.stringify({ schemaVersion: CANDIDATE_READBACK_VERSION, candidateId: candidate.id, status: 'remote-verified',
     ...(candidate.publishedAt ? { publishedAt: candidate.publishedAt, versionId: candidate.versionId } : {}),
     filesCommit, metadataCommit, buildId, readback, native: remoteNative.validation, tool: remoteNative.tool }, null, 2) + '\n');
   const evidencePath = `${prefix}/readback.json`;

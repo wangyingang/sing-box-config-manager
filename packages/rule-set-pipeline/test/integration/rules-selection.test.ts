@@ -99,10 +99,13 @@ test('候选证据边界逐项拒绝损坏；status 只读且 pin 保留当前�
     ['usage', /Projection availability/, d => d.change('manifest.json', m => { m.projections['dns-response'] = m.projections.route; })],
     ['capability', /Artifact integrity or capability/, d => d.change('manifest.json', m => { m.artifacts[1].requiredCapabilities = ['processMatching']; })],
     ['projection-mapping', /Projection mapping/, d => d.change('manifest.json', m => { m.projections['dns-query'].artifactIds = ['missing', m.artifacts[0].id]; })],
+    ['build-policy', /Incomplete native validation record/, d => d.change('build.json', b => { b.validation.policy = 'old-policy'; })],
+    ['readback-missing-load', /Incomplete native validation record/, async d => { d.evidence.native.steps.pop(); await d.saveEvidence(); }],
+    ['binary-term-count', /Invalid Artifact Manifest/, d => d.change('manifest.json', m => { m.artifacts[1].termCount = 1; })],
     ['build-identity', /Configured build identity/, d => d.change('build.json', b => { b.id = 'china-ip'; })],
     ['build-target', /Configured build identity/, d => d.change('build.json', b => { b.target.branch = 'other'; })],
     ...[null, { artifactManifest: 2, sourceFormat: 4, buildRecord: 2 },
-      { artifactManifest: 1, sourceFormat: 4 }, { artifactManifest: 1, sourceFormat: 4, buildRecord: 3 }]
+      { artifactManifest: 1, sourceFormat: 4 }, { artifactManifest: 2, sourceFormat: 4, buildRecord: 4 }]
       .map((contracts, index) => [`build-contracts-${index}`, /Unsupported build contracts/,
         (d: Awaited<ReturnType<typeof damage>>) => d.change('build.json', b => { b.contracts = contracts; })] as typeof cases[number]),
     ['retained-replacement', /differs from retained/, d => { env.trees.get(env.heads.get(env.context.repository.branch)!)!.set(`candidates/${candidate.id}/domains.srs`, Buffer.from('replaced retained bytes')); }],

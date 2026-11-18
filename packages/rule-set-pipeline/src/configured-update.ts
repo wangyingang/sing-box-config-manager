@@ -3,7 +3,7 @@ import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { configuredInput } from './configuration.js';
 import { buildConfiguredCommit, buildConfiguredRelease, CONFIGURED_BUILD_RECORD, parseBuildConfiguration } from './configured-build.js';
-import { publishCandidate, type PublicationCandidate } from './candidate-publication.js';
+import { ARTIFACT_MANIFEST_VERSION, publishCandidate, type PublicationCandidate } from './candidate-publication.js';
 import { githubPublication, immutableUrl, type PublicationTransport } from './publication.js';
 import { lookupRelease, type ReleaseInput } from './release.js';
 import { commitSourceKey, fullGitCommit, resolveCommit, withCommitCheckpoint, type CommitInput, type CommitSourceRecord } from './github-commit.js';
@@ -283,10 +283,10 @@ export async function publishConfiguredCandidate(result: Extract<Awaited<ReturnT
   return publishCandidate({ candidate, native: result.native, buildId: result.buildId, binary, publication, save, beforeEvidence,
     records: filesCommit => {
       const artifactId = (file: string) => `${result.id}@${candidate.id}:${file}`;
-      const manifest = { schemaVersion: 1, id: result.id, revision: candidate.id, targetVersion: '1.14.4', sourceFormatVersion: 4,
+      const manifest = { schemaVersion: ARTIFACT_MANIFEST_VERSION, id: result.id, revision: candidate.id, targetVersion: '1.14.4', sourceFormatVersion: 4,
         artifacts: result.native.artifacts.map(artifact => ({ id: artifactId(artifact.file), format: artifact.format,
           url: immutableUrl(filesCommit, `${prefix}/${artifact.file}`), sha256: artifact.sha256, byteLength: artifact.bytes,
-          termCount: artifact.termCount, requiredCapabilities: artifact.requiredCapabilities })),
+          ...(artifact.format === 'source' && { termCount: artifact.termCount }), requiredCapabilities: artifact.requiredCapabilities })),
         projections: Object.fromEntries(Object.entries(result.native.usages).map(([usage, projection]) => [usage,
           'artifactFiles' in projection ? { artifactIds: projection.artifactFiles.map(artifactId) } : { unavailable: 'empty' }])),
       };
@@ -297,7 +297,7 @@ export async function publishConfiguredCandidate(result: Extract<Awaited<ReturnT
         [`${prefix}/conversion-report.json`]: encode(result.report),
         [`${prefix}/build.json`]: encode({ id: result.id, definition: result.definition, target, buildId: result.buildId,
           candidateId: candidate.id, operation: candidate.operation, previousCandidateId: candidate.previousCandidateId,
-          contracts: { artifactManifest: 1, sourceFormat: 4, buildRecord: CONFIGURED_BUILD_RECORD }, source, tools, nativeBuildId, ...validation,
+          contracts: { artifactManifest: ARTIFACT_MANIFEST_VERSION, sourceFormat: 4, buildRecord: CONFIGURED_BUILD_RECORD }, source, tools, nativeBuildId, ...validation,
           artifacts: result.native.artifacts.map(({ content: _content, ...metadata }) => metadata) }),
       };
     } });

@@ -14,14 +14,14 @@ import { USAGES, type BuildTerm } from './projection.js';
 export { parseBuildConfiguration } from './configuration.js';
 export type { BuildConfiguration, RuleDefinition } from './configuration.js';
 
-export const CONFIGURED_BUILD_RECORD = 2;
+export const CONFIGURED_BUILD_RECORD = 3;
 
 export type ConfiguredResult = { id: string; definition: RuleDefinition; status: 'failed'; report: ConversionReport; error: string }
   | { id: string; definition: RuleDefinition; status: 'built-validated'; report: ConversionReport; native: NativeBuild; buildId: string };
 
 export async function configuredBuildTools(format: 'plain-yaml' | 'cidr-text' = 'plain-yaml') {
   const files = ['source-input', 'configuration', 'configured-build', 'release', 'plain-yaml-adapter', 'yaml-input', 'convert',
-    'types', 'projection', 'native', 'semantics'];
+    'types', 'projection', 'native'];
   if (format === 'cidr-text') files.push('github-commit', 'cidr-text-adapter');
   const implementationSha256 = sha256(Buffer.concat(await Promise.all(
     files.map(name =>
