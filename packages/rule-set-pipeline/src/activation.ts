@@ -162,7 +162,8 @@ export async function verifyCandidateEvidence(options: Partial<NativeBuildOption
     requireThat(reproduced?.content.equals(bytesByFormat[format]), `Native artifact mismatch: ${file}`);
   }
   return { candidateId: location.id, buildId: build.buildId, evidenceUrl: options.candidateEvidenceUrl, manifest, source, bytesByFormat,
-    build: { definition: build.definition, tools: build.tools, tool: build.tool },
+    versionId: evidence.versionId, publishedAt: evidence.publishedAt,
+    build: { definition: build.definition, tools: build.tools, tool: build.tool, nativeBuildId: build.nativeBuildId },
     validation: native && { tool: native.tool, buildId: build.buildId, nativeBuildId: native.buildId } };
 }
 

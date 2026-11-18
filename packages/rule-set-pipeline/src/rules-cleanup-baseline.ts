@@ -40,6 +40,9 @@ function retainedJournal(original: RulesJournal, candidates: Record<string, Rule
   }
   journal.maintenance = 'maintenance';
   journal.candidates = candidates;
+  for (const rule of Object.values(journal.rules)) {
+    if (rule.successfulInput && !Object.hasOwn(candidates, rule.successfulInput.candidateId)) delete rule.successfulInput;
+  }
   return journal;
 }
 

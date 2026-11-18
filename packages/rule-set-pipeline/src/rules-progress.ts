@@ -1,5 +1,5 @@
 export interface RulesProgress {
-  stage: 'configuration' | 'state' | 'build' | 'candidate' | 'files' | 'metadata' | 'evidence'
+  stage: 'configuration' | 'state' | 'source' | 'build' | 'candidate' | 'files' | 'metadata' | 'evidence'
     | 'prepare-delivery' | 'stable-write' | 'readback' | 'status' | 'cleanup';
   logicalId?: string;
 }
@@ -11,7 +11,7 @@ export function reportRulesProgress(observer: ((event: RulesProgress) => void) |
 }
 
 const labels: Record<RulesProgress['stage'], string> = {
-  configuration: '读取正式配置', state: '核对远端状态', build: '读取来源并构建校验',
+  configuration: '读取正式配置', state: '核对远端状态', source: '读取并转换规则来源', build: '构建并验证规则',
   candidate: '登记规则候选', files: '上传规则文件', metadata: '保存候选构建记录',
   evidence: '回读并验证候选', 'prepare-delivery': '验证候选并准备交付',
   'stable-write': '更新稳定订阅文件', readback: '回读确认交付', status: '核对当前版本与候选', cleanup: '检查与清理保留历史',

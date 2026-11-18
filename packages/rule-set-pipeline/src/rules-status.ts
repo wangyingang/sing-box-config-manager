@@ -54,6 +54,7 @@ export async function addCurrentFacts(session: RulesSession, results: RuleResult
     const actual = await observedRule(session, result.id, stable);
     result.current = deliveries.get(result.id);
     result.control = actual?.control;
+    result.successfulInput = session.journal.rules[result.id]?.successfulInput;
     result.expectedSource = session.loaded.configuration.ruleSets.some(rule => rule.id === result.id)
       ? session.loaded.configuration.sources[session.loaded.configuration.ruleSets.find(rule => rule.id === result.id)!.source] : undefined;
   }
@@ -105,7 +106,8 @@ export async function getRulesStatus(request: RulesRequest & { id?: string } = {
       const configurationDifference = !definition ? 'delete' : !accepted || accepted.lifecycle === 'deleted' ? 'add'
         : definitionRevision(expectedSource!, definition) !== accepted.definitionRevision ? 'change' : 'none';
       rules.push({ id, status: session.journal.pendingDelivery?.logicalId === id ? 'pending' : accepted?.lastFailure ? 'failed' : 'unchanged',
-        current, control: accepted?.control, expectedSource, deliveryState: current ? 'delivered' : 'not-delivered',
+        current, control: accepted?.control, expectedSource,
+        successfulInput: session.journal.rules[id]?.successfulInput, deliveryState: current ? 'delivered' : 'not-delivered',
         lifecycle: accepted?.lifecycle, acceptedConfigurationRevision: accepted?.configurationRevision, configurationDifference,
         stableUrls: Object.keys(current?.files ?? {}).map(path => `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${session.loaded.context.targetBranch}/${path}`),
         candidates, candidateCount: candidates.filter(candidate => candidate.selectable).length,

@@ -10,6 +10,7 @@ import type { RulesSession } from './rules-session.js';
 import type { RuleWrites } from './rules-repository.js';
 import { rulesBinary } from './rules-context.js';
 import { verifyRuleCandidate } from './rules-build.js';
+import { verifiedDeliveryInput } from './rules-success.js';
 
 export async function readRuleDeliveries(snapshot: PublicationSnapshot) {
   const deliveries = new Map<string, RuleDelivery>();
@@ -84,8 +85,12 @@ async function verifyChanges(snapshot: PublicationSnapshot, changes: PendingDeli
   }
 }
 
-async function finishDelivery(session: RulesSession, pending: PendingDelivery) {
-  session.journal.rules[pending.logicalId] = pending.afterRule;
+async function finishDelivery(session: RulesSession, pending: PendingDelivery, stable: PublicationSnapshot) {
+  const rule = { ...pending.afterRule };
+  if (pending.kind === 'sync') {
+    rule.successfulInput = await verifiedDeliveryInput(session, rule, pending.record!, stable);
+  }
+  session.journal.rules[pending.logicalId] = rule;
   const files: RuleWrites = {};
   for (const id of pending.removeCandidates) {
     for (const path of session.snapshot.paths.filter(path => path.startsWith(`candidates/${id}/`))) files[path] = null;
@@ -144,7 +149,7 @@ export async function recoverRuleDelivery(session: RulesSession) {
       if (actual.length !== expected.byteLength || sha256(actual) !== expected.sha256) throw new Error('RULE_WRITE_PENDING: committed HTTPS readback differs');
     });
   }
-  await finishDelivery(session, pending);
+  await finishDelivery(session, pending, stable);
 }
 
 export async function deliverRuleVersion(session: RulesSession, rule: ManagedRule, candidate: RuleCandidate,
@@ -190,6 +195,7 @@ export async function deleteRuleDelivery(session: RulesSession, rule: ManagedRul
   const removeCandidates = [...Object.values(session.journal.candidates), ...quarantined].filter(candidate => candidate.logicalId === id).map(candidate => candidate.id);
   const afterRule: ManagedRule = { ...rule, lifecycle: 'deleted', control: { mode: 'auto', revision: randomUUID(), inputBindingRevision: rule.inputBindingRevision } };
   delete afterRule.lastFailure;
+  delete afterRule.successfulInput;
   session.journal.pendingDelivery = { id: randomUUID(), kind: 'delete', logicalId: id,
     configurationRevision: session.loaded.observed.revision, stableHead: stable.head, afterRule,
     changes: evidenceFor(files), removeCandidates };
