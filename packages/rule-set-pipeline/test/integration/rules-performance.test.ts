@@ -16,6 +16,7 @@ import { rulesEnvironment } from '../fixtures/rules-environment.js';
 import { cleanupEnvironment } from '../fixtures/cleanup-environment.js';
 import { PublicationWriteError } from '../../src/publication-repository.js';
 import { getRulesStatus } from '../../src/rules-status.js';
+import { runRuleAutomation, runRuleWorkflow } from '../../src/rule-workflow.js';
 import { cleanupRuleHistory } from '../../src/rules-cleanup.js';
 import { candidateArtifactFiles } from '../../src/candidate-publication.js';
 import { immutableUrl } from '../../src/publication.js';
@@ -46,6 +47,73 @@ exec ${quote(binary!)} "$@"
 
 const oneNativeValidation = { compile: 1, decompile: 0, sourceLoad: 1, binaryLoad: 1 };
 const noNativeValidation = { compile: 0, decompile: 0, sourceLoad: 0, binaryLoad: 0 };
+
+test('每日预检零历史候选读取，人工 status 仍检查全部保留候选', { skip: !binary }, async t => {
+  const { wrapper, take } = await traceNative(t);
+  const env = cleanupEnvironment(wrapper, 'main');
+  const config = env.config();
+  config.ruleSets = config.ruleSets.filter(rule => rule.id === 'openai');
+  env.configure(config);
+  const target = env.context.targetBranch;
+  const candidateIds = [];
+  for (const label of ['trace', 'damaged', 'current']) {
+    env.upstream({ openai: `domain:${label}.example` });
+    const synced = await syncRules({ context: env.context });
+    assert.equal(synced.status, 'success', JSON.stringify(synced));
+    candidateIds.push(synced.results[0].current!.candidateId);
+  }
+  const [trace, damaged, current] = candidateIds;
+  const [tracePath, damagedPath] = [`candidates/${trace}/conversion-report.json`, `candidates/${damaged}/domains.srs`];
+  const repository = env.context.repository;
+  const { snapshot, lastChange, download } = repository;
+  const gitReads: string[] = [], rawReads: string[] = [];
+  repository.snapshot = async (...args) => {
+    const observed = await snapshot(...args);
+    return { ...observed, read(path) { gitReads.push(path); return observed.read(path); } };
+  };
+  repository.lastChange = (head, path) => { gitReads.push(path); return lastChange(head, path); };
+  repository.download = url => { rawReads.push(url); return download(url); };
+  const historicalReads = () => gitReads.filter(path => [trace, damaged].some(id => path.startsWith(`candidates/${id}/`)));
+  const reports: any[] = [];
+  let preflightReads: { historical: string[]; stable: string[]; raw: string[] } | undefined;
+  assert.equal(await runRuleAutomation({ event: 'schedule', target }, text => {
+    if (!reports.length) preflightReads = { historical: historicalReads(), stable: gitReads.filter(path => path.startsWith('stable/')), raw: [...rawReads] };
+    reports.push(JSON.parse(text));
+  }, env.context), 0, JSON.stringify(reports));
+  assert.deepEqual(preflightReads?.historical, []);
+  assert.deepEqual(preflightReads?.raw, []);
+  assert.ok(preflightReads.stable.some(path => path.endsWith('/activation.json')));
+  assert.ok(preflightReads.stable.some(path => path.endsWith('.srs')));
+  assert.equal(reports[0].operation, 'schedule-preflight');
+  assert.deepEqual(reports[0].verified, ['official-configuration', 'journal-structure', 'stable-files']);
+  assert.equal(reports[0].results[0].current.candidateId, current);
+  assert.ok(!('candidates' in reports[0].results[0]));
+
+  const head = env.heads.get(repository.branch)!;
+  const tree = env.trees.get(head)!;
+  assert.ok(tree.delete(tracePath));
+  assert.ok(tree.has(damagedPath));
+  tree.set(damagedPath, Buffer.from('corrupt artifact'));
+  await take();
+  gitReads.length = 0;
+  rawReads.length = 0;
+  const writes = env.writes.length, refWrites = env.refWrites.length, stageWrites = env.stageWrites.length;
+  let status: Awaited<ReturnType<typeof getRulesStatus>> | undefined;
+  assert.equal(await runRuleWorkflow({ operation: 'status', target }, text => { status = JSON.parse(text); }, env.context), 0);
+  const candidates = status?.rules?.[0].candidates;
+  assert.deepEqual(candidates?.map(candidate => candidate.id).sort(), [...candidateIds].sort());
+  assert.equal(candidates?.find(candidate => candidate.id === current)?.selectable, true);
+  assert.equal(candidates?.find(candidate => candidate.id === trace)?.selectable, true);
+  assert.deepEqual(candidates?.find(candidate => candidate.id === trace)?.missingTraceFiles, ['conversion-report.json']);
+  assert.equal(candidates?.find(candidate => candidate.id === damaged)?.selectable, false);
+  assert.match(candidates?.find(candidate => candidate.id === damaged)?.reason ?? '', /integrity mismatch: domains\.srs/);
+  assert.ok(historicalReads().some(path => path.startsWith(`candidates/${trace}/`) && path.endsWith('.srs')));
+  assert.ok(historicalReads().includes(damagedPath));
+  assert.deepEqual(status?.readbackRequests, []);
+  assert.deepEqual(rawReads, []);
+  assert.equal(await readFile(`${wrapper}.log`, 'utf8'), '');
+  assert.deepEqual([env.writes.length, env.refWrites.length, env.stageWrites.length], [writes, refWrites, stageWrites]);
+});
 
 test('Release 与 Git 输入更新后同语义保留交付，零编译和加载，并独立记住新输入', { skip: !binary }, async t => {
   const { wrapper, take } = await traceNative(t);

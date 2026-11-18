@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
+import { promisify } from 'node:util';
 import { runRuleWorkflow, runRuleAutomation } from '../src/rule-workflow.js';
 import { getRulesStatus, cleanupRuleHistory } from '../src/index.js';
 import { rulesEnvironment } from './fixtures/rules-environment.js';
@@ -21,7 +26,9 @@ test('isolated workflow reports the shared service result and rejects retired op
   let text = '';
   assert.equal(await runRuleWorkflow({ operation: 'status', target: env.context.targetBranch }, output => { text = output; }, env.context), expected.exitCode);
   assert.deepEqual(JSON.parse(text), JSON.parse(JSON.stringify(expected)));
-  assert.equal(await runRuleWorkflow({ operation: 'check', target: env.context.targetBranch }, output => { text = output; }, env.context), 1);
+  for (const operation of ['check', 'schedule-preflight']) {
+    assert.equal(await runRuleWorkflow({ operation, target: env.context.targetBranch }, output => { text = output; }, env.context), 1);
+  }
   assert.equal(env.writes.length, 0);
 });
 
@@ -72,7 +79,7 @@ test('workflow rejects unrelated and option-shaped inputs before reading busines
   assert.equal(env.writes.length, 0);
 });
 
-function scenario(responses: { operation: string; status: string; exitCode: number; maintenance?: string;
+function scenario(responses: { operation: string; status: string; exitCode: number;
   error?: string; results?: { status: string; error?: string }[] }[]) {
   const context = rulesEnvironment('/unused').context;
   const calls: string[] = [];
@@ -82,55 +89,36 @@ function scenario(responses: { operation: string; status: string; exitCode: numb
     const next = responses[calls.length - 1];
     assert.ok(next, `Unexpected operation ${request.operation}`);
     assert.equal(request.operation, next.operation);
-    report(JSON.stringify({ target: { branch: context.targetBranch }, configurationRevision: 'current-config', ...next }));
+    report(JSON.stringify({ target: { branch: context.targetBranch }, configurationRevision: (await context.readConfiguration()).revision, ...next }));
     return next.exitCode;
   };
   return { context, calls, reports, run: (event: 'push' | 'schedule' = 'schedule') =>
     runRuleAutomation({ event, target: context.targetBranch }, text => reports.push(JSON.parse(text)), context, execute) };
 }
 
-const statusOpen = { operation: 'status', status: 'success', exitCode: 0, maintenance: 'open' };
 const syncSuccess = { operation: 'sync', status: 'success', exitCode: 0, results: [{ status: 'unchanged' }, { status: 'pinned-skipped' }] };
 const cleanupSuccess = { operation: 'cleanup', status: 'success', exitCode: 0 };
 
 test('configuration push only synchronizes; daily sync and cleanup keep separate results', async () => {
   const pushed = scenario([syncSuccess]);
+  pushed.context.repository.snapshot = async () => assert.fail('Push must not run schedule preflight');
   assert.equal(await pushed.run('push'), 0);
   assert.deepEqual(pushed.calls, ['sync']);
-  const daily = scenario([statusOpen, syncSuccess, cleanupSuccess]);
+  const daily = scenario([syncSuccess, cleanupSuccess]);
   assert.equal(await daily.run(), 0);
-  assert.deepEqual(daily.calls, ['status', 'sync', 'cleanup']);
-  assert.equal(daily.reports.length, 3);
-});
-
-test('daily recovers active maintenance before synchronizing and reports each stage', async () => {
-  const daily = scenario([
-    { ...statusOpen, status: 'pending', exitCode: 1, maintenance: 'maintenance' },
-    cleanupSuccess, syncSuccess, cleanupSuccess,
-  ]);
-  assert.equal(await daily.run(), 0);
-  assert.deepEqual(daily.calls, ['status', 'cleanup', 'sync', 'cleanup']);
-});
-
-test('disabled or unresolved maintenance cannot masquerade as recovered or start sync', async () => {
-  for (const cleanup of [
-    { ...cleanupSuccess, status: 'disabled', error: 'RULE_CLEANUP_ENABLED is false' },
-    { ...cleanupSuccess, status: 'pending', exitCode: 1 },
-  ]) {
-    const daily = scenario([{ ...statusOpen, status: 'pending', exitCode: 1, maintenance: 'maintenance' }, cleanup]);
-    assert.equal(await daily.run(), 1);
-    assert.deepEqual(daily.calls, ['status', 'cleanup']);
-  }
+  assert.deepEqual(daily.calls, ['sync', 'cleanup']);
+  const reports = daily.reports as { operation: string; configurationRevision: string }[];
+  assert.deepEqual(reports.map(report => report.operation), ['schedule-preflight', 'sync', 'cleanup']);
+  assert.ok(reports.every(report => report.configurationRevision === reports[0].configurationRevision));
 });
 
 test('ordinary per-rule failure still permits cleanup and cannot be hidden by cleanup success', async () => {
   const daily = scenario([
-    { ...statusOpen, status: 'failed', exitCode: 1, results: [{ status: 'failed', error: 'Previous upstream failure' }] },
     { ...syncSuccess, status: 'partial', exitCode: 1, results: [{ status: 'delivered' }, { status: 'failed', error: 'Upstream unavailable' }] },
     cleanupSuccess,
   ]);
   assert.equal(await daily.run(), 1);
-  assert.deepEqual(daily.calls, ['status', 'sync', 'cleanup']);
+  assert.deepEqual(daily.calls, ['sync', 'cleanup']);
   assert.equal((daily.reports[1] as { status: string }).status, 'partial');
 });
 
@@ -141,21 +129,25 @@ test('shared pending, unverified state and concurrent configuration changes stop
     { ...syncSuccess, status: 'partial', exitCode: 1, results: [{ status: 'superseded', error: 'RULE_INTENT_SUPERSEDED' }] },
     { ...syncSuccess, status: 'failed', exitCode: 1, results: [{ status: 'failed', error: 'RULE_WRITE_CONFLICT' }] },
   ]) {
-    const daily = scenario([statusOpen, failed]);
+    const daily = scenario([failed]);
     assert.equal(await daily.run(), 1);
-    assert.deepEqual(daily.calls, ['status', 'sync']);
+    assert.deepEqual(daily.calls, ['sync']);
   }
-  const unreadable = scenario([{ ...statusOpen, status: 'failed', exitCode: 1, error: 'RULE_STATE_MIGRATION_REQUIRED' }]);
-  assert.equal(await unreadable.run(), 1);
-  assert.deepEqual(unreadable.calls, ['status']);
+  for (const message of ['Cannot confirm current Git state', '']) {
+    const unreadable = scenario([]);
+    unreadable.context.repository.snapshot = async () => { throw new Error(message); };
+    assert.equal(await unreadable.run(), 1);
+    assert.deepEqual(unreadable.calls, []);
+    assert.equal((unreadable.reports[0] as { error: string }).error, message);
+  }
 });
 
 test('disabled update does not prevent independently enabled cleanup', async () => {
-  const daily = scenario([statusOpen, { ...syncSuccess, status: 'disabled', error: 'Not applied: updates disabled' }, cleanupSuccess]);
+  const daily = scenario([{ ...syncSuccess, status: 'disabled', error: 'Not applied: updates disabled' }, cleanupSuccess]);
   daily.context.allowWrites = false;
   daily.context.allowCleanupWrites = true;
   assert.equal(await daily.run(), 0);
-  assert.deepEqual(daily.calls, ['status', 'sync', 'cleanup']);
+  assert.deepEqual(daily.calls, ['sync', 'cleanup']);
 });
 
 test('default-off automation reports disabled operations without reading old production state', async () => {
@@ -165,10 +157,11 @@ test('default-off automation reports disabled operations without reading old pro
   ]);
   daily.context.allowWrites = false;
   daily.context.allowCleanupWrites = false;
+  daily.context.repository.snapshot = async () => assert.fail('Both gates are disabled');
   assert.equal(await daily.run(), 0);
   assert.deepEqual(daily.calls, ['sync', 'cleanup']);
   assert.ok(daily.reports.every(report => (report as { status: string; configurationRevision: string }).status === 'disabled'
-    && (report as { configurationRevision: string }).configurationRevision === 'current-config'));
+    && (report as { configurationRevision: string }).configurationRevision !== 'unavailable'));
 });
 
 test('production manual and scheduled writes share disabled gates and retain the current configuration revision', async () => {
@@ -195,4 +188,40 @@ test('production manual and scheduled writes share disabled gates and retain the
   assert.ok(reports.every(result => result.status === 'disabled' && result.configurationRevision !== 'unavailable'));
   assert.equal(env.writes.length, 0);
   assert.equal(env.requests.length, 0);
+});
+
+test('Actions entry writes the schedule preflight failure to the summary and JSON artifact', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'rules-actions-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const configuration = await rulesEnvironment('/unused', 'main').context.readConfiguration();
+  const response = join(directory, 'configuration.json');
+  await writeFile(response, JSON.stringify({ encoding: 'base64', content: Buffer.from(configuration.content).toString('base64') }));
+  await writeFile(join(directory, 'gh'), `#!/bin/sh
+case "$2" in
+  repos/wangyingang/sing-box-config-manager/commits/main) printf '%s' '{"sha":"${configuration.revision}"}' ;;
+  repos/wangyingang/sing-box-config-manager/contents/*) cat "$RULE_TEST_CONFIGURATION" ;;
+  repos/wangyingang/sing-box-rule-artifacts) printf '%s' '{"private":false}' ;;
+  repos/wangyingang/sing-box-rule-artifacts/git/ref/heads/candidates) echo 'journal is unreadable' >&2; exit 1 ;;
+  *) echo "unexpected gh request: $2" >&2; exit 1 ;;
+esac
+`, { mode: 0o700 });
+  const summaryPath = join(directory, 'summary.md'), resultPath = join(directory, 'result.json');
+  const execute = promisify(execFile);
+  await assert.rejects(execute(process.execPath, ['--import', 'tsx', 'src/rule-workflow.ts'], {
+    env: { ...process.env, PATH: `${directory}:${process.env.PATH}`, RULE_TEST_CONFIGURATION: response,
+      RULE_EVENT_NAME: 'schedule', RULE_TARGET: 'main', RULE_CONFIG_BRANCH: 'main', RULE_UPDATE_ENABLED: 'true', RULE_CLEANUP_ENABLED: 'false',
+      RULE_RESULT_PATH: resultPath, GITHUB_STEP_SUMMARY: summaryPath, SING_BOX_BINARY: undefined, GH_TOKEN: undefined, GITHUB_TOKEN: undefined },
+  }), { code: 1 });
+  const result = JSON.parse(await readFile(resultPath, 'utf8'));
+  assert.equal(result.event, 'schedule');
+  assert.equal(result.exitCode, 1);
+  assert.deepEqual(result.results.map((row: { operation: string }) => row.operation), ['schedule-preflight']);
+  assert.equal(result.results[0].status, 'failed');
+  assert.equal(result.results[0].configurationRevision, configuration.revision);
+  assert.match(result.results[0].error, /journal is unreadable/);
+  assert.equal(result.results[0].verified, undefined);
+  const summary = await readFile(summaryPath, 'utf8');
+  const report = summary.split('```json\n')[1].split('\n```')[0];
+  assert.deepEqual(JSON.parse(report), result.results[0]);
+  assert.match(summary, /Overall result: failed/);
 });

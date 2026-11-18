@@ -29,7 +29,10 @@ export function disabledRulesResult(loaded: LoadedRules, operation: RulesResult[
     status: 'disabled', exitCode: 0, results: [], error: `${gate} is disabled; configuration has not been applied (未应用)` };
 }
 
-export function rulesReport(session: RulesSession, operation: RulesResult['operation'], results: RuleResult[]): RulesResult {
+type ReportOperation = RulesResult['operation'] | 'schedule-preflight';
+type OperationReport<Operation extends ReportOperation> = Omit<RulesResult, 'operation'> & { operation: Operation };
+
+export function rulesReport<Operation extends ReportOperation>(session: RulesSession, operation: Operation, results: RuleResult[]): OperationReport<Operation> {
   const pending = results.some(result => result.status === 'pending') || Boolean(session.journal.pendingDelivery)
     || session.journal.maintenance === 'maintenance'
     || Object.values(session.journal.quarantinedCandidates ?? {}).some(candidate => !candidate.logicalId);
@@ -42,7 +45,8 @@ export function rulesReport(session: RulesSession, operation: RulesResult['opera
       ? { error: 'RULE_MIGRATION_PENDING: retained candidate ownership is unresolved' } : {}) };
 }
 
-export function rulesFailure(operation: RulesResult['operation'], request: RulesRequest, error: unknown, loaded?: LoadedRules): RulesResult {
+export function rulesFailure<Operation extends ReportOperation>(operation: Operation, request: RulesRequest, error: unknown,
+  loaded?: LoadedRules): OperationReport<Operation> {
   const message = error instanceof Error ? error.message : String(error);
   return { operation, dryRun: Boolean(request.dryRun), configurationRevision: loaded?.observed.revision ?? 'unavailable',
     configurationOrigin: loaded?.observed.origin ?? 'unavailable',
@@ -65,17 +69,49 @@ export async function addCurrentFacts(session: RulesSession, results: RuleResult
   return stable;
 }
 
+async function observeRules(loaded: LoadedRules) {
+  const session = await openRulesSession(loaded);
+  const stable = await session.stable();
+  const deliveries = await readRuleDeliveries(stable);
+  const definitions = new Map(loaded.configuration.ruleSets.map(rule => [rule.id, rule]));
+  const ids = [...new Set([...definitions.keys(), ...Object.entries(session.journal.rules)
+    .filter(([, rule]) => rule.lifecycle !== 'deleted').map(([id]) => id), ...deliveries.keys()])];
+  return { session, stable, deliveries, definitions, ids, observedHeads: { journal: session.snapshot.head, stable: stable.head } };
+}
+
+interface SchedulePreflight extends OperationReport<'schedule-preflight'> {
+  maintenance?: RulesSession['journal']['maintenance'];
+  verified?: string[];
+  continueWith?: 'cleanup' | 'sync';
+  results: (RuleResult & { pendingOperation?: string })[];
+}
+
+/** The schedule routes on shared state and current delivery; candidate verification belongs to the operation that needs it. */
+export async function readSchedulePreflight(request: { context: LoadedRules['context'] }): Promise<SchedulePreflight> {
+  let loaded: LoadedRules | undefined;
+  try {
+    loaded = await loadRulesRequest(request);
+    const { session, stable, deliveries, ids, observedHeads } = await observeRules(loaded);
+    const { maintenance, pendingDelivery } = session.journal;
+    const results: SchedulePreflight['results'] = [];
+    for (const id of ids) {
+      const accepted = await observedRule(session, id, stable);
+      const pendingOperation = pendingDelivery?.logicalId === id ? pendingDelivery.id : undefined;
+      results.push({ id, current: deliveries.get(id), control: accepted?.control, pendingOperation,
+        status: pendingOperation ? 'pending' : accepted?.lastFailure ? 'failed' : 'unchanged', error: accepted?.lastFailure });
+    }
+    return { ...rulesReport(session, 'schedule-preflight', results), results, maintenance, observedHeads,
+      verified: ['official-configuration', 'journal-structure', 'stable-files'],
+      continueWith: maintenance === 'maintenance' ? 'cleanup' : undefined };
+  } catch (error) { return rulesFailure('schedule-preflight', request, error, loaded); }
+}
+
 export async function getRulesStatus(request: RulesRequest & { id?: string } = {}): Promise<RulesResult & { rules?: RuleStatus[]; maintenance?: string; quarantinedCandidates?: RulesSession['journal']['quarantinedCandidates'] }> {
   let loaded: LoadedRules | undefined;
   try {
     if (request.draft !== undefined || request.dryRun) throw new Error('status is read-only and does not accept draft or dry-run');
     loaded = await loadRulesRequest(request);
-    const session = await openRulesSession(loaded);
-    const stable = await session.stable();
-    const deliveries = await readRuleDeliveries(stable);
-    const definitions = new Map(session.loaded.configuration.ruleSets.map(rule => [rule.id, rule]));
-    const ids = [...new Set([...definitions.keys(), ...Object.entries(session.journal.rules)
-      .filter(([, rule]) => rule.lifecycle !== 'deleted').map(([id]) => id), ...deliveries.keys()])];
+    const { session, stable, deliveries, definitions, ids, observedHeads } = await observeRules(loaded);
     if (request.id && !ids.includes(request.id)) throw new Error(`Unknown rule set: ${request.id}`);
     const rules: RuleStatus[] = [];
     for (const id of ids.filter(id => !request.id || id === request.id)) {
@@ -132,6 +168,6 @@ export async function getRulesStatus(request: RulesRequest & { id?: string } = {
     return { ...rulesReport(session, 'status', rules), rules, maintenance: session.journal.maintenance, quarantinedCandidates: session.journal.quarantinedCandidates,
       ...(cleanup && { cleanup: { phase: 'phase' in cleanup ? cleanup.phase : 'cleanup' as const,
         maintenanceId: cleanup.id, plan: cleanup.plan, continueWith: 'cleanup' as const } }),
-      observedHeads: { journal: session.snapshot.head, stable: stable.head } };
+      observedHeads };
   } catch (error) { return rulesFailure('status', request, error, loaded); }
 }

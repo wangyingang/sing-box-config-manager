@@ -43,7 +43,9 @@ main 的 sync/pin/resume 写入受 `RULE_UPDATE_ENABLED` 控制，cleanup 写入
 
 配置 push 调用完整 sync；schedule 正常先 sync 后 cleanup，存在活动维护时先 cleanup 续做，确认恢复可写后再同步。自动编排保留各次应用服务结果，并聚合退出码；独立单集失败不会回滚其他成功，也不能被之后的 cleanup 成功覆盖。共享状态未明或维护仍未完成时停止相关写入；pending/partial/failed 使整个运行非成功。手工 sync 不暗中清理，手工 cleanup 不更新上游，不公开 daily 或内部维护阶段入口。
 
-仅关联已登记交付、且无整体或逐集共享异常的 status pending，可以路由到 sync 恢复。此分类只决定是否调用应用服务；sync 重新读取持久状态并核对原操作、回执、摘要、意图和 heads/CAS，不因此获得绕过保护的写权限。sync 仍 pending 或共享状态未明时停止后续 cleanup；更新 disabled 也不能证明此前登记交付已完成。缺少登记依据、损坏、不可读、目标不符及迁移归属未决状态继续阻断。
+每日 Actions 的内部 `schedule-preflight` 报告从正式配置、journal 和当前稳定交付获得的观察结果。`verified` 列出本次完成的检查，`observedHeads` 记录观察时的 Git heads，`results` 可包含当前交付、更新控制和待恢复交付登记。历史候选可选性由人工 status 审计。
+
+活动维护先交给 cleanup，确认恢复可写后再调用 sync。仅关联已登记交付、且无整体或逐集共享异常的 pending 可以路由到 sync 恢复。sync 重新读取持久状态并核对原操作、回执、摘要、意图和 heads/CAS。sync 仍 pending、共享状态未明或更新门禁关闭导致登记交付仍待恢复时，停止后续 cleanup。缺少登记依据、损坏、不可读、目标不符及迁移归属未决状态继续阻断。
 
 Actions 的 main 目标使用 `RULE_ARTIFACT_TOKEN`；acceptance-* 目标只使用独立 `RULE_ACCEPTANCE_TOKEN`，缺少时失败，不回落生产凭据。源码配置读取使用工作流 `GITHUB_TOKEN`。隔离 token 只授予产物仓库 Contents 读写权限，但权限范围仍是仓库；分支范围由可信目标校验约束。Secret 的设置位置与最小权限见[模块凭据说明](../README.md#actions-自动与手工运行)。
 

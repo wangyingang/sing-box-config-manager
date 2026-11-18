@@ -1,5 +1,5 @@
 name: Rule operations
-run-name: Rules ${{ github.event_name }} · ${{ github.event_name == 'push' && github.ref_name || inputs.target || 'main' }} · ${{ inputs.operation || 'sync' }}
+run-name: Rules ${{ github.event_name }} · ${{ github.event_name == 'push' && github.ref_name || inputs.target || 'main' }} · ${{ github.event_name == 'schedule' && 'preflight + sync + cleanup' || inputs.operation || 'sync' }}
 
 on:
   push:

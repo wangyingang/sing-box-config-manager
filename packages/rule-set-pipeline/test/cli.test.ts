@@ -14,7 +14,7 @@ const exec = promisify(execFile);
 test('root command exposes only the five manager operations', async () => {
   const { stdout } = await exec('corepack', ['pnpm', '--silent', 'rules', '--help'], { cwd: '../..' });
   for (const operation of ['status', 'sync', 'pin', 'resume', 'cleanup']) assert.match(stdout, new RegExp(`pnpm rules ${operation}`));
-  for (const old of ['update', 'rebuild', 'check-now', 'activate', 'rollback', 'initialize', 'maintenance-enter', 'maintenance-prepare', 'maintenance-switch', 'maintenance-resume', 'maintenance-abort']) {
+  for (const old of ['schedule-preflight', 'update', 'rebuild', 'check-now', 'activate', 'rollback', 'initialize', 'maintenance-enter', 'maintenance-prepare', 'maintenance-switch', 'maintenance-resume', 'maintenance-abort']) {
     assert.ok(!stdout.includes(`pnpm rules ${old}`));
     await assert.rejects(exec(process.execPath, ['--import', 'tsx', 'src/cli.ts', old, '--json']),
       (error: { code?: number; stdout?: string }) => error.code === 1 && JSON.parse(error.stdout!).status === 'failed');

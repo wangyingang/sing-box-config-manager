@@ -1,6 +1,7 @@
 import { appendFileSync, writeFileSync } from 'node:fs';
 import { runRulesCli } from './cli.js';
 import { createGitHubRulesContext, type RulesContext } from './rules-context.js';
+import { readSchedulePreflight } from './rules-status.js';
 
 export interface RuleWorkflowRequest {
   target: string;
@@ -16,8 +17,6 @@ interface WorkflowResult {
   status: string;
   exitCode: number;
   error?: string;
-  maintenance?: string;
-  rules?: { status: string; pendingOperation?: string; error?: string }[];
   results?: { status: string; error?: string }[];
 }
 
@@ -65,13 +64,13 @@ function uncertainSharedState(result: WorkflowResult) {
     || result.results?.some(row => row.status === 'pending' || sharedStateException(row));
 }
 
-// Status only routes a registered delivery to sync. The service rechecks the
+// Preflight only routes a registered delivery to sync. The service rechecks the
 // operation, receipts, intent and CAS before it can make any shared write.
-function registeredDeliveryRecovery(result: WorkflowResult) {
-  const pending = result.rules?.filter(row => row.status === 'pending') ?? [];
+function registeredDeliveryRecovery(result: Awaited<ReturnType<typeof readSchedulePreflight>>) {
+  const pending = result.results.filter(row => row.status === 'pending');
   return result.status === 'pending' && !result.error && pending.length > 0
     && pending.every(row => Boolean(row.pendingOperation))
-    && !result.rules?.some(sharedStateException);
+    && !result.results.some(sharedStateException);
 }
 
 /** Trigger orchestration is internal; daily is deliberately not a sixth manager operation. */
@@ -80,7 +79,7 @@ export async function runRuleAutomation(request: { event: 'push' | 'schedule'; t
   validTarget(request.target);
   const execution = context ?? await createGitHubRulesContext();
   if (execution.targetBranch !== request.target) throw new Error('Workflow context and target disagree');
-  async function operation(name: 'status' | 'sync' | 'cleanup') {
+  async function operation(name: 'sync' | 'cleanup') {
     let result: WorkflowResult | undefined;
     const exitCode = await execute({ operation: name, target: request.target }, text => {
       report(text);
@@ -99,16 +98,18 @@ export async function runRuleAutomation(request: { event: 'push' | 'schedule'; t
     const cleanup = await operation('cleanup');
     return sync.exitCode || cleanup.exitCode ? 1 : 0;
   }
-  const observed = await operation('status');
+  const observed = await readSchedulePreflight({ context: execution });
+  const recoverDelivery = registeredDeliveryRecovery(observed);
+  report(JSON.stringify({ ...observed, ...(recoverDelivery && observed.maintenance !== 'maintenance' && { continueWith: 'sync' }) }));
   if (observed.maintenance === 'maintenance') {
     const resumed = await operation('cleanup');
     // A disabled cleanup is not evidence that maintenance was completed.
     if (resumed.exitCode !== 0 || resumed.status !== 'success') return 1;
-  } else if (uncertainSharedState(observed) && !registeredDeliveryRecovery(observed)) {
+  } else if (!observed.observedHeads || (uncertainSharedState(observed) && !recoverDelivery)) {
     return 1;
   }
   const sync = await operation('sync');
-  if (registeredDeliveryRecovery(observed) && sync.status === 'disabled') return 1;
+  if (recoverDelivery && sync.status === 'disabled') return 1;
   // An ordinary per-rule source failure does not block a safe cleanup. A shared
   // conflict or unknown result must be resolved before another write is attempted.
   if (uncertainSharedState(sync)) return 1;

@@ -30,7 +30,7 @@ test('自动编排沿用固定与恢复控制，续做清理后才访问上游�
   env.upstream({ openai: 'domain:automatic-new.example', anthropic: 'domain:automatic-anthropic.example' });
   const daily = await automatic('schedule');
   assert.equal(daily.code, 0, JSON.stringify(daily));
-  assert.deepEqual(daily.results.map(result => result.operation), ['status', 'sync', 'cleanup']);
+  assert.deepEqual(daily.results.map(result => result.operation), ['schedule-preflight', 'sync', 'cleanup']);
   const sync = daily.results[1];
   const pinned = sync.results.find(row => row.id === 'openai')!;
   assert.equal(pinned.status, 'pinned-skipped');
@@ -55,7 +55,7 @@ test('自动编排沿用固定与恢复控制，续做清理后才访问上游�
   env.clock('2026-11-17T00:00:00.000Z');
   const recovered = await automatic('schedule');
   assert.equal(recovered.code, 0, JSON.stringify(recovered));
-  assert.deepEqual(recovered.results.map(result => result.operation), ['status', 'cleanup', 'sync', 'cleanup']);
+  assert.deepEqual(recovered.results.map(result => result.operation), ['schedule-preflight', 'cleanup', 'sync', 'cleanup']);
   assert.deepEqual(recovered.results[1].cleanup!.plan, frozen);
   assert.equal((await env.journal()).maintenance, 'open');
 
@@ -67,7 +67,7 @@ test('自动编排沿用固定与恢复控制，续做清理后才访问上游�
   env.upstream({ openai: 'domain:successful-peer.example' });
   const failed = await automatic('schedule');
   assert.equal(failed.code, 1, JSON.stringify(failed));
-  assert.deepEqual(failed.results.map(result => result.operation), ['status', 'sync', 'cleanup']);
+  assert.deepEqual(failed.results.map(result => result.operation), ['schedule-preflight', 'sync', 'cleanup']);
   assert.equal(failed.results[1].status, 'partial');
   assert.equal(failed.results[1].results.find(row => row.id === 'openai')!.status, 'delivered');
   assert.equal(failed.results[1].results.find(row => row.id === 'anthropic')!.status, 'failed');
