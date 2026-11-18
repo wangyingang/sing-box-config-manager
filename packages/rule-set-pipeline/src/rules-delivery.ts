@@ -72,6 +72,13 @@ async function plannedDeliveryFiles(session: RulesSession, pending: PendingDeliv
 const evidenceFor = (files: RuleWrites) => Object.fromEntries(Object.entries(files).map(([path, bytes]) =>
   [path, bytes === null ? null : { sha256: sha256(bytes), byteLength: bytes.length }]));
 
+export function matchesRuleDelivery(current: RuleDelivery, candidate: RuleCandidate, files: Record<string, Buffer>) {
+  return current.logicalId === candidate.logicalId && current.candidateId === candidate.id
+    && current.versionId === candidate.versionId && current.publishedAt === candidate.publishedAt
+    && current.candidateEvidenceUrl === candidate.evidenceUrl && isDeepStrictEqual(current.source, candidate.source)
+    && isDeepStrictEqual(current.files, evidenceFor(files));
+}
+
 async function receiptMatches(snapshot: PublicationSnapshot, id: string) {
   const bytes = await snapshot.read(RULE_RECEIPT_PATH);
   const receipt = bytes && JSON.parse(bytes.toString());
@@ -136,7 +143,7 @@ export async function recoverRuleDelivery(session: RulesSession) {
     if (!isDeepStrictEqual(evidenceFor(files), pending.changes)) throw new Error('RULE_WRITE_PENDING: registered content changed');
     files[RULE_RECEIPT_PATH] = encodeRecord({ schemaVersion: 2, id: pending.id });
     try {
-      if (session.shared) deliveryCommit = await session.save(files);
+      if (session.shared) await session.save(files);
       else deliveryCommit = await repository.commit(session.loaded.context.targetBranch, pending.stableHead, files,
         `交付规则 ${pending.logicalId}：${pending.kind}`, session.guard);
     } catch (error) {

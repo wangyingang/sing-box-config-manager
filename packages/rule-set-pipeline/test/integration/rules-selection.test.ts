@@ -4,6 +4,7 @@ import { PublicationWriteError } from '../../src/publication-repository.js';
 import { encodeRecord, parseRulesJournal, RULE_STATE_PATH, type RuleCandidate } from '../../src/rules-model.js';
 import { syncRules, pinRuleVersion } from '../../src/rules-operations.js';
 import { getRulesStatus } from '../../src/rules-status.js';
+import { immutableUrl } from '../../src/publication.js';
 import { sha256 } from '../../src/release.js';
 import { rulesEnvironment } from '../fixtures/rules-environment.js';
 import { cleanupEnvironment } from '../fixtures/cleanup-environment.js';
@@ -109,6 +110,10 @@ test('候选证据边界逐项拒绝损坏；status 只读且 pin 保留当前�
     ['binary-term-count', /Invalid Artifact Manifest/, d => d.change('manifest.json', m => { m.artifacts[1].termCount = 1; })],
     ['version', /stage or version differs/, d => d.change('readback.json', r => { r.versionId = 'other'; })],
     ['files-commit', /stage or version differs/, d => d.change('readback.json', r => { r.filesCommit = 'a'.repeat(40); })],
+    ['missing-publication-commit', /Git publication stage missing/, d => d.changeCandidate(c => {
+      c.evidenceCommit = 'a'.repeat(40);
+      c.evidenceUrl = immutableUrl(c.evidenceCommit, `candidates/${c.id}/readback.json`);
+    })],
     ['source-binding', /source binding mismatch/, d => d.changeCandidate(c => { c.source.repository = 'other/repo'; })],
     ['tools', /Build identity mismatch/, d => d.change('build.json', b => { b.tools.yaml = 'wrong'; })],
     ['build-identity', /Configured build identity/, d => d.change('build.json', b => { b.id = 'china-ip'; })],
@@ -128,7 +133,7 @@ test('候选证据边界逐项拒绝损坏；status 只读且 pin 保留当前�
     assert.equal(listed.selectable, false); assert.match(listed.reason!, expected);
     // Representative application rejection, without rerunning native builds
     // for every structural variant already proven at the evidence boundary.
-    if (['wrong-rule', 'missing-readback.json', 'source-binding', 'retained-replacement'].includes(fault)) {
+    if (['wrong-rule', 'missing-readback.json', 'source-binding', 'retained-replacement', 'missing-publication-commit'].includes(fault)) {
       const result = await pinRuleVersion({ context: env.context, id: candidate.logicalId, version: candidate.versionId! });
       assert.equal(result.status, 'failed'); assert.match(result.results[0].error!, expected);
     }
@@ -186,6 +191,34 @@ test('纯追溯异常与辅助 JSON 重排不阻断 status、成功输入复用�
   assert.deepEqual(pin.readbackRequests, raw);
   assert.ok(raw.every(url => !url.includes('/candidates/')));
   assert.deepEqual(gitReads.filter(path => /\/(?:source|conversion-report)\.json$/.test(path)), []);
+});
+
+test('status 报告悬空交付，重复 pin 修正已固定版本的交付记录', async () => {
+  const env = await versions();
+  const current = env.first.results[0].current!;
+  const request = { context: env.context, id: current.logicalId };
+  const pin = () => pinRuleVersion({ ...request, version: current.versionId! });
+  assert.equal((await pin()).status, 'success');
+  const path = `stable/${current.logicalId}/activation.json`;
+  const snapshot = await env.context.repository.snapshot();
+  const bytes = (await snapshot.read(path))!;
+  const record = JSON.parse(bytes.toString());
+  const tree = env.trees.get(snapshot.head)!;
+  tree.set(path, encodeRecord({ ...record, candidateId: '1'.repeat(36) }));
+  const status = await getRulesStatus(request);
+  const reported = status.rules!.find(rule => rule.id === current.logicalId)!;
+  assert.equal(reported.status, 'failed');
+  assert.match(reported.deliveryIssue!, /no retained candidate/);
+  assert.deepEqual(status.readbackRequests, []);
+
+  tree.set(path, encodeRecord({ ...record, versionId: 'wrong-version' }));
+  const repaired = await pin();
+  assert.equal(repaired.status, 'success', JSON.stringify(repaired));
+  assert.equal(repaired.results[0].current?.versionId, current.versionId);
+  assert.equal(repaired.readbackRequests?.length, 2);
+  const repeated = await pin();
+  assert.equal(repeated.status, 'success', JSON.stringify(repeated));
+  assert.deepEqual(repeated.readbackRequests, []);
 });
 
 test('摘要随 SRS 篡改更新仍过不了真实原生 pin；域名与 CIDR 当前及兄弟集不变', async t => {

@@ -4,7 +4,7 @@ import { candidateStableFiles } from './activation.js';
 import type { RuleDefinition } from './configuration.js';
 import { guardRulesConfiguration, loadRulesRequest, rulesBinary, type LoadedRules, type RulesRequest } from './rules-context.js';
 import { buildPreparedRules, buildRulesInput, resolveRulesInput, publishRuleBuild, recoverPublishedRuleCandidate, verifyRuleCandidate } from './rules-build.js';
-import { deleteRuleDelivery, deliverRuleVersion, readRuleDeliveries, recoverRuleDelivery, ruleSubscription, ensureRulePathAvailable } from './rules-delivery.js';
+import { deleteRuleDelivery, deliverRuleVersion, readRuleDeliveries, recoverRuleDelivery, ruleSubscription, ensureRulePathAvailable, matchesRuleDelivery } from './rules-delivery.js';
 import { definitionRevision, inputBindingRevision, type ManagedRule, type RuleCandidate, type RuleResult, type RulesResult, type SuccessfulRuleInput } from './rules-model.js';
 import { openRulesSession, type RulesSession } from './rules-session.js';
 import { findReusableBuild, reusableInputBaseline, reuseSuccessfulInput, reuseVerifiedInput, unchangedBuiltInput } from './rules-success.js';
@@ -307,7 +307,7 @@ export async function pinRuleVersion(request: RulesRequest & { id: string; versi
     // definition, so an invalid pin is a genuinely read-only failure.
     await ensureRulePathAvailable(session, definition);
     const verified = await verifyRuleCandidate(session, candidate, rulesBinary(session.loaded.context));
-    candidateStableFiles(verified, ruleSubscription(session, afterRule, current), definition, session.loaded.context.targetBranch);
+    const files = candidateStableFiles(verified, ruleSubscription(session, afterRule, current), definition, session.loaded.context.targetBranch);
     if (request.dryRun) return operationReport(session, 'pin', [{ id: request.id, status: 'planned',
       changes: ['deliver-selected-version', 'stop-automatic-updates'], candidate: { versionId: candidate.versionId, publishedAt: candidate.publishedAt },
       verified: ['candidate-git', 'native', 'subscription'], reliedOn: ['historical-candidate-publication'], unverified: ['stable-commit', 'HTTPS-readback'] }]);
@@ -319,7 +319,7 @@ export async function pinRuleVersion(request: RulesRequest & { id: string; versi
     const existing = ownRule(session, request.id);
     if (existing?.control.mode === 'pinned' && existing.control.candidateId === candidate.id
       && existing.inputBindingRevision === afterRule.inputBindingRevision && existing.definitionRevision === afterRule.definitionRevision
-      && current?.candidateId === candidate.id) return operationReport(session, 'pin', [{ id: request.id, status: 'pinned', changes: [], verified: ['candidate-git', 'native', 'subscription'],
+      && current && matchesRuleDelivery(current, candidate, files)) return operationReport(session, 'pin', [{ id: request.id, status: 'pinned', changes: [], verified: ['candidate-git', 'native', 'subscription'],
         reliedOn: ['historical-candidate-publication', 'historical-stable-delivery'] }]);
     afterRule.control = { mode: 'pinned', revision: randomUUID(), inputBindingRevision: afterRule.inputBindingRevision, candidateId: candidate.id };
     delete afterRule.lastFailure;

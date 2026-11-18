@@ -220,12 +220,13 @@ for (const stage of ['evidence', 'metadata'] as const) test(`${stage}阶段已�
   t.after(() => rm(directory, { recursive: true, force: true }));
   const movedBinary = join(directory, 'sing-box'); await copyFile(binary!, movedBinary);
   const env = rulesEnvironment(binary!); const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
-  const repository = env.context.repository; const download = repository.download;
-  if (stage === 'evidence') repository.download = async url => { if (url.endsWith('/readback.json')) throw new Error('readback unavailable'); return download(url); };
-  const commit = repository.commit;
-  if (stage === 'metadata') repository.commit = async (...args) => {
+  const repository = env.context.repository, commit = repository.commit;
+  const stageFile = stage === 'evidence' ? '/readback.json' : '/build.json';
+  repository.commit = async (...args) => {
     const head = await commit(...args);
-    if (Object.keys(args[2]).some(path => path.endsWith('/build.json'))) throw new Error('process stopped after metadata commit');
+    if (Object.keys(args[2]).some(path => path.endsWith(stageFile))) {
+      throw new Error(`RULE_WRITE_CONFLICT: process stopped after ${stage} commit`);
+    }
     return head;
   };
   assert.equal((await syncRules({ context: env.context })).status, 'failed');
@@ -236,7 +237,7 @@ for (const stage of ['evidence', 'metadata'] as const) test(`${stage}阶段已�
   const evidence = await snapshot.read(`candidates/${candidate.id}/readback.json`);
   const build = await snapshot.read(`candidates/${candidate.id}/build.json`); assert.ok(build);
   if (stage === 'evidence') assert.ok(evidence);
-  repository.download = download; repository.commit = commit; env.failSource(stage === 'evidence'); env.requests.length = 0;
+  repository.commit = commit; env.failSource(stage === 'evidence'); env.requests.length = 0;
   const resumed = await syncRules({ context: { ...env.context, binary: movedBinary } });
   assert.equal(resumed.status, 'success', JSON.stringify(resumed));
   assert.equal(resumed.results[0].current?.candidateId, candidate.id);

@@ -1,12 +1,10 @@
-import { isDeepStrictEqual } from 'node:util';
 import { candidateTraceFiles } from './candidate-publication.js';
 import { candidateStableFiles } from './activation.js';
 import { ARTIFACT_REPOSITORY } from './publication.js';
 import { loadRulesRequest, type LoadedRules, type RulesRequest } from './rules-context.js';
 import { openRulesSession, type RulesSession } from './rules-session.js';
-import { readRuleDeliveries, observedRule, ruleSubscription, ensureRulePathAvailable } from './rules-delivery.js';
+import { readRuleDeliveries, observedRule, ruleSubscription, ensureRulePathAvailable, matchesRuleDelivery } from './rules-delivery.js';
 import { verifyRuleCandidate } from './rules-build.js';
-import { sha256 } from './release.js';
 import { definitionRevision, type RuleResult, type RulesResult } from './rules-model.js';
 
 export interface RuleStatus extends RuleResult {
@@ -19,6 +17,7 @@ export interface RuleStatus extends RuleResult {
     reason?: string; missingTraceFiles?: string[] }[];
   candidateCount: number;
   pendingOperation?: string;
+  deliveryIssue?: string;
 }
 
 /** A closed environment gate does not read or migrate the artifact journal. */
@@ -86,6 +85,9 @@ export async function getRulesStatus(request: RulesRequest & { id?: string } = {
       const expectedSource = definition && session.loaded.configuration.sources[definition.source];
       const current = deliveries.get(id);
       const candidates: RuleStatus['candidates'] = [];
+      const currentCandidate = current && session.journal.candidates[current.candidateId];
+      let deliveryIssue = current && (currentCandidate?.logicalId !== id || currentCandidate.status !== 'verified')
+        ? 'Current delivery has no retained candidate for this rule' : undefined;
       for (const candidate of Object.values(session.journal.candidates).filter(candidate => candidate.logicalId === id)) {
         let reason = candidate.error ?? candidate.migrationPending;
         let selectable = candidate.status === 'verified' && Boolean(candidate.versionId) && !candidate.migrationPending;
@@ -97,14 +99,13 @@ export async function getRulesStatus(request: RulesRequest & { id?: string } = {
             const subscription = ruleSubscription(session, { definition }, current);
             const files = candidateStableFiles(verified, subscription, definition, session.loaded.context.targetBranch);
             await ensureRulePathAvailable(session, definition, stable);
-            if (current?.candidateId === candidate.id) {
-              const expected = Object.fromEntries(Object.entries(files).map(([path, bytes]) =>
-                [path, { sha256: sha256(bytes), byteLength: bytes.length }]));
-              if (!isDeepStrictEqual(current.files, expected) || !isDeepStrictEqual(current.source, candidate.source)
-                || current.versionId !== candidate.versionId || current.publishedAt !== candidate.publishedAt
-                || current.candidateEvidenceUrl !== candidate.evidenceUrl) throw new Error('Current delivery differs from its retained candidate');
+            if (current?.candidateId === candidate.id && !matchesRuleDelivery(current, candidate, files)) {
+              throw new Error('Current delivery differs from its retained candidate');
             }
-          } catch (error) { selectable = false; reason = String(error); }
+          } catch (error) {
+            selectable = false; reason = String(error);
+            if (current?.candidateId === candidate.id) deliveryIssue = reason;
+          }
         }
         const missingTraceFiles = candidateTraceFiles.filter(file => !session.snapshot.paths.includes(`candidates/${candidate.id}/${file}`));
         candidates.push({ id: candidate.id, versionId: candidate.versionId, publishedAt: candidate.publishedAt,
@@ -113,19 +114,19 @@ export async function getRulesStatus(request: RulesRequest & { id?: string } = {
           ...(missingTraceFiles.length && { missingTraceFiles }) });
       }
       for (const candidate of Object.values(session.journal.quarantinedCandidates ?? {}).filter(candidate => candidate.logicalId === id)) {
-        const missingTraceFiles = candidateTraceFiles.filter(file => !session.snapshot.paths.includes(`candidates/${candidate.id}/${file}`));
         candidates.push({ id: candidate.id, source: undefined, current: false, selectable: false, reason: candidate.reason });
       }
       candidates.sort((a, b) => (b.publishedAt ?? '').localeCompare(a.publishedAt ?? '') || a.id.localeCompare(b.id));
       const configurationDifference = !definition ? 'delete' : !accepted || accepted.lifecycle === 'deleted' ? 'add'
         : definitionRevision(expectedSource!, definition) !== accepted.definitionRevision ? 'change' : 'none';
-      rules.push({ id, status: session.journal.pendingDelivery?.logicalId === id ? 'pending' : accepted?.lastFailure ? 'failed' : 'unchanged',
+      rules.push({ id, status: session.journal.pendingDelivery?.logicalId === id ? 'pending' : deliveryIssue || accepted?.lastFailure ? 'failed' : 'unchanged',
         current, control: accepted?.control, expectedSource,
         successfulInput: session.journal.rules[id]?.successfulInput, deliveryState: current ? 'delivered' : 'not-delivered',
         lifecycle: accepted?.lifecycle, acceptedConfigurationRevision: accepted?.configurationRevision, configurationDifference,
         stableUrls: Object.keys(current?.files ?? {}).map(path => `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${session.loaded.context.targetBranch}/${path}`),
         candidates, candidateCount: candidates.filter(candidate => candidate.selectable).length,
-        verified: ['stable-files', 'candidate-git-eligibility'], error: accepted?.lastFailure, pendingOperation: session.journal.pendingDelivery?.logicalId === id ? session.journal.pendingDelivery.id : undefined });
+        verified: ['stable-files', ...(!deliveryIssue ? ['candidate-git-eligibility'] : [])],
+        error: deliveryIssue ?? accepted?.lastFailure, deliveryIssue, pendingOperation: session.journal.pendingDelivery?.logicalId === id ? session.journal.pendingDelivery.id : undefined });
     }
     const cleanup = session.journal.cleanupRun ?? session.journal.cleanupCheckpoint;
     return { ...rulesReport(session, 'status', rules), rules, maintenance: session.journal.maintenance, quarantinedCandidates: session.journal.quarantinedCandidates,

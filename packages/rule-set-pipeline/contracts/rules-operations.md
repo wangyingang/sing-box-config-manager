@@ -29,7 +29,7 @@ Node 请求可选传入 `onProgress(event)`，事件为 `RulesProgress`（`stage
 
 逐集结果区分 delivered、unchanged、pinned-skipped、pinned、resumed、deleted、failed、pending、superseded、planned。正常固定跳过是成功；独立失败与成功并存为 partial；存在待核实提交或归属未知的隔离候选为 pending。`changes` 说明本次已完成或预览预计完成的变化。resume 后更新失败时，`automatic-updates-restored` 与 auto 控制说明解除固定已经持久化，不能把整次失败理解为仍被固定。
 
-通过上游文件身份省略正文时，`verified` 包含 `source-identity`、`retained-candidate`、`subscription` 和 `stable-files`，`reliedOn` 包含 `historical-normalized-content` 和 `historical-native`。读取正文后确认规范化内容相同时，`verified` 包含 `source` 与 `normalized-content`，`reliedOn` 只列出 `historical-native`。完整构建后确认无需切换时，`verified` 可以报告 `native`。
+通过上游文件身份省略正文时，`verified` 包含 `source-identity`、`retained-candidate`、`subscription` 和 `stable-files`，`reliedOn` 包含 `historical-normalized-content`、`historical-native` 和 `historical-candidate-publication`。读取正文后确认规范化内容相同时，`verified` 包含 `source` 与 `normalized-content`，`reliedOn` 包含 `historical-native` 和 `historical-candidate-publication`。完整构建后确认无需切换时，`verified` 可以报告 `native`。
 
 进度事件的 `source-identity` 阶段表示探测上游文件身份，`source` 表示读取和转换正文，`build` 表示开始构建及验证。
 
@@ -123,7 +123,7 @@ Git 对象读取优化只复用完整 Git SHA 指定的不可变内容，缓存�
 | cleanup 重建 | 每个保留候选在新 commit 的 JSON 与 SRS，切换后每组当前稳定分支入口的 JSON 与 SRS |
 | 恢复 | 按所处阶段补齐未完成的规则回读，已提交的稳定写入先核对原回执 |
 
-Git 中的候选登记和回读完成记录约束规则归属、来源绑定、版本和发布阶段。Manifest 和实际 JSON/SRS 约束字节、格式及用途。构建记录约束工具、策略和构建身份。稳定交付、保留关系和写入控制取自实际 Git 状态。候选资格无需读取 `source.json` 或 `conversion-report.json` 的正文。人工 status 通过路径盘点报告已发现的 `missingTraceFiles`，候选可选性仍由核心事实和产物决定。已存在的纯追溯文件在重建时原样复制。已知文件读取或复制失败时，维护计划保持可恢复状态。
+Git 中的候选登记和回读完成记录约束规则归属、来源绑定、版本和发布阶段。固定地址的 commit 由该阶段的 Git 路径历史核对。Manifest 和实际 JSON/SRS 约束字节、格式及用途。构建记录约束工具、策略和构建身份。稳定交付、保留关系和写入控制取自实际 Git 状态。候选资格无需读取 `source.json` 或 `conversion-report.json` 的正文。人工 status 通过路径盘点报告已发现的 `missingTraceFiles`，候选可选性仍由核心事实和产物决定。已存在的纯追溯文件在重建时原样复制。已知文件读取或复制失败时，维护计划保持可恢复状态。
 
 每次操作单独建立 HTTPS 字节缓存。只复用可信产物仓库中由完整 commit SHA 与路径定位、已经通过校验的字节。该操作要求校验的新规则地址首次真实 GET，即使内容摘要相同。稳定分支地址在 cleanup 切换后直接 GET。缓存最多保留 128 个地址及 64 MiB 字节，达到任一上限时按写入顺序淘汰，超限单文件直接校验。失败可重试，返回字节与缓存相互隔离。
 

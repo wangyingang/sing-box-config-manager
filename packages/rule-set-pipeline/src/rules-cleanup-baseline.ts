@@ -53,7 +53,7 @@ function tracePaths(snapshot: PublicationSnapshot, id: string) {
 
 async function verifyBaselineCandidate(snapshot: PublicationSnapshot, candidate: RuleCandidate, options: RulesBaselineVerification,
   verify: VerifyEvidence) {
-  const result = await verifyRuleCandidateInSnapshot(snapshot, candidate, options.targetBranch, options);
+  const result = await verifyRuleCandidateInSnapshot(snapshot, candidate, options.targetBranch, options.repository.lastChange, options);
   const files = candidateArtifactFiles(candidate.definition);
   for (const format of ['source', 'binary'] as const) {
     await verifyRuleFile(verify, immutableUrl(candidate.filesCommit!, `candidates/${candidate.id}/${files[format]}`),
@@ -163,7 +163,7 @@ export async function prepareRulesBaseline(options: RulesBaselineVerification & 
   for (const id of plan.retain.candidateIds) {
     const candidate = journal.candidates[id];
     if (!candidate) throw new Error(`Missing retained candidate: ${id}`);
-    const verified = await verifyRuleCandidateInSnapshot(source, candidate, targetBranch);
+    const verified = await verifyRuleCandidateInSnapshot(source, candidate, targetBranch, repository.lastChange);
     const layout = candidateArtifactFiles(candidate.definition);
     const prefix = `candidates/${id}/`;
     assets[prefix + layout.source] = verified.bytesByFormat.source;

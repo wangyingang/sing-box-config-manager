@@ -16,6 +16,7 @@ import { ARTIFACT_REPOSITORY, immutableUrl } from './publication.js';
 import { retainedCandidateDownload, type PublicationSnapshot } from './publication-repository.js';
 import { activationDigest, effectiveControl, manualControl, openManualActivation, registerManualActivation, type ActivationWriteReservation, type ObservedActivation } from './manual-activation.js';
 import { BASELINE_PATH, guardResultGeneration, type ActivationOperation } from './remote-state.js';
+import type { RulesRepository } from './rules-repository.js';
 import type { RuleCandidate } from './rules-model.js';
 import { activationRecord } from './remote-status.js';
 import { ActivationWriteError, githubActivation, type ActivationTransport } from './activation-transport.js';
@@ -49,6 +50,7 @@ function candidateLocation(url: string, file: string) {
 interface RetainedRuleCandidate {
   candidate: RuleCandidate;
   snapshot: PublicationSnapshot;
+  lastChange: RulesRepository['lastChange'];
 }
 
 /** Managed candidates use a retained Git snapshot. Historical tooling uses its original transport. */
@@ -164,6 +166,15 @@ export async function verifyCandidateEvidence(options: Partial<NativeBuildOption
   const files = { source: `${stem}.json`, binary: `${stem}.srs` };
   const sourceBytes = await remote(files.source, evidence.filesCommit);
   const srsBytes = await remote(files.binary, evidence.filesCommit);
+  if (retained) {
+    for (const [commit, file] of [[evidence.filesCommit, files.source], [evidence.filesCommit, files.binary],
+      [evidence.metadataCommit, 'manifest.json'], [location.commit, 'readback.json']]) {
+      const changed = await retained.lastChange(commit, `${prefix}/${file}`).catch(error => {
+        throw new Error(`CANDIDATE_UNAVAILABLE: Git publication stage missing: ${file}`, { cause: error });
+      });
+      requireThat(changed === commit, `CANDIDATE_UNAVAILABLE: Git publication stage differs: ${file}`);
+    }
+  }
   const json = JSON.parse(sourceBytes.toString());
   requireThat(json.version === 4, 'Candidate Source Format mismatch');
   const terms = readSourceTerms(json);

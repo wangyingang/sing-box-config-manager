@@ -75,7 +75,7 @@ export async function planRulesCleanup(session: RulesSession, refs: Ref[], froze
     if (action === 'retain') {
       const paths = candidateCoreFiles(candidate.definition).map(file => `candidates/${id}/${file}`);
       if (complete) {
-        try { await verifyRuleCandidateInSnapshot(snapshot, candidate, loaded.context.targetBranch); }
+        try { await verifyRuleCandidateInSnapshot(snapshot, candidate, loaded.context.targetBranch, loaded.context.repository.lastChange); }
         catch (error) { blockers.push(`Candidate ${id}: ${String(error)}`); }
       }
       for (const path of paths) {

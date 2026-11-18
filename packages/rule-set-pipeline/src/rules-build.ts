@@ -9,6 +9,7 @@ import { probeCommitInput, readPinnedCommitInput } from './git-input-probe.js';
 import { lookupRelease, readReleaseInput, type ReleaseOptions } from './release.js';
 import { probeReleaseInput } from './release-input-probe.js';
 import type { SourceRecord } from './types.js';
+import type { RulesRepository } from './rules-repository.js';
 import type { PublicationSnapshot } from './publication-repository.js';
 import type { NativeBuildOptions } from './native.js';
 import { immutableUrl, type PublicationTransport } from './publication.js';
@@ -78,17 +79,17 @@ export async function buildRulesInput(loaded: LoadedRules, definitions: RuleDefi
 }
 
 export function verifyRuleCandidateInSnapshot(snapshot: PublicationSnapshot, candidate: RuleCandidate, targetBranch: string,
-  native?: Partial<NativeBuildOptions>) {
+  lastChange: RulesRepository['lastChange'], native?: Partial<NativeBuildOptions>) {
   if (!candidate.evidenceUrl || !candidate.versionId || !candidate.publishedAt || candidate.status !== 'verified' || candidate.migrationPending) {
     throw new Error('CANDIDATE_UNAVAILABLE: version is incomplete');
   }
-  return verifyCandidateEvidence({ candidateEvidenceUrl: candidate.evidenceUrl, retained: { candidate, snapshot }, ...native },
+  return verifyCandidateEvidence({ candidateEvidenceUrl: candidate.evidenceUrl, retained: { candidate, snapshot, lastChange }, ...native },
     { branch: targetBranch }, candidate.definition, 'rollback');
 }
 
 export function verifyRuleCandidate(session: RulesSession, candidate: RuleCandidate, binary?: string) {
   return verifyRuleCandidateInSnapshot(session.snapshot, candidate, session.loaded.context.targetBranch,
-    { binary, nativeBuild: session.loaded.nativeBuild });
+    session.loaded.context.repository.lastChange, { binary, nativeBuild: session.loaded.nativeBuild });
 }
 
 /** An immutable evidence stage survives a lost readback or process checkpoint.

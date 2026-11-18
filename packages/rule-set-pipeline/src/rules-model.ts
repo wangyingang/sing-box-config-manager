@@ -241,8 +241,8 @@ export function parseRulesJournal(bytes: Buffer): RulesJournal {
   }
   const qualification = pending?.qualifiedCandidate;
   if (qualification !== undefined) {
-    const candidate = value.candidates[record.candidateId];
-    if (!validQualification(qualification) || pending.kind !== 'sync' || candidate.status !== 'verified'
+    const candidate = record && value.candidates[record.candidateId];
+    if (!validQualification(qualification) || pending.kind !== 'sync' || !candidate || candidate.status !== 'verified'
       || qualification.candidateId !== candidate.id || qualification.buildId !== candidate.buildId
       || pending.afterRule.inputBindingRevision !== candidate.inputBindingRevision
       || pending.afterRule.definitionRevision !== definitionRevision(candidate.sourceInput, candidate.definition)) {

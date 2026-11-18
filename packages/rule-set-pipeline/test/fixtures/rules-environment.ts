@@ -39,6 +39,7 @@ export function rulesEnvironment(binary: string, target = 'acceptance-issue-84',
       return { head, parent: parents.get(head), paths: [...tree.keys()], async read(path) { return tree.get(path); } };
     },
     async lastChange(head, path) {
+      if (!trees.get(head)?.has(path)) throw new Error(`Missing Git path: ${head}/${path}`);
       while (parents.has(head) && isDeepStrictEqual(trees.get(head)?.get(path), trees.get(parents.get(head)!)?.get(path))) head = parents.get(head)!;
       return head;
     },

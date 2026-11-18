@@ -11,7 +11,7 @@ import { serialize } from 'node:v8';
 import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
 import { sha256 } from '../../src/release.js';
 import { pinRuleVersion, resumeRuleUpdates, syncRules } from '../../src/rules-operations.js';
-import { encodeRecord, parseRulesJournal, RULE_STATE_PATH } from '../../src/rules-model.js';
+import { encodeRecord, parseRulesJournal, RULE_RECEIPT_PATH, RULE_STATE_PATH } from '../../src/rules-model.js';
 import { rulesEnvironment } from '../fixtures/rules-environment.js';
 import { cleanupEnvironment } from '../fixtures/cleanup-environment.js';
 import { PublicationWriteError } from '../../src/publication-repository.js';
@@ -446,6 +446,26 @@ test('稳定回读恢复成功后记账，候选 HTTPS 断开不阻塞已应用�
   assert.equal(after.pendingDelivery, undefined);
   assert.equal(after.rules.openai.successfulInput?.candidateId, pending.record.candidateId);
   assert.deepEqual(after.rules.openai.successfulInput?.source, pending.record.source);
+});
+
+test('单分支稳定交付回读回执原提交，后续 head 不改变固定地址', { skip: !binary }, async () => {
+  const env = rulesEnvironment(binary!, 'acceptance-receipt-commit');
+  const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
+  const repo = env.context.repository, commit = repo.commit;
+  let deliveryCommit: string | undefined;
+  repo.commit = async (...args) => {
+    const head = await commit(...args);
+    if (args[2][RULE_RECEIPT_PATH] && Object.keys(args[2]).some(path => path.startsWith('stable/'))) {
+      deliveryCommit = head;
+      await commit(args[0], head, { 'unrelated.txt': Buffer.from('appended after stable write') }, 'fixture append', async () => {});
+    }
+    return head;
+  };
+  const result = await syncRules({ context: env.context });
+  assert.equal(result.status, 'success', JSON.stringify(result));
+  assert.ok(deliveryCommit);
+  const stable = Object.keys(result.results[0].current!.files).map(path => immutableUrl(deliveryCommit!, path));
+  assert.deepEqual(result.readbackRequests?.filter(url => url.includes('/stable/')).sort(), stable.sort());
 });
 
 test('首次 sync、pin 和 cleanup 各执行一组原生验证，同版本 resume 使用历史证明', { skip: !binary }, async t => {
