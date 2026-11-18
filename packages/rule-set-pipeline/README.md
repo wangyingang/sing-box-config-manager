@@ -219,7 +219,7 @@ YAML 解析使用固定版本的 [yaml](https://eemeli.org/yaml/)，拒绝语法
 
 ## 自动化验证
 
-常规检查与完整本地验证使用[根 README 的统一入口](../../README.md#开发检查分别证明什么)。原生集成测试使用真实 sing-box；Git/上游 fixture 只替换外部边界，不意味着执行了真实 GitHub 写入。一次性历史转换使用固定的旧 writer 输出，保留来源、身份、原始 SRS 与逐字节摘要；样本依据、覆盖映射和验证范围见 [#99 记录](../../docs/verification/issue-99.md)。
+常规检查与完整本地验证使用[根 README 的统一入口](../../README.md#开发检查分别证明什么)。原生集成测试使用真实 sing-box；Git/上游 fixture 只替换外部边界，不意味着执行了真实 GitHub 写入。旧 writer 的固定样本继续验证历史读取、拒绝跨策略写入及未完成历史文件隔离。原转换验收的样本和范围见 [#99 历史记录](../../docs/verification/issue-99.md)。
 
 ```sh
 pnpm --dir packages/rule-set-pipeline test

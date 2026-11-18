@@ -137,7 +137,7 @@ const digest = (value: unknown) => typeof value === 'string' && /^[a-f0-9]{64}$/
 const uuid = (value: unknown) => typeof value === 'string' && /^[a-f0-9-]{36}$/.test(value);
 export function parseRulesJournal(bytes: Buffer): RulesJournal {
   const value: unknown = JSON.parse(bytes.toString());
-  if (object(value) && value.schemaVersion === 1) throw new Error('RULE_STATE_MIGRATION_REQUIRED: run the reviewed one-time state conversion');
+  if (object(value) && value.schemaVersion === 1) throw new Error('RULE_STATE_MIGRATION_REQUIRED: the current native policy requires an empty artifact target');
   if (!object(value) || value.schemaVersion !== 2 || !uuid(value.id) || !Number.isSafeInteger(value.generation)
     || value.generation < 1 || !['open', 'maintenance'].includes(value.maintenance)
     || typeof value.targetBranch !== 'string' || !object(value.rules) || !object(value.candidates)) throw new Error('RULE_STATE_CORRUPT');
