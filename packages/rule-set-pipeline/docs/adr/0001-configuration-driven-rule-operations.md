@@ -26,4 +26,4 @@ status: accepted
 
 [#128](https://github.com/wangyingang/sing-box-config-manager/issues/128) 为每集记录最后一次确认成功的输入。若来源更新只改变其他列表，系统核对本集的规范化内容、用途、工具和完整交付后跳过原生构建，更新成功输入记录并保留原交付来源。成功记录与交付一起完成，或在已核实继续使用旧交付后单独保存。候选缺失、当前版本不符或处理条件变化时回到常规流程。共享稳定文件与交付摘要不符时停止写入。
 
-[#129](https://github.com/wangyingang/sing-box-config-manager/issues/129) 在下载正文前核对上游文件身份。系统用固定 Git commit 或可信文件 blob、Release 实际附件及摘要判断本集的成功输入能否复用。缺少上游证据时读取必要摘要或正文，当前候选、交付和处理条件仍按规则集核对。完整基线的重复同步可以同时省略正文下载、原生进程与 Git 提交。证据与报告字段见[操作契约](../../contracts/rules-operations.md#上游文件身份与回退)。
+[#129](https://github.com/wangyingang/sing-box-config-manager/issues/129) 在下载正文前核对上游文件身份。系统用固定 Git commit 或可信文件 blob、Release 实际附件及摘要判断本集的成功输入能否复用。缺少上游证据时读取必要摘要或正文，当前候选、交付和处理条件仍按规则集核对。完整基线的重复同步可以同时省略正文下载、原生编译和加载，以及 Git 提交。系统仍核对工具身份。证据与报告字段见[操作契约](../../contracts/rules-operations.md#上游文件身份与回退)。
