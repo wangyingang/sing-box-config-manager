@@ -49,7 +49,10 @@ test('四集共享各自来源；仅 CIDR 变化只交付 CIDR，新 commit 同�
   env.upstream({}); env.changeCidr('# same ranges\n2001:db8:2::/48\n192.0.2.128/25\n');
   const unchanged = await syncRules(request);
   assert.deepEqual(unchanged.results.map(x => x.status), ['unchanged', 'unchanged', 'unchanged', 'unchanged']);
-  assert.equal(env.writes.length, writes);
+  assert.equal(env.writes.length, writes + 4, 'one success checkpoint per new input identity');
+  const checkpointed = env.writes.length;
+  assert.equal((await syncRules(request)).status, 'success');
+  assert.equal(env.writes.length, checkpointed);
   const after = await getRulesStatus(request);
   assert.deepEqual(after.rules?.map(x => [x.current, x.candidates]), before.rules?.map(x => [x.current, x.candidates]));
   assert.deepEqual(old.rules?.map(x => x.candidateCount), [1, 1, 1, 1]);
@@ -92,6 +95,14 @@ for (const fault of ['release-offline', 'checksum', 'yaml', 'missing-list', 'inv
     if (commonFailure) assert.deepEqual((await getRulesStatus(request)).rules?.map(x => x.candidateCount), [1, 1, 1, 2]);
     for (let i = 0; i < 4; i++) {
       const entry = result.results[i];
+      const successful = entry.successfulInput?.source;
+      if (entry.status === 'failed' || entry.status === 'pending') {
+        assert.deepEqual(entry.successfulInput, first.results[i].successfulInput);
+      } else if (entry.id === 'china-ip') {
+        assert.equal(successful?.commit, '2'.repeat(40));
+      } else {
+        assert.equal(successful && 'releaseId' in successful && successful.releaseId, 2);
+      }
       if (entry.status === 'failed' || entry.status === 'unchanged') {
         assert.deepEqual(entry.current, first.results[i].current);
         for (const [path, evidence] of Object.entries(entry.current!.files)) {

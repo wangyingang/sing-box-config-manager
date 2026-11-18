@@ -9,7 +9,7 @@ import { lookupRelease, readReleaseInput, sha256 } from './release.js';
 import type { SourceRecord } from './types.js';
 import { retainedCandidateDownload } from './publication-repository.js';
 import { immutableUrl, type PublicationTransport } from './publication.js';
-import { inputBindingRevision, parseRulesJournal, type ManagedRule, type RuleCandidate, type RuleDelivery } from './rules-model.js';
+import { inputBindingRevision, parseRulesJournal, type ManagedRule, type RuleCandidate } from './rules-model.js';
 import { rulesBinary, type LoadedRules } from './rules-context.js';
 import type { RulesSession } from './rules-session.js';
 
@@ -17,8 +17,8 @@ export type RuleBuild = Awaited<ReturnType<typeof buildRulesInput>>;
 export type ValidRuleBuild = Extract<RuleBuild['results'][number], { status: 'built-validated' }>;
 
 /** Acquisition and parsing are independent, so supported formats work with either mechanism. */
-export async function buildRulesInput(loaded: LoadedRules, definitions: RuleDefinition[], fixed?: RuleCandidate) {
-  loaded.progress('build', definitions.map(rule => rule.id).join(', '));
+export async function prepareRulesInput(loaded: LoadedRules, definitions: RuleDefinition[], fixed?: RuleCandidate) {
+  loaded.progress('source', definitions.map(rule => rule.id).join(', '));
   const input = fixed?.sourceInput ?? loaded.configuration.sources[definitions[0].source];
   const network = { fetch: loaded.context.fetch, token: loaded.context.token };
   const acquired = input.version === 'git-branch'
@@ -33,9 +33,19 @@ export async function buildRulesInput(loaded: LoadedRules, definitions: RuleDefi
         expectedSource: fixed?.source as SourceRecord | undefined }, input);
     })();
   const file = input.version === 'git-branch' ? input.input.path : input.input.asset;
-  const lists = convertInput(acquired.bytes, definitions, input.input.format, file);
+  const format = input.input.format;
+  const lists = convertInput(acquired.bytes, definitions, format, file);
+  return { source: acquired.source, lists, format, file };
+}
+
+export async function buildPreparedRules(loaded: LoadedRules, definitions: RuleDefinition[], input: Awaited<ReturnType<typeof prepareRulesInput>>) {
+  loaded.progress('build', definitions.map(rule => rule.id).join(', '));
   return buildConfigured(loaded.configuration, definitions, { binary: rulesBinary(loaded.context), nativeBuild: loaded.nativeBuild },
-    acquired.source, lists, input.input.format, file);
+    input.source, input.lists, input.format, input.file);
+}
+
+export async function buildRulesInput(loaded: LoadedRules, definitions: RuleDefinition[], fixed?: RuleCandidate) {
+  return buildPreparedRules(loaded, definitions, await prepareRulesInput(loaded, definitions, fixed));
 }
 
 export async function verifyRuleCandidate(session: RulesSession, candidate: RuleCandidate, binary?: string) {
@@ -78,18 +88,6 @@ export async function recoverPublishedRuleCandidate(session: RulesSession, candi
   // The caller either registers delivery in the same checkpoint, or saves this
   // qualified candidate separately before checking the latest upstream input.
   return recovered;
-}
-
-export async function unchangedDelivery(session: RulesSession, built: RuleBuild, result: ValidRuleBuild, active: RuleDelivery | undefined, rule: ManagedRule) {
-  if (!active) return false;
-  const previous = session.journal.candidates[active.candidateId];
-  if (!previous || previous.inputBindingRevision !== rule.inputBindingRevision) return false;
-  const { source: _oldAlias, ...oldDefinition } = previous.definition;
-  const { source: _newAlias, ...newDefinition } = result.definition;
-  if (!isDeepStrictEqual(oldDefinition, newDefinition)) return false;
-  const verified = await verifyRuleCandidate(session, previous);
-  return isDeepStrictEqual(verified.build.tools, built.tools) && verified.build.tool.sha256 === result.native.tool.sha256
-    && result.native.artifacts.every(artifact => artifact.content.equals(verified.bytesByFormat[artifact.format]));
 }
 
 export async function publishRuleBuild(session: RulesSession, built: RuleBuild, result: ValidRuleBuild, rule: ManagedRule, recovering?: RuleCandidate) {

@@ -3,10 +3,11 @@ import { isDeepStrictEqual } from 'node:util';
 import { candidateStableFiles } from './activation.js';
 import type { RuleDefinition } from './configuration.js';
 import { guardRulesConfiguration, loadRulesRequest, rulesBinary, type LoadedRules, type RulesRequest } from './rules-context.js';
-import { buildRulesInput, publishRuleBuild, recoverPublishedRuleCandidate, unchangedDelivery, verifyRuleCandidate } from './rules-build.js';
+import { buildPreparedRules, buildRulesInput, prepareRulesInput, publishRuleBuild, recoverPublishedRuleCandidate, verifyRuleCandidate } from './rules-build.js';
 import { deleteRuleDelivery, deliverRuleVersion, readRuleDeliveries, recoverRuleDelivery, ruleSubscription, ensureRulePathAvailable } from './rules-delivery.js';
-import { definitionRevision, inputBindingRevision, type ManagedRule, type RuleCandidate, type RuleResult, type RulesResult } from './rules-model.js';
+import { definitionRevision, inputBindingRevision, type ManagedRule, type RuleCandidate, type RuleResult, type RulesResult, type SuccessfulRuleInput } from './rules-model.js';
 import { openRulesSession, type RulesSession } from './rules-session.js';
+import { findReusableBuild, reuseSuccessfulInput, unchangedBuiltInput } from './rules-success.js';
 import { addCurrentFacts, disabledRulesResult, rulesFailure, rulesReport } from './rules-status.js';
 
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
@@ -21,9 +22,12 @@ function desiredRule(session: RulesSession, definition: RuleDefinition): Managed
   const fresh = !previous || previous.lifecycle === 'deleted';
   const control = fresh || previous.inputBindingRevision !== binding
     ? { mode: 'auto' as const, revision: randomUUID(), inputBindingRevision: binding } : previous.control;
-  return { definition, source, inputBindingRevision: binding, definitionRevision: definitionRevision(source, definition),
+  const revision = definitionRevision(source, definition);
+  const successfulInput = !fresh && previous.definitionRevision === revision ? previous.successfulInput : undefined;
+  return { definition, source, inputBindingRevision: binding, definitionRevision: revision,
     configurationRevision: session.loaded.observed.revision, generation: fresh ? randomUUID() : previous.generation,
-    lifecycle: 'present', control, ...(previous?.lastFailure ? { lastFailure: previous.lastFailure } : {}) };
+    lifecycle: 'present', control, ...(previous?.lastFailure ? { lastFailure: previous.lastFailure } : {}),
+    ...(successfulInput ? { successfulInput } : {}) };
 }
 
 function definitionChanges(session: RulesSession, next: ManagedRule) {
@@ -42,6 +46,27 @@ async function failure(session: RulesSession, id: string, error: unknown, change
   }
   return { id, status: pending ? 'pending' : /SUPERSEDED/.test(message(error)) ? 'superseded' : 'failed', changes,
     error: message(error), continueWith: 'sync' };
+}
+
+async function unchangedResult(session: RulesSession, rule: ManagedRule, success: SuccessfulRuleInput,
+  changes: string[], historical: boolean): Promise<RuleResult> {
+  const id = rule.definition.id;
+  if (!session.loaded.dryRun) {
+    // An authorized concurrent delivery changes the journal even when this
+    // run has no facts to write.
+    await session.guard();
+    const next = { ...rule, successfulInput: success };
+    delete next.lastFailure;
+    session.journal.rules[id] = next;
+    try { await session.save(); }
+    catch (error) {
+      session.journal.rules[id] = rule;
+      throw error;
+    }
+  }
+  return { id, status: 'unchanged', changes,
+    verified: ['source', historical ? 'normalized-content' : 'native', 'retained-candidate', 'subscription', 'stable-files'],
+    ...(historical && { reliedOn: ['historical-native'] }) };
 }
 
 async function updateSelectedRules(session: RulesSession, definitions: RuleDefinition[], changes: Map<string, string[]>) {
@@ -101,42 +126,51 @@ async function updateSelectedRules(session: RulesSession, definitions: RuleDefin
       }
     }
     const batch = definitions.filter(definition => !completed.has(definition.id) && !blocked.has(definition.id));
-    if (batch.length) {
-      let built;
-      try { built = await buildRulesInput(session.loaded, batch); }
-      catch (error) {
-        for (const definition of batch) results.push(await failure(session, definition.id, error, changes.get(definition.id)));
-        continue;
-      }
-      for (const builtRule of built.results) {
-        const id = builtRule.id;
-        const rule = session.loaded.dryRun ? desiredRule(session, session.loaded.configuration.ruleSets.find(rule => rule.id === id)!) : ownRule(session, id)!;
-        const itemChanges = changes.get(id) ?? [];
-        if (builtRule.status === 'failed') { results.push(await failure(session, id, builtRule.error, itemChanges)); continue; }
-        try {
-          const current = deliveries.get(id);
-          if (await unchangedDelivery(session, built, builtRule, current, rule)) {
-            if (!session.loaded.dryRun) { delete rule.lastFailure; await session.save(); }
-            results.push({ id, status: 'unchanged', changes: itemChanges, verified: ['source', 'native', 'subscription'] });
-            continue;
-          }
-          if (session.loaded.dryRun) {
-            results.push({ id, status: 'planned', changes: [...itemChanges, current ? 'replace-current-version' : 'first-delivery'],
-              verified: ['source', 'native', 'subscription'], unverified: ['remote-publication', 'HTTPS-readback'] });
-            continue;
-          }
-          const reusable = Object.values(session.journal.candidates).find(candidate => candidate.buildId === builtRule.buildId
-            && candidate.logicalId === id && candidate.definitionGeneration === rule.generation && candidate.status === 'verified');
-          const candidate = reusable ?? await publishRuleBuild(session, built, builtRule, rule);
-          const afterRule = { ...rule }; delete afterRule.lastFailure;
-          const delivered = await deliverRuleVersion(session, afterRule, candidate, 'sync', current);
-          deliveries.set(id, delivered);
-          results.push({ id, status: 'delivered', changes: [...itemChanges, current ? 'replace-current-version' : 'first-delivery'],
-            candidate: { versionId: candidate.versionId, publishedAt: candidate.publishedAt } });
-        } catch (error) {
-          results.push(await failure(session, id, error, itemChanges));
-          if (sharedFailure(session, error)) return results;
+    if (!batch.length) continue;
+    let input;
+    try { input = await prepareRulesInput(session.loaded, batch); }
+    catch (error) {
+      for (const definition of batch) results.push(await failure(session, definition.id, error, changes.get(definition.id)));
+      continue;
+    }
+    for (const definition of batch) {
+      const id = definition.id;
+      const rule = session.loaded.dryRun ? desiredRule(session, definition) : ownRule(session, id)!;
+      const itemChanges = changes.get(id) ?? [];
+      const current = deliveries.get(id);
+      try {
+        const reused = !session.loaded.dryRun && await reuseSuccessfulInput(session, rule, current, input);
+        if (reused) {
+          results.push(await unchangedResult(session, rule, reused, itemChanges, true));
+          continue;
         }
+        const built = await buildPreparedRules(session.loaded, [definition], input);
+        const builtRule = built.results[0];
+        if (builtRule.status === 'failed') {
+          results.push(await failure(session, id, builtRule.error, itemChanges));
+          continue;
+        }
+        const unchanged = await unchangedBuiltInput(session, rule, current, built, builtRule);
+        if (unchanged) {
+          results.push(await unchangedResult(session, rule, unchanged, itemChanges, false));
+          continue;
+        }
+        const deliveryChanges = [...itemChanges, current ? 'replace-current-version' : 'first-delivery'];
+        if (session.loaded.dryRun) {
+          results.push({ id, status: 'planned', changes: deliveryChanges,
+            verified: ['source', 'native', 'subscription'], unverified: ['remote-publication', 'HTTPS-readback'] });
+          continue;
+        }
+        const candidate = await findReusableBuild(session, rule, built, builtRule)
+          ?? await publishRuleBuild(session, built, builtRule, rule);
+        const afterRule = { ...rule }; delete afterRule.lastFailure;
+        const delivered = await deliverRuleVersion(session, afterRule, candidate, 'sync', current);
+        deliveries.set(id, delivered);
+        results.push({ id, status: 'delivered', changes: deliveryChanges,
+          candidate: { versionId: candidate.versionId, publishedAt: candidate.publishedAt } });
+      } catch (error) {
+        results.push(await failure(session, id, error, itemChanges));
+        if (sharedFailure(session, error)) return results;
       }
     }
   }

@@ -1,9 +1,11 @@
+import { isDeepStrictEqual } from 'node:util';
 import type { PublicationCandidate } from './candidate-publication.js';
 import type { BuildConfiguration, RuleDefinition, SourceInput } from './configuration.js';
 import { parseRuleDefinition, parseSource } from './configuration.js';
-import type { CommitSourceRecord } from './github-commit.js';
+import { validCommitSource, type CommitSourceRecord } from './github-commit.js';
 import type { SourceRecord } from './types.js';
 import { sha256 } from './release.js';
+import { validReleaseSource } from './release-source-fact.js';
 import type { CleanupCheckpoint, CleanupReport, CleanupRun, LastCleanup } from './rules-cleanup-model.js';
 import { validateCleanupFields } from './rules-cleanup-model.js';
 
@@ -13,6 +15,22 @@ export const encodeRecord = (value: unknown) => Buffer.from(JSON.stringify(value
 export type RuleSource = SourceRecord | CommitSourceRecord;
 export type RuleControl = { mode: 'auto'; revision: string; inputBindingRevision: string }
   | { mode: 'pinned'; revision: string; inputBindingRevision: string; candidateId: string };
+
+export interface QualifiedRuleCandidate {
+  toolSha256: string;
+  buildToolsSha256: string;
+  validationPolicy: string;
+  nativeBuildId: string;
+  candidateId: string;
+  buildId: string;
+}
+
+export interface SuccessfulRuleInput extends QualifiedRuleCandidate {
+  source: RuleSource;
+  inputBindingRevision: string;
+  definitionRevision: string;
+  definitionGeneration: string;
+}
 
 export interface ManagedRule {
   definition: RuleDefinition;
@@ -24,6 +42,7 @@ export interface ManagedRule {
   lifecycle: 'present' | 'deleting' | 'deleted';
   control: RuleControl;
   lastFailure?: string;
+  successfulInput?: SuccessfulRuleInput;
 }
 
 export interface RuleCandidate extends PublicationCandidate {
@@ -66,6 +85,8 @@ export interface PendingDelivery {
   stableHead: string;
   afterRule: ManagedRule;
   record?: RuleDelivery;
+  /** Build proof recorded at preparation. It becomes a successful input only after stable readback. */
+  qualifiedCandidate?: QualifiedRuleCandidate;
   changes: Record<string, FileEvidence | null>;
   removeCandidates: string[];
 }
@@ -104,7 +125,9 @@ export interface RuleResult {
   control?: RuleControl;
   expectedSource?: SourceInput;
   candidate?: { versionId?: string; publishedAt?: string };
+  successfulInput?: SuccessfulRuleInput;
   verified?: string[];
+  reliedOn?: string[];
   unverified?: string[];
   continueWith?: string;
 }
@@ -135,6 +158,20 @@ export function definitionRevision(source: SourceInput, definition: RuleDefiniti
 const object = (value: unknown): value is Record<string, any> => !!value && typeof value === 'object' && !Array.isArray(value);
 const digest = (value: unknown) => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const uuid = (value: unknown) => typeof value === 'string' && /^[a-f0-9-]{36}$/.test(value);
+function validQualification(value: unknown) {
+  return object(value) && uuid(value.candidateId)
+    && ['toolSha256', 'buildToolsSha256', 'nativeBuildId', 'buildId'].every(key => digest(value[key]))
+    && typeof value.validationPolicy === 'string' && Boolean(value.validationPolicy);
+}
+
+function validSuccessfulInput(value: unknown, source: SourceInput) {
+  if (!object(value) || !validQualification(value) || !object(value.source) || !uuid(value.definitionGeneration)
+    || !digest(value.inputBindingRevision) || !digest(value.definitionRevision)) return false;
+  const acquired = value.source;
+  if (source.version === 'git-branch') return validCommitSource(acquired as CommitSourceRecord, source) && acquired.inputBytes > 0;
+  return validReleaseSource(acquired, source);
+}
+
 export function parseRulesJournal(bytes: Buffer): RulesJournal {
   const value: unknown = JSON.parse(bytes.toString());
   if (object(value) && value.schemaVersion === 1) throw new Error('RULE_STATE_MIGRATION_REQUIRED: the current native policy requires an empty artifact target');
@@ -148,6 +185,9 @@ export function parseRulesJournal(bytes: Buffer): RulesJournal {
     const source = parseSource(rule.source), definition = parseRuleDefinition(rule.definition, source.input.format);
     if (definition.id !== id || inputBindingRevision(source, definition) !== rule.inputBindingRevision
       || definitionRevision(source, definition) !== rule.definitionRevision || rule.control.inputBindingRevision !== rule.inputBindingRevision
+      || rule.successfulInput !== undefined && (!validSuccessfulInput(rule.successfulInput, source)
+        || rule.successfulInput.inputBindingRevision !== rule.inputBindingRevision || rule.successfulInput.definitionRevision !== rule.definitionRevision
+        || rule.successfulInput.definitionGeneration !== rule.generation || rule.lifecycle === 'deleted')
       || rule.control.mode === 'pinned' && !Object.hasOwn(value.candidates, rule.control.candidateId)) throw new Error('RULE_STATE_CORRUPT: definition or control');
   }
   if (value.quarantinedCandidates !== undefined) {
@@ -178,6 +218,21 @@ export function parseRulesJournal(bytes: Buffer): RulesJournal {
   if (pending !== undefined && (!object(pending) || !uuid(pending.id) || !['sync', 'pin', 'delete'].includes(pending.kind)
     || !/^[a-f0-9]{40}$/.test(pending.stableHead) || !object(pending.changes) || !object(pending.afterRule)
     || !Array.isArray(pending.removeCandidates))) throw new Error('RULE_STATE_CORRUPT: pending delivery');
+  const qualification = pending?.qualifiedCandidate;
+  if (qualification !== undefined) {
+    const record = pending.record;
+    const candidate = object(record) && value.candidates[record.candidateId];
+    if (!validQualification(qualification) || pending.kind !== 'sync' || !candidate || candidate.status !== 'verified'
+      || qualification.candidateId !== candidate.id || qualification.buildId !== candidate.buildId
+      || pending.logicalId !== candidate.logicalId || record.logicalId !== candidate.logicalId
+      || pending.afterRule.definition?.id !== candidate.logicalId || pending.afterRule.generation !== candidate.definitionGeneration
+      || pending.afterRule.inputBindingRevision !== candidate.inputBindingRevision
+      || pending.afterRule.definitionRevision !== definitionRevision(candidate.sourceInput, candidate.definition)
+      || record.versionId !== candidate.versionId || record.publishedAt !== candidate.publishedAt
+      || record.candidateEvidenceUrl !== candidate.evidenceUrl || !isDeepStrictEqual(record.source, candidate.source)) {
+      throw new Error('RULE_STATE_CORRUPT: pending candidate qualification');
+    }
+  }
   validateCleanupFields(value);
   return value as RulesJournal;
 }

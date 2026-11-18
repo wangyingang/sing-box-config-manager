@@ -1,6 +1,6 @@
 # 配置驱动操作、状态与版本契约
 
-本页描述 [Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84)、[Spec #85](https://github.com/wangyingang/sing-box-config-manager/issues/85)、[Spec #86](https://github.com/wangyingang/sing-box-config-manager/issues/86) 及 [Spec #90 恢复修复](https://github.com/wangyingang/sing-box-config-manager/issues/90) 的应用服务结果、自动运行边界及远端持久事实。它不是 Compiler 的输入契约；Compiler 继续消费 [Rule Subscription v2](rule-subscription-v2.md) 或固定 [Artifact Manifest v2](README.md)。
+本页描述 [#128 无变化同步](https://github.com/wangyingang/sing-box-config-manager/issues/128)、[Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84)、[Spec #85](https://github.com/wangyingang/sing-box-config-manager/issues/85)、[Spec #86](https://github.com/wangyingang/sing-box-config-manager/issues/86) 及 [Spec #90 恢复修复](https://github.com/wangyingang/sing-box-config-manager/issues/90) 的应用服务结果、自动运行边界及远端持久事实。它不是 Compiler 的输入契约；Compiler 继续消费 [Rule Subscription v2](rule-subscription-v2.md) 或固定 [Artifact Manifest v2](README.md)。
 
 ## 配置
 
@@ -29,6 +29,8 @@ Node 请求可选传入 `onProgress(event)`，事件为 `RulesProgress`（`stage
 
 逐集结果区分 delivered、unchanged、pinned-skipped、pinned、resumed、deleted、failed、pending、superseded、planned。正常固定跳过是成功；独立失败与成功并存为 partial；存在待核实提交或归属未知的隔离候选为 pending。`changes` 说明本次已完成或预览预计完成的变化。resume 后更新失败时，`automatic-updates-restored` 与 auto 控制说明解除固定已经持久化，不能把整次失败理解为仍被固定。
 
+真实更新因规范化内容相同而省略原生验证时，`verified` 列出本次检查的来源、内容、保留候选、订阅及稳定文件，`reliedOn: ["historical-native"]` 表示沿用历史原生验证。完整构建后确认无需切换的结果可以在 `verified` 中报告 `native`。进度事件的 `source` 阶段表示读取并转换正文，`build` 阶段表示开始构建及验证。
+
 预览结果可以包含 `verified` 和 `unverified`，例如已验证来源、原生规则与订阅契约，但尚未验证远端发布及 HTTPS 回读。四种写操作的 dry-run 不持久保存任何状态，也不补做 pending 恢复。草稿仅允许 sync 预览；pin/resume/cleanup 始终按正式配置核对。
 
 ## 环境门禁与自动运行
@@ -51,6 +53,7 @@ Actions 的 main 目标使用 `RULE_ARTIFACT_TOKEN`；acceptance-* 目标只使�
 
 - `deliveryState`：delivered 或 not-delivered，首次构建失败不能伪装成存在旧版本。
 - `expectedSource` 与 `current.source`：分别表示当前正式期望和实际交付来源；换源失败时两者可以不同。
+- `successfulInput`：可选的最近成功输入事实。其 `source` 可能比 `current.source` 新。pin 可改变当前交付，既有最近成功输入仍按原候选记录。
 - `control`：已接受的 auto/pinned 控制及 revision。
 - `acceptedConfigurationRevision`、`configurationDifference`：上次接受修订及 add/change/delete/none 差异。
 - `lifecycle`：present/deleting/deleted；待删除或待核实不等于删除已完成。
@@ -63,11 +66,15 @@ status 只读取，不登记操作、更新检查时间、恢复维护或发送�
 
 ## 远端事实与版本身份
 
-`pipeline/state.json` 使用 schema 2。`rules` 保存每集已接受定义、输入绑定、定义修订、配置修订、规则代次、lifecycle、控制与最近失败。`candidates` 保存构建、固定来源、证据及发布身份。`pendingDelivery` 登记一次未完成稳定写入，包含操作身份、配置修订、预期 stable head、目标规则事实与具体文件摘要/删除路径。状态写入还保存 `writeId`，以核实响应丢失的同一次提交。
+`pipeline/state.json` 使用 schema 2。`rules` 保存每集已接受定义、输入绑定、定义修订、配置修订、规则代次、lifecycle、控制、最近失败及可选的 `successfulInput`。`candidates` 保存构建、固定来源、证据及发布身份。`pendingDelivery` 登记一次未完成稳定写入，包含操作身份、配置修订、预期 stable head、目标规则事实与具体文件摘要/删除路径。状态写入还保存 `writeId`，以核实响应丢失的同一次提交。
 
 输入绑定依据规范化来源与所选列表计算。它不含 source 别名或上游随后出现的新版本；定义修订另包含稳定路径与用途。控制只有 auto/pinned，不再由旧激活记录的双暂停布尔值与 resumes 叠加判定。
 
-候选文件位于 `candidates/<id>/`，仍使用固定 commit 地址、Manifest、构建记录与 readback 证据。候选首次成功发布保存 UTC ISO 8601 `publishedAt`，并以时间和候选稳定短身份组成 `versionId`，例如 `2026-11-16T12:34:56.789Z~1234abcd`。时间相同的候选仍由完整身份区分，短身份冲突时延长；不覆盖旧候选。pin、resume、重试和再次交付不刷新原版本身份或时间。有效内容与构建条件未变时 sync 不新增候选。
+候选文件位于 `candidates/<id>/`，仍使用固定 commit 地址、Manifest、构建记录与 readback 证据。候选首次成功发布保存 UTC ISO 8601 `publishedAt`，并以时间和候选稳定短身份组成 `versionId`，例如 `2026-11-16T12:34:56.789Z~1234abcd`。时间相同的候选仍由完整身份区分，短身份冲突时延长；不覆盖旧候选。pin、resume、重试和再次交付不刷新原版本身份或时间。有效内容与构建条件未变时，完整的当前交付可继续使用。
+
+`successfulInput` 保存已核实的 Git commit/文件或 Release/资产身份及输入摘要，绑定 `inputBindingRevision`、`definitionRevision`、`definitionGeneration`、`toolSha256`、`buildToolsSha256`、`validationPolicy`、`nativeBuildId`、`candidateId` 和 `buildId`。定义包括用途，因此规范化内容身份与定义一起约束实际用途投影。版本来源仍取自生成候选的原输入。
+
+同步和恢复只在交付回读完成，或本次核实完整现有交付可复用后推进对应规则的成功记录。共享来源的失败项保留各自此前适用的记录。同一成功事实没有观测时间字段，重复处理无需提交。缺少记录、上次失败、工具或策略变化、当前候选不匹配或候选证据不足时走常规构建和验证。共享稳定文件缺失或摘要不符时仍停止写入。实质定义变化与删除会清除旧记录。同一来源的别名变更沿用有效定义判断。
 
 正式配置状态先单独保存。每集正常首次交付采用以下 7 个持久阶段，沿用现有 schema、分支与稳定 URL，不重写历史：
 
@@ -75,9 +82,9 @@ status 只读取，不登记操作、更新检查时间、恢复维护或发送�
 2. 上传 JSON/SRS，同时保存 publishing 状态。
 3. 上传 Manifest、来源及构建记录，同时保存规则文件所在 commit。
 4. 保存 HTTPS 回读证据，同时保存元数据 commit、地址和已确定的版本身份。
-5. 候选验证及交付准备均成功后，合并保存 verified 与 pendingDelivery。
+5. 候选验证及交付准备均成功后，合并保存 verified 与 pendingDelivery。同步登记中保存核实过的候选和构建工具关联。
 6. 更新稳定文件、交付记录及操作回执。
-7. 回读确认后保存交付完成并清除 pendingDelivery。
+7. 稳定回执和回读确认后，依据登记的证明保存完成与成功输入，清除 pendingDelivery。已应用的写入可以在候选 HTTPS 临时不可用时完成此阶段。
 
 阶段文件与当时的 journal 同一提交；返回的 commit 指针在下一阶段保存。若文件已提交但指针未保存，按原候选固定路径核实实际提交和字节，继续原 candidateId、source、buildId 和已登记版本。不能以缺失指针认定文件未提交，或盲目重试上传。候选合格但交付准备失败，或恢复后未被选中时，单独保存 verified；29 次只是四集正常成功路径目标，故障与恢复可以增加提交。
 
@@ -124,7 +131,7 @@ Git 对象读取优化只复用完整 Git SHA 指定的不可变内容，缓存�
 
 年龄按首次成功发布的 `publishedAt` 计算，UTC 连续 24 小时计一天。`publishedAt >= cutoff` 的完整候选保留；早于 cutoff 的候选仅在没有保护依赖时删除。当前交付、pin 目标、未决操作所需证据和最小控制/删除代次均受到保护。候选退出当前身份不更新时间或重新计时；未知历史时间不伪造、不按过期处理。
 
-实际执行隔离写入后保存维护身份、时间边界和完整集合；中断恢复不重新计算删除计划。关键写入仍核对当前定义、控制、generation 和 Git heads，冲突时停止。新基线复制所有保留候选的完整依赖，并保留实际当前 candidate/version 指针。物理 commit 和证据 URL 可重写，业务 `versionId`、`publishedAt`、来源、稳定 URL 与规则字节不变。
+实际执行隔离写入后保存维护身份、时间边界和完整集合；中断恢复不重新计算删除计划。关键写入仍核对当前定义、控制、generation 和 Git heads，冲突时停止。新基线复制所有保留候选的完整依赖，并保留实际当前 candidate/version 指针。清理保留有效候选关联的成功输入，清除被回收候选的关联。物理 commit 和证据 URL 可重写，业务 `versionId`、`publishedAt`、来源、稳定 URL 与规则字节不变。
 
 切换前重跑 cleanup 复用或核实已准备对象；切换后继续回读、清理本次拥有且 head 一致的临时引用、恢复写入，不回滚旧基线。无法判定时保留隔离并返回 pending/failed。dry-run 只盘点已保存的状态与文件；`cleanup.unverified` 明示尚未执行的原生候选复验、新基线 HTTPS 回读和原子切换。存在活动维护时展示已固化计划，不恢复阶段、不写引用或 generation。status 在维护隔离期间报告 pending，并在当前检查点有计划时提供 cleanup 阶段、身份、截止时间与继续入口。
 

@@ -1,4 +1,3 @@
-import { validRepository } from './source-input.js';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { saveActivationReceipt } from './activation-receipt.js';
@@ -11,7 +10,8 @@ import { validCommitSource } from './github-commit.js';
 import { buildNative, nativeArtifactCommands, nativeBuildIdentity, NATIVE_VALIDATION_POLICY, type NativeBuildOptions } from './native.js';
 import { ARTIFACT_MANIFEST_VERSION, CANDIDATE_READBACK_VERSION, LEGACY_BUILD_RECORD } from './candidate-publication.js';
 import { readSourceTerms, USAGES } from './projection.js';
-import { sha256, validReleaseAssetIdentities, V2FLY_RELEASE_INPUT } from './release.js';
+import { sha256, V2FLY_RELEASE_INPUT } from './release.js';
+import { validReleaseSource } from './release-source-fact.js';
 import { ARTIFACT_REPOSITORY, immutableUrl } from './publication.js';
 import { retainedCandidateDownload } from './publication-repository.js';
 import { activationDigest, effectiveControl, manualControl, openManualActivation, registerManualActivation, type ActivationWriteReservation, type ObservedActivation } from './manual-activation.js';
@@ -81,10 +81,7 @@ export async function verifyCandidateEvidence(options: Partial<NativeBuildOption
     requireThat(typeof source.description === 'string' && source.description.length > 0 && typeof source.revision === 'string' && source.revision.length > 0,
       'Synthetic candidate must identify its controlled origin');
   } else {
-    requireThat(validRepository(source.repository) && Number.isSafeInteger(source.releaseId) && source.releaseId > 0
-      && /^[a-f0-9]{40}$/.test(source.commit) && typeof source.tag === 'string' && source.tag.length > 0
-      && /^[a-f0-9]{64}$/.test(source.inputSha256) && Number.isSafeInteger(source.inputBytes) && source.inputBytes > 0 && /^[a-f0-9]{64}$/.test(source.checksumSha256), 'Incomplete official source');
-    requireThat(validReleaseAssetIdentities(source), 'Incomplete source asset identity');
+    requireThat(validReleaseSource(source), 'Incomplete official Release source or asset identity');
   }
   const expectedSteps = nativeArtifactCommands(`${layout.stem}.json`, `${layout.stem}.srs`);
   const completedNativeSteps = (record: any) => record?.status === 'passed' && record.policy === NATIVE_VALIDATION_POLICY
@@ -162,7 +159,8 @@ export async function verifyCandidateEvidence(options: Partial<NativeBuildOption
     requireThat(reproduced?.content.equals(bytesByFormat[format]), `Native artifact mismatch: ${file}`);
   }
   return { candidateId: location.id, buildId: build.buildId, evidenceUrl: options.candidateEvidenceUrl, manifest, source, bytesByFormat,
-    build: { definition: build.definition, tools: build.tools, tool: build.tool },
+    versionId: evidence.versionId, publishedAt: evidence.publishedAt,
+    build: { definition: build.definition, tools: build.tools, tool: build.tool, nativeBuildId: build.nativeBuildId },
     validation: native && { tool: native.tool, buildId: build.buildId, nativeBuildId: native.buildId } };
 }
 

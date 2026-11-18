@@ -8,13 +8,12 @@ import test, { type TestContext } from 'node:test';
 import { promisify } from 'node:util';
 import { serialize } from 'node:v8';
 import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
-import { syncRules } from '../../src/rules-operations.js';
-import { parseRulesJournal, RULE_STATE_PATH } from '../../src/rules-model.js';
+import { pinRuleVersion, resumeRuleUpdates, syncRules } from '../../src/rules-operations.js';
+import { encodeRecord, parseRulesJournal, RULE_STATE_PATH } from '../../src/rules-model.js';
 import { rulesEnvironment } from '../fixtures/rules-environment.js';
 import { cleanupEnvironment } from '../fixtures/cleanup-environment.js';
 import { PublicationWriteError } from '../../src/publication-repository.js';
 import { getRulesStatus } from '../../src/rules-status.js';
-import { pinRuleVersion, resumeRuleUpdates } from '../../src/rules-operations.js';
 import { cleanupRuleHistory } from '../../src/rules-cleanup.js';
 import { countNativeCommands } from '../fixtures/native-commands.js';
 
@@ -42,8 +41,211 @@ exec ${quote(binary!)} "$@"
 }
 
 const oneNativeValidation = { compile: 1, decompile: 0, sourceLoad: 1, binaryLoad: 1 };
+const noNativeValidation = { compile: 0, decompile: 0, sourceLoad: 0, binaryLoad: 0 };
 
-test('sync、pin、resume 和 cleanup 各自在操作内只执行一组原生验证', { skip: !binary }, async t => {
+test('Release 与 Git 输入更新后同语义保留交付，零编译和加载，并独立记住新输入', { skip: !binary }, async t => {
+  const { wrapper, take } = await traceNative(t);
+  const env = cleanupEnvironment(wrapper, 'main');
+  const config = parseBuildConfiguration(readOfficialConfiguration());
+  config.ruleSets = config.ruleSets.filter(rule => ['openai', 'china-ip'].includes(rule.id));
+  env.configure(config);
+  let revision = 'a', cidr = '192.0.2.0/24\n2001:db8::/32\n';
+  const fetcher = env.context.fetch!;
+  env.context.fetch = async (address, init) => {
+    const url = String(address);
+    if (url.includes('gaoyifan/china-operator-ip')) return url.includes('/branches/')
+      ? Response.json({ name: 'ip-lists', commit: { sha: revision.repeat(40) } })
+      : new Response(cidr);
+    return fetcher(address, init);
+  };
+  const request = { context: env.context };
+  const first = await syncRules(request);
+  assert.equal(first.status, 'success', JSON.stringify(first));
+  assert.deepEqual(await take(), { compile: 2, decompile: 0, sourceLoad: 2, binaryLoad: 2 });
+  const original = first.results.map(result => result.current);
+  const stableHead = env.heads.get('main');
+  env.upstream({ other: 'domain:changed.example' });
+  revision = 'b'; cidr = '# same networks\n2001:db8::/32\n192.0.2.0/24\n';
+  const next = await syncRules(request);
+  assert.equal(next.status, 'success', JSON.stringify(next));
+  assert.deepEqual(next.results.map(result => result.status), ['unchanged', 'unchanged']);
+  assert.deepEqual(await take(), noNativeValidation);
+  assert.deepEqual(next.results.map(result => result.current), original);
+  assert.equal(env.heads.get('main'), stableHead);
+  const observed = await getRulesStatus(request);
+  const release = observed.rules!.find(rule => rule.id === 'openai')!.successfulInput;
+  const git = observed.rules!.find(rule => rule.id === 'china-ip')!.successfulInput;
+  assert.equal(release?.source && 'releaseId' in release.source && release.source.releaseId, 2);
+  assert.equal(git?.source.commit, 'b'.repeat(40));
+  for (const result of next.results) {
+    assert.ok(result.reliedOn?.includes('historical-native'));
+    assert.ok(!result.verified?.includes('native'));
+    assert.equal(result.successfulInput?.candidateId, result.current?.candidateId);
+  }
+  const writes = env.writes.length;
+  assert.equal((await syncRules(request)).status, 'success');
+  assert.equal(env.writes.length, writes);
+  assert.deepEqual(await take(), noNativeValidation);
+  const oldHeads = new Set(env.trees.keys());
+  assert.equal((await cleanupRuleHistory(request)).status, 'success');
+  oldHeads.forEach(head => env.blockedHeads.add(head));
+  await take();
+  const cleanedWrites = env.writes.length;
+  const afterCleanup = await syncRules(request);
+  assert.equal(afterCleanup.status, 'success', JSON.stringify(afterCleanup));
+  assert.deepEqual(await take(), noNativeValidation);
+  assert.equal(env.writes.length, cleanedWrites);
+  assert.deepEqual(afterCleanup.results.map(result => result.successfulInput), next.results.map(result => result.successfulInput));
+  assert.notEqual(afterCleanup.results[0].current?.candidateEvidenceUrl, original[0]?.candidateEvidenceUrl);
+});
+
+test('cleanup 回收到期的成功候选后，resume 从旧 pin 回退到实际构建和交付', { skip: !binary }, async t => {
+  const { wrapper, take } = await traceNative(t);
+  const env = cleanupEnvironment(wrapper, 'main');
+  const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
+  const request = { context: env.context, id: 'openai' };
+  const original = (await syncRules(request)).results[0].current!;
+  env.upstream({ openai: 'domain:latest.example' });
+  const changed = (await syncRules(request)).results[0].current!;
+  assert.notEqual(changed.versionId, original.versionId);
+  assert.equal((await pinRuleVersion({ ...request, version: original.versionId! })).status, 'success');
+  env.requests.length = 0;
+  const pinned = await syncRules(request);
+  assert.equal(pinned.results[0].status, 'pinned-skipped');
+  assert.equal(pinned.results[0].successfulInput?.candidateId, changed.candidateId);
+  assert.equal(env.requests.length, 0);
+  env.clock('2026-12-20T00:00:00.000Z');
+  const cleaned = await cleanupRuleHistory(request);
+  assert.equal(cleaned.status, 'success', JSON.stringify(cleaned));
+  assert.ok(cleaned.cleanup?.plan.discard.candidateIds.includes(changed.candidateId));
+  assert.equal((await getRulesStatus(request)).rules![0].successfulInput, undefined);
+  await take();
+  const resumed = await resumeRuleUpdates(request);
+  assert.equal(resumed.status, 'success', JSON.stringify(resumed));
+  assert.equal(resumed.results[0].status, 'resumed');
+  assert.deepEqual(await take(), oneNativeValidation);
+  assert.notEqual(resumed.results[0].current?.candidateId, changed.candidateId);
+  assert.equal(resumed.results[0].successfulInput?.candidateId, resumed.results[0].current?.candidateId);
+  assert.deepEqual(resumed.results[0].current?.source, changed.source);
+  assert.deepEqual(resumed.results[0].current?.files, changed.files);
+});
+
+test('缺少候选证据时重新构建，原证据仍存的旧输入不能跳过', { skip: !binary }, async t => {
+  const { wrapper, take } = await traceNative(t);
+  const env = cleanupEnvironment(wrapper, 'main');
+  const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
+  const request = { context: env.context };
+  const first = await syncRules(request);
+  assert.equal(first.status, 'success', JSON.stringify(first));
+  const original = first.results[0].current!;
+  const journal = await env.journal();
+  delete journal.candidates[original.candidateId].evidenceSha256;
+  const repo = env.context.repository;
+  await repo.commit(repo.branch, (await repo.snapshot()).head, { [RULE_STATE_PATH]: encodeRecord(journal) }, 'fixture', async () => {});
+  await take();
+  const repaired = await syncRules(request);
+  assert.equal(repaired.status, 'success', JSON.stringify(repaired));
+  assert.equal(repaired.results[0].status, 'delivered');
+  assert.deepEqual(await take(), oneNativeValidation);
+  assert.notEqual(repaired.results[0].current?.candidateId, original.candidateId);
+  assert.deepEqual(repaired.results[0].current?.files, original.files);
+  assert.equal(repaired.results[0].successfulInput?.candidateId, repaired.results[0].current?.candidateId);
+});
+
+test('来源别名保留成功关联，换列表、工具内容变化和同 ID 重建重新走原生验证', { skip: !binary }, async t => {
+  const { wrapper, take } = await traceNative(t);
+  const env = cleanupEnvironment(wrapper, 'main');
+  const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
+  env.upstream({ other: 'domain:openai.example' });
+  const request = { context: env.context };
+  const first = await syncRules(request);
+  assert.equal(first.status, 'success', JSON.stringify(first));
+  await take();
+  config.sources.alias = config.sources.dlc;
+  config.ruleSets[0].source = 'alias';
+  env.configure(config);
+  const alias = await syncRules(request);
+  assert.equal(alias.results[0].status, 'unchanged');
+  assert.deepEqual(await take(), noNativeValidation);
+  assert.deepEqual(alias.results[0].successfulInput, first.results[0].successfulInput);
+
+  config.ruleSets[0].list = 'other';
+  env.configure(config);
+  const list = await syncRules(request);
+  assert.equal(list.results[0].status, 'delivered', JSON.stringify(list));
+  assert.deepEqual(await take(), oneNativeValidation);
+  assert.notEqual(list.results[0].successfulInput?.inputBindingRevision, alias.results[0].successfulInput?.inputBindingRevision);
+
+  appendFileSync(wrapper, '\n# New executable digest\n');
+  const tool = await syncRules(request);
+  assert.equal(tool.results[0].status, 'delivered', JSON.stringify(tool));
+  assert.deepEqual(await take(), oneNativeValidation);
+  assert.notEqual(tool.results[0].successfulInput?.toolSha256, list.results[0].successfulInput?.toolSha256);
+
+  env.configure({ ...config, ruleSets: [] });
+  assert.equal((await syncRules(request)).results[0].status, 'deleted');
+  env.configure(config);
+  const recreated = await syncRules(request);
+  assert.equal(recreated.results[0].status, 'delivered', JSON.stringify(recreated));
+  assert.deepEqual(await take(), oneNativeValidation);
+  assert.notEqual(recreated.results[0].successfulInput?.definitionGeneration, tool.results[0].successfulInput?.definitionGeneration);
+});
+
+test('同义输入的成功记录提交与 pin 并发时不会越过 journal 租约', { skip: !binary }, async t => {
+  const { wrapper, take } = await traceNative(t);
+  const env = cleanupEnvironment(wrapper, 'main');
+  const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
+  const request = { context: env.context, id: 'openai' };
+  const first = await syncRules(request);
+  assert.equal(first.status, 'success', JSON.stringify(first));
+  await take();
+  env.upstream({ other: 'domain:unrelated.example' });
+  let pinned = false;
+  env.beforeWrite(async files => {
+    if (!files[RULE_STATE_PATH]) return;
+    const next = parseRulesJournal(files[RULE_STATE_PATH]!);
+    const source = next.rules.openai.successfulInput?.source;
+    if (!source || !('releaseId' in source) || source.releaseId !== 2) return;
+    env.beforeWrite();
+    const pin = await pinRuleVersion({ ...request, version: first.results[0].current!.versionId! });
+    assert.equal(pin.status, 'success', JSON.stringify(pin));
+    pinned = true;
+  });
+  const raced = await syncRules(request);
+  assert.ok(pinned);
+  assert.notEqual(raced.status, 'success');
+  assert.match(raced.results[0].error!, /RULE_WRITE_CONFLICT/);
+  assert.equal(raced.results[0].control?.mode, 'pinned');
+  assert.deepEqual(raced.results[0].successfulInput, first.results[0].successfulInput);
+  assert.deepEqual(await take(), oneNativeValidation, 'only the competing pin runs native validation');
+});
+
+test('稳定回读恢复成功后记账，候选 HTTPS 断开不阻塞已应用交付', { skip: !binary }, async () => {
+  const env = cleanupEnvironment(binary!, 'main');
+  const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
+  const request = { context: env.context };
+  env.failDownload(url => { if (url.includes('/stable/')) throw new Error('interrupted stable readback'); });
+  const interrupted = await syncRules(request);
+  assert.equal(interrupted.status, 'pending', JSON.stringify(interrupted));
+  const journal = await env.journal(), pending = journal.pendingDelivery!;
+  assert.ok(pending.record);
+  assert.equal(interrupted.results[0].current?.candidateId, pending.record.candidateId);
+  assert.equal(journal.rules.openai.successfulInput, undefined);
+  const stableHead = env.heads.get('main');
+  env.failDownload(url => { if (url.includes('/candidates/')) throw new Error('503 candidate HTTPS only'); });
+  env.failSource(true);
+  const recovered = await syncRules({ context: { ...env.context } });
+  // The independent latest-input step is offline, but the applied delivery is complete.
+  assert.equal(recovered.status, 'failed', JSON.stringify(recovered));
+  assert.match(recovered.results[0].error!, /Upstream unavailable/);
+  assert.equal(env.heads.get('main'), stableHead);
+  const after = await env.journal();
+  assert.equal(after.pendingDelivery, undefined);
+  assert.equal(after.rules.openai.successfulInput?.candidateId, pending.record.candidateId);
+  assert.deepEqual(after.rules.openai.successfulInput?.source, pending.record.source);
+});
+
+test('首次 sync、pin 和 cleanup 各执行一组原生验证，同版本 resume 使用历史证明', { skip: !binary }, async t => {
   const { wrapper, take } = await traceNative(t);
   const env = cleanupEnvironment(wrapper, 'main');
   const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
@@ -63,7 +265,7 @@ test('sync、pin、resume 和 cleanup 各自在操作内只执行一组原生验
   assert.equal(cleanup.status, 'success', JSON.stringify(cleanup));
   assert.ok(env.refWrites.length);
   counts.push(await take());
-  assert.deepEqual(counts, Array(4).fill(oneNativeValidation), 'sync, pin, resume, cleanup');
+  assert.deepEqual(counts, [oneNativeValidation, oneNativeValidation, noNativeValidation, oneNativeValidation], 'sync, pin, resume, cleanup');
 });
 
 test('首次交付和清理按固定地址复用回读，清理仍读取稳定分支', { skip: !binary }, async t => {
@@ -310,6 +512,7 @@ for (const target of ['main', 'acceptance-performance']) for (const stage of [1,
     assert.notEqual((await syncRules({ context: env.context })).status, 'success');
     repo.commit = commit; repo.snapshot = snapshot;
     const before = await env.journal(), candidate = Object.values(before.candidates)[0];
+    assert.deepEqual(before.rules.openai.successfulInput?.source, stage === 7 ? candidate.source : undefined);
     const retained = await snapshot();
     const bytes = new Map(await Promise.all(retained.paths.filter(path => path.startsWith(`candidates/${candidate.id}/`))
       .map(async path => [path, await retained.read(path)] as const)));
@@ -326,6 +529,8 @@ for (const target of ['main', 'acceptance-performance']) for (const stage of [1,
     for (const [path, original] of bytes) assert.deepEqual(await (await snapshot()).read(path), original, path);
     assert.equal(result.results[0].current?.candidateId, candidate.id);
     assert.equal(after.pendingDelivery, undefined);
+    assert.deepEqual(after.rules.openai.successfulInput?.source, candidate.source);
+    assert.equal(after.rules.openai.successfulInput?.candidateId, candidate.id);
     if (stableWrites) assert.equal(env.writes.filter(write => Object.keys(write.files).some(path => path.startsWith('stable/'))).length, stableWrites);
     const count = env.writes.length;
     assert.equal((await syncRules({ context: { ...env.context } })).status, 'success');

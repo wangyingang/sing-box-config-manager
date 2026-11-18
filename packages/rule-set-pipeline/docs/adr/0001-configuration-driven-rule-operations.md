@@ -23,3 +23,5 @@ status: accepted
 候选清理决定见 [ADR 0002](0002-retained-history-cleanup.md) 和 [#85](https://github.com/wangyingang/sing-box-config-manager/issues/85)，push/schedule 与 GitHub 失败通知见 [ADR 0003](0003-automated-operations-and-native-notifications.md) 和 [#86](https://github.com/wangyingang/sing-box-config-manager/issues/86)。#84 阶段没有接入生产编排或执行生产转换；后续接线仍遵守独立的环境门禁和生产授权。历史验收保留原日期与事实，当前完成状态以对应 PR 和工单交付记录为准。
 
 [#125](https://github.com/wangyingang/sing-box-config-manager/issues/125) 的原生策略切换采用空产物状态。旧开发期候选、稳定订阅、证据和运行状态可清除。新候选由正式配置首次 sync 建立，使用编译和两种格式的真实加载，固定地址与订阅交付继续校验实际字节。旧状态转换建议适用于上文早期操作升级。
+
+[#128](https://github.com/wangyingang/sing-box-config-manager/issues/128) 为每集记录最后一次确认成功的输入。若来源更新只改变其他列表，系统核对本集的规范化内容、用途、工具和完整交付后跳过原生构建，更新成功输入记录并保留原交付来源。成功记录与交付一起完成，或在已核实继续使用旧交付后单独保存。候选缺失、当前版本不符或处理条件变化时回到常规流程。共享稳定文件与交付摘要不符时停止写入。

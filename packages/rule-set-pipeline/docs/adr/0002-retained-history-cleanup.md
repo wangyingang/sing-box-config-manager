@@ -19,3 +19,5 @@ status: accepted
 每次调用 `cleanup` 时，准备基线、切换前复验和切换后回读可复用本次已建立的原生验证证明。各阶段仍验证固定地址、实际字节、保留树和引用租约。恢复已有检查点时，需要原生验证的阶段从本次调用取得证明。[#126](https://github.com/wangyingang/sing-box-config-manager/issues/126)
 
 准备、切换前复验和切换后核对可在一次 `cleanup` 内复用已校验的固定地址字节。重写后的地址首次真实下载，切换后的稳定分支入口继续通过 HTTPS 回读。当前保留树、基线身份与引用租约仍逐阶段核对。缓存容量和固定地址的可用性观察见[证据回读](../../contracts/rules-operations.md#证据回读)。[#127](https://github.com/wangyingang/sing-box-config-manager/issues/127)
+
+[#128](https://github.com/wangyingang/sing-box-config-manager/issues/128) 的成功输入记录以候选 ID 和构建身份关联保留证据。清理可改写物理地址并保留关联。候选被回收时，清理删除相应记录。成功记录不延长候选保留期。
