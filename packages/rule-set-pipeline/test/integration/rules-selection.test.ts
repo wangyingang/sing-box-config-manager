@@ -207,7 +207,8 @@ test('status 报告悬空交付，重复 pin 修正已固定版本的交付记�
   tree.set(path, encodeRecord({ ...record, candidateId: '1'.repeat(36) }));
   const status = await getRulesStatus(request);
   const reported = status.rules!.find(rule => rule.id === current.logicalId)!;
-  assert.equal(reported.status, 'failed');
+  assert.equal(status.status, 'success');
+  assert.equal(reported.deliveryState, 'delivered');
   assert.match(reported.deliveryIssue!, /no retained candidate/);
   assert.deepEqual(status.readbackRequests, []);
 
@@ -370,6 +371,7 @@ test('当前候选证据丢失或损坏时 status 保留真实交付，候选不
     const before = await stableBytes(env), reads = env.requests.length;
     const status = await getRulesStatus({ context: { ...env.context } });
     assert.equal(status.status, 'success', JSON.stringify(status));
+    assert.ok(status.rules!.find(rule => rule.id === current.logicalId)?.deliveryIssue);
     const rule = status.rules!.find(rule => rule.id === 'openai')!;
     assert.deepEqual(rule.current, current); assert.equal(rule.deliveryState, 'delivered');
     assert.deepEqual(rule.stableUrls, healthy.stableUrls); assert.deepEqual(rule.control, healthy.control);

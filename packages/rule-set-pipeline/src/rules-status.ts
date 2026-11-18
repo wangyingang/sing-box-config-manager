@@ -119,14 +119,14 @@ export async function getRulesStatus(request: RulesRequest & { id?: string } = {
       candidates.sort((a, b) => (b.publishedAt ?? '').localeCompare(a.publishedAt ?? '') || a.id.localeCompare(b.id));
       const configurationDifference = !definition ? 'delete' : !accepted || accepted.lifecycle === 'deleted' ? 'add'
         : definitionRevision(expectedSource!, definition) !== accepted.definitionRevision ? 'change' : 'none';
-      rules.push({ id, status: session.journal.pendingDelivery?.logicalId === id ? 'pending' : deliveryIssue || accepted?.lastFailure ? 'failed' : 'unchanged',
+      rules.push({ id, status: session.journal.pendingDelivery?.logicalId === id ? 'pending' : accepted?.lastFailure ? 'failed' : 'unchanged',
         current, control: accepted?.control, expectedSource,
         successfulInput: session.journal.rules[id]?.successfulInput, deliveryState: current ? 'delivered' : 'not-delivered',
         lifecycle: accepted?.lifecycle, acceptedConfigurationRevision: accepted?.configurationRevision, configurationDifference,
         stableUrls: Object.keys(current?.files ?? {}).map(path => `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${session.loaded.context.targetBranch}/${path}`),
         candidates, candidateCount: candidates.filter(candidate => candidate.selectable).length,
         verified: ['stable-files', ...(!deliveryIssue ? ['candidate-git-eligibility'] : [])],
-        error: deliveryIssue ?? accepted?.lastFailure, deliveryIssue, pendingOperation: session.journal.pendingDelivery?.logicalId === id ? session.journal.pendingDelivery.id : undefined });
+        error: accepted?.lastFailure, deliveryIssue, pendingOperation: session.journal.pendingDelivery?.logicalId === id ? session.journal.pendingDelivery.id : undefined });
     }
     const cleanup = session.journal.cleanupRun ?? session.journal.cleanupCheckpoint;
     return { ...rulesReport(session, 'status', rules), rules, maintenance: session.journal.maintenance, quarantinedCandidates: session.journal.quarantinedCandidates,

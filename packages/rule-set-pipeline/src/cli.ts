@@ -59,6 +59,7 @@ function humanResult(result: RulesResult & { rules?: RuleStatus[]; maintenance?:
     if (row.unverified?.length) lines.push(`  Unverified: ${row.unverified.join(', ')}`);
     if (status) {
       lines.push(`  Candidates: ${status.candidateCount}; configuration difference=${status.configurationDifference}`);
+      if (status.deliveryIssue) lines.push(`  Delivery issue: ${status.deliveryIssue}`);
       if (status.pendingOperation) lines.push(`  Pending: ${status.pendingOperation}`);
     }
     if (detailed || row.error || row.changes?.includes('change-source')) {
