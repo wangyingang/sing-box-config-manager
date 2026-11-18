@@ -3,11 +3,11 @@ import { isDeepStrictEqual } from 'node:util';
 import { candidateStableFiles } from './activation.js';
 import type { RuleDefinition } from './configuration.js';
 import { guardRulesConfiguration, loadRulesRequest, rulesBinary, type LoadedRules, type RulesRequest } from './rules-context.js';
-import { buildPreparedRules, buildRulesInput, prepareRulesInput, publishRuleBuild, recoverPublishedRuleCandidate, verifyRuleCandidate } from './rules-build.js';
+import { buildPreparedRules, buildRulesInput, resolveRulesInput, publishRuleBuild, recoverPublishedRuleCandidate, verifyRuleCandidate } from './rules-build.js';
 import { deleteRuleDelivery, deliverRuleVersion, readRuleDeliveries, recoverRuleDelivery, ruleSubscription, ensureRulePathAvailable } from './rules-delivery.js';
 import { definitionRevision, inputBindingRevision, type ManagedRule, type RuleCandidate, type RuleResult, type RulesResult, type SuccessfulRuleInput } from './rules-model.js';
 import { openRulesSession, type RulesSession } from './rules-session.js';
-import { findReusableBuild, reuseSuccessfulInput, unchangedBuiltInput } from './rules-success.js';
+import { findReusableBuild, reusableInputBaseline, reuseSuccessfulInput, reuseVerifiedInput, unchangedBuiltInput } from './rules-success.js';
 import { addCurrentFacts, disabledRulesResult, rulesFailure, rulesReport } from './rules-status.js';
 
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
@@ -49,7 +49,7 @@ async function failure(session: RulesSession, id: string, error: unknown, change
 }
 
 async function unchangedResult(session: RulesSession, rule: ManagedRule, success: SuccessfulRuleInput,
-  changes: string[], historical: boolean): Promise<RuleResult> {
+  changes: string[], verification: 'source-identity' | 'normalized-content' | 'native'): Promise<RuleResult> {
   const id = rule.definition.id;
   if (!session.loaded.dryRun) {
     // An authorized concurrent delivery changes the journal even when this
@@ -65,11 +65,12 @@ async function unchangedResult(session: RulesSession, rule: ManagedRule, success
     }
   }
   return { id, status: 'unchanged', changes,
-    verified: ['source', historical ? 'normalized-content' : 'native', 'retained-candidate', 'subscription', 'stable-files'],
-    ...(historical && { reliedOn: ['historical-native'] }) };
+    verified: [...(verification === 'source-identity' ? [] : ['source']), verification, 'retained-candidate', 'subscription', 'stable-files'],
+    ...(verification !== 'native' && { reliedOn: verification === 'source-identity'
+      ? ['historical-normalized-content', 'historical-native'] : ['historical-native'] }) };
 }
 
-async function updateSelectedRules(session: RulesSession, definitions: RuleDefinition[], changes: Map<string, string[]>) {
+async function updateSelectedRules(session: RulesSession, definitions: RuleDefinition[], changes: Map<string, string[]>, recoveredDeliveryId?: string) {
   const results: RuleResult[] = [];
   const deliveries = await readRuleDeliveries(await session.stable());
   const groups = new Map<string, RuleDefinition[]>();
@@ -90,6 +91,7 @@ async function updateSelectedRules(session: RulesSession, definitions: RuleDefin
   for (const definitions of groups.values()) {
     const completed = new Set<string>();
     const blocked = new Set<string>();
+    const rulesWithRecoveredCandidates = new Set<string>();
     if (!session.loaded.dryRun) for (const definition of definitions) {
       const rule = ownRule(session, definition.id)!;
       const recovering = Object.values(session.journal.candidates).filter(candidate => ['building', 'publishing'].includes(candidate.status)
@@ -97,6 +99,7 @@ async function updateSelectedRules(session: RulesSession, definitions: RuleDefin
         && candidate.definitionGeneration === rule.generation && candidate.controlRevision === rule.control.revision
         && definitionRevision(candidate.sourceInput, candidate.definition) === rule.definitionRevision)
         .sort((a, b) => a.id.localeCompare(b.id));
+      if (recovering.length) rulesWithRecoveredCandidates.add(definition.id);
       for (const fixed of recovering) {
         try {
           const current = deliveries.get(definition.id);
@@ -127,37 +130,61 @@ async function updateSelectedRules(session: RulesSession, definitions: RuleDefin
     }
     const batch = definitions.filter(definition => !completed.has(definition.id) && !blocked.has(definition.id));
     if (!batch.length) continue;
-    let input;
-    try { input = await prepareRulesInput(session.loaded, batch); }
-    catch (error) {
+    let source;
+    try {
+      session.loaded.progress('source-identity', batch.map(rule => rule.id).join(', '));
+      source = await resolveRulesInput(session.loaded, batch);
+    } catch (error) {
       for (const definition of batch) results.push(await failure(session, definition.id, error, changes.get(definition.id)));
+      if (sharedFailure(session, error)) return results;
       continue;
     }
-    for (const definition of batch) {
+    const batchResults = new Map<string, RuleResult>();
+    const orderedResults = () => batch.map(definition => batchResults.get(definition.id))
+      .filter((result): result is RuleResult => result !== undefined);
+    if (!session.loaded.dryRun) for (const definition of batch) {
+      const id = definition.id;
+      const rule = ownRule(session, id)!;
+      const current = deliveries.get(id);
+      const baseline = reusableInputBaseline(rule, current);
+      if (!baseline || id === recoveredDeliveryId || rulesWithRecoveredCandidates.has(id)) continue;
+      try {
+        const unchanged = await source.unchanged?.(baseline.source);
+        const success = unchanged && await reuseVerifiedInput(session, rule, current, baseline, unchanged);
+        if (success) batchResults.set(id, await unchangedResult(session, rule, success, changes.get(id) ?? [], 'source-identity'));
+      } catch (error) {
+        batchResults.set(id, await failure(session, id, error, changes.get(id)));
+        if (sharedFailure(session, error)) return [...results, ...orderedResults()];
+      }
+    }
+    const bodyNeeded = batch.filter(definition => !batchResults.has(definition.id));
+    let body: ReturnType<typeof source.read> | undefined;
+    for (const definition of bodyNeeded) {
       const id = definition.id;
       const rule = session.loaded.dryRun ? desiredRule(session, definition) : ownRule(session, id)!;
       const itemChanges = changes.get(id) ?? [];
       const current = deliveries.get(id);
       try {
+        const input = await (body ??= source.read(bodyNeeded));
         const reused = !session.loaded.dryRun && await reuseSuccessfulInput(session, rule, current, input);
         if (reused) {
-          results.push(await unchangedResult(session, rule, reused, itemChanges, true));
+          batchResults.set(id, await unchangedResult(session, rule, reused, itemChanges, 'normalized-content'));
           continue;
         }
         const built = await buildPreparedRules(session.loaded, [definition], input);
         const builtRule = built.results[0];
         if (builtRule.status === 'failed') {
-          results.push(await failure(session, id, builtRule.error, itemChanges));
+          batchResults.set(id, await failure(session, id, builtRule.error, itemChanges));
           continue;
         }
         const unchanged = await unchangedBuiltInput(session, rule, current, built, builtRule);
         if (unchanged) {
-          results.push(await unchangedResult(session, rule, unchanged, itemChanges, false));
+          batchResults.set(id, await unchangedResult(session, rule, unchanged, itemChanges, 'native'));
           continue;
         }
         const deliveryChanges = [...itemChanges, current ? 'replace-current-version' : 'first-delivery'];
         if (session.loaded.dryRun) {
-          results.push({ id, status: 'planned', changes: deliveryChanges,
+          batchResults.set(id, { id, status: 'planned', changes: deliveryChanges,
             verified: ['source', 'native', 'subscription'], unverified: ['remote-publication', 'HTTPS-readback'] });
           continue;
         }
@@ -166,13 +193,14 @@ async function updateSelectedRules(session: RulesSession, definitions: RuleDefin
         const afterRule = { ...rule }; delete afterRule.lastFailure;
         const delivered = await deliverRuleVersion(session, afterRule, candidate, 'sync', current);
         deliveries.set(id, delivered);
-        results.push({ id, status: 'delivered', changes: deliveryChanges,
+        batchResults.set(id, { id, status: 'delivered', changes: deliveryChanges,
           candidate: { versionId: candidate.versionId, publishedAt: candidate.publishedAt } });
       } catch (error) {
-        results.push(await failure(session, id, error, itemChanges));
-        if (sharedFailure(session, error)) return results;
+        batchResults.set(id, await failure(session, id, error, itemChanges));
+        if (sharedFailure(session, error)) return [...results, ...orderedResults()];
       }
     }
+    results.push(...orderedResults());
   }
   return results;
 }
@@ -201,6 +229,7 @@ export async function syncRules(request: RulesRequest = {}): Promise<RulesResult
     session = await openRulesSession(loaded);
     // Shared delivery corruption must stop even definition/control checkpoints.
     await readRuleDeliveries(await session.stable());
+    const recoveredDeliveryId = session.journal.pendingDelivery?.logicalId;
     if (!session.loaded.dryRun) { await guardRulesConfiguration(session.loaded); await recoverRuleDelivery(session); }
     else if (session.journal.pendingDelivery) {
       return operationReport(session, 'sync', [{ id: session.journal.pendingDelivery.logicalId, status: 'pending',
@@ -233,7 +262,7 @@ export async function syncRules(request: RulesRequest = {}): Promise<RulesResult
         if (sharedFailure(session, error)) return operationReport(session, 'sync', results);
       }
     }
-    results.push(...await updateSelectedRules(session, definitions, changes));
+    results.push(...await updateSelectedRules(session, definitions, changes, recoveredDeliveryId));
     return operationReport(session, 'sync', results);
   } catch (error) {
     if (!session) return rulesFailure('sync', request, error, loaded);
@@ -307,6 +336,7 @@ export async function resumeRuleUpdates(request: RulesRequest & { id: string }):
     session = await openRulesSession(loaded);
     const definition = selectedDefinition(session, request.id);
     await readRuleDeliveries(await session.stable());
+    const recoveredDeliveryId = session.journal.pendingDelivery?.logicalId;
     if (!session.loaded.dryRun) {
       await guardRulesConfiguration(session.loaded);
       if (session.journal.pendingDelivery && session.journal.pendingDelivery.logicalId !== request.id) throw new Error('RULE_WRITE_PENDING: another rule set has an unresolved delivery');
@@ -327,7 +357,7 @@ export async function resumeRuleUpdates(request: RulesRequest & { id: string }):
     }
     session.journal.rules[request.id] = next;
     await session.save(); resumed = true;
-    const results = await updateSelectedRules(session, [definition], new Map([[request.id, ['automatic-updates-restored']]]));
+    const results = await updateSelectedRules(session, [definition], new Map([[request.id, ['automatic-updates-restored']]]), recoveredDeliveryId);
     for (const result of results) if (['delivered', 'unchanged'].includes(result.status)) result.status = 'resumed';
     return operationReport(session, 'resume', results);
   } catch (error) {

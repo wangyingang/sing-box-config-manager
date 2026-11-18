@@ -29,7 +29,9 @@ Node 请求可选传入 `onProgress(event)`，事件为 `RulesProgress`（`stage
 
 逐集结果区分 delivered、unchanged、pinned-skipped、pinned、resumed、deleted、failed、pending、superseded、planned。正常固定跳过是成功；独立失败与成功并存为 partial；存在待核实提交或归属未知的隔离候选为 pending。`changes` 说明本次已完成或预览预计完成的变化。resume 后更新失败时，`automatic-updates-restored` 与 auto 控制说明解除固定已经持久化，不能把整次失败理解为仍被固定。
 
-真实更新因规范化内容相同而省略原生验证时，`verified` 列出本次检查的来源、内容、保留候选、订阅及稳定文件，`reliedOn: ["historical-native"]` 表示沿用历史原生验证。完整构建后确认无需切换的结果可以在 `verified` 中报告 `native`。进度事件的 `source` 阶段表示读取并转换正文，`build` 阶段表示开始构建及验证。
+通过上游文件身份省略正文时，`verified` 包含 `source-identity`、`retained-candidate`、`subscription` 和 `stable-files`，`reliedOn` 包含 `historical-normalized-content` 和 `historical-native`。读取正文后确认规范化内容相同时，`verified` 包含 `source` 与 `normalized-content`，`reliedOn` 只列出 `historical-native`。完整构建后确认无需切换时，`verified` 可以报告 `native`。
+
+进度事件的 `source-identity` 阶段表示探测上游文件身份，`source` 表示读取和转换正文，`build` 表示开始构建及验证。
 
 预览结果可以包含 `verified` 和 `unverified`，例如已验证来源、原生规则与订阅契约，但尚未验证远端发布及 HTTPS 回读。四种写操作的 dry-run 不持久保存任何状态，也不补做 pending 恢复。草稿仅允许 sync 预览；pin/resume/cleanup 始终按正式配置核对。
 
@@ -63,6 +65,15 @@ Actions 的 main 目标使用 `RULE_ARTIFACT_TOKEN`；acceptance-* 目标只使�
 - `error`、`pendingOperation`：最近失败和待核实操作。
 
 status 只读取，不登记操作、更新检查时间、恢复维护或发送通知。可选性检查以保留证据和当前订阅为依据；正式 pin 仍重新进行原生与兼容验证。
+
+## 上游文件身份与回退
+
+真实更新在规则集有适用的 `successfulInput` 时，可以用上游证据确认文件未变。候选、订阅和稳定文件必须完整，当前工具与处理策略必须符合成功记录。先处理已登记的待恢复事项。涉及恢复、上次失败、换源或证据不足的规则集回到正文处理，固定的规则集跳过上游。
+
+- **Git** 同一实际仓库、文件路径和完整 commit 可以直接确认。分支移动时，系统从 GitHub 的固定 commit 逐级核对树，在两个 commit 的同一路径查找普通文件。只有完整树中的 blob SHA 一致且大小与已成功处理的字节相符时才省略正文。分支名、大小、符号链接和截断的树本身不能证明文件未变。缺少可信 blob 时读取当前固定 commit 的正文。
+- **Release** 先解析实际 Release、tag、源码 commit 和两个附件的身份。GitHub 上传完成的正文附件 SHA-256 与已验证正文相符时，继续核对校验附件。摘要绑定本次探测得到的实际附件 ID、名称与地址，附件 ID 变化时也要重新核对摘要。校验附件可通过 GitHub 的 SHA-256 或重新读取小校验附件来确认。正文摘要缺失或任一附件的摘要无法确认相同时，进入正文处理。首次、回退和固定输入恢复时仍按附件 ID 下载，并校验校验附件的格式、目标文件和正文 SHA-256。tag、名称、源码 commit、修改时间和大小都不足以替代附件证据。
+
+同源规则集合并最新身份探测和必要的正文下载。各集独立核对前提并保存成功事实。当前交付可以沿用时，新 Git commit 或新 Release 的成功记录只影响下次探测，保留候选的来源、版本和首次发布时间仍取自最初交付。正式配置修订和成功事实均未变时，正常同步只读取必要证据，规则正文下载、`compile`、JSON/SRS 原生加载及 Git 提交均为 0。
 
 ## 远端事实与版本身份
 
