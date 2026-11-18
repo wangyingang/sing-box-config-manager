@@ -1,4 +1,4 @@
-import type { VerifyEvidence } from './evidence-download.js';
+import { verifyWithoutEvidenceCache, type VerifyEvidence } from './evidence-download.js';
 import type { RuleDefinition } from './configuration.js';
 import type { SourceReference } from './update.js';
 import { buildNative, type NativeBuild, type NativeBuildOptions } from './native.js';
@@ -44,7 +44,7 @@ export async function publishCandidate(options: NativeBuildOptions & {
   verifyEvidence?: VerifyEvidence;
 }) {
   const { candidate, native, buildId, binary, publication, save, nativeBuild = buildNative } = options;
-  const verifyEvidence: VerifyEvidence = options.verifyEvidence ?? (verify => verify(url => publication.download(url)));
+  const verifyEvidence = options.verifyEvidence ?? verifyWithoutEvidenceCache(url => publication.download(url));
   const prefix = `candidates/${candidate.id}`;
   const files = Object.fromEntries(native.artifacts.map(artifact => [`${prefix}/${artifact.file}`, artifact.content]));
   // A previously committed stage must still have the same bytes in the

@@ -60,3 +60,23 @@ test('可信完整提交地址才复用，淘汰后重新下载', async () => {
   await read(address);
   assert.equal(requests.filter(request => request === address).length, 2);
 });
+
+test('超出 64 MiB 的证据逐次下载，调用方仍得到独立字节', async () => {
+  const transportBytes = Buffer.alloc(64 * 1024 * 1024 + 1);
+  transportBytes[0] = 42;
+  let reads = 0;
+  const verify = createOperationEvidenceVerifier(async () => {
+    reads++;
+    return transportBytes;
+  });
+  const read = () => verify(async download => {
+    const bytes = await download(address);
+    assert.equal(bytes[0], 42);
+    return bytes;
+  });
+
+  (await read())[0] = 0;
+  await read();
+  assert.equal(reads, 2);
+  assert.equal(transportBytes[0], 42);
+});

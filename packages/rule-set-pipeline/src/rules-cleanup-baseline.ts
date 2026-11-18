@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { candidateStableFiles, verifyCandidateEvidence } from './activation.js';
 import { candidateArtifactFiles, candidateFiles } from './candidate-publication.js';
 import { filePaths, stageRef, type BaselineStage, type BaselineStages, type BaselineTransport, type PreparedBaseline } from './maintenance-baseline-transport.js';
-import type { VerifyEvidence } from './evidence-download.js';
+import { verifyWithoutEvidenceCache, type VerifyEvidence } from './evidence-download.js';
 import type { CleanupPlan } from './rules-cleanup-model.js';
 import { inspectBinary, type NativeBuildOptions } from './native.js';
 import { retainedCandidateDownload, type PublicationSnapshot } from './publication-repository.js';
@@ -92,7 +92,7 @@ export async function verifyRulesBaseline(options: RulesBaselineVerification, st
     throw new Error('Baseline maintenance identity mismatch');
   }
   const allowed = new Set(Object.values(stages).map(stage => stage.head));
-  const verifyEvidence: VerifyEvidence = options.verifyEvidence ?? (verify => verify(url => repository.download(url)));
+  const verifyEvidence = options.verifyEvidence ?? verifyWithoutEvidenceCache(url => repository.download(url));
   const restrict = (download: RulesRepository['download']) => async (url: string) => {
     const prefix = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/`;
     if (!url.startsWith(prefix) || !allowed.has(url.slice(prefix.length).split('/')[0])) {
@@ -155,7 +155,7 @@ export async function prepareRulesBaseline(options: RulesBaselineVerification & 
   source: PublicationSnapshot; stable: PublicationSnapshot; now: Date;
 }): Promise<PreparedBaseline> {
   const { transport, repository, targetBranch, journal, source, stable, plan, runId } = options;
-  const verifyEvidence: VerifyEvidence = options.verifyEvidence ?? (verify => verify(url => repository.download(url)));
+  const verifyEvidence = options.verifyEvidence ?? verifyWithoutEvidenceCache(url => repository.download(url));
   const tool = await inspectBinary(options.binary);
   const marker = encodeRecord({ schemaVersion: 2, maintenanceId: runId, generation: journal.generation });
   const stage = async (name: string, parent: BaselineStage | undefined, files: Record<string, Buffer>): Promise<BaselineStage> => {
