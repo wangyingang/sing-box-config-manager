@@ -5,7 +5,7 @@ import { inspectBinary, nativeBuildIdentity, NATIVE_VALIDATION_POLICY, type Nati
 import { projectTerms } from './projection.js';
 import type { PublicationSnapshot } from './publication-repository.js';
 import { sha256 } from './release.js';
-import { verifyRuleCandidate, type prepareRulesInput, type RuleBuild, type ValidRuleBuild } from './rules-build.js';
+import { verifyRuleCandidate, type PreparedRulesInput, type RuleBuild, type ValidRuleBuild } from './rules-build.js';
 import { rulesBinary } from './rules-context.js';
 import { definitionRevision, type ManagedRule, type QualifiedRuleCandidate, type RuleCandidate, type RuleDelivery, type RuleSource, type SuccessfulRuleInput } from './rules-model.js';
 import type { RulesSession } from './rules-session.js';
@@ -66,20 +66,30 @@ export async function verifiedDeliveryInput(session: RulesSession, rule: Managed
   if (retained) return successfulRuleInput(rule, current.source, retained.qualification);
 }
 
-export async function reuseSuccessfulInput(session: RulesSession, rule: ManagedRule, current: RuleDelivery | undefined,
-  input: Awaited<ReturnType<typeof prepareRulesInput>>) {
+export function reusableInputBaseline(rule: ManagedRule, current: RuleDelivery | undefined) {
   const baseline = rule.successfulInput;
-  const converted = input.lists.get(rule.definition.list);
-  if (!baseline || rule.lastFailure || !converted?.ok || baseline.candidateId !== current?.candidateId
-    || baseline.validationPolicy !== NATIVE_VALIDATION_POLICY) return;
-  const terms = projectTerms(converted.terms).route;
-  if (nativeBuildIdentity(baseline.toolSha256, terms) !== baseline.nativeBuildId) return;
+  if (baseline && !rule.lastFailure && baseline.candidateId === current?.candidateId
+    && baseline.validationPolicy === NATIVE_VALIDATION_POLICY) return baseline;
+}
+
+export async function reuseVerifiedInput(session: RulesSession, rule: ManagedRule, current: RuleDelivery | undefined,
+  baseline: SuccessfulRuleInput, source: RuleSource) {
   // Missing or unreadable evidence makes the current delivery ineligible for reuse.
   const retained = await currentCandidate(session, rule, current).catch(() => undefined);
   if (!retained || !isDeepStrictEqual(successfulRuleInput(rule, baseline.source, retained.qualification), baseline)) return;
-  const [tool, tools] = await Promise.all([inspectBinary(rulesBinary(session.loaded.context)), configuredBuildTools(input.format)]);
+  const [tool, tools] = await Promise.all([inspectBinary(rulesBinary(session.loaded.context)), configuredBuildTools(rule.source.input.format)]);
   if (tool.sha256 !== baseline.toolSha256 || digestTools(tools) !== baseline.buildToolsSha256) return;
-  return { ...baseline, source: input.source };
+  return { ...baseline, source };
+}
+
+export async function reuseSuccessfulInput(session: RulesSession, rule: ManagedRule, current: RuleDelivery | undefined,
+  input: PreparedRulesInput) {
+  const baseline = reusableInputBaseline(rule, current);
+  const converted = input.lists.get(rule.definition.list);
+  if (!baseline || !converted?.ok) return;
+  const terms = projectTerms(converted.terms).route;
+  if (nativeBuildIdentity(baseline.toolSha256, terms) !== baseline.nativeBuildId) return;
+  return reuseVerifiedInput(session, rule, current, baseline, input.source);
 }
 
 function matchesBuild(verified: VerifiedCandidate, built: RuleBuild, result: ValidRuleBuild) {

@@ -75,12 +75,14 @@ export function rulesEnvironment(binary: string, target = 'acceptance-issue-84',
     const retained = history.get(version)!;
     const input = JSON.stringify({ lists: ['openai', 'anthropic', 'google-deepmind', 'other'].map(name =>
       ({ name, length: 1, rules: [retained[name] ?? `domain:${name}.example`] })) });
+    const checksum = `${sha256(input)}  dlc.dat_plain.yml\n`;
     if (url.includes('/releases/') && !url.includes('/assets/')) return Response.json({ id: version, tag_name: tag,
       assets: ['dlc.dat_plain.yml', 'dlc.dat_plain.yml.sha256sum'].map((name, index) => ({ id: version * 10 + 1 + index, name,
+        state: 'uploaded', digest: `sha256:${sha256(index === 0 ? input : checksum)}`,
         browser_download_url: `https://github.com/${repository}/releases/download/${tag}/${name}` })) });
     if (url.includes('/git/ref/tags/')) return Response.json({ object: { type: 'commit', sha: 'a'.repeat(40) } });
     if (asset && Number(asset) % 10 === 1) return new Response(input);
-    if (asset && Number(asset) % 10 === 2) return new Response(`${sha256(input)}  dlc.dat_plain.yml\n`);
+    if (asset && Number(asset) % 10 === 2) return new Response(checksum);
     throw new Error(`Unexpected input: ${url}`);
   };
   const context: RulesContext = { repository, targetBranch: target, allowWrites: true, binary, fetch: fetcher,

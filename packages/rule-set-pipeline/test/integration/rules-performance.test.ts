@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { appendFileSync } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -8,6 +9,7 @@ import test, { type TestContext } from 'node:test';
 import { promisify } from 'node:util';
 import { serialize } from 'node:v8';
 import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
+import { sha256 } from '../../src/release.js';
 import { pinRuleVersion, resumeRuleUpdates, syncRules } from '../../src/rules-operations.js';
 import { encodeRecord, parseRulesJournal, RULE_STATE_PATH } from '../../src/rules-model.js';
 import { rulesEnvironment } from '../fixtures/rules-environment.js';
@@ -51,8 +53,10 @@ test('Release 与 Git 输入更新后同语义保留交付，零编译和加载�
   env.configure(config);
   let revision = 'a', cidr = '192.0.2.0/24\n2001:db8::/32\n';
   const fetcher = env.context.fetch!;
+  let gitBodies = 0;
   env.context.fetch = async (address, init) => {
     const url = String(address);
+    if (url.startsWith('https://raw.githubusercontent.com/gaoyifan/')) gitBodies++;
     if (url.includes('gaoyifan/china-operator-ip')) return url.includes('/branches/')
       ? Response.json({ name: 'ip-lists', commit: { sha: revision.repeat(40) } })
       : new Response(cidr);
@@ -83,7 +87,17 @@ test('Release 与 Git 输入更新后同语义保留交付，零编译和加载�
     assert.equal(result.successfulInput?.candidateId, result.current?.candidateId);
   }
   const writes = env.writes.length;
-  assert.equal((await syncRules(request)).status, 'success');
+  gitBodies = 0;
+  env.requests.length = 0;
+  const repeated = await syncRules(request);
+  assert.equal(repeated.status, 'success', JSON.stringify(repeated));
+  assert.equal(gitBodies, 0);
+  assert.deepEqual(env.requests.filter(url => url.includes('/releases/assets/')), []);
+  for (const result of repeated.results) {
+    assert.ok(result.verified?.includes('source-identity'));
+    assert.ok(!result.verified?.includes('normalized-content'));
+    assert.ok(result.reliedOn?.includes('historical-normalized-content'));
+  }
   assert.equal(env.writes.length, writes);
   assert.deepEqual(await take(), noNativeValidation);
   const oldHeads = new Set(env.trees.keys());
@@ -97,6 +111,189 @@ test('Release 与 Git 输入更新后同语义保留交付，零编译和加载�
   assert.equal(env.writes.length, cleanedWrites);
   assert.deepEqual(afterCleanup.results.map(result => result.successfulInput), next.results.map(result => result.successfulInput));
   assert.notEqual(afterCleanup.results[0].current?.candidateEvidenceUrl, original[0]?.candidateEvidenceUrl);
+});
+
+test('Git 分支移动后只复用可信的同路径 blob，缺失或改变时读取固定正文', { skip: !binary }, async t => {
+  const { wrapper, take } = await traceNative(t);
+  const env = cleanupEnvironment(wrapper, 'main');
+  const config = parseBuildConfiguration(readOfficialConfiguration());
+  config.ruleSets = config.ruleSets.filter(rule => rule.id === 'china-ip');
+  const input = config.sources[config.ruleSets[0].source];
+  assert.equal(input.version, 'git-branch');
+  input.input.path = 'lists/china46.txt';
+  env.configure(config);
+  let revision = 1;
+  const requests: string[] = [];
+  const commit = (id: number) => String(id).repeat(40);
+  const body = (id: number) => id < 3 ? '192.0.2.0/24\n' : '192.0.3.0/24\n';
+  const oid = (id: number, base: string) => id.toString(16).padStart(2, base).repeat(20);
+  const blob = (id: number) => createHash('sha1').update(`blob ${Buffer.byteLength(body(id))}\0`).update(body(id)).digest('hex');
+  env.context.fetch = async address => {
+    const url = String(address);
+    requests.push(url);
+    if (url.endsWith('/branches/ip-lists')) return Response.json({ name: 'ip-lists', commit: { sha: commit(revision) } });
+    const sha = url.split('/').at(-1)!;
+    if (url.includes('/git/commits/')) return Response.json({ sha, tree: { sha: oid(Number(sha[0]), 'a') } });
+    if (url.includes('/git/trees/')) {
+      const id = Number(sha[1]);
+      return Response.json({ sha, truncated: id === 4, tree: sha[0] === 'a'
+        ? [{ path: 'lists', type: 'tree', mode: '040000', sha: oid(id, 'b') }]
+        : [{ path: 'china46.txt', type: 'blob', mode: id === 5 ? '120000' : '100644', sha: blob(id), size: Buffer.byteLength(body(id)) }] });
+    }
+    assert.ok(url.endsWith(`/${commit(revision)}/lists/china46.txt`));
+    return new Response(body(revision));
+  };
+  const sync = async (id: number) => {
+    requests.length = 0;
+    revision = id;
+    const result = await syncRules({ context: env.context });
+    assert.equal(result.status, 'success', JSON.stringify(result));
+    assert.equal(result.results[0].successfulInput?.source.commit, commit(id));
+    assert.equal(requests.filter(url => url.includes('/branches/')).length, 1);
+    return { result: result.results[0], downloads: requests.filter(url => url.startsWith('https://raw.githubusercontent.com/')).length };
+  };
+  const first = await sync(1);
+  assert.equal(first.downloads, 1);
+  assert.deepEqual(await take(), oneNativeValidation);
+  const equivalent = await sync(2);
+  assert.equal(equivalent.downloads, 0);
+  assert.deepEqual(equivalent.result.current, first.result.current);
+  assert.ok(equivalent.result.verified?.includes('source-identity'));
+  assert.deepEqual(await take(), noNativeValidation);
+  const processedWrites = env.writes.length;
+  assert.equal((await sync(2)).downloads, 0);
+  assert.equal(requests.length, 1, 'same full commit needs no tree lookup');
+  assert.equal(env.writes.length, processedWrites);
+
+  const changed = await sync(3);
+  assert.equal(changed.downloads, 1);
+  assert.equal(changed.result.status, 'delivered');
+  assert.equal(changed.result.current?.source.commit, commit(3));
+  assert.deepEqual(await take(), oneNativeValidation);
+  for (const id of [4, 5]) {
+    const fallback = await sync(id);
+    assert.equal(fallback.downloads, 1);
+    assert.ok(fallback.result.verified?.includes('normalized-content'));
+    assert.deepEqual(fallback.result.current, changed.result.current);
+    assert.deepEqual(await take(), noNativeValidation);
+  }
+});
+
+test('Release 按附件 ID 和摘要短路，保留同 tag 替换与首次或回退输入校验', { skip: !binary }, async t => {
+  const { wrapper, take } = await traceNative(t);
+  const env = cleanupEnvironment(wrapper, 'main');
+  const config = env.config();
+  config.ruleSets = [config.ruleSets[0]];
+  env.configure(config);
+  const repo = config.sources.dlc.repository;
+  const tag = 'fixed-tag';
+  let checksumFailures = 0;
+  let assetId = 11, rule = 'domain:a.example', yamlDigest = true, checksumDigest = true, badChecksum = false;
+  const downloads: number[] = [];
+  env.context.fetch = async address => {
+    const url = String(address);
+    const input = JSON.stringify({ lists: [{ name: 'openai', length: 1, rules: [rule] }] });
+    const checksum = `${badChecksum ? '0'.repeat(64) : sha256(input)}  dlc.dat_plain.yml\n`;
+    if (url.endsWith('/releases/latest')) return Response.json({ id: 1, tag_name: tag,
+      assets: ['dlc.dat_plain.yml', 'dlc.dat_plain.yml.sha256sum'].map((name, index) => ({
+        id: assetId + index, name, state: 'uploaded', size: index ? checksum.length : input.length, updated_at: '2026-11-18T00:00:00Z',
+        browser_download_url: `https://github.com/${repo}/releases/download/${tag}/${name}`,
+        ...(index ? checksumDigest && { digest: `sha256:${sha256(checksum)}` } : yamlDigest && { digest: `sha256:${sha256(input)}` }),
+      })) });
+    if (url.endsWith(`/git/ref/tags/${tag}`)) return Response.json({ object: { type: 'commit', sha: 'a'.repeat(40) } });
+    const match = /\/releases\/assets\/(\d+)$/.exec(url);
+    assert.ok(match, url);
+    const id = Number(match[1]);
+    downloads.push(id);
+    assert.ok(id === assetId || id === assetId + 1);
+    if (id === assetId + 1 && checksumFailures > 0) {
+      checksumFailures--;
+      return new Response(null, { status: 503 });
+    }
+    return new Response(id === assetId ? input : checksum);
+  };
+  async function sync(expected: number[], status: 'success' | 'failed' = 'success') {
+    downloads.length = 0;
+    const result = await syncRules({ context: env.context });
+    assert.equal(result.status, status, JSON.stringify(result));
+    assert.deepEqual([...downloads].sort((a, b) => a - b), expected);
+    return result.results[0];
+  }
+  // Even when both GitHub digests exist, first acquisition checks the attached checksum.
+  badChecksum = true;
+  assert.match((await sync([11, 12], 'failed')).error!, /SHA-256/);
+  badChecksum = false;
+  const first = await sync([11, 12]);
+  assert.equal(first.status, 'delivered');
+  assert.deepEqual(await take(), oneNativeValidation);
+  checksumDigest = false;
+  assert.ok((await sync([12])).verified?.includes('source-identity'));
+  assert.deepEqual(await take(), noNativeValidation);
+
+  checksumFailures = 1;
+  assert.ok((await sync([11, 12, 12])).verified?.includes('normalized-content'));
+  assert.deepEqual(await take(), noNativeValidation);
+
+  // A successfully downloaded checksum is shared with fallback, even if it disagrees.
+  badChecksum = true;
+  assert.match((await sync([11, 12], 'failed')).error!, /SHA-256/);
+  assert.deepEqual(await take(), noNativeValidation);
+  badChecksum = false;
+  await sync([11, 12]); // A previous error requires full processing.
+  assert.deepEqual(await take(), oneNativeValidation);
+  yamlDigest = false;
+  assert.ok((await sync([11, 12])).verified?.includes('normalized-content'));
+  assert.deepEqual(await take(), noNativeValidation);
+
+  yamlDigest = checksumDigest = true;
+  assetId = 21;
+  const reuploaded = await sync([]);
+  assert.ok(reuploaded.verified?.includes('source-identity'));
+  assert.deepEqual(reuploaded.current, first.current);
+  const reuploadedSource = reuploaded.successfulInput?.source;
+  assert.equal(reuploadedSource && 'yaml' in reuploadedSource && reuploadedSource.yaml.id, 21);
+  assert.deepEqual(await take(), noNativeValidation);
+
+  assetId = 31;
+  rule = 'domain:b.example';
+  const replacement = await sync([31, 32]);
+  assert.equal(replacement.status, 'delivered');
+  const observed = replacement.successfulInput?.source;
+  assert.equal(observed && 'yaml' in observed && observed.yaml.id, 31);
+  assert.notEqual(replacement.current?.candidateId, first.current?.candidateId);
+  assert.deepEqual(await take(), oneNativeValidation);
+  assert.ok((await sync([])).verified?.includes('source-identity'));
+  assert.deepEqual(await take(), noNativeValidation);
+});
+
+test('同源成功集跳过正文转换，失败集仍共用一次必要的 Release 下载并单独重试', { skip: !binary }, async t => {
+  const { wrapper, take } = await traceNative(t);
+  const env = cleanupEnvironment(wrapper, 'main');
+  const request = { context: env.context };
+  const first = await syncRules(request);
+  assert.equal(first.status, 'success', JSON.stringify(first));
+  await take();
+
+  env.upstream({ anthropic: 'unsupported:invalid.example' });
+  const next = await syncRules(request);
+  assert.equal(next.status, 'partial', JSON.stringify(next));
+  assert.deepEqual(await take(), noNativeValidation);
+  assert.ok(next.results.find(result => result.id === 'openai')?.verified?.includes('normalized-content'));
+  env.requests.length = 0;
+  const retried = await syncRules(request);
+  assert.equal(retried.status, 'partial', JSON.stringify(retried));
+  assert.deepEqual(await take(), noNativeValidation);
+  assert.equal(env.requests.filter(url => url.endsWith('/releases/latest')).length, 1);
+  assert.equal(env.requests.filter(url => url.includes('/git/ref/tags/')).length, 1);
+  assert.deepEqual(env.requests.filter(url => url.includes('/releases/assets/')).sort().map(url => url.split('/').at(-1)), ['21', '22']);
+
+  const openai = retried.results.find(result => result.id === 'openai')!;
+  assert.deepEqual(openai.current, first.results.find(result => result.id === 'openai')?.current);
+  assert.ok(openai.verified?.includes('source-identity'));
+  assert.deepEqual(openai.successfulInput, next.results.find(result => result.id === 'openai')?.successfulInput);
+  const anthropic = retried.results.find(result => result.id === 'anthropic')!;
+  assert.equal(anthropic.status, 'failed');
+  assert.deepEqual(anthropic.successfulInput, first.results.find(result => result.id === 'anthropic')?.successfulInput);
 });
 
 test('cleanup 回收到期的成功候选后，resume 从旧 pin 回退到实际构建和交付', { skip: !binary }, async t => {
@@ -143,7 +340,9 @@ test('缺少候选证据时重新构建，原证据仍存的旧输入不能跳�
   const repo = env.context.repository;
   await repo.commit(repo.branch, (await repo.snapshot()).head, { [RULE_STATE_PATH]: encodeRecord(journal) }, 'fixture', async () => {});
   await take();
+  env.requests.length = 0;
   const repaired = await syncRules(request);
+  assert.ok(env.requests.some(url => url.endsWith('/releases/assets/11')));
   assert.equal(repaired.status, 'success', JSON.stringify(repaired));
   assert.equal(repaired.results[0].status, 'delivered');
   assert.deepEqual(await take(), oneNativeValidation);
@@ -177,7 +376,9 @@ test('来源别名保留成功关联，换列表、工具内容变化和同 ID �
   assert.notEqual(list.results[0].successfulInput?.inputBindingRevision, alias.results[0].successfulInput?.inputBindingRevision);
 
   appendFileSync(wrapper, '\n# New executable digest\n');
+  env.requests.length = 0;
   const tool = await syncRules(request);
+  assert.ok(env.requests.some(url => url.endsWith('/releases/assets/21')));
   assert.equal(tool.results[0].status, 'delivered', JSON.stringify(tool));
   assert.deepEqual(await take(), oneNativeValidation);
   assert.notEqual(tool.results[0].successfulInput?.toolSha256, list.results[0].successfulInput?.toolSha256);
@@ -455,13 +656,15 @@ test('新 Node 进程从持久回读阶段恢复原候选并重新执行一组�
   assert.deepEqual(await take(), oneNativeValidation);
 });
 
-test('正式四集首次交付执行四组原生验证与 29 次提交，七个持久阶段保留恢复边界', { skip: !binary }, async t => {
+test('正式四集首次交付执行四组原生验证与 29 次提交，后续输入未变时零正文、原生验证与提交', { skip: !binary }, async t => {
   const { wrapper, take } = await traceNative(t);
   const env = rulesEnvironment(wrapper, 'main');
   env.configure(parseBuildConfiguration(readOfficialConfiguration()));
   const fetcher = env.context.fetch!;
+  let gitBodies = 0;
   env.context.fetch = async (address, init) => {
     const url = String(address);
+    if (url.startsWith('https://raw.githubusercontent.com/gaoyifan/')) gitBodies++;
     if (url.includes('gaoyifan/china-operator-ip')) return url.includes('/branches/')
       ? Response.json({ name: 'ip-lists', commit: { sha: 'b'.repeat(40) } })
       : new Response('192.0.2.0/24\n2001:db8::/32\n');
@@ -492,6 +695,18 @@ test('正式四集首次交付执行四组原生验证与 29 次提交，七个�
     assert.equal(journals[6]!.pendingDelivery, undefined);
     assert.equal(journals[6]!.candidates[id].versionId, rule.current!.versionId);
   }
+  assert.equal(gitBodies, 1);
+  gitBodies = 0;
+  env.requests.length = 0;
+  const unchanged = await syncRules({ context: env.context });
+  assert.equal(unchanged.status, 'success', JSON.stringify(unchanged));
+  assert.deepEqual(unchanged.results.map(rule => rule.current), result.results.map(rule => rule.current));
+  assert.ok(unchanged.results.every(rule => rule.status === 'unchanged' && rule.verified?.includes('source-identity')));
+  assert.equal(gitBodies, 0);
+  assert.deepEqual(env.requests.filter(url => url.includes('/releases/assets/')), []);
+  assert.equal(env.requests.filter(url => url.endsWith('/releases/latest')).length, 1);
+  assert.deepEqual(await take(), noNativeValidation);
+  assert.equal(env.writes.length, 29);
 });
 
 for (const target of ['main', 'acceptance-performance']) for (const stage of [1, 2, 3, 4, 5, 6, 7]) {

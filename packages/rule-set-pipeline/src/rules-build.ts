@@ -3,49 +3,77 @@ import { isDeepStrictEqual } from 'node:util';
 import { verifyCandidateEvidence } from './activation.js';
 import { buildConfigured, convertInput } from './configured-build.js';
 import { publishConfiguredCandidate } from './configured-update.js';
-import type { RuleDefinition } from './configuration.js';
-import { readCommitInput, withCommitCheckpoint, type CommitSourceRecord } from './github-commit.js';
-import { lookupRelease, readReleaseInput, sha256 } from './release.js';
+import type { RuleDefinition, SourceInput } from './configuration.js';
+import type { CommitSourceRecord } from './github-commit.js';
+import { probeCommitInput, readPinnedCommitInput } from './git-input-probe.js';
+import { lookupRelease, readReleaseInput, sha256, type ReleaseOptions } from './release.js';
+import { probeReleaseInput } from './release-input-probe.js';
 import type { SourceRecord } from './types.js';
 import { retainedCandidateDownload } from './publication-repository.js';
 import { immutableUrl, type PublicationTransport } from './publication.js';
-import { inputBindingRevision, parseRulesJournal, type ManagedRule, type RuleCandidate } from './rules-model.js';
+import { inputBindingRevision, parseRulesJournal, type ManagedRule, type RuleCandidate, type RuleSource } from './rules-model.js';
 import { rulesBinary, type LoadedRules } from './rules-context.js';
 import type { RulesSession } from './rules-session.js';
 
 export type RuleBuild = Awaited<ReturnType<typeof buildRulesInput>>;
 export type ValidRuleBuild = Extract<RuleBuild['results'][number], { status: 'built-validated' }>;
 
-/** Acquisition and parsing are independent, so supported formats work with either mechanism. */
-export async function prepareRulesInput(loaded: LoadedRules, definitions: RuleDefinition[], fixed?: RuleCandidate) {
-  loaded.progress('source', definitions.map(rule => rule.id).join(', '));
-  const input = fixed?.sourceInput ?? loaded.configuration.sources[definitions[0].source];
-  const network = { fetch: loaded.context.fetch, token: loaded.context.token };
-  const acquired = input.version === 'git-branch'
-    ? await readCommitInput(input, fixed ? withCommitCheckpoint(network, {
-      identity: (({ inputSha256: _hash, inputBytes: _bytes, ...identity }) => identity)(fixed.source as CommitSourceRecord),
-      expectedSource: fixed.source as CommitSourceRecord, onSource: async () => {},
-    }) : network)
-    : await (async () => {
-      const metadata = await lookupRelease(input, fixed ? String((fixed.source as SourceRecord).releaseId) : 'latest', network);
-      if (typeof metadata.tag_name !== 'string') throw new Error('Release metadata has no tag');
-      return readReleaseInput({ ...network, tag: metadata.tag_name, releaseMetadata: metadata,
-        expectedSource: fixed?.source as SourceRecord | undefined }, input);
-    })();
-  const file = input.version === 'git-branch' ? input.input.path : input.input.asset;
-  const format = input.input.format;
-  const lists = convertInput(acquired.bytes, definitions, format, file);
-  return { source: acquired.source, lists, format, file };
+// The proof adapters leave the fixed-input readers and their build-tool fingerprints intact.
+interface RuleSourceProbe {
+  read(): Promise<{ bytes: Uint8Array; source: RuleSource }>;
+  unchanged?(previous: RuleSource): Promise<RuleSource | undefined>;
 }
 
-export async function buildPreparedRules(loaded: LoadedRules, definitions: RuleDefinition[], input: Awaited<ReturnType<typeof prepareRulesInput>>) {
+async function pinRulesSource(input: SourceInput, network: Pick<ReleaseOptions, 'fetch' | 'token'>, fixed?: RuleCandidate): Promise<RuleSourceProbe> {
+  if (input.version === 'git-branch') {
+    if (fixed) {
+      const expectedSource = fixed.source as CommitSourceRecord;
+      const { inputSha256: _hash, inputBytes: _bytes, ...identity } = expectedSource;
+      return { read: () => readPinnedCommitInput(input, network, identity, expectedSource) };
+    }
+    const probe = await probeCommitInput(input, network);
+    return { read: probe.read, unchanged: async previous => 'kind' in previous ? probe.unchanged(previous) : undefined };
+  }
+  const expectedSource = fixed?.source as SourceRecord | undefined;
+  const metadata = await lookupRelease(input, expectedSource ? String(expectedSource.releaseId) : 'latest', network);
+  if (typeof metadata.tag_name !== 'string') throw new Error('Release metadata has no tag');
+  const options = { ...network, tag: metadata.tag_name, releaseMetadata: metadata, expectedSource };
+  if (expectedSource) return { read: () => readReleaseInput(options, input) };
+  const probe = probeReleaseInput(input, options);
+  return { read: probe.read, unchanged: async previous => 'kind' in previous ? undefined : probe.unchanged(previous) };
+}
+
+export interface PreparedRulesInput {
+  source: RuleSource;
+  lists: ReturnType<typeof convertInput>;
+  format: SourceInput['input']['format'];
+  file: string;
+}
+
+/** Pin a shared source once, then read and convert only the lists that need its body. */
+export async function resolveRulesInput(loaded: LoadedRules, definitions: RuleDefinition[], fixed?: RuleCandidate) {
+  const input = fixed?.sourceInput ?? loaded.configuration.sources[definitions[0].source];
+  const probe = await pinRulesSource(input, { fetch: loaded.context.fetch, token: loaded.context.token }, fixed);
+  const format = input.input.format;
+  const file = input.version === 'git-branch' ? input.input.path : input.input.asset;
+  return {
+    unchanged: probe.unchanged,
+    async read(selected: RuleDefinition[]): Promise<PreparedRulesInput> {
+      loaded.progress('source', selected.map(rule => rule.id).join(', '));
+      const acquired = await probe.read();
+      return { source: acquired.source, lists: convertInput(acquired.bytes, selected, format, file), format, file };
+    },
+  };
+}
+
+export async function buildPreparedRules(loaded: LoadedRules, definitions: RuleDefinition[], input: PreparedRulesInput) {
   loaded.progress('build', definitions.map(rule => rule.id).join(', '));
   return buildConfigured(loaded.configuration, definitions, { binary: rulesBinary(loaded.context), nativeBuild: loaded.nativeBuild },
     input.source, input.lists, input.format, input.file);
 }
 
 export async function buildRulesInput(loaded: LoadedRules, definitions: RuleDefinition[], fixed?: RuleCandidate) {
-  return buildPreparedRules(loaded, definitions, await prepareRulesInput(loaded, definitions, fixed));
+  return buildPreparedRules(loaded, definitions, await (await resolveRulesInput(loaded, definitions, fixed)).read(definitions));
 }
 
 export async function verifyRuleCandidate(session: RulesSession, candidate: RuleCandidate, binary?: string) {
