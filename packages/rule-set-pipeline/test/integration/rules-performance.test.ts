@@ -13,7 +13,7 @@ import { sha256 } from '../../src/release.js';
 import { pinRuleVersion, resumeRuleUpdates, syncRules } from '../../src/rules-operations.js';
 import { encodeRecord, parseRulesJournal, RULE_RECEIPT_PATH, RULE_STATE_PATH } from '../../src/rules-model.js';
 import { rulesEnvironment } from '../fixtures/rules-environment.js';
-import { cleanupEnvironment } from '../fixtures/cleanup-environment.js';
+import { cleanupEnvironment, publishReplacementForCleanup } from '../fixtures/cleanup-environment.js';
 import { PublicationWriteError } from '../../src/publication-repository.js';
 import { getRulesStatus } from '../../src/rules-status.js';
 import { runRuleAutomation, runRuleWorkflow } from '../../src/rule-workflow.js';
@@ -133,6 +133,14 @@ test('Release 与 Git 输入更新后同语义保留交付，零编译和加载�
     return fetcher(address, init);
   };
   const request = { context: env.context };
+  env.upstream({ openai: 'domain:before-retention.example' });
+  env.configure({ ...config, ruleSets: config.ruleSets.filter(rule => rule.id === 'openai') });
+  const old = await syncRules(request);
+  assert.equal(old.status, 'success', JSON.stringify(old));
+  env.clock('2026-12-20T00:00:00.000Z');
+  env.upstream({ openai: 'domain:openai.example' });
+  env.configure(config);
+  await take();
   const first = await syncRules(request);
   assert.equal(first.status, 'success', JSON.stringify(first));
   assert.deepEqual(await take(), { compile: 2, decompile: 0, sourceLoad: 2, binaryLoad: 2 });
@@ -149,7 +157,7 @@ test('Release 与 Git 输入更新后同语义保留交付，零编译和加载�
   const observed = await getRulesStatus(request);
   const release = observed.rules!.find(rule => rule.id === 'openai')!.successfulInput;
   const git = observed.rules!.find(rule => rule.id === 'china-ip')!.successfulInput;
-  assert.equal(release?.source && 'releaseId' in release.source && release.source.releaseId, 2);
+  assert.equal(release?.source && 'releaseId' in release.source && release.source.releaseId, 4);
   assert.equal(git?.source.commit, 'b'.repeat(40));
   for (const result of next.results) {
     assert.ok(result.reliedOn?.includes('historical-native'));
@@ -171,7 +179,9 @@ test('Release 与 Git 输入更新后同语义保留交付，零编译和加载�
   assert.equal(env.writes.length, writes);
   assert.deepEqual(await take(), noNativeValidation);
   const oldHeads = new Set(env.trees.keys());
-  assert.equal((await cleanupRuleHistory(request)).status, 'success');
+  const cleaned = await cleanupRuleHistory(request);
+  assert.equal(cleaned.status, 'success', JSON.stringify(cleaned));
+  assert.deepEqual(cleaned.cleanup?.plan.discard.candidateIds, [old.results[0].current!.candidateId]);
   oldHeads.forEach(head => env.blockedHeads.add(head));
   await take();
   const cleanedWrites = env.writes.length;
@@ -552,6 +562,8 @@ test('首次 sync、pin 和 cleanup 各执行一组原生验证，同版本 resu
   const resume = await resumeRuleUpdates(request);
   assert.equal(resume.status, 'success', JSON.stringify(resume));
   counts.push(await take());
+  await publishReplacementForCleanup(env);
+  await take();
   const cleanup = await cleanupRuleHistory(request);
   assert.equal(cleanup.status, 'success', JSON.stringify(cleanup));
   assert.ok(env.refWrites.length);
@@ -568,6 +580,7 @@ test('首次交付与清理只回读各自需要的规则地址', { skip: !binar
 
   for (const [operation, run] of [['sync', syncRules], ['cleanup', cleanupRuleHistory]] as const) {
     await t.test(operation, async () => {
+      if (operation === 'cleanup') await publishReplacementForCleanup(env);
       downloads.length = 0;
       const result = await run(request);
       assert.equal(result.status, 'success', JSON.stringify(result));
@@ -582,13 +595,57 @@ test('首次交付与清理只回读各自需要的规则地址', { skip: !binar
   }
 });
 
+test('初始化及纯控制、来源观测和成功输入更新后，cleanup 只评估保留期', async t => {
+  const { wrapper, take } = await traceNative(t);
+  const env = cleanupEnvironment(wrapper, 'main');
+  const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
+  const request = { context: env.context, id: config.ruleSets[0].id };
+  const first = await syncRules(request);
+  assert.equal(first.status, 'success', JSON.stringify(first));
+  const current = first.results[0].current!;
+
+  const unchanged = async (observed: string, cutoff: string) => {
+    const journal = await env.journal();
+    const heads = new Map(env.heads), writes = env.writes.length;
+    const urls: string[] = [];
+    env.failDownload(url => { urls.push(url); });
+    await take();
+    env.clock(observed);
+    const result = await cleanupRuleHistory(request);
+    assert.equal(result.cleanup?.phase, 'unchanged', JSON.stringify(result));
+    assert.equal(result.status, 'success');
+    assert.equal(result.cleanup.plan.cutoff, cutoff);
+    assert.deepEqual(result.cleanup.plan.discard.candidateIds, []);
+    assert.deepEqual(await take(), noNativeValidation);
+    assert.deepEqual(urls, []);
+    assert.deepEqual(env.stageWrites, []);
+    assert.deepEqual(env.refWrites, []);
+    assert.deepEqual(env.heads, heads);
+    assert.equal(env.writes.length, writes);
+    assert.deepEqual(await env.journal(), journal);
+    env.failDownload();
+  };
+
+  await unchanged('2026-11-17T00:00:00.000Z', '2026-10-18T00:00:00.000Z');
+  const pinned = await pinRuleVersion({ ...request, version: current.versionId! });
+  assert.equal(pinned.status, 'success', JSON.stringify(pinned));
+  await unchanged('2026-11-18T00:00:00.000Z', '2026-10-19T00:00:00.000Z');
+  const resumed = await resumeRuleUpdates(request);
+  assert.equal(resumed.status, 'success', JSON.stringify(resumed));
+  env.upstream({ other: 'domain:unrelated-update.example' });
+  const observed = await syncRules(request);
+  assert.equal(observed.status, 'success', JSON.stringify(observed));
+  assert.deepEqual(observed.results[0].current, resumed.results[0].current);
+  assert.notDeepEqual(observed.results[0].successfulInput?.source, first.results[0].successfulInput?.source);
+  await unchanged('2026-11-19T00:00:00.000Z', '2026-10-20T00:00:00.000Z');
+});
+
 test('status、预览与无回收 cleanup 检查 Git 且没有 Raw 请求或写入', { skip: !binary }, async () => {
   const env = cleanupEnvironment(binary!, 'main');
   const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
   const request = { context: env.context };
   assert.equal((await syncRules(request)).status, 'success');
   const version = (await getRulesStatus(request)).rules![0].candidates[0].versionId!;
-  assert.equal((await cleanupRuleHistory(request)).status, 'success');
   const writes = env.writes.length;
   const urls: string[] = [];
   env.failDownload(url => { urls.push(url); });
@@ -914,6 +971,7 @@ for (const rival of ['sync', 'pin', 'change-source', 'delete', 'cleanup'] as con
     const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
     const first = await syncRules({ context: env.context }); assert.equal(first.status, 'success');
     const version = first.results[0].current!.versionId!;
+    const expired = rival === 'cleanup' ? await publishReplacementForCleanup(env) : undefined;
     env.upstream({ openai: 'domain:next.example' });
     let rivalResult: unknown; let afterRival = '';
     env.beforeWrite(async files => {
@@ -924,8 +982,10 @@ for (const rival of ['sync', 'pin', 'change-source', 'delete', 'cleanup'] as con
       const request = { context: { ...env.context } };
       if (rival === 'pin') rivalResult = await pinRuleVersion({ ...request, id: 'openai', version });
       else if (rival === 'cleanup') {
-        rivalResult = await cleanupRuleHistory(request);
-        assert.equal((rivalResult as { status: string }).status, 'success', JSON.stringify(rivalResult));
+        const cleaned = await cleanupRuleHistory(request);
+        rivalResult = cleaned;
+        assert.equal(cleaned.status, 'success', JSON.stringify(cleaned));
+        assert.deepEqual(cleaned.cleanup?.plan.discard.candidateIds, [expired]);
         assert.ok(env.refWrites.length);
       } else {
         if (rival === 'change-source') { const next = env.config(); next.ruleSets[0].list = 'other'; env.configure(next); }

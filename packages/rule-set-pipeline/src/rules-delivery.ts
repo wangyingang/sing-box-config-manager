@@ -112,6 +112,9 @@ async function finishDelivery(session: RulesSession, pending: PendingDelivery, s
     delete session.journal.candidates[id];
     if (session.journal.quarantinedCandidates) delete session.journal.quarantinedCandidates[id];
   }
+  if (pending.kind === 'delete' && (Object.keys(pending.changes).length || pending.removeCandidates.length)) {
+    session.journal.deletedHistoryPending = true;
+  }
   delete session.journal.pendingDelivery;
   await session.save(files);
 }

@@ -5,6 +5,7 @@ import type { BaselineTransport } from '../../src/maintenance-baseline-transport
 import type { MaintenanceRefTransport, RefChange } from '../../src/maintenance-refs.js';
 import type { PublicationSnapshot } from '../../src/publication-repository.js';
 import { parseRulesJournal, RULE_STATE_PATH } from '../../src/rules-model.js';
+import { syncRules } from '../../src/rules-operations.js';
 import type { RulesRepository } from '../../src/rules-repository.js';
 import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
 import { rulesEnvironment } from './rules-environment.js';
@@ -142,4 +143,20 @@ export function fourSetCleanupEnvironment(binary: string, target: string) {
     return releaseFetch(url, init);
   };
   return { ...env, sourceRequests, changeCidr(input: string) { inputs.set(++revision, input); } };
+}
+
+/** Replace the current OpenAI delivery and age its predecessor out of the retention window. */
+export async function publishReplacementForCleanup(env: ReturnType<typeof cleanupEnvironment>) {
+  const candidates = Object.values((await env.journal()).candidates).filter(candidate => candidate.logicalId === 'openai');
+  assert.equal(candidates.length, 1, 'Expected one published OpenAI candidate');
+  const [current] = candidates;
+  assert.ok(current.publishedAt);
+  env.clock(new Date(Date.parse(current.publishedAt) + (env.config().candidateRetentionDays + 1) * 86_400_000).toISOString());
+  env.upstream({ openai: 'domain:replacement-for-cleanup.example' });
+  const result = await syncRules({ context: env.context });
+  assert.equal(result.status, 'success', JSON.stringify(result));
+  const replacement = result.results.find(rule => rule.id === 'openai')?.current;
+  assert.ok(replacement);
+  assert.notEqual(replacement.candidateId, current.id);
+  return current.id;
 }

@@ -15,6 +15,7 @@ export interface CleanupPlan {
   blockers: string[];
   retainedBytes: number;
   otherRefs: Ref[];
+  deletedHistoryPending?: true;
   hasCleanup: boolean;
 }
 
@@ -69,6 +70,7 @@ export function validateCleanupFields(value: Record<string, any>) {
       || !object(p.retain) || !object(p.discard) || !ids(p.retain.candidateIds) || !ids(p.discard.candidateIds)
       || p.retain.candidateIds.some((id: string) => p.discard.candidateIds.includes(id))
       || !Array.isArray(p.retain.active) || !Array.isArray(p.decisions) || !Array.isArray(p.blockers)
+      || p.deletedHistoryPending !== value.deletedHistoryPending
       || p.blockers.length || !Number.isSafeInteger(p.retainedBytes) || p.retainedBytes < 0 || p.hasCleanup !== true
       || !Array.isArray(p.otherRefs) || !p.otherRefs.every((r: any) => object(r) && typeof r.ref === 'string' && sha(r.head))) return false;
     if (!p.retain.active.every((a: any) => object(a) && typeof a.recordPath === 'string'
@@ -81,6 +83,7 @@ export function validateCleanupFields(value: Record<string, any>) {
         && Array.isArray(d.reasons) && d.reasons.every((reason: any) => typeof reason === 'string'));
   };
   const fail = () => { throw new Error('RULE_STATE_CORRUPT: cleanup recovery metadata'); };
+  if (value.deletedHistoryPending !== undefined && value.deletedHistoryPending !== true) fail();
   const run = value.cleanupRun;
   if (run !== undefined) {
     if (!object(run) || value.maintenance !== 'maintenance' || !uuid(run.id) || run.generation !== value.generation

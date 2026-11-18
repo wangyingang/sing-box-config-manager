@@ -266,7 +266,7 @@ test('GitHub 四集 cleanup：保留窗口、切换中断、HTTPS 失败恢复�
       readbacks.push({ url, sha256: sha256(bytes), byteLength: bytes.length, at: new Date().toISOString() });
       return bytes;
     };
-    const verifyRetained = async () => {
+    const verifyRetained = async (expectedVersions = retained) => {
       const snapshot = await repository.snapshot();
       const journal = parseRulesJournal((await snapshot.read(RULE_STATE_PATH))!);
       const status = await getRulesStatus({ context: { ...context } }); observations.push({ label: 'status-after-cleanup', status });
@@ -281,7 +281,7 @@ test('GitHub 四集 cleanup：保留窗口、切换中断、HTTPS 失败恢复�
         const path = `${journal.rules[expected.id].definition.stablePath}/activation.json`;
         await readBytes(`https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${snapshot.head}/${path}`, (await snapshot.read(path))!);
       }
-      for (const version of retained) {
+      for (const version of expectedVersions) {
         const candidate = journal.candidates[version.candidateId]; assert.ok(candidate);
         assert.equal(candidate.versionId, version.versionId); assert.equal(candidate.publishedAt, version.publishedAt);
         assert.deepEqual(candidate.source, version.source);
@@ -304,10 +304,13 @@ test('GitHub 四集 cleanup：保留窗口、切换中断、HTTPS 失败恢复�
     const secondBefore = await repository.snapshot();
     const secondBytes = new Map(await Promise.all(filePaths(secondBefore.paths).filter(path => path.startsWith('stable/') && !path.endsWith('/activation.json'))
       .map(async path => [path, await secondBefore.read(path)] as const)));
-    const secondHistory = await ancestorHeads(secondBefore.head); now = '2026-11-17T00:00:00.000Z';
-    await check('cleanup-second-round', () => cleanupRuleHistory(input)); assert.equal(switchCount, 2);
+    const secondHistory = await ancestorHeads(secondBefore.head); now = '2026-12-02T00:00:00.000Z';
+    const secondCleanup = await check('cleanup-second-round', () => cleanupRuleHistory(input));
+    assert.equal(switchCount, 2);
+    assert.deepEqual(secondCleanup.cleanup?.plan.discard.candidateIds, [recent.candidateId]);
     secondHistory.forEach(head => blockedHeads.add(head));
-    const second = await verifyRetained();
+    const second = await verifyRetained(retained.filter(version => version.candidateId !== recent.candidateId));
+    assert.equal(parseRulesJournal((await second.read(RULE_STATE_PATH))!).candidates[recent.candidateId], undefined);
     for (const [path, bytes] of secondBytes) await readBytes(`https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${second.head}/${path}`, bytes!);
     const chosenCidr = await check('pin-retained-cidr', () => pinRuleVersion({ ...input, id: 'china-ip', version: cidr.versionId! }));
     assert.equal(currentOf(chosenCidr, 'china-ip').source.commit, updatedCommit);

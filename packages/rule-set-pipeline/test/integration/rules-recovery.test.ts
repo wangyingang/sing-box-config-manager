@@ -5,7 +5,7 @@ import { syncRules, pinRuleVersion, resumeRuleUpdates } from '../../src/rules-op
 import { getRulesStatus } from '../../src/rules-status.js';
 import { cleanupRuleHistory } from '../../src/rules-cleanup.js';
 import { runRuleAutomation } from '../../src/rule-workflow.js';
-import { cleanupEnvironment } from '../fixtures/cleanup-environment.js';
+import { cleanupEnvironment, publishReplacementForCleanup } from '../fixtures/cleanup-environment.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
 test('schedule 从登记的稳定交付恢复，失败与关闭更新门禁不进入 cleanup', { skip: !binary }, async () => {
@@ -58,7 +58,7 @@ for (const target of ['acceptance-issue-90', 'main']) test(`${target}: building 
   assert.ok((await getRulesStatus({ context: env.context })).rules?.[0].candidates[0].selectable);
   const cleaned = await cleanupRuleHistory({ context: { ...env.context } });
   assert.equal(cleaned.status, 'success', JSON.stringify(cleaned));
-  assert.equal(cleaned.cleanup?.phase, 'completed');
+  assert.equal(cleaned.cleanup?.phase, 'unchanged');
   const identity = (await env.journal()).candidates[candidate.id];
   const count = env.writes.length;
   assert.equal((await syncRules({ context: { ...env.context } })).status, 'success');
@@ -123,7 +123,7 @@ test('双分支同源两个 publishing 全部恢复原身份，不漏掉第二�
     assert.equal(recovered.results.find(row => row.id === candidate.logicalId)?.current?.candidateId, candidate.id);
   }
   const clean = await cleanupRuleHistory({ context: { ...env.context } });
-  assert.equal(clean.status, 'success', JSON.stringify(clean)); assert.equal(clean.cleanup?.phase, 'completed');
+  assert.equal(clean.status, 'success', JSON.stringify(clean)); assert.equal(clean.cleanup?.phase, 'unchanged');
 });
 
 async function persistJournal(env: ReturnType<typeof cleanupEnvironment>, journal: Awaited<ReturnType<typeof env.journal>>) {
@@ -187,8 +187,7 @@ test('历史同内容 building/publishing 全部收尾，unchanged 保持当前�
   }
   assert.equal((await getRulesStatus({ context: env.context })).rules![0].candidateCount, 3);
   const clean = await cleanupRuleHistory({ context: { ...env.context } });
-  assert.equal(clean.status, 'success', JSON.stringify(clean)); assert.equal(clean.cleanup?.phase, 'completed');
-  assert.equal((await env.journal()).lastCleanup?.id, clean.cleanup?.maintenanceId);
+  assert.equal(clean.status, 'success', JSON.stringify(clean)); assert.equal(clean.cleanup?.phase, 'unchanged');
   env.clock('2026-12-18T00:00:00.000Z');
   const expired = await cleanupRuleHistory({ context: { ...env.context } });
   assert.equal(expired.status, 'success', JSON.stringify(expired)); assert.equal(expired.cleanup?.removedCandidateCount, 2);
@@ -300,6 +299,7 @@ test('活动维护未完成或 cleanup 门禁关闭时，schedule 不开放上�
   const env = cleanupEnvironment(binary!, 'main');
   const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
   assert.equal((await syncRules({ context: env.context })).status, 'success');
+  await publishReplacementForCleanup(env);
   env.failStage(() => { throw new Error('maintenance stage unavailable'); });
   assert.notEqual((await cleanupRuleHistory({ context: env.context })).status, 'success');
   const frozen = (await env.journal()).cleanupRun!.plan;

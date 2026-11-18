@@ -220,6 +220,7 @@ export async function cleanupRuleHistory(request: RulesRequest = {}): Promise<Ru
       lastCleanup: { id: completed.id, completedAt: (session.loaded.context.now?.() ?? new Date()).toISOString(),
         headBeforeReopen: session.snapshot.head, stableHead: completed.stableHead } };
     delete next.cleanupCheckpoint;
+    delete next.deletedHistoryPending;
     session = await checkpoint(session, next, completed.stableHead);
     stableHead = session.shared ? session.snapshot.head : completed.stableHead;
     phase = 'completed';

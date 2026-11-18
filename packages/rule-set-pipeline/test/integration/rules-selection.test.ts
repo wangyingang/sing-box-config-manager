@@ -238,14 +238,17 @@ test('摘要随 SRS 篡改更新仍过不了真实原生 pin；域名与 CIDR �
 
 test('cleanup 已验证相同 JSON 后，仍拒绝另一保留候选中摘要自洽的无效 SRS', async () => {
   const env = cleanupEnvironment(binary!);
-  env.upstream({ openai: 'domain:shared.example', anthropic: 'domain:shared.example' });
   const request = { context: env.context };
+  assert.equal((await syncRules(request)).status, 'success');
+  env.clock('2026-12-20T00:00:00.000Z');
+  env.upstream({ openai: 'domain:shared.example', anthropic: 'domain:shared.example' });
   const built = await syncRules(request);
   assert.equal(built.status, 'success', JSON.stringify(built));
   const preview = await cleanupRuleHistory({ ...request, dryRun: true });
   assert.equal(preview.status, 'success', JSON.stringify(preview));
   const candidates = preview.cleanup!.plan!.retain.candidateIds;
   assert.equal(candidates.length, 2);
+  assert.equal(preview.cleanup?.plan.discard.candidateIds.length, 2);
   await replaceSrs(env, (await env.journal()).candidates[candidates[1]], 'domains');
   const result = await cleanupRuleHistory(request);
   assert.equal(result.status, 'pending', JSON.stringify(result));
