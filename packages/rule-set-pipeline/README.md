@@ -30,7 +30,9 @@ pnpm rules resume openai --dry-run --json
 pnpm rules cleanup --dry-run --json
 ```
 
-pin 示例的版本仅说明格式。实际操作先从 `status openai` 中选择 `selectable: true` 的 `versionId`；不要把 Git head、Release tag 或证据 URL 当作版本参数。sync/pin/resume 的 `--dry-run` 检查真实输入和必要的原生验证；cleanup 的预览只盘点保留集合，不执行原生复验或引用切换。所有预览均不发布候选、不登记控制或进度、不消费正式版本身份，输出区分已验证条件、预计变化和尚未验证的内容；正式执行重新核对前提。
+pin 示例的版本仅说明格式。实际操作先从 `status openai` 中选择 `selectable: true` 的 `versionId`；不要把 Git head、Release tag 或证据 URL 当作版本参数。人工 `status` 从 Git 审计所查询规则集的全部相关保留候选。核心事实或规则字节损坏时报告不可选原因，缺失的纯追溯文件通过 `missingTraceFiles` 提示。该审计的产物 Raw 请求、原生执行和写入均为零。
+
+sync/pin/resume 的 `--dry-run` 检查真实输入和必要的原生验证；cleanup 的预览只盘点保留集合，不执行原生复验或引用切换。所有预览均不发布候选、不登记控制或进度、不消费正式版本身份，输出区分已验证条件、预计变化和尚未验证的内容；正式执行重新核对前提。
 
 无效 pin 不改变控制、当前交付或尚未同步的配置。新 pin 可以选择当前规则代次内保留的旧源版本；再次实质换源会撤销该固定。`resume` 不补跑固定期间的中间版本，已经为 auto 时也立即检查。
 
@@ -126,12 +128,14 @@ pnpm rules status openai
 | --- | --- |
 | main 的正式配置 `config/rulesets.yml` push | 读取 main 当前配置，执行一次完整 sync，统一识别新增、换源和删除 |
 | `acceptance-*` 的同一路径 push | 读取该分支当前配置，只向产物仓库同名隔离目标执行 sync |
-| 每日 `23 20 * * *`（UTC 每日 20:23，北京时间每日 04:23） | 正常先 sync 后 cleanup；已有未完成维护时先续做 cleanup，恢复可写后再 sync 和必要清理 |
+| 每日 `23 20 * * *`（UTC 每日 20:23，北京时间每日 04:23） | 先做轻量预检，再按观察结果调用 sync 和 cleanup；已有未完成维护时先续做 cleanup，恢复可写后再 sync 和必要清理 |
 | 手工 `workflow_dispatch` | 选择五个 operation 之一、target 和该操作需要的参数；target 默认 main，也可选择已准备的 acceptance 分支 |
 
 例如在同一次正式配置提交中新增 A、将 B 换源、删除 C，push 会完成一次完整 sync，无需另发逐集命令。若 B 的来源失败，A/C 的成功保留，摘要列出 B 仍实际交付的版本，运行整体失败。修复后再次 push，或下一次每日 sync，会按当前配置继续处理。pinned 集跳过上游处理；手工 resume 后恢复 auto 并立即检查当前来源。生产更新开关关闭时，此次 push 显示未应用，而不会假装已经完成配置变更。
 
-日常编排分别保留 sync 和 cleanup 的结果；清理成功不能覆盖更新失败。单集普通来源失败不必阻止可安全执行的清理，共享状态或写入结果尚不明确时停止受影响写入。两类生产开关分别控制各自阶段；未完成维护无法恢复时不能继续更新。每日频率不改变候选保留年龄；不再使用 `RULE_CLEANUP_PERIOD_DAYS` 或 `RULE_CLEANUP_START_AT`，也不增加公开 daily 操作。GitHub 的 [schedule 事件可能延迟或丢弃](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)，本模块不承诺准时触发。
+每日预检读取当前正式配置、维护和交付登记，以及当前稳定交付的 Git 记录和规则字节。Summary 和 JSON artifact 中的 `schedule-preflight` 记录观察范围、当前交付和下一步恢复入口；历史候选的资格由人工 `status` 审计，后续实际操作按需核验候选。两个生产门禁均关闭时，只报告 sync 与 cleanup 未应用。
+
+日常编排分别保留 sync 和 cleanup 的结果；清理成功不能覆盖更新失败。单集普通来源失败不必阻止可安全执行的清理，共享状态或写入结果尚不明确时停止受影响写入。两类生产开关分别控制各自阶段；未完成维护无法恢复时不能继续更新。每日频率不改变候选保留年龄；不再使用 `RULE_CLEANUP_PERIOD_DAYS` 或 `RULE_CLEANUP_START_AT`。GitHub 的 [schedule 事件可能延迟或丢弃](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)，本模块不承诺准时触发。
 
 稳定文件已提交而 HTTPS 回读暂时失败时，下次 schedule 可将仅关联已登记交付的 pending 交给同一个受保护的 sync 恢复；不重复提交已经核实的稳定交付。损坏、不可读、目标不符、归属未明或混合共享冲突仍阻止后续写入。恢复未完成，或更新门禁关闭而返回 disabled 时，不继续 cleanup，也不把 disabled 当作 pending 已解决。活动维护仍优先由 cleanup 沿用已固化计划恢复。
 
@@ -149,7 +153,7 @@ pnpm rules status openai
 
 隔离验收的最小凭据设置：在源码仓库 `wangyingang/sing-box-config-manager` 的 **Settings → Secrets and variables → Actions → Repository secrets** 中保存 `RULE_ACCEPTANCE_TOKEN`。使用独立的 Fine-grained PAT，仅选择产物仓库 `wangyingang/sing-box-rule-artifacts`，仓库权限设为 **Contents: Read and write**，有效期只覆盖测试所需时间。创建步骤见 [GitHub Fine-grained PAT 文档](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token)。该 token 授权范围是仓库，不是 acceptance 分支；分支隔离由工作流和应用服务的目标校验约束。不要复制本机 `gh` 登录 token，也不要替换或修改生产 `RULE_ARTIFACT_TOKEN`。
 
-旧事件或 rerun 重新读取对应配置分支的当前 head，并记录实际配置修订，不能重放已删除的旧定义。运行摘要与可下载 JSON 结果保留操作、目标、配置修订、各集实际交付与控制状态、失败原因及继续入口。partial/failed/pending 均使工作流失败；成功、无变化、固定跳过和无到期数据为成功。disabled 表示对应阶段没有应用；它不会抵消其他阶段已经报告的失败或 pending。
+旧事件或 rerun 重新读取对应配置分支的当前 head，并记录实际配置修订，不能重放已删除的旧定义。运行摘要与可下载 JSON 结果保留操作、目标、配置修订、各集实际交付与控制状态、失败原因及继续入口。未解决的 pending、共享状态异常及实际执行的 sync 或 cleanup 失败均使工作流失败。已观察到的维护或待恢复交付在后续操作处理成功后，整次运行可以成功。disabled 表示对应阶段未应用，仍待恢复的交付继续报告为失败。
 
 ## GitHub 原生失败通知
 

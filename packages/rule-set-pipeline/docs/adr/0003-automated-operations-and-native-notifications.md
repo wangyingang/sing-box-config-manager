@@ -13,3 +13,5 @@ status: accepted
 通知对象和内容由 GitHub 及账号设置决定；定时任务通知对象还与创建、修改 cron 或重新启用工作流的人有关。保留期只决定候选年龄，计划只决定执行频率，两者不互相替代。历史 Spec #47/#66 的记录保持原事实；生产转换、开关启用、原生 schedule 观察和邮箱实收须依据部署授权与实际证据记录，不能由代码交付推断完成。当前操作与设置见[模块 README](../../README.md#actions-自动与手工运行)，交付状态以 Spec #86 的 PR 和验收记录为准。
 
 [#138](https://github.com/wangyingang/sing-box-config-manager/issues/138) 为操作结果记录本次实际发起的产物 Raw 请求。人工 status 用 Git 检查保留候选及稳定交付，预览也只在各自只读边界内检查。定时运行中的待恢复写入继续按 sync 或 cleanup 的持久阶段推进，完成必要规则回读后才确认成功。
+
+[#130](https://github.com/wangyingang/sing-box-config-manager/issues/130) 将每日预检收窄为正式配置、维护和待恢复交付登记，以及当前稳定交付的 Git 核验。Actions 用 `schedule-preflight` 记录观察范围，再调用 sync 或 cleanup。人工 status 继续核对全部相关保留候选的核心事实、实际规则字节和可选性。配置 push 直接调用 sync。预检只决定下一步，写入服务继续核对操作身份、配置修订和 Git heads。

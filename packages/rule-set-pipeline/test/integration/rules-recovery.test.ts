@@ -19,14 +19,16 @@ test('schedule 从登记的稳定交付恢复，失败与关闭更新门禁不�
   const stableWrites = env.writes.filter(write => write.branch === 'main').length;
   const reports: any[] = [];
   const run = (context = { ...env.context }) => runRuleAutomation({ event: 'schedule', target: 'main' }, text => reports.push(JSON.parse(text)), context);
-  assert.equal(await run(), 1); assert.deepEqual(reports.map(row => row.operation), ['status', 'sync']);
+  assert.equal(await run(), 1); assert.deepEqual(reports.map(row => row.operation), ['schedule-preflight', 'sync']);
+  assert.equal(reports[0].continueWith, 'sync');
+  assert.equal(reports[0].results[0].pendingOperation, pending.id);
   assert.equal((await env.journal()).pendingDelivery?.id, pending.id);
   reports.length = 0;
   assert.equal(await run({ ...env.context, allowWrites: false, allowCleanupWrites: true }), 1);
-  assert.deepEqual(reports.map(row => row.operation), ['status', 'sync']);
+  assert.deepEqual(reports.map(row => row.operation), ['schedule-preflight', 'sync']);
   env.failDownload(); reports.length = 0;
   assert.equal(await run(), 0, JSON.stringify(reports));
-  assert.deepEqual(reports.map(row => row.operation), ['status', 'sync', 'cleanup']);
+  assert.deepEqual(reports.map(row => row.operation), ['schedule-preflight', 'sync', 'cleanup']);
   assert.equal((await env.journal()).pendingDelivery, undefined);
   assert.equal(env.writes.filter(write => write.branch === 'main').length, stableWrites);
   assert.equal((await getRulesStatus({ context: { ...env.context } })).rules?.[0].current?.candidateId, pending.record?.candidateId);
@@ -257,7 +259,7 @@ test('恢复固定输入不跟随新的上游；缺失原输入明确失败并�
 });
 
 test('schedule 不放行损坏、不可读、目标不符、无登记依据或混合共享异常的 pending', { skip: !binary }, async () => {
-  for (const fault of ['corrupt', 'unreadable', 'target', 'unregistered', 'mixed']) {
+  for (const fault of ['corrupt', 'unreadable', 'target', 'unregistered', 'mixed', 'stable-corrupt']) {
     const env = cleanupEnvironment(binary!, 'main');
     const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
     env.failDownload(url => { if (url.includes('/stable/')) throw new Error('temporary readback failure'); });
@@ -274,6 +276,12 @@ test('schedule 不放行损坏、不可读、目标不符、无登记依据或�
     if (fault === 'corrupt') {
       const snapshot = await env.context.repository.snapshot(); env.trees.get(snapshot.head)!.set('pipeline/state.json', Buffer.from('{'));
     }
+    if (fault === 'stable-corrupt') {
+      const snapshot = await env.context.repository.snapshot('main');
+      const stableSrs = snapshot.paths.find(path => path.startsWith('stable/') && path.endsWith('.srs'));
+      assert.ok(stableSrs);
+      env.trees.get(snapshot.head)!.set(stableSrs, Buffer.from('corrupt stable artifact'));
+    }
     if (fault === 'unreadable') {
       const snapshot = env.context.repository.snapshot;
       env.context.repository.snapshot = async (...args) => {
@@ -283,7 +291,7 @@ test('schedule 不放行损坏、不可读、目标不符、无登记依据或�
     }
     const writes = env.writes.length, reports: { operation: string }[] = [];
     assert.equal(await runRuleAutomation({ event: 'schedule', target: 'main' }, text => reports.push(JSON.parse(text)), { ...env.context }), 1, fault);
-    assert.deepEqual(reports.map(row => row.operation), ['status'], fault);
+    assert.deepEqual(reports.map(row => row.operation), ['schedule-preflight'], fault);
     assert.equal(env.writes.length, writes); assert.equal(env.refWrites.length, 0);
   }
 });
@@ -299,7 +307,7 @@ test('活动维护未完成或 cleanup 门禁关闭时，schedule 不开放上�
   for (const allowCleanupWrites of [false, true]) {
     const reports: { operation: string }[] = [];
     assert.equal(await runRuleAutomation({ event: 'schedule', target: 'main' }, text => reports.push(JSON.parse(text)), { ...env.context, allowCleanupWrites }), 1);
-    assert.deepEqual(reports.map(row => row.operation), ['status', 'cleanup']);
+    assert.deepEqual(reports.map(row => row.operation), ['schedule-preflight', 'cleanup']);
     assert.deepEqual((await env.journal()).cleanupRun!.plan, frozen);
   }
   assert.equal(env.writes.length, writes); assert.equal(env.requests.length, 0);
