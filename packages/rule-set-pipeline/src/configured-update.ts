@@ -1,3 +1,4 @@
+import type { VerifyEvidence } from './evidence-download.js';
 import { randomUUID } from 'node:crypto';
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -280,10 +281,10 @@ async function prepareRelease(source: ReleaseInput, options: ConfiguredUpdateOpt
 
 export async function publishConfiguredCandidate(result: Extract<Awaited<ReturnType<typeof buildConfiguredRelease>>['results'][number], { status: 'built-validated' }>,
   candidate: PublicationCandidate & { operation?: string; previousCandidateId?: string }, source: SourceRecord | CommitSourceRecord, tools: Record<string, string | number>, target: { repository: string; branch: string },
-  publication: PublicationTransport, { binary, nativeBuild }: NativeBuildOptions,
+  publication: PublicationTransport, { binary, nativeBuild, verifyEvidence }: NativeBuildOptions & { verifyEvidence?: VerifyEvidence },
   save: () => Promise<void>, beforeEvidence?: () => void) {
   const prefix = `candidates/${candidate.id}`;
-  return publishCandidate({ candidate, native: result.native, buildId: result.buildId, binary, nativeBuild, publication, save, beforeEvidence,
+  return publishCandidate({ candidate, native: result.native, buildId: result.buildId, binary, nativeBuild, verifyEvidence, publication, save, beforeEvidence,
     records: filesCommit => {
       const artifactId = (file: string) => `${result.id}@${candidate.id}:${file}`;
       const manifest = { schemaVersion: ARTIFACT_MANIFEST_VERSION, id: result.id, revision: candidate.id, targetVersion: '1.14.4', sourceFormatVersion: 4,

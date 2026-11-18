@@ -17,3 +17,5 @@ status: accepted
 [#125](https://github.com/wangyingang/sing-box-config-manager/issues/125) 启用后，维护从新策略生成的历史中选择保留候选，沿用相同的保留与恢复规则。清理保留原构建工具和验证步骤，并记录新物理地址的字节核对及复验工具。
 
 每次调用 `cleanup` 时，准备基线、切换前复验和切换后回读可复用本次已建立的原生验证证明。各阶段仍验证固定地址、实际字节、保留树和引用租约。恢复已有检查点时，需要原生验证的阶段从本次调用取得证明。[#126](https://github.com/wangyingang/sing-box-config-manager/issues/126)
+
+准备、切换前复验和切换后核对可在一次 `cleanup` 内复用已校验的固定地址字节。重写后的地址首次真实下载，切换后的稳定分支入口继续通过 HTTPS 回读。当前保留树、基线身份与引用租约仍逐阶段核对。缓存容量和固定地址的可用性观察见[证据回读](../../contracts/rules-operations.md#证据回读)。[#127](https://github.com/wangyingang/sing-box-config-manager/issues/127)

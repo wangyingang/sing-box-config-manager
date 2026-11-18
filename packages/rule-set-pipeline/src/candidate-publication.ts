@@ -1,3 +1,4 @@
+import type { VerifyEvidence } from './evidence-download.js';
 import type { RuleDefinition } from './configuration.js';
 import type { SourceReference } from './update.js';
 import { buildNative, type NativeBuild, type NativeBuildOptions } from './native.js';
@@ -40,8 +41,10 @@ export async function publishCandidate(options: NativeBuildOptions & {
   publication: PublicationTransport; save: () => Promise<void>;
   records: (filesCommit: string) => Record<string, Buffer>;
   beforeEvidence?: () => void;
+  verifyEvidence?: VerifyEvidence;
 }) {
   const { candidate, native, buildId, binary, publication, save, nativeBuild = buildNative } = options;
+  const verifyEvidence: VerifyEvidence = options.verifyEvidence ?? (verify => verify(url => publication.download(url)));
   const prefix = `candidates/${candidate.id}`;
   const files = Object.fromEntries(native.artifacts.map(artifact => [`${prefix}/${artifact.file}`, artifact.content]));
   // A previously committed stage must still have the same bytes in the
@@ -63,12 +66,15 @@ export async function publishCandidate(options: NativeBuildOptions & {
     // Preserve the original immutable record when an identical tool is installed
     // at a different path on the recovery machine.
     const path = `${prefix}/build.json`;
-    const original = await publication.download(immutableUrl(candidate.metadataCommit, path));
-    const expectedBuild = JSON.parse(records[path].toString()), originalBuild = JSON.parse(original.toString());
-    const withoutLocation = (record: Record<string, any>) => ({ ...record, tool: { ...record.tool, path: undefined } });
-    if (!isDeepStrictEqual(withoutLocation(expectedBuild), withoutLocation(originalBuild))) throw new Error('Remote build record mismatch');
-    records[path] = original;
-    await verifyRetained(records);
+    const url = immutableUrl(candidate.metadataCommit, path);
+    await verifyEvidence(async download => {
+      const original = await download(url);
+      const expectedBuild = JSON.parse(records[path].toString()), originalBuild = JSON.parse(original.toString());
+      const withoutLocation = (record: Record<string, any>) => ({ ...record, tool: { ...record.tool, path: undefined } });
+      if (!isDeepStrictEqual(withoutLocation(expectedBuild), withoutLocation(originalBuild))) throw new Error('Remote build record mismatch');
+      records[path] = original;
+      await verifyRetained(records);
+    });
   }
   const metadataCommit = candidate.metadataCommit ??= await publication.commit(records, `候选 ${candidate.id}：Manifest 与构建记录`);
   candidate.manifestUrl = immutableUrl(metadataCommit, `${prefix}/manifest.json`);
@@ -76,10 +82,13 @@ export async function publishCandidate(options: NativeBuildOptions & {
   const readback: { url: string; sha256: string; byteLength: number; exactBytes: true }[] = [];
   const verify = async (path: string, expected: Buffer, commit: string) => {
     const url = immutableUrl(commit, path);
-    const actual = await publication.download(url);
-    if (actual.length !== expected.length || sha256(actual) !== sha256(expected) || !actual.equals(expected)) {
-      throw new Error(`Readback content mismatch: ${url}`);
-    }
+    const actual = await verifyEvidence(async download => {
+      const bytes = await download(url);
+      if (bytes.length !== expected.length || sha256(bytes) !== sha256(expected) || !bytes.equals(expected)) {
+        throw new Error(`Readback content mismatch: ${url}`);
+      }
+      return bytes;
+    });
     readback.push({ url, sha256: sha256(actual), byteLength: actual.length, exactBytes: true });
     return actual;
   };

@@ -139,8 +139,10 @@ export async function recoverRuleDelivery(session: RulesSession) {
   // readback fails, so status can show the committed version and pending check.
   for (const [path, expected] of Object.entries(pending.changes)) {
     if (!expected) continue;
-    const actual = await repository.download(immutableUrl(stable.head, path));
-    if (actual.length !== expected.byteLength || sha256(actual) !== expected.sha256) throw new Error('RULE_WRITE_PENDING: committed HTTPS readback differs');
+    await session.loaded.verifyEvidence(async download => {
+      const actual = await download(immutableUrl(stable.head, path));
+      if (actual.length !== expected.byteLength || sha256(actual) !== expected.sha256) throw new Error('RULE_WRITE_PENDING: committed HTTPS readback differs');
+    });
   }
   await finishDelivery(session, pending);
 }
