@@ -17,7 +17,7 @@ test('CLI 在写入前和各阶段持续报告进度，JSON stdout 只有最终�
   env.beforeWrite(async () => { assert.equal(stdout.length, 0); assert.ok(stderr.length); });
   assert.equal(await runRulesCli(['sync', '--json'], text => stdout.push(text), env.context, text => stderr.push(text)), 0);
   assert.equal(stdout.length, 1); assert.equal(JSON.parse(stdout[0]).status, 'success');
-  for (const stage of ['正式配置', '构建校验', '登记规则候选', '上传规则文件', '候选构建记录', '验证候选', '准备交付', '稳定订阅文件', '回读确认交付']) {
+  for (const stage of ['正式配置', '读取并转换规则来源', '构建校验', '登记规则候选', '上传规则文件', '候选构建记录', '验证候选', '准备交付', '稳定订阅文件', '回读确认交付']) {
     assert.ok(stderr.some(line => line.includes(stage)), stage);
   }
   assert.ok(stderr.every(line => !/token|Authorization|https:\/\//.test(line)));

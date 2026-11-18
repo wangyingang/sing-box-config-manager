@@ -8,13 +8,12 @@ import test, { type TestContext } from 'node:test';
 import { promisify } from 'node:util';
 import { serialize } from 'node:v8';
 import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
-import { syncRules } from '../../src/rules-operations.js';
+import { pinRuleVersion, resumeRuleUpdates, syncRules } from '../../src/rules-operations.js';
 import { encodeRecord, parseRulesJournal, RULE_STATE_PATH } from '../../src/rules-model.js';
 import { rulesEnvironment } from '../fixtures/rules-environment.js';
 import { cleanupEnvironment } from '../fixtures/cleanup-environment.js';
 import { PublicationWriteError } from '../../src/publication-repository.js';
 import { getRulesStatus } from '../../src/rules-status.js';
-import { pinRuleVersion, resumeRuleUpdates } from '../../src/rules-operations.js';
 import { cleanupRuleHistory } from '../../src/rules-cleanup.js';
 import { countNativeCommands } from '../fixtures/native-commands.js';
 
@@ -219,6 +218,31 @@ test('同义输入的成功记录提交与 pin 并发时不会越过 journal 租
   assert.equal(raced.results[0].control?.mode, 'pinned');
   assert.deepEqual(raced.results[0].successfulInput, first.results[0].successfulInput);
   assert.deepEqual(await take(), oneNativeValidation, 'only the competing pin runs native validation');
+});
+
+test('稳定回读恢复成功后记账，候选 HTTPS 断开不阻塞已应用交付', { skip: !binary }, async () => {
+  const env = cleanupEnvironment(binary!, 'main');
+  const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
+  const request = { context: env.context };
+  env.failDownload(url => { if (url.includes('/stable/')) throw new Error('interrupted stable readback'); });
+  const interrupted = await syncRules(request);
+  assert.equal(interrupted.status, 'pending', JSON.stringify(interrupted));
+  const journal = await env.journal(), pending = journal.pendingDelivery!;
+  assert.ok(pending.record);
+  assert.equal(interrupted.results[0].current?.candidateId, pending.record.candidateId);
+  assert.equal(journal.rules.openai.successfulInput, undefined);
+  const stableHead = env.heads.get('main');
+  env.failDownload(url => { if (url.includes('/candidates/')) throw new Error('503 candidate HTTPS only'); });
+  env.failSource(true);
+  const recovered = await syncRules({ context: { ...env.context } });
+  // The independent latest-input step is offline, but the applied delivery is complete.
+  assert.equal(recovered.status, 'failed', JSON.stringify(recovered));
+  assert.match(recovered.results[0].error!, /Upstream unavailable/);
+  assert.equal(env.heads.get('main'), stableHead);
+  const after = await env.journal();
+  assert.equal(after.pendingDelivery, undefined);
+  assert.equal(after.rules.openai.successfulInput?.candidateId, pending.record.candidateId);
+  assert.deepEqual(after.rules.openai.successfulInput?.source, pending.record.source);
 });
 
 test('首次 sync、pin 和 cleanup 各执行一组原生验证，同版本 resume 使用历史证明', { skip: !binary }, async t => {

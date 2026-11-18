@@ -48,20 +48,25 @@ async function failure(session: RulesSession, id: string, error: unknown, change
     error: message(error), continueWith: 'sync' };
 }
 
-async function recordUnchangedInput(session: RulesSession, rule: ManagedRule, success: SuccessfulRuleInput) {
-  if (session.loaded.dryRun) return;
+async function unchangedResult(session: RulesSession, rule: ManagedRule, success: SuccessfulRuleInput,
+  changes: string[], historical: boolean): Promise<RuleResult> {
   const id = rule.definition.id;
-  // Even a no-write result must still describe the accepted configuration and
-  // journal. An authorized concurrent delivery changes the journal head.
-  await session.guard();
-  const next = { ...rule, successfulInput: success };
-  delete next.lastFailure;
-  session.journal.rules[id] = next;
-  try { await session.save(); }
-  catch (error) {
-    session.journal.rules[id] = rule;
-    throw error;
+  if (!session.loaded.dryRun) {
+    // An authorized concurrent delivery changes the journal even when this
+    // run has no facts to write.
+    await session.guard();
+    const next = { ...rule, successfulInput: success };
+    delete next.lastFailure;
+    session.journal.rules[id] = next;
+    try { await session.save(); }
+    catch (error) {
+      session.journal.rules[id] = rule;
+      throw error;
+    }
   }
+  return { id, status: 'unchanged', changes,
+    verified: ['source', historical ? 'normalized-content' : 'native', 'retained-candidate', 'subscription', 'stable-files'],
+    ...(historical && { reliedOn: ['historical-native'] }) };
 }
 
 async function updateSelectedRules(session: RulesSession, definitions: RuleDefinition[], changes: Map<string, string[]>) {
@@ -136,9 +141,7 @@ async function updateSelectedRules(session: RulesSession, definitions: RuleDefin
       try {
         const reused = !session.loaded.dryRun && await reuseSuccessfulInput(session, rule, current, input);
         if (reused) {
-          await recordUnchangedInput(session, rule, reused);
-          results.push({ id, status: 'unchanged', changes: itemChanges,
-            verified: ['source', 'normalized-content', 'retained-candidate', 'subscription', 'stable-files'], reliedOn: ['historical-native'] });
+          results.push(await unchangedResult(session, rule, reused, itemChanges, true));
           continue;
         }
         const built = await buildPreparedRules(session.loaded, [definition], input);
@@ -149,9 +152,7 @@ async function updateSelectedRules(session: RulesSession, definitions: RuleDefin
         }
         const unchanged = await unchangedBuiltInput(session, rule, current, built, builtRule);
         if (unchanged) {
-          await recordUnchangedInput(session, rule, unchanged);
-          results.push({ id, status: 'unchanged', changes: itemChanges,
-            verified: ['source', 'native', 'retained-candidate', 'subscription', 'stable-files'] });
+          results.push(await unchangedResult(session, rule, unchanged, itemChanges, false));
           continue;
         }
         const deliveryChanges = [...itemChanges, current ? 'replace-current-version' : 'first-delivery'];

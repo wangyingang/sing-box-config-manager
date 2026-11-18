@@ -10,7 +10,7 @@ import type { RulesSession } from './rules-session.js';
 import type { RuleWrites } from './rules-repository.js';
 import { rulesBinary } from './rules-context.js';
 import { verifyRuleCandidate } from './rules-build.js';
-import { verifiedDeliveryInput } from './rules-success.js';
+import { qualifiedRuleCandidate, successfulRuleInput, verifiedDeliveryInput } from './rules-success.js';
 
 export async function readRuleDeliveries(snapshot: PublicationSnapshot) {
   const deliveries = new Map<string, RuleDelivery>();
@@ -88,7 +88,13 @@ async function verifyChanges(snapshot: PublicationSnapshot, changes: PendingDeli
 async function finishDelivery(session: RulesSession, pending: PendingDelivery, stable: PublicationSnapshot) {
   const rule = { ...pending.afterRule };
   if (pending.kind === 'sync') {
-    rule.successfulInput = await verifiedDeliveryInput(session, rule, pending.record!, stable);
+    const record = pending.record!;
+    // The exact candidate was verified before registration. Stable recovery
+    // can finish even if the previously checked candidate HTTPS is unavailable.
+    const success = pending.qualifiedCandidate
+      ? successfulRuleInput(rule, record.source, pending.qualifiedCandidate)
+      : await verifiedDeliveryInput(session, rule, record, stable);
+    if (success) rule.successfulInput = success;
   }
   session.journal.rules[pending.logicalId] = rule;
   const files: RuleWrites = {};
@@ -156,6 +162,8 @@ export async function deliverRuleVersion(session: RulesSession, rule: ManagedRul
   kind: 'sync' | 'pin', current?: RuleDelivery) {
   session.loaded.progress('prepare-delivery', rule.definition.id);
   const verified = await verifyRuleCandidate(session, candidate, rulesBinary(session.loaded.context));
+  const qualification = kind === 'sync' ? qualifiedRuleCandidate(rule, candidate, verified) : undefined;
+  if (kind === 'sync' && !qualification) throw new Error('CANDIDATE_UNAVAILABLE: incomplete input or build qualification');
   const subscription = ruleSubscription(session, rule, current);
   await ensureRulePathAvailable(session, rule.definition);
   const files = candidateStableFiles(verified, subscription, rule.definition, session.loaded.context.targetBranch);
@@ -166,7 +174,8 @@ export async function deliverRuleVersion(session: RulesSession, rule: ManagedRul
   files[`${rule.definition.stablePath}/activation.json`] = encodeRecord(record);
   const stable = await session.stable();
   session.journal.pendingDelivery = { id, kind, logicalId: rule.definition.id, configurationRevision: session.loaded.observed.revision,
-    stableHead: stable.head, afterRule: rule, record, changes: evidenceFor(files), removeCandidates: [] };
+    stableHead: stable.head, afterRule: rule, record, changes: evidenceFor(files), removeCandidates: [],
+    ...(qualification && { qualifiedCandidate: qualification }) };
   await session.save();
   await recoverRuleDelivery(session);
   return record;
