@@ -44,19 +44,21 @@ test('自动编排沿用固定与恢复控制，续做清理后才访问上游�
   assert.equal(resumed.results[0].control!.mode, 'auto');
   assert.notEqual(resumed.results[0].current!.versionId, original);
 
+  env.clock('2026-12-17T00:00:00.000Z');
   env.failStage(() => { throw new Error('Simulated interrupted cleanup'); });
   let interrupted: RulesResult | undefined;
   assert.equal(await runRuleWorkflow({ operation: 'cleanup', target: env.context.targetBranch },
     text => { interrupted = JSON.parse(text); }, env.context), 1);
   assert.equal((await env.journal()).maintenance, 'maintenance', JSON.stringify(interrupted));
   const frozen = (await env.journal()).cleanupRun!.plan;
+  assert.equal(frozen.discard.candidateIds.length, 2);
   env.failStage();
   const fetcher = env.context.fetch!;
   env.context.fetch = async (...args) => {
     assert.equal((await env.journal()).maintenance, 'open', 'Upstream processing must wait until maintenance recovery finishes');
     return fetcher(...args);
   };
-  env.clock('2026-11-17T00:00:00.000Z');
+  env.clock('2026-12-18T00:00:00.000Z');
   const recovered = await automatic('schedule');
   assert.equal(recovered.code, 0, JSON.stringify(recovered));
   assert.deepEqual(recovered.results.map(result => result.operation), ['schedule-preflight', 'cleanup', 'sync', 'cleanup']);
