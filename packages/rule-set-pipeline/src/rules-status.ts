@@ -1,9 +1,12 @@
+import { isDeepStrictEqual } from 'node:util';
+import { candidateTraceFiles } from './candidate-publication.js';
 import { candidateStableFiles } from './activation.js';
 import { ARTIFACT_REPOSITORY } from './publication.js';
 import { loadRulesRequest, type LoadedRules, type RulesRequest } from './rules-context.js';
 import { openRulesSession, type RulesSession } from './rules-session.js';
 import { readRuleDeliveries, observedRule, ruleSubscription, ensureRulePathAvailable } from './rules-delivery.js';
 import { verifyRuleCandidate } from './rules-build.js';
+import { sha256 } from './release.js';
 import { definitionRevision, type RuleResult, type RulesResult } from './rules-model.js';
 
 export interface RuleStatus extends RuleResult {
@@ -12,7 +15,8 @@ export interface RuleStatus extends RuleResult {
   acceptedConfigurationRevision?: string;
   configurationDifference: 'add' | 'change' | 'delete' | 'none';
   stableUrls: string[];
-  candidates: { id: string; versionId?: string; publishedAt?: string; source: unknown; current: boolean; selectable: boolean; reason?: string }[];
+  candidates: { id: string; versionId?: string; publishedAt?: string; source: unknown; current: boolean; selectable: boolean;
+    reason?: string; missingTraceFiles?: string[] }[];
   candidateCount: number;
   pendingOperation?: string;
 }
@@ -34,7 +38,7 @@ export function rulesReport(session: RulesSession, operation: RulesResult['opera
   const status = pending ? 'pending' : failed ? (failed === results.length ? 'failed' : 'partial') : 'success';
   return { operation, dryRun: session.loaded.dryRun, configurationRevision: session.loaded.observed.revision,
     configurationOrigin: session.loaded.observed.origin, target: session.loaded.configuration.target, status,
-    exitCode: status === 'success' ? 0 : 1, results,
+    exitCode: status === 'success' ? 0 : 1, results, readbackRequests: [...session.loaded.readbackRequests],
     ...(Object.values(session.journal.quarantinedCandidates ?? {}).some(candidate => !candidate.logicalId)
       ? { error: 'RULE_MIGRATION_PENDING: retained candidate ownership is unresolved' } : {}) };
 }
@@ -44,7 +48,8 @@ export function rulesFailure(operation: RulesResult['operation'], request: Rules
   return { operation, dryRun: Boolean(request.dryRun), configurationRevision: loaded?.observed.revision ?? 'unavailable',
     configurationOrigin: loaded?.observed.origin ?? 'unavailable',
     target: loaded?.configuration.target ?? { repository: ARTIFACT_REPOSITORY, branch: request.context?.targetBranch ?? process.env.RULE_TARGET ?? 'main' },
-    status: /PENDING/.test(message) ? 'pending' : 'failed', exitCode: 1, results: [], error: message };
+    status: /PENDING/.test(message) ? 'pending' : 'failed', exitCode: 1, results: [], error: message,
+    ...(loaded && { readbackRequests: [...loaded.readbackRequests] }) };
 }
 
 export async function addCurrentFacts(session: RulesSession, results: RuleResult[]) {
@@ -90,16 +95,25 @@ export async function getRulesStatus(request: RulesRequest & { id?: string } = {
             if (accepted && candidate.definitionGeneration !== accepted.generation) throw new Error('Version belongs to a deleted definition generation');
             if (!definition) throw new Error('Rule definition is pending deletion');
             const subscription = ruleSubscription(session, { definition }, current);
-            candidateStableFiles(verified, subscription, definition, session.loaded.context.targetBranch);
+            const files = candidateStableFiles(verified, subscription, definition, session.loaded.context.targetBranch);
             await ensureRulePathAvailable(session, definition, stable);
-            if (!verified.manifest) throw new Error('Incomplete candidate evidence');
+            if (current?.candidateId === candidate.id) {
+              const expected = Object.fromEntries(Object.entries(files).map(([path, bytes]) =>
+                [path, { sha256: sha256(bytes), byteLength: bytes.length }]));
+              if (!isDeepStrictEqual(current.files, expected) || !isDeepStrictEqual(current.source, candidate.source)
+                || current.versionId !== candidate.versionId || current.publishedAt !== candidate.publishedAt
+                || current.candidateEvidenceUrl !== candidate.evidenceUrl) throw new Error('Current delivery differs from its retained candidate');
+            }
           } catch (error) { selectable = false; reason = String(error); }
         }
+        const missingTraceFiles = candidateTraceFiles.filter(file => !session.snapshot.paths.includes(`candidates/${candidate.id}/${file}`));
         candidates.push({ id: candidate.id, versionId: candidate.versionId, publishedAt: candidate.publishedAt,
           source: candidate.source, current: candidate.id === current?.candidateId, selectable,
-          ...(!selectable ? { reason: reason ?? 'Candidate publication is incomplete' } : {}) });
+          ...(!selectable ? { reason: reason ?? 'Candidate publication is incomplete' } : {}),
+          ...(missingTraceFiles.length && { missingTraceFiles }) });
       }
       for (const candidate of Object.values(session.journal.quarantinedCandidates ?? {}).filter(candidate => candidate.logicalId === id)) {
+        const missingTraceFiles = candidateTraceFiles.filter(file => !session.snapshot.paths.includes(`candidates/${candidate.id}/${file}`));
         candidates.push({ id: candidate.id, source: undefined, current: false, selectable: false, reason: candidate.reason });
       }
       candidates.sort((a, b) => (b.publishedAt ?? '').localeCompare(a.publishedAt ?? '') || a.id.localeCompare(b.id));
@@ -111,7 +125,7 @@ export async function getRulesStatus(request: RulesRequest & { id?: string } = {
         lifecycle: accepted?.lifecycle, acceptedConfigurationRevision: accepted?.configurationRevision, configurationDifference,
         stableUrls: Object.keys(current?.files ?? {}).map(path => `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${session.loaded.context.targetBranch}/${path}`),
         candidates, candidateCount: candidates.filter(candidate => candidate.selectable).length,
-        error: accepted?.lastFailure, pendingOperation: session.journal.pendingDelivery?.logicalId === id ? session.journal.pendingDelivery.id : undefined });
+        verified: ['stable-files', 'candidate-git-eligibility'], error: accepted?.lastFailure, pendingOperation: session.journal.pendingDelivery?.logicalId === id ? session.journal.pendingDelivery.id : undefined });
     }
     const cleanup = session.journal.cleanupRun ?? session.journal.cleanupCheckpoint;
     return { ...rulesReport(session, 'status', rules), rules, maintenance: session.journal.maintenance, quarantinedCandidates: session.journal.quarantinedCandidates,

@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { verifyCandidateEvidence } from '../../src/activation.js';
-import { PublicationWriteError, retainedCandidateDownload } from '../../src/publication-repository.js';
+import { PublicationWriteError } from '../../src/publication-repository.js';
 import { encodeRecord, parseRulesJournal, RULE_STATE_PATH, type RuleCandidate } from '../../src/rules-model.js';
 import { syncRules, pinRuleVersion } from '../../src/rules-operations.js';
 import { getRulesStatus } from '../../src/rules-status.js';
@@ -68,19 +67,16 @@ async function damage(env: Pick<ReturnType<typeof rulesEnvironment>, 'context' |
     }
   };
   const evidence = JSON.parse((await read('readback.json')).toString());
-  const saveEvidence = async () => {
-    const bytes = encodeRecord(evidence); replace('readback.json', bytes);
-    const journal = await env.journal(); journal.candidates[candidate.id].evidenceSha256 = sha256(bytes);
-    env.trees.get(env.heads.get(env.context.repository.branch)!)!.set(RULE_STATE_PATH, encodeRecord(journal));
-  };
+  const saveEvidence = () => replace('readback.json', encodeRecord(evidence));
   const change = async (file: string, alter: (value: any) => void) => {
     const value = JSON.parse((await read(file)).toString()); alter(value);
-    const bytes = encodeRecord(value); replace(file, bytes);
-    const record = evidence.readback.find((entry: any) => entry.url.endsWith('/' + file));
-    record.sha256 = sha256(bytes); record.byteLength = bytes.length;
-    await saveEvidence();
+    replace(file, encodeRecord(value));
   };
-  return { read, replace, evidence, saveEvidence, change };
+  const changeCandidate = async (alter: (value: RuleCandidate) => void) => {
+    const journal = await env.journal(); alter(journal.candidates[candidate.id]);
+    env.trees.get(env.heads.get(env.context.repository.branch)!)!.set(RULE_STATE_PATH, encodeRecord(journal));
+  };
+  return { read, replace, evidence, saveEvidence, change, changeCandidate };
 }
 
 async function replaceSrs(env: Parameters<typeof damage>[0], candidate: RuleCandidate, stem: string) {
@@ -89,7 +85,7 @@ async function replaceSrs(env: Parameters<typeof damage>[0], candidate: RuleCand
   const record = d.evidence.readback.find((r: any) => r.url.endsWith(`/${stem}.srs`));
   record.sha256 = sha256(invalid); record.byteLength = invalid.length;
   await d.change('manifest.json', m => { const a = m.artifacts.find((a: any) => a.format === 'binary'); a.sha256 = sha256(invalid); a.byteLength = invalid.length; });
-  await d.change('build.json', b => { const a = b.artifacts.find((a: any) => a.format === 'binary'); a.sha256 = sha256(invalid); a.bytes = invalid.length; });
+  d.saveEvidence();
 }
 
 test('候选证据边界逐项拒绝损坏；status 只读且 pin 保留当前及兄弟集字节', async t => {
@@ -99,43 +95,40 @@ test('候选证据边界逐项拒绝损坏；status 只读且 pin 保留当前�
     ['wrong-rule', /identity mismatch/, d => d.change('manifest.json', m => { m.id = 'china-ip'; })],
     ['duplicate-artifact', /Duplicate artifact identity/, d => d.change('manifest.json', m => { m.artifacts[1].id = m.artifacts[0].id; })],
     ['extra-artifact', /Unsupported candidate projections/, d => d.change('manifest.json', m => { m.artifacts.push({ ...m.artifacts[0], id: 'extra' }); })],
-    ...['domains.json', 'domains.srs', 'manifest.json', 'source.json', 'conversion-report.json', 'build.json', 'readback.json']
-      .map(file => [`missing-${file}`, /404/, (d: Awaited<ReturnType<typeof damage>>) => d.replace(file)] as typeof cases[number]),
+    ...['domains.json', 'domains.srs', 'manifest.json', 'build.json', 'readback.json']
+      .map(file => [`missing-${file}`, /Missing retained file/, (d: Awaited<ReturnType<typeof damage>>) => d.replace(file)] as typeof cases[number]),
     ['missing-readback', /Missing complete readback/, async d => { d.evidence.readback.pop(); await d.saveEvidence(); }],
-    ['registered-digest', /registered evidence/, async d => d.replace('readback.json', Buffer.concat([await d.read('readback.json'), Buffer.from('\n')]))],
     ['readback-digest', /Readback integrity mismatch/, d => d.replace('domains.srs', Buffer.from('tampered'))],
     ['readback-length', /Readback integrity mismatch/, async d => { d.evidence.readback.find((r: any) => r.url.endsWith('/domains.srs')).byteLength++; await d.saveEvidence(); }],
     ['manifest-digest', /Artifact integrity/, d => d.change('manifest.json', m => { m.artifacts[1].sha256 = 'f'.repeat(64); })],
     ['manifest-length', /Artifact integrity/, d => d.change('manifest.json', m => { m.artifacts[1].byteLength++; })],
-    ['build-digest', /Build artifact mismatch/, d => d.change('build.json', b => { b.artifacts[1].sha256 = 'f'.repeat(64); })],
     ['usage', /Projection availability/, d => d.change('manifest.json', m => { m.projections['dns-response'] = m.projections.route; })],
     ['capability', /Artifact integrity or capability/, d => d.change('manifest.json', m => { m.artifacts[1].requiredCapabilities = ['processMatching']; })],
     ['projection-mapping', /Projection mapping/, d => d.change('manifest.json', m => { m.projections['dns-query'].artifactIds = ['missing', m.artifacts[0].id]; })],
     ['build-policy', /Incomplete native validation record/, d => d.change('build.json', b => { b.validation.policy = 'old-policy'; })],
-    ['readback-missing-load', /Incomplete native validation record/, async d => { d.evidence.native.steps.pop(); await d.saveEvidence(); }],
     ['binary-term-count', /Invalid Artifact Manifest/, d => d.change('manifest.json', m => { m.artifacts[1].termCount = 1; })],
+    ['version', /stage or version differs/, d => d.change('readback.json', r => { r.versionId = 'other'; })],
+    ['files-commit', /stage or version differs/, d => d.change('readback.json', r => { r.filesCommit = 'a'.repeat(40); })],
+    ['source-binding', /source binding mismatch/, d => d.changeCandidate(c => { c.source.repository = 'other/repo'; })],
+    ['tools', /Build identity mismatch/, d => d.change('build.json', b => { b.tools.yaml = 'wrong'; })],
     ['build-identity', /Configured build identity/, d => d.change('build.json', b => { b.id = 'china-ip'; })],
     ['build-target', /Configured build identity/, d => d.change('build.json', b => { b.target.branch = 'other'; })],
     ...[null, { artifactManifest: 2, sourceFormat: 4, buildRecord: 2 },
       { artifactManifest: 1, sourceFormat: 4 }, { artifactManifest: 2, sourceFormat: 4, buildRecord: 4 }]
       .map((contracts, index) => [`build-contracts-${index}`, /Unsupported build contracts/,
         (d: Awaited<ReturnType<typeof damage>>) => d.change('build.json', b => { b.contracts = contracts; })] as typeof cases[number]),
-    ['retained-replacement', /differs from retained/, d => { env.trees.get(env.heads.get(env.context.repository.branch)!)!.set(`candidates/${candidate.id}/domains.srs`, Buffer.from('replaced retained bytes')); }],
+    ['retained-replacement', /Readback integrity mismatch/, d => { env.trees.get(env.heads.get(env.context.repository.branch)!)!.set(`candidates/${candidate.id}/domains.srs`, Buffer.from('replaced retained bytes')); }],
   ];
   for (const [fault, expected, corrupt] of cases) await t.test(fault, async () => {
     env.restore(); await corrupt(await damage(env, candidate));
     const before = await stableBytes(env), heads = new Map(env.heads), writes = env.writes.length;
-    const snapshot = await env.context.repository.snapshot();
-    await assert.rejects(verifyCandidateEvidence({ candidateEvidenceUrl: candidate.evidenceUrl!,
-      evidenceSha256: (await env.journal()).candidates[candidate.id].evidenceSha256 },
-    { branch: env.context.targetBranch, download: retainedCandidateDownload(snapshot, candidate.id, env.context.repository.download) }, candidate.definition, 'rollback'), expected);
     const status = await getRulesStatus({ context: env.context });
     assert.equal(status.status, 'success', JSON.stringify(status));
     const listed = status.rules!.find(rule => rule.id === candidate.logicalId)!.candidates.find(entry => entry.id === candidate.id)!;
     assert.equal(listed.selectable, false); assert.match(listed.reason!, expected);
     // Representative application rejection, without rerunning native builds
     // for every structural variant already proven at the evidence boundary.
-    if (['wrong-rule', 'missing-readback.json', 'registered-digest', 'retained-replacement'].includes(fault)) {
+    if (['wrong-rule', 'missing-readback.json', 'source-binding', 'retained-replacement'].includes(fault)) {
       const result = await pinRuleVersion({ context: env.context, id: candidate.logicalId, version: candidate.versionId! });
       assert.equal(result.status, 'failed'); assert.match(result.results[0].error!, expected);
     }
@@ -144,15 +137,64 @@ test('候选证据边界逐项拒绝损坏；status 只读且 pin 保留当前�
   });
 });
 
+test('纯追溯异常与辅助 JSON 重排不阻断 status、成功输入复用或重新交付', async () => {
+  const env = await versions();
+  const current = env.second.results[0].current!;
+  const previous = env.first.results[0].current!;
+  const journal = await env.journal();
+  for (const id of [current.candidateId, previous.candidateId]) {
+    const d = await damage(env, journal.candidates[id]);
+    d.replace('source.json');
+    d.replace('conversion-report.json', Buffer.from('incomplete diagnostic output'));
+    await d.change('build.json', b => {
+      b.source = { diagnostic: 'stale source display' };
+      delete b.artifacts;
+      b.tool.path = '/some/other/path';
+      b.validation.steps = [];
+      b.tools = Object.fromEntries(Object.entries(b.tools).reverse());
+    });
+    for (const file of ['manifest.json', 'readback.json']) {
+      d.replace(file, Buffer.from(JSON.stringify(JSON.parse((await d.read(file)).toString()))));
+    }
+  }
+
+  const repo = env.context.repository;
+  const snapshot = repo.snapshot, download = repo.download;
+  const gitReads: string[] = [], raw: string[] = [];
+  repo.snapshot = async branch => {
+    const observed = await snapshot(branch);
+    return { ...observed, async read(path) { gitReads.push(path); return observed.read(path); } };
+  };
+  repo.download = async url => { raw.push(url); return download(url); };
+  const request = { context: env.context, id: current.logicalId };
+  const status = await getRulesStatus(request);
+  const listed = status.rules?.[0].candidates.find(c => c.id === current.candidateId);
+  assert.equal(listed?.selectable, true, JSON.stringify(status));
+  assert.deepEqual(listed?.missingTraceFiles, ['source.json']);
+  const writes = env.writes.length;
+  const sync = await syncRules(request);
+  assert.equal(sync.status, 'success', JSON.stringify(sync));
+  assert.equal(sync.results.find(row => row.id === current.logicalId)?.status, 'unchanged');
+  assert.equal(env.writes.length, writes);
+  assert.equal(raw.length, 0);
+  const pin = await pinRuleVersion({ ...request, version: previous.versionId! });
+  assert.equal(pin.status, 'success', JSON.stringify(pin));
+  assert.equal(pin.results[0].current?.candidateId, previous.candidateId);
+  const stableHead = await repo.lastChange(env.heads.get(env.context.targetBranch)!, `stable/${current.logicalId}/activation.json`);
+  assert.deepEqual(raw.map(url => new URL(url).pathname).sort(), ['domains.json', 'domains.srs'].map(file =>
+    `/wangyingang/sing-box-rule-artifacts/${stableHead}/stable/${current.logicalId}/${file}`));
+  assert.deepEqual(pin.readbackRequests, raw);
+  assert.ok(raw.every(url => !url.includes('/candidates/')));
+  assert.deepEqual(gitReads.filter(path => /\/(?:source|conversion-report)\.json$/.test(path)), []);
+});
+
 test('摘要随 SRS 篡改更新仍过不了真实原生 pin；域名与 CIDR 当前及兄弟集不变', async t => {
   const env = await versions();
   for (const current of env.first.results.map(result => result.current!)) await t.test(current.logicalId, async () => {
     env.restore(); const candidate = (await env.journal()).candidates[current.candidateId];
     await replaceSrs(env, candidate, candidate.logicalId === 'china-ip' ? 'route' : 'domains');
-    const snapshot = await env.context.repository.snapshot();
-    // Coherent digests alone are insufficient: this passes structural checks.
-    await verifyCandidateEvidence({ candidateEvidenceUrl: candidate.evidenceUrl! },
-      { branch: env.context.targetBranch, download: retainedCandidateDownload(snapshot, candidate.id, env.context.repository.download) }, candidate.definition, 'rollback');
+    const status = await getRulesStatus({ context: env.context });
+    assert.equal(status.rules!.find(rule => rule.id === current.logicalId)?.candidates.find(entry => entry.id === candidate.id)?.selectable, true);
     const before = await stableBytes(env), writes = env.writes.length, heads = new Map(env.heads);
     const result = await pinRuleVersion({ context: env.context, id: candidate.logicalId, version: candidate.versionId! });
     assert.equal(result.status, 'failed'); assert.match(result.results[0].error!, /Native artifact mismatch/);

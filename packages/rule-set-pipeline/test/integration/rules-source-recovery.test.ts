@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { syncRules } from '../../src/rules-operations.js';
 import { sha256 } from '../../src/release.js';
-import { encodeRecord, RULE_STATE_PATH } from '../../src/rules-model.js';
+import { encodeRecord, parseRulesJournal, RULE_STATE_PATH } from '../../src/rules-model.js';
 import { cleanupEnvironment } from '../fixtures/cleanup-environment.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
@@ -120,14 +120,13 @@ test('Git 首次输入下载失败尚无候选，重试按最新分支建立候�
   assert.ok(!env.requests.some(url => url.includes(`/${env.fixed}/`)));
 });
 
-for (const file of ['route.srs', 'manifest.json', 'readback.json']) {
+for (const file of ['route.json', 'route.srs']) {
   test(`Git/CIDR ${file} 阶段 HTTPS 回读失败，按固定 commit 恢复原身份与字节`, async () => {
     const env = gitEnvironment();
     env.failDownload(url => { if (url.endsWith('/' + file)) throw new Error('stage HTTPS unavailable'); });
     assert.equal((await syncRules({ context: env.context })).status, 'failed');
     const candidate = Object.values((await env.journal()).candidates)[0];
     assert.equal(candidate.status, 'publishing'); assert.equal(candidate.source.commit, env.fixed);
-    if (file === 'readback.json') { assert.ok(candidate.versionId); assert.ok(candidate.publishedAt); }
     const retained = await bytesUnder(env, `candidates/${candidate.id}/`);
     assert.ok(retained.has(`candidates/${candidate.id}/${file}`));
     env.failDownload(); env.advance(); env.requests.length = 0; env.clock('2026-11-19T00:00:00.000Z');
@@ -142,7 +141,7 @@ for (const file of ['route.srs', 'manifest.json', 'readback.json']) {
       assert.equal(result.results[0].current?.versionId, candidate.versionId);
     }
     for (const [path, bytes] of retained) assert.deepEqual((await bytesUnder(env, `candidates/${candidate.id}/`)).get(path), bytes, path);
-    assert.deepEqual(env.requests, file === 'readback.json' ? [] : [`https://raw.githubusercontent.com/gaoyifan/china-operator-ip/${env.fixed}/china46.txt`]);
+    assert.deepEqual(env.requests, [`https://raw.githubusercontent.com/gaoyifan/china-operator-ip/${env.fixed}/china46.txt`]);
     for (const path of retained.keys()) assert.equal(env.writes.filter(write => Object.hasOwn(write.files, path)).length, 1, path);
     const stable = await bytesUnder(env, 'stable/', 'main');
     assert.ok(stable.get('stable/china-ip/route.srs'));
@@ -175,20 +174,28 @@ test('Git/CIDR 固定输入消失或变化拒绝恢复，恢复原输入后沿�
 
 for (const stage of ['metadata', 'evidence']) test(`Git/CIDR ${stage} 恢复拒绝保留文件篡改或缺失`, async t => {
   const env = gitEnvironment();
-  env.failDownload(url => { if (url.endsWith(stage === 'metadata' ? '/manifest.json' : '/readback.json')) throw new Error('stage HTTPS unavailable'); });
-  assert.equal((await syncRules({ context: env.context })).status, 'failed'); env.failDownload();
+  if (stage === 'metadata') {
+    env.failDownload(url => { if (url.includes('/candidates/') && url.endsWith('/route.srs')) throw new Error('candidate HTTPS unavailable'); });
+  } else {
+    env.beforeWrite(async files => {
+      const state = files[RULE_STATE_PATH];
+      if (state && parseRulesJournal(state).pendingDelivery) throw new Error('RULE_WRITE_CONFLICT: interrupted after evidence');
+    });
+  }
+  assert.notEqual((await syncRules({ context: env.context })).status, 'success');
+  env.failDownload(); env.beforeWrite();
   const candidate = Object.values((await env.journal()).candidates)[0], restore = checkpoint(env);
-  for (const fault of ['changed-route.srs', 'missing-source.json', ...(stage === 'evidence' ? ['replaced-readback.json'] : [])]) await t.test(fault, async () => {
+  for (const fault of ['changed-route.srs', 'missing-build.json', ...(stage === 'evidence' ? ['wrong-version'] : [])]) await t.test(fault, async () => {
     restore();
     const tree = env.trees.get(env.heads.get(env.context.repository.branch)!)!;
     const prefix = `candidates/${candidate.id}/`;
     if (fault === 'changed-route.srs') tree.set(prefix + 'route.srs', Buffer.from('tampered retained SRS'));
-    else if (fault === 'missing-source.json') tree.delete(prefix + 'source.json');
-    else tree.set(prefix + 'readback.json', Buffer.from(JSON.stringify(JSON.parse(tree.get(prefix + 'readback.json')!.toString()))));
+    else if (fault === 'missing-build.json') tree.delete(prefix + 'build.json');
+    else tree.set(prefix + 'readback.json', encodeRecord({ ...JSON.parse(tree.get(prefix + 'readback.json')!.toString()), versionId: 'wrong' }));
     const retained = await bytesUnder(env, prefix), stableHead = env.heads.get('main');
     const failed = await syncRules({ context: { ...env.context } });
     assert.equal(failed.status, 'failed', JSON.stringify(failed));
-    assert.match(failed.results[0].error!, /CANDIDATE_UNAVAILABLE|differs from retained|readback differs|Readback integrity/);
+    assert.match(failed.results[0].error!, /CANDIDATE_UNAVAILABLE|Missing retained file|Readback integrity/);
     assert.deepEqual((await env.journal()).candidates, { [candidate.id]: candidate });
     assert.deepEqual(await bytesUnder(env, prefix), retained); assert.equal(env.heads.get('main'), stableHead);
     assert.equal(failed.results[0].current, undefined);

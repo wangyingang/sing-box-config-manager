@@ -1,15 +1,15 @@
 import { isDeepStrictEqual } from 'node:util';
-import { candidateStableFiles, verifyCandidateEvidence } from './activation.js';
-import { candidateArtifactFiles, candidateFiles } from './candidate-publication.js';
+import { activationSubscription, candidateStableFiles } from './activation.js';
+import { candidateArtifactFiles, candidateTraceFiles, candidateCoreFiles, RULE_READBACK_VERSION, verifyRuleFile } from './candidate-publication.js';
 import { filePaths, stageRef, type BaselineStage, type BaselineStages, type BaselineTransport, type PreparedBaseline } from './maintenance-baseline-transport.js';
 import { verifyWithoutEvidenceCache, type VerifyEvidence } from './evidence-download.js';
 import type { CleanupPlan } from './rules-cleanup-model.js';
 import { inspectBinary, type NativeBuildOptions } from './native.js';
-import { retainedCandidateDownload, type PublicationSnapshot } from './publication-repository.js';
-import { ARTIFACT_REPOSITORY, immutableUrl } from './publication.js';
-import { sha256 } from './release.js';
+import type { PublicationSnapshot } from './publication-repository.js';
+import { immutableUrl } from './publication.js';
 import { encodeRecord, parseRulesJournal, RULE_STATE_PATH, type RuleCandidate, type RulesJournal } from './rules-model.js';
 import { readRuleDeliveries } from './rules-delivery.js';
+import { verifyRuleCandidateInSnapshot } from './rules-build.js';
 import type { RulesRepository } from './rules-repository.js';
 
 const markerPath = 'pipeline/baseline.json';
@@ -21,6 +21,7 @@ export interface RulesBaselineVerification extends NativeBuildOptions {
   plan: CleanupPlan;
   runId: string;
   journal: RulesJournal;
+  source: PublicationSnapshot;
 }
 
 async function required(snapshot: PublicationSnapshot, path: string) {
@@ -46,24 +47,19 @@ function retainedJournal(original: RulesJournal, candidates: Record<string, Rule
   return journal;
 }
 
-async function verifyCandidate(snapshot: PublicationSnapshot, candidate: RuleCandidate, download: RulesRepository['download'],
-  targetBranch: string, native?: NativeBuildOptions) {
-  if (!candidate.evidenceUrl || candidate.status !== 'verified' || !candidate.versionId || !candidate.publishedAt || candidate.migrationPending) {
-    throw new Error(`RULE_CLEANUP_PENDING: retained candidate is incomplete: ${candidate.id}`);
+function tracePaths(snapshot: PublicationSnapshot, id: string) {
+  return candidateTraceFiles.map(file => `candidates/${id}/${file}`).filter(path => snapshot.paths.includes(path));
+}
+
+async function verifyBaselineCandidate(snapshot: PublicationSnapshot, candidate: RuleCandidate, options: RulesBaselineVerification,
+  verify: VerifyEvidence) {
+  const result = await verifyRuleCandidateInSnapshot(snapshot, candidate, options.targetBranch, options);
+  const files = candidateArtifactFiles(candidate.definition);
+  for (const format of ['source', 'binary'] as const) {
+    await verifyRuleFile(verify, immutableUrl(candidate.filesCommit!, `candidates/${candidate.id}/${files[format]}`),
+      result.bytesByFormat[format]);
   }
-  const evidence = JSON.parse((await required(snapshot, `candidates/${candidate.id}/readback.json`)).toString());
-  const evidenceVersion = typeof evidence.versionId === 'string' && evidence.versionId.startsWith(`${evidence.publishedAt}~`)
-    ? evidence.versionId : candidate.operation === 'migration' ? `${evidence.publishedAt}~${candidate.id.replaceAll('-', '')}` : undefined;
-  if (candidate.publishedAt !== evidence.publishedAt || candidate.versionId !== evidenceVersion) {
-    throw new Error(`RULE_CLEANUP_PENDING: retained version identity differs from its evidence: ${candidate.id}`);
-  }
-  const verified = await verifyCandidateEvidence({ candidateEvidenceUrl: candidate.evidenceUrl,
-    evidenceSha256: candidate.evidenceSha256, binary: native?.binary, nativeBuild: native?.nativeBuild },
-  { branch: targetBranch, download: retainedCandidateDownload(snapshot, candidate.id, download) }, candidate.definition, 'rollback');
-  if (verified.buildId !== candidate.buildId || !isDeepStrictEqual(verified.source, candidate.source)) {
-    throw new Error(`RULE_CLEANUP_PENDING: candidate source or build changed: ${candidate.id}`);
-  }
-  return verified;
+  return result;
 }
 
 /** Verify every retained version through addresses reachable exclusively from the new roots. */
@@ -94,33 +90,35 @@ export async function verifyRulesBaseline(options: RulesBaselineVerification, st
     || !isDeepStrictEqual(JSON.parse((await required(stable, markerPath)).toString()), marker)) {
     throw new Error('Baseline maintenance identity mismatch');
   }
-  const allowed = new Set(Object.values(stages).map(stage => stage.head));
   const verifyEvidence = options.verifyEvidence ?? verifyWithoutEvidenceCache(url => repository.download(url));
-  const restrict = (download: RulesRepository['download']) => async (url: string) => {
-    const prefix = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/`;
-    if (!url.startsWith(prefix) || !allowed.has(url.slice(prefix.length).split('/')[0])) {
-      throw new Error(`Baseline depends on an address outside its new history: ${url}`);
-    }
-    return download(url);
-  };
   const expectedCandidates: Record<string, RuleCandidate> = {};
-  const verified = new Map<string, Awaited<ReturnType<typeof verifyCandidate>>>();
+  const verified = new Map<string, Awaited<ReturnType<typeof verifyBaselineCandidate>>>();
   for (const id of plan.retain.candidateIds) {
     const previous = original.candidates[id], candidate = journal.candidates[id];
     if (!previous || !candidate) throw new Error(`Missing retained candidate: ${id}`);
-    const evidence = await required(snapshot, `candidates/${id}/readback.json`);
     expectedCandidates[id] = { ...previous, filesCommit: stages.files.head, metadataCommit: stages.metadata.head,
-      evidenceCommit: stages.evidence.head, evidenceSha256: sha256(evidence),
+      evidenceCommit: stages.evidence.head,
       manifestUrl: immutableUrl(stages.metadata.head, `candidates/${id}/manifest.json`),
       evidenceUrl: immutableUrl(stages.evidence.head, `candidates/${id}/readback.json`) };
-    verified.set(id, await verifyEvidence(download => verifyCandidate(snapshot, candidate, restrict(download), targetBranch, options)));
+    delete expectedCandidates[id].evidenceSha256;
+    if (!isDeepStrictEqual(expectedCandidates[id], candidate)) throw new Error(`Baseline candidate identity or addresses changed: ${id}`);
+    verified.set(id, await verifyBaselineCandidate(snapshot, candidate, options, verifyEvidence));
   }
   if (!isDeepStrictEqual(journal, retainedJournal(original, expectedCandidates))) {
     throw new Error('Baseline changed retained candidate identity, control or definition state');
   }
-  const candidatePaths = new Set(plan.retain.candidateIds.flatMap(id => candidateFiles(journal.candidates[id].definition).map(file => `candidates/${id}/${file}`)));
+  const candidatePaths = new Set(plan.retain.candidateIds.flatMap(id => [
+    ...candidateCoreFiles(journal.candidates[id].definition).map(file => `candidates/${id}/${file}`), ...tracePaths(options.source, id),
+  ]));
   if (!isDeepStrictEqual(new Set(filePaths(snapshot.paths).filter(path => path.startsWith('candidates/'))), candidatePaths)) {
     throw new Error('Baseline retained candidate file set differs from plan');
+  }
+  for (const id of plan.retain.candidateIds) {
+    for (const path of tracePaths(options.source, id)) {
+      if (!(await required(snapshot, path)).equals(await required(options.source, path))) {
+        throw new Error(`Baseline changed retained trace file: ${path}`);
+      }
+    }
   }
   const deliveries = await readRuleDeliveries(stable);
   if (deliveries.size !== plan.retain.active.length) throw new Error('Baseline active entry count changed');
@@ -133,20 +131,15 @@ export async function verifyRulesBaseline(options: RulesBaselineVerification, st
       || !isDeepStrictEqual(JSON.parse((await required(stable, recordPath)).toString()), expected)) {
       throw new Error(`Baseline changed current version: ${recordPath}`);
     }
-    const files = candidateStableFiles(verified.get(candidate.id)!, record.subscription, candidate.definition, targetBranch);
+    const subscription = activationSubscription(record.subscription, targetBranch, candidate.definition);
+    const files = candidateStableFiles(verified.get(candidate.id)!, subscription, candidate.definition, targetBranch);
     if (!isDeepStrictEqual(new Set(Object.keys(files)), new Set(Object.keys(record.files)))) {
       throw new Error(`Baseline stable file set changed: ${recordPath}`);
     }
     for (const [path, bytes] of Object.entries(files)) {
       if (!(await required(stable, path)).equals(bytes)) throw new Error(`Baseline stable candidate bytes differ: ${path}`);
     }
-    for (const path of [recordPath, ...Object.keys(record.files)]) {
-      stablePaths.add(path);
-      await verifyEvidence(async download => {
-        const bytes = await restrict(download)(immutableUrl(stable.head, path));
-        if (!bytes.equals(await required(stable, path))) throw new Error(`Baseline HTTPS content mismatch: ${path}`);
-      });
-    }
+    for (const path of [recordPath, ...Object.keys(record.files)]) stablePaths.add(path);
   }
   if (!isDeepStrictEqual(new Set(filePaths(stable.paths).filter(path => path.startsWith('stable/'))), stablePaths)) {
     throw new Error('Baseline stable paths differ from current delivery');
@@ -155,7 +148,7 @@ export async function verifyRulesBaseline(options: RulesBaselineVerification, st
 
 /** Rebase all retained candidates, preserving business identities and original evidence facts. */
 export async function prepareRulesBaseline(options: RulesBaselineVerification & {
-  source: PublicationSnapshot; stable: PublicationSnapshot; now: Date;
+  stable: PublicationSnapshot; now: Date;
 }): Promise<PreparedBaseline> {
   const { transport, repository, targetBranch, journal, source, stable, plan, runId } = options;
   const verifyEvidence = options.verifyEvidence ?? verifyWithoutEvidenceCache(url => repository.download(url));
@@ -166,17 +159,17 @@ export async function prepareRulesBaseline(options: RulesBaselineVerification & 
     return { ref, head: await transport.stage(ref, parent?.head, files, `规则历史清理 ${runId}：${name}`) };
   };
   const assets: Record<string, Buffer> = { [markerPath]: marker }, metadata: Record<string, Buffer> = {};
-  const originals = new Map<string, Record<string, any>>();
+
   for (const id of plan.retain.candidateIds) {
     const candidate = journal.candidates[id];
     if (!candidate) throw new Error(`Missing retained candidate: ${id}`);
-    await verifyEvidence(download => verifyCandidate(source, candidate, download, targetBranch));
-    originals.set(id, JSON.parse((await required(source, `candidates/${id}/readback.json`)).toString()));
+    const verified = await verifyRuleCandidateInSnapshot(source, candidate, targetBranch);
     const layout = candidateArtifactFiles(candidate.definition);
-    for (const file of candidateFiles(candidate.definition).filter(file => file !== 'readback.json')) {
-      const path = `candidates/${id}/${file}`;
-      (file === layout.source || file === layout.binary ? assets : metadata)[path] = await required(source, path);
-    }
+    const prefix = `candidates/${id}/`;
+    assets[prefix + layout.source] = verified.bytesByFormat.source;
+    assets[prefix + layout.binary] = verified.bytesByFormat.binary;
+    metadata[prefix + 'manifest.json'] = encodeRecord(verified.manifest);
+    for (const path of [prefix + 'build.json', ...tracePaths(source, id)]) metadata[path] = await required(source, path);
   }
   const copyOtherFiles = async (snapshot: PublicationSnapshot, output: Record<string, Buffer>) => {
     for (const path of filePaths(snapshot.paths).filter(path => !/^(stable|pipeline|candidates)\//.test(path))) output[path] = await required(snapshot, path);
@@ -194,21 +187,16 @@ export async function prepareRulesBaseline(options: RulesBaselineVerification & 
   const priorEvidence = await transport.snapshot(stageRef(runId, 'evidence'));
   for (const id of plan.retain.candidateIds) {
     const prefix = `candidates/${id}/`, readback = [];
-    for (const [contents, head] of [[assets, files.head], [metadata, metadataStage.head]] as const) {
-      for (const [path, bytes] of Object.entries(contents).filter(([path]) => path.startsWith(prefix))) {
-        const url = immutableUrl(head, path);
-        const record = await verifyEvidence(async download => {
-          const actual = await download(url);
-          if (!actual.equals(bytes)) throw new Error(`Baseline HTTPS content mismatch: ${path}`);
-          return { url, sha256: sha256(actual), byteLength: actual.length, exactBytes: true };
-        });
-        readback.push(record);
-      }
+    const candidate = journal.candidates[id];
+    const layout = candidateArtifactFiles(candidate.definition);
+    for (const file of [layout.source, layout.binary]) {
+      const path = prefix + file;
+      const { record } = await verifyRuleFile(verifyEvidence, immutableUrl(files.head, path), assets[path]);
+      readback.push(record);
     }
-    const { revalidationTool: _oldTool, ...original } = originals.get(id)!;
-    const record = { ...original,
-      publishedAt: journal.candidates[id].publishedAt, versionId: journal.candidates[id].versionId, filesCommit: files.head,
-      metadataCommit: metadataStage.head, readback };
+    const record = { schemaVersion: RULE_READBACK_VERSION, status: 'remote-verified', candidateId: id,
+      buildId: candidate.buildId, publishedAt: candidate.publishedAt, versionId: candidate.versionId,
+      filesCommit: files.head, metadataCommit: metadataStage.head, readback };
     const path = `${prefix}readback.json`;
     if (priorEvidence) {
       // Another host may use a different platform build of the same version.
@@ -223,11 +211,12 @@ export async function prepareRulesBaseline(options: RulesBaselineVerification & 
     }
   }
   const evidenceStage = await stage('evidence', metadataStage, evidence);
-  const candidates = Object.fromEntries(plan.retain.candidateIds.map(id => [id, { ...journal.candidates[id],
-    filesCommit: files.head, metadataCommit: metadataStage.head, evidenceCommit: evidenceStage.head,
-    evidenceSha256: sha256(evidence[`candidates/${id}/readback.json`]),
-    manifestUrl: immutableUrl(metadataStage.head, `candidates/${id}/manifest.json`),
-    evidenceUrl: immutableUrl(evidenceStage.head, `candidates/${id}/readback.json`) }]));
+  const candidates = Object.fromEntries(plan.retain.candidateIds.map(id => {
+    const { evidenceSha256: _digest, ...candidate } = journal.candidates[id];
+    return [id, { ...candidate, filesCommit: files.head, metadataCommit: metadataStage.head, evidenceCommit: evidenceStage.head,
+      manifestUrl: immutableUrl(metadataStage.head, `candidates/${id}/manifest.json`),
+      evidenceUrl: immutableUrl(evidenceStage.head, `candidates/${id}/readback.json`) }];
+  }));
   const shared = repository.branch === targetBranch;
   let stableRoot: BaselineStage | undefined;
   if (!shared) {

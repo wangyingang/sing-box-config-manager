@@ -67,7 +67,8 @@ async function unchangedResult(session: RulesSession, rule: ManagedRule, success
   return { id, status: 'unchanged', changes,
     verified: [...(verification === 'source-identity' ? [] : ['source']), verification, 'retained-candidate', 'subscription', 'stable-files'],
     ...(verification !== 'native' && { reliedOn: verification === 'source-identity'
-      ? ['historical-normalized-content', 'historical-native'] : ['historical-native'] }) };
+      ? ['historical-normalized-content', 'historical-native', 'historical-candidate-publication']
+      : ['historical-native', 'historical-candidate-publication'] }) };
 }
 
 async function updateSelectedRules(session: RulesSession, definitions: RuleDefinition[], changes: Map<string, string[]>, recoveredDeliveryId?: string) {
@@ -104,7 +105,8 @@ async function updateSelectedRules(session: RulesSession, definitions: RuleDefin
         try {
           const current = deliveries.get(definition.id);
           const direct = recovering.length === 1 && !current;
-          let candidate = await recoverPublishedRuleCandidate(session, fixed);
+          const published = await recoverPublishedRuleCandidate(session, fixed);
+          let candidate = published;
           if (!candidate) {
             const built = await buildRulesInput(session.loaded, [fixed.definition], fixed);
             const result = built.results[0];
@@ -119,7 +121,9 @@ async function updateSelectedRules(session: RulesSession, definitions: RuleDefin
             const delivered = await deliverRuleVersion(session, afterRule, candidate, 'sync', current);
             deliveries.set(definition.id, delivered); completed.add(definition.id);
             results.push({ id: definition.id, status: 'delivered', changes: [...(changes.get(definition.id) ?? []), current ? 'replace-current-version' : 'first-delivery'],
-              candidate: { versionId: candidate.versionId, publishedAt: candidate.publishedAt } });
+              candidate: { versionId: candidate.versionId, publishedAt: candidate.publishedAt },
+              verified: ['candidate-git', 'native', 'subscription', 'stable-git', 'stable-HTTPS', ...(!published ? ['candidate-HTTPS'] : [])],
+              ...(published && { reliedOn: ['historical-candidate-publication'] }) });
           } else await session.save(); // Qualified history is durable even if latest input fails.
         } catch (error) {
           results.push(await failure(session, definition.id, new Error(`Candidate ${fixed.id}: ${message(error)}`), changes.get(definition.id)));
@@ -188,13 +192,16 @@ async function updateSelectedRules(session: RulesSession, definitions: RuleDefin
             verified: ['source', 'native', 'subscription'], unverified: ['remote-publication', 'HTTPS-readback'] });
           continue;
         }
-        const candidate = await findReusableBuild(session, rule, built, builtRule)
-          ?? await publishRuleBuild(session, built, builtRule, rule);
+        const retained = await findReusableBuild(session, rule, built, builtRule);
+        const candidate = retained ?? await publishRuleBuild(session, built, builtRule, rule);
         const afterRule = { ...rule }; delete afterRule.lastFailure;
         const delivered = await deliverRuleVersion(session, afterRule, candidate, 'sync', current);
         deliveries.set(id, delivered);
         batchResults.set(id, { id, status: 'delivered', changes: deliveryChanges,
-          candidate: { versionId: candidate.versionId, publishedAt: candidate.publishedAt } });
+          candidate: { versionId: candidate.versionId, publishedAt: candidate.publishedAt },
+          verified: ['source', 'native', 'candidate-git', 'subscription', 'stable-git', 'stable-HTTPS',
+            ...(!retained ? ['candidate-HTTPS'] : [])],
+          ...(retained && { reliedOn: ['historical-candidate-publication'] }) });
       } catch (error) {
         batchResults.set(id, await failure(session, id, error, itemChanges));
         if (sharedFailure(session, error)) return [...results, ...orderedResults()];
@@ -303,7 +310,7 @@ export async function pinRuleVersion(request: RulesRequest & { id: string; versi
     candidateStableFiles(verified, ruleSubscription(session, afterRule, current), definition, session.loaded.context.targetBranch);
     if (request.dryRun) return operationReport(session, 'pin', [{ id: request.id, status: 'planned',
       changes: ['deliver-selected-version', 'stop-automatic-updates'], candidate: { versionId: candidate.versionId, publishedAt: candidate.publishedAt },
-      verified: ['retained-candidate', 'native', 'subscription'], unverified: ['stable-commit', 'HTTPS-readback'] }]);
+      verified: ['candidate-git', 'native', 'subscription'], reliedOn: ['historical-candidate-publication'], unverified: ['stable-commit', 'HTTPS-readback'] }]);
     await guardRulesConfiguration(session.loaded);
     if (session.journal.pendingDelivery && session.journal.pendingDelivery.logicalId !== request.id) throw new Error('RULE_WRITE_PENDING: another rule set has an unresolved delivery');
     await recoverRuleDelivery(session);
@@ -312,11 +319,13 @@ export async function pinRuleVersion(request: RulesRequest & { id: string; versi
     const existing = ownRule(session, request.id);
     if (existing?.control.mode === 'pinned' && existing.control.candidateId === candidate.id
       && existing.inputBindingRevision === afterRule.inputBindingRevision && existing.definitionRevision === afterRule.definitionRevision
-      && current?.candidateId === candidate.id) return operationReport(session, 'pin', [{ id: request.id, status: 'pinned', changes: [] }]);
+      && current?.candidateId === candidate.id) return operationReport(session, 'pin', [{ id: request.id, status: 'pinned', changes: [], verified: ['candidate-git', 'native', 'subscription'],
+        reliedOn: ['historical-candidate-publication', 'historical-stable-delivery'] }]);
     afterRule.control = { mode: 'pinned', revision: randomUUID(), inputBindingRevision: afterRule.inputBindingRevision, candidateId: candidate.id };
     delete afterRule.lastFailure;
     await deliverRuleVersion(session, afterRule, candidate, 'pin', current);
-    return operationReport(session, 'pin', [{ id: request.id, status: 'pinned', changes: ['deliver-selected-version', 'stop-automatic-updates'] }]);
+    return operationReport(session, 'pin', [{ id: request.id, status: 'pinned', changes: ['deliver-selected-version', 'stop-automatic-updates'],
+      verified: ['candidate-git', 'native', 'subscription', 'stable-git', 'stable-HTTPS'], reliedOn: ['historical-candidate-publication'] }]);
   } catch (error) {
     if (!session) return rulesFailure('pin', request, error, loaded);
     // Do not persist a failed pin or silently apply another configuration change.

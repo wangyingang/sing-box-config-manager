@@ -92,9 +92,14 @@ export async function loadRulesRequest(request: RulesRequest, writeKind: 'update
   if (context.repository.branch !== (context.targetBranch === 'main' ? 'candidates' : context.targetBranch)) throw new Error('Rules context repository does not match its target');
   configuration.target.branch = context.targetBranch;
   const allowWrites = writeKind === 'cleanup' ? context.allowCleanupWrites ?? context.allowWrites : context.allowWrites;
-  return { context, observed, configuration, dryRun: Boolean(request.dryRun), allowWrites, writeKind,
+  const readbackRequests: string[] = [];
+  const downloadEvidence = (url: string) => {
+    readbackRequests.push(url);
+    return context.repository.download(url);
+  };
+  return { context, observed, configuration, readbackRequests, downloadEvidence, dryRun: Boolean(request.dryRun), allowWrites, writeKind,
     nativeBuild: createOperationNativeBuilder(),
-    verifyEvidence: createOperationEvidenceVerifier(url => context.repository.download(url)),
+    verifyEvidence: createOperationEvidenceVerifier(downloadEvidence),
     progress: (stage: RulesProgress['stage'], id?: string) => reportRulesProgress(request.onProgress, stage, id) };
 }
 export type LoadedRules = Awaited<ReturnType<typeof loadRulesRequest>>;

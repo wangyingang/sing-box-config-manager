@@ -140,6 +140,8 @@ export interface RulesResult {
   status: 'success' | 'partial' | 'failed' | 'pending' | 'disabled';
   exitCode: 0 | 1;
   results: RuleResult[];
+  /** Actual Raw HTTP requests initiated by this operation, including unsuccessful attempts. */
+  readbackRequests?: string[];
   observedHeads?: { journal: string; stable: string };
   error?: string;
   cleanup?: CleanupReport;
@@ -183,12 +185,13 @@ export function parseRulesJournal(bytes: Buffer): RulesJournal {
       || !['present', 'deleting', 'deleted'].includes(rule.lifecycle) || !['auto', 'pinned'].includes(rule.control.mode)
       || typeof rule.configurationRevision !== 'string' || !rule.configurationRevision) throw new Error('RULE_STATE_CORRUPT: rule');
     const source = parseSource(rule.source), definition = parseRuleDefinition(rule.definition, source.input.format);
+    const pinned = rule.control.mode === 'pinned' ? value.candidates[rule.control.candidateId] : undefined;
     if (definition.id !== id || inputBindingRevision(source, definition) !== rule.inputBindingRevision
       || definitionRevision(source, definition) !== rule.definitionRevision || rule.control.inputBindingRevision !== rule.inputBindingRevision
       || rule.successfulInput !== undefined && (!validSuccessfulInput(rule.successfulInput, source)
         || rule.successfulInput.inputBindingRevision !== rule.inputBindingRevision || rule.successfulInput.definitionRevision !== rule.definitionRevision
         || rule.successfulInput.definitionGeneration !== rule.generation || rule.lifecycle === 'deleted')
-      || rule.control.mode === 'pinned' && !Object.hasOwn(value.candidates, rule.control.candidateId)) throw new Error('RULE_STATE_CORRUPT: definition or control');
+      || rule.control.mode === 'pinned' && (!pinned || pinned.logicalId !== id || pinned.definitionGeneration !== rule.generation)) throw new Error('RULE_STATE_CORRUPT: definition or control');
   }
   if (value.quarantinedCandidates !== undefined) {
     if (!object(value.quarantinedCandidates)) throw new Error('RULE_STATE_CORRUPT: quarantine index');
@@ -218,18 +221,31 @@ export function parseRulesJournal(bytes: Buffer): RulesJournal {
   if (pending !== undefined && (!object(pending) || !uuid(pending.id) || !['sync', 'pin', 'delete'].includes(pending.kind)
     || !/^[a-f0-9]{40}$/.test(pending.stableHead) || !object(pending.changes) || !object(pending.afterRule)
     || !Array.isArray(pending.removeCandidates))) throw new Error('RULE_STATE_CORRUPT: pending delivery');
+  const record = pending?.record;
+  if (pending && pending.kind !== 'delete') {
+    const definition = pending.afterRule.definition;
+    const candidate = record && value.candidates[record.candidateId];
+    if (!object(record) || record.schemaVersion !== 2 || record.id !== pending.id || record.logicalId !== pending.logicalId
+      || !candidate || candidate.logicalId !== pending.logicalId || candidate.definitionGeneration !== pending.afterRule.generation
+      || record.versionId !== candidate.versionId || record.publishedAt !== candidate.publishedAt
+      || record.candidateEvidenceUrl !== candidate.evidenceUrl || !isDeepStrictEqual(record.source, candidate.source)
+      || !object(definition) || definition.id !== pending.logicalId || !object(record.files)
+      || pending.kind === 'pin' && (pending.afterRule.control?.mode !== 'pinned' || pending.afterRule.control.candidateId !== candidate.id)) {
+      throw new Error('RULE_STATE_CORRUPT: pending delivery record');
+    }
+    const activationPath = `${definition.stablePath}/activation.json`;
+    const activation = encodeRecord(record);
+    if (!isDeepStrictEqual(pending.changes, { ...record.files, [activationPath]: { sha256: sha256(activation), byteLength: activation.length } })) {
+      throw new Error('RULE_STATE_CORRUPT: pending delivery changes');
+    }
+  }
   const qualification = pending?.qualifiedCandidate;
   if (qualification !== undefined) {
-    const record = pending.record;
-    const candidate = object(record) && value.candidates[record.candidateId];
-    if (!validQualification(qualification) || pending.kind !== 'sync' || !candidate || candidate.status !== 'verified'
+    const candidate = value.candidates[record.candidateId];
+    if (!validQualification(qualification) || pending.kind !== 'sync' || candidate.status !== 'verified'
       || qualification.candidateId !== candidate.id || qualification.buildId !== candidate.buildId
-      || pending.logicalId !== candidate.logicalId || record.logicalId !== candidate.logicalId
-      || pending.afterRule.definition?.id !== candidate.logicalId || pending.afterRule.generation !== candidate.definitionGeneration
       || pending.afterRule.inputBindingRevision !== candidate.inputBindingRevision
-      || pending.afterRule.definitionRevision !== definitionRevision(candidate.sourceInput, candidate.definition)
-      || record.versionId !== candidate.versionId || record.publishedAt !== candidate.publishedAt
-      || record.candidateEvidenceUrl !== candidate.evidenceUrl || !isDeepStrictEqual(record.source, candidate.source)) {
+      || pending.afterRule.definitionRevision !== definitionRevision(candidate.sourceInput, candidate.definition)) {
       throw new Error('RULE_STATE_CORRUPT: pending candidate qualification');
     }
   }

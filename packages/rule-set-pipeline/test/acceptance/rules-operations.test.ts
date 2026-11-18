@@ -15,7 +15,7 @@ import { ARTIFACT_REPOSITORY, GitHubHttpError, ghJson } from '../../src/publicat
 import { githubRulesRepository } from '../../src/rules-repository.js';
 import type { RulesContext } from '../../src/rules-context.js';
 import type { RuleDelivery, RulesResult } from '../../src/rules-model.js';
-import { candidateFiles } from '../../src/candidate-publication.js';
+import { candidateFiles, RULE_READBACK_VERSION } from '../../src/candidate-publication.js';
 import { syncRules, pinRuleVersion, resumeRuleUpdates } from '../../src/rules-operations.js';
 import { getRulesStatus } from '../../src/rules-status.js';
 import { sha256 } from '../../src/release.js';
@@ -193,6 +193,7 @@ exec ${shellQuote(binary)} "$@"
     assert.equal(result.status, 'success', JSON.stringify(result));
     // New context/session, not a local success index.
     const status = await getRulesStatus({ context: { ...context } }); assert.equal(status.status, 'success', JSON.stringify(status));
+    assert.deepEqual(status.readbackRequests, []);
     observations.push({ label, status }); checkedStatus = status;
     const snapshot = await repository.snapshot();
     for (const rule of status.rules ?? []) {
@@ -214,31 +215,35 @@ exec ${shellQuote(binary)} "$@"
     console.log(`${label}: ${result.status}`); return result;
   }
   async function inspectCandidate(current: RuleDelivery, expectedCount?: number, expectedList = current.logicalId) {
-    const prefix = current.candidateEvidenceUrl.replace(/readback.json$/, '');
     const retained = await repository.snapshot();
-    const readback = JSON.parse((await readBytes(current.candidateEvidenceUrl)).toString());
-    assert.equal(readback.status, 'remote-verified'); assert.equal(readback.native.status, 'passed');
+    const prefix = `candidates/${current.candidateId}/`;
+    const readGit = async (file: string) => {
+      const bytes = await retained.read(prefix + file);
+      assert.ok(bytes, `missing Git record: ${prefix}${file}`);
+      return bytes;
+    };
+    const readback = JSON.parse((await readGit('readback.json')).toString());
+    assert.equal(readback.schemaVersion, RULE_READBACK_VERSION);
+    assert.equal(readback.status, 'remote-verified');
     assert.equal(readback.candidateId, current.candidateId); assert.equal(readback.versionId, current.versionId);
+    assert.equal(readback.readback.length, 2);
     const files = [];
     for (const file of candidateFiles(config.ruleSets.find(x => x.id === current.logicalId))) {
-      const bytes = await retained.read(`candidates/${current.candidateId}/${file}`); assert.ok(bytes);
-      const observed = await readBytes(prefix + file, { sha256: sha256(bytes), byteLength: bytes.length });
+      const bytes = await readGit(file);
       for (const entry of readback.readback.filter((x: { url: string }) => x.url.endsWith('/' + file))) {
-        assert.deepEqual(await readBytes(entry.url, entry), observed);
+        assert.deepEqual(await readBytes(entry.url, entry), bytes);
       }
       files.push({ file, sha256: sha256(bytes), byteLength: bytes.length });
     }
-    assert.equal(readback.readback.length, 6);
-    const manifest = artifactManifestSchema.parse(JSON.parse((await readBytes(prefix + 'manifest.json')).toString()), '');
-    const report = JSON.parse((await readBytes(prefix + 'conversion-report.json')).toString());
-    const build = JSON.parse((await readBytes(prefix + 'build.json')).toString());
+    const manifest = artifactManifestSchema.parse(JSON.parse((await readGit('manifest.json')).toString()), '');
+    const report = JSON.parse((await readGit('conversion-report.json')).toString());
+    const build = JSON.parse((await readGit('build.json')).toString());
     assert.equal(manifest.id, current.logicalId); assert.equal(manifest.targetVersion, '1.14.4'); assert.equal(manifest.sourceFormatVersion, 4);
     assert.equal(build.id, current.logicalId);
     assert.equal(build.definition.list, current.logicalId === 'china-ip' ? 'all' : expectedList);
     assert.deepEqual(build.source, current.source); assert.equal(build.validation.status, 'passed');
     assert.equal(build.validation.policy, NATIVE_VALIDATION_POLICY);
-    assert.equal(readback.native.policy, NATIVE_VALIDATION_POLICY);
-    assert.deepEqual(build.source, JSON.parse((await readBytes(prefix + 'source.json')).toString()));
+    assert.deepEqual(build.source, JSON.parse((await readGit('source.json')).toString()));
     if (expectedCount !== undefined) assert.equal(report.inputCount, expectedCount);
     assert.deepEqual(manifest.artifacts.map((x: { format: string }) => x.format), ['source', 'binary']);
     assert.deepEqual(manifest.projections.route, manifest.projections[current.logicalId === 'china-ip' ? 'dns-response' : 'dns-query']);

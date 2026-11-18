@@ -85,23 +85,23 @@ status 只读取，不登记操作、更新检查时间、恢复维护或发送�
 
 `successfulInput` 保存已核实的 Git commit/文件或 Release/资产身份及输入摘要，绑定 `inputBindingRevision`、`definitionRevision`、`definitionGeneration`、`toolSha256`、`buildToolsSha256`、`validationPolicy`、`nativeBuildId`、`candidateId` 和 `buildId`。定义包括用途，因此规范化内容身份与定义一起约束实际用途投影。版本来源仍取自生成候选的原输入。
 
-同步和恢复只在交付回读完成，或本次核实完整现有交付可复用后推进对应规则的成功记录。共享来源的失败项保留各自此前适用的记录。同一成功事实没有观测时间字段，重复处理无需提交。缺少记录、上次失败、工具或策略变化、当前候选不匹配或候选证据不足时走常规构建和验证。共享稳定文件缺失或摘要不符时仍停止写入。实质定义变化与删除会清除旧记录。同一来源的别名变更沿用有效定义判断。
+同步和恢复只在稳定规则文件的固定 commit 正文回读通过，或本次从 Git 核实完整现有交付可复用后推进该集的成功记录。共享来源的失败项保留各自此前适用的记录。同一成功事实没有观测时间字段，重复处理无需提交。缺少记录、上次失败、工具或策略变化、当前候选不匹配或候选证据不足时走常规构建和验证。共享稳定文件缺失或摘要不符时仍停止写入。实质定义变化与删除会清除旧记录。同一来源的别名变更沿用有效定义判断。
 
 正式配置状态先单独保存。每集正常首次交付采用以下 7 个持久阶段，沿用现有 schema、分支与稳定 URL，不重写历史：
 
 1. 登记候选，固定来源及 buildId，状态为 building。
 2. 上传 JSON/SRS，同时保存 publishing 状态。
-3. 上传 Manifest、来源及构建记录，同时保存规则文件所在 commit。
-4. 保存 HTTPS 回读证据，同时保存元数据 commit、地址和已确定的版本身份。
+3. 上传 Manifest、构建记录及追溯文件，同时保存规则文件所在 commit。
+4. 固定 commit 的 JSON 和 SRS 正文校验通过后保存回读记录，同时保存元数据 commit、地址和已确定的版本身份。
 5. 候选验证及交付准备均成功后，合并保存 verified 与 pendingDelivery。同步登记中保存核实过的候选和构建工具关联。
 6. 更新稳定文件、交付记录及操作回执。
-7. 稳定回执和回读确认后，依据登记的证明保存完成与成功输入，清除 pendingDelivery。已应用的写入可以在候选 HTTPS 临时不可用时完成此阶段。
+7. 从 Git 核对回执、activation 和实际变更，再校验该次稳定交付 commit 的 JSON 和 SRS 正文。依据登记的证明保存完成与成功输入，清除 pendingDelivery。删除通过 Git 核对实际结果后完成。
 
 阶段文件与当时的 journal 同一提交；返回的 commit 指针在下一阶段保存。若文件已提交但指针未保存，按原候选固定路径核实实际提交和字节，继续原 candidateId、source、buildId 和已登记版本。不能以缺失指针认定文件未提交，或盲目重试上传。候选合格但交付准备失败，或恢复后未被选中时，单独保存 verified；29 次只是四集正常成功路径目标，故障与恢复可以增加提交。
 
 Git 对象读取优化只复用完整 Git SHA 指定的不可变内容，缓存有界且失败请求不复用；正式配置分支、目标分支和公开仓库权限仍实时读取。每次实际写入在对象创建前和 ref 更新前核对配置、journal head、维护门禁及由 journal 约束的规则身份，更新目标 ref 前再核对目标 head，保留预期 parent 与非强制更新。移除同一次提交之外的重复预检，不移除这些写入检查；响应不明仍由 writeId 或交付回执核实。
 
-真实 sync 按规则及稳定候选身份遍历当前有效意图下的全部 building/publishing，核对输入绑定、定义修订、规则代次及控制修订，再作普通更新或 unchanged 判断。同源分组只优化普通输入获取，不能限制恢复范围。沿用原 candidateId/source/buildId 完成 building→publishing→verified，不新增终止状态，不以同内容直接宣告 verified。已有完整证据时优先复验；证据不足时使用原固定输入补齐缺失阶段。已登记的 versionId/publishedAt 必须与证据一致；journal 缺失时只从核实后的原证据恢复，不可靠或冲突的事实明确失败并保留记录。
+真实 sync 按规则及稳定候选身份遍历当前有效意图下的全部 building/publishing，核对输入绑定、定义修订、规则代次及控制修订，再作普通更新或 unchanged 判断。同源分组只优化普通输入获取，不能限制恢复范围。沿用原 candidateId/source/buildId 完成 building→publishing→verified，不新增终止状态，不以同内容直接宣告 verified。已有持久回读记录时，从 Git 核对业务事实、实际字节和阶段关联，并在本次操作复验原生产物。候选规则回读尚未完成时，使用原固定输入补齐阶段。已登记的 versionId/publishedAt 必须与证据一致；journal 缺失时只从核实后的原证据恢复，不可靠或冲突的事实明确失败并保留记录。
 
 候选恢复与选择当前交付分别处理。已有 current 时，先完成所有匹配候选的证据，再通过正常最新上游输入与兼容检查决定一次交付；即使仅有一个在途候选也不直接切换。latest 检查失败时，已恢复证据仍保留，已有稳定交付不变，整体报告失败并以 sync 继续。完整证据复验本身不重新获取候选的固定上游输入，但不能据此承诺已有 current 时上游离线也能完成整次 sync。尚无 current 且单一有效在途候选可以直接复验并交付；原已登记 pendingDelivery 沿用原操作恢复，不受该选择限制。
 
@@ -113,11 +113,21 @@ Git 对象读取优化只复用完整 Git SHA 指定的不可变内容，缓存�
 
 ## 证据回读
 
-构建记录（正式配置的 `buildRecord: 3`）和 `readback.json`（`schemaVersion: 2`）记录 `native-compile-load-v1`、通过的实际命令及工具内容摘要。每组源 JSON 执行一次 `rule-set compile`，再用 `rule-set match` 分别加载 JSON 和 SRS。回读证据记录固定 HTTPS 地址、实际字节长度、SHA-256 和逐字节相等结果。cleanup 保留原始构建验证记录，并为重写后的地址记录回读及复验工具。新策略切换从空目标开始，见 [Pipeline README](../README.md#从空产物状态启用新验证策略)。
+构建记录（`buildRecord: 3`）保存通过的编译和加载、工具 SHA-256、`native-compile-load-v1` 及构建身份。`readback.json`（`schemaVersion: 3`）记录候选身份、版本、首次发布时间、文件和元数据 commit，以及固定 JSON/SRS 地址的两条正文长度、SHA-256 和逐字节校验记录。清理重写物理地址并记录复验工具。Artifact Manifest v2 仍描述产物格式、用途、能力和摘要，Compiler 继续消费内存数据。从空目标启用的步骤见 [Pipeline README](../README.md#从空产物状态启用新验证策略)。
 
-每次调用 `status`、`sync`、`pin`、`resume` 或 `cleanup` 时单独建立 HTTPS 字节缓存。同一个 Node context 的后续调用和中断后恢复都会重新下载。仅复用可信产物仓库中由完整 commit SHA 与文件路径定位、已下载并通过本阶段校验的字节。新地址即使内容相同也要首次下载。缓存最多保留 128 个地址、合计 64 MiB 字节，达到任一上限时按写入顺序淘汰；超出字节上限的单文件直接校验。传输或首次校验失败可重试，缓存字节与调用方持有的字节相互隔离。
+| 操作 | 产物仓库 Raw HTTP 正文核验 |
+| --- | --- |
+| 新候选发布 | 候选文件所在 commit 的 JSON 与 SRS |
+| 稳定交付 | 写入回执所在 commit 的 JSON 与 SRS |
+| 已完成候选复选、完整成功输入复用、人工 status、预览、无回收 cleanup | 0 次 |
+| cleanup 重建 | 每个保留候选在新 commit 的 JSON 与 SRS，切换后每组当前稳定分支入口的 JSON 与 SRS |
+| 恢复 | 按所处阶段补齐未完成的规则回读，已提交的稳定写入先核对原回执 |
 
-后续阶段仍各自核对期望摘要、候选身份、当前保留树和控制条件。稳定订阅和其他分支地址按原有阶段实际回读。固定地址通过首次回读和校验后，缓存命中期间不再观察该地址短时的 HTTP 故障。
+Git 中的候选登记和回读完成记录约束规则归属、来源绑定、版本和发布阶段。Manifest 和实际 JSON/SRS 约束字节、格式及用途。构建记录约束工具、策略和构建身份。稳定交付、保留关系和写入控制取自实际 Git 状态。候选资格无需读取 `source.json` 或 `conversion-report.json` 的正文。人工 status 通过路径盘点报告已发现的 `missingTraceFiles`，候选可选性仍由核心事实和产物决定。已存在的纯追溯文件在重建时原样复制。已知文件读取或复制失败时，维护计划保持可恢复状态。
+
+每次操作单独建立 HTTPS 字节缓存。只复用可信产物仓库中由完整 commit SHA 与路径定位、已经通过校验的字节。该操作要求校验的新规则地址首次真实 GET，即使内容摘要相同。稳定分支地址在 cleanup 切换后直接 GET。缓存最多保留 128 个地址及 64 MiB 字节，达到任一上限时按写入顺序淘汰，超限单文件直接校验。失败可重试，返回字节与缓存相互隔离。
+
+操作结果的 `readbackRequests` 记录该次调用在产物 Raw 传输边界实际发起的地址，包含失败尝试。`verified` 描述本次核验，`reliedOn` 描述所依赖的历史成功事实。固定地址校验通过后，同次缓存命中期间可以复用该观察。Git 检查和历史事实均有各自的证据范围。
 
 每次调用 `sync`、`pin`、`resume` 或 `cleanup` 时，首次成功的原生验证建立内存证明。后续阶段重新探测工具身份。验证策略、格式、用途投影和工具 SHA-256 相同，且阶段核对的 JSON/SRS 与通过验证的文件逐字节相同时，可以沿用这组实际命令。字节、工具或策略变化会触发新验证或拒绝。原生命令失败或执行中检测到工具变化时，本次验证不产生证明，后续仍可重试。
 
@@ -135,14 +145,14 @@ Git 对象读取优化只复用完整 Git SHA 指定的不可变内容，缓存�
 | `plan.decisions[]` | 每个候选的身份、已知版本/时间、retain/discard 及原因 |
 | `plan.retain.candidateIds`、`plan.retain.active` | 保留候选集合和按 candidateId 明确指向的实际当前交付 |
 | `plan.discard.candidateIds` | 本次可移除候选集合 |
-| `plan.blockers`、`plan.retainedBytes`、`plan.hasCleanup` | 阻塞原因、保留候选与当前稳定文件的逻辑字节数及是否存在清理工作；字节数不含 Git 对象开销 |
+| `plan.blockers`、`plan.retainedBytes`、`plan.hasCleanup` | 阻塞原因、保留候选核心文件与当前稳定文件的逻辑字节数及是否存在清理工作。字节数不含纯追溯文件或 Git 对象开销 |
 | `plan.otherRefs`、`otherRefs` | 盘点时和结果中观察到的非受管引用；报告而不删除 |
 | `retainedCandidateCount`、`removedCandidateCount` | 能确认时返回的保留/移除数量 |
 | `continueWith` | 未完成时为 cleanup，CLI 显示 `pnpm rules cleanup` |
 
 年龄按首次成功发布的 `publishedAt` 计算，UTC 连续 24 小时计一天。`publishedAt >= cutoff` 的完整候选保留；早于 cutoff 的候选仅在没有保护依赖时删除。当前交付、pin 目标、未决操作所需证据和最小控制/删除代次均受到保护。候选退出当前身份不更新时间或重新计时；未知历史时间不伪造、不按过期处理。
 
-实际执行隔离写入后保存维护身份、时间边界和完整集合；中断恢复不重新计算删除计划。关键写入仍核对当前定义、控制、generation 和 Git heads，冲突时停止。新基线复制所有保留候选的完整依赖，并保留实际当前 candidate/version 指针。清理保留有效候选关联的成功输入，清除被回收候选的关联。物理 commit 和证据 URL 可重写，业务 `versionId`、`publishedAt`、来源、稳定 URL 与规则字节不变。
+实际执行隔离写入后保存维护身份、时间边界和完整集合；中断恢复不重新计算删除计划。关键写入仍核对当前定义、控制、generation 和 Git heads，冲突时停止。新基线复制保留候选的必需产物和已有追溯文件，并保留实际当前 candidate/version 指针。清理保留有效候选关联的成功输入，清除被回收候选的关联。物理 commit 和证据 URL 可重写，业务 `versionId`、`publishedAt`、来源、稳定 URL 与规则字节不变。
 
 切换前重跑 cleanup 复用或核实已准备对象；切换后继续回读、清理本次拥有且 head 一致的临时引用、恢复写入，不回滚旧基线。无法判定时保留隔离并返回 pending/failed。dry-run 只盘点已保存的状态与文件；`cleanup.unverified` 明示尚未执行的原生候选复验、新基线 HTTPS 回读和原子切换。存在活动维护时展示已固化计划，不恢复阶段、不写引用或 generation。status 在维护隔离期间报告 pending，并在当前检查点有计划时提供 cleanup 阶段、身份、截止时间与继续入口。
 

@@ -6,10 +6,11 @@ import { publishConfiguredCandidate } from './configured-update.js';
 import type { RuleDefinition, SourceInput } from './configuration.js';
 import type { CommitSourceRecord } from './github-commit.js';
 import { probeCommitInput, readPinnedCommitInput } from './git-input-probe.js';
-import { lookupRelease, readReleaseInput, sha256, type ReleaseOptions } from './release.js';
+import { lookupRelease, readReleaseInput, type ReleaseOptions } from './release.js';
 import { probeReleaseInput } from './release-input-probe.js';
 import type { SourceRecord } from './types.js';
-import { retainedCandidateDownload } from './publication-repository.js';
+import type { PublicationSnapshot } from './publication-repository.js';
+import type { NativeBuildOptions } from './native.js';
 import { immutableUrl, type PublicationTransport } from './publication.js';
 import { inputBindingRevision, parseRulesJournal, type ManagedRule, type RuleCandidate, type RuleSource } from './rules-model.js';
 import { rulesBinary, type LoadedRules } from './rules-context.js';
@@ -76,16 +77,18 @@ export async function buildRulesInput(loaded: LoadedRules, definitions: RuleDefi
   return buildPreparedRules(loaded, definitions, await (await resolveRulesInput(loaded, definitions, fixed)).read(definitions));
 }
 
-export async function verifyRuleCandidate(session: RulesSession, candidate: RuleCandidate, binary?: string) {
-  if (!candidate.evidenceUrl || candidate.status !== 'verified') throw new Error('CANDIDATE_UNAVAILABLE: version is incomplete');
-  const { evidenceUrl } = candidate;
-  return session.loaded.verifyEvidence(async download => {
-    const retained = retainedCandidateDownload(session.snapshot, candidate.id, download);
-    const verified = await verifyCandidateEvidence({ candidateEvidenceUrl: evidenceUrl, binary, nativeBuild: session.loaded.nativeBuild,
-      evidenceSha256: candidate.evidenceSha256 }, { branch: session.loaded.context.targetBranch, download: retained }, candidate.definition, 'rollback');
-    if (verified.buildId !== candidate.buildId || !isDeepStrictEqual(verified.source, candidate.source)) throw new Error('CANDIDATE_UNAVAILABLE: stored source or build changed');
-    return verified;
-  });
+export function verifyRuleCandidateInSnapshot(snapshot: PublicationSnapshot, candidate: RuleCandidate, targetBranch: string,
+  native?: Partial<NativeBuildOptions>) {
+  if (!candidate.evidenceUrl || !candidate.versionId || !candidate.publishedAt || candidate.status !== 'verified' || candidate.migrationPending) {
+    throw new Error('CANDIDATE_UNAVAILABLE: version is incomplete');
+  }
+  return verifyCandidateEvidence({ candidateEvidenceUrl: candidate.evidenceUrl, retained: { candidate, snapshot }, ...native },
+    { branch: targetBranch }, candidate.definition, 'rollback');
+}
+
+export function verifyRuleCandidate(session: RulesSession, candidate: RuleCandidate, binary?: string) {
+  return verifyRuleCandidateInSnapshot(session.snapshot, candidate, session.loaded.context.targetBranch,
+    { binary, nativeBuild: session.loaded.nativeBuild });
 }
 
 /** An immutable evidence stage survives a lost readback or process checkpoint.
@@ -99,7 +102,7 @@ export async function recoverPublishedRuleCandidate(session: RulesSession, candi
   const evidence = JSON.parse(bytes.toString());
   const evidenceCommit = candidate.evidenceCommit ?? await session.loaded.context.repository.lastChange(session.snapshot.head, path);
   const recovered: RuleCandidate = { ...candidate, status: 'verified', evidenceCommit,
-    evidenceUrl: immutableUrl(evidenceCommit, path), evidenceSha256: sha256(bytes) };
+    evidenceUrl: immutableUrl(evidenceCommit, path) };
   if (recovered.publishedAt && recovered.publishedAt !== evidence.publishedAt
     || recovered.versionId && recovered.versionId !== evidence.versionId) {
     throw new Error('CANDIDATE_UNAVAILABLE: retained evidence does not match the registered version');
@@ -130,8 +133,8 @@ export async function publishRuleBuild(session: RulesSession, built: RuleBuild, 
     // pointers first so the publisher preserves the original diagnostic path.
     const filesPath = `candidates/${candidate.id}/${result.native.artifacts[0].file}`;
     const metadataPath = `candidates/${candidate.id}/build.json`;
-    if (!candidate.filesCommit && await session.snapshot.read(filesPath)) candidate.filesCommit = await session.loaded.context.repository.lastChange(session.snapshot.head, filesPath);
-    if (!candidate.metadataCommit && await session.snapshot.read(metadataPath)) candidate.metadataCommit = await session.loaded.context.repository.lastChange(session.snapshot.head, metadataPath);
+    if (!candidate.filesCommit && session.snapshot.paths.includes(filesPath)) candidate.filesCommit = await session.loaded.context.repository.lastChange(session.snapshot.head, filesPath);
+    if (!candidate.metadataCommit && session.snapshot.paths.includes(metadataPath)) candidate.metadataCommit = await session.loaded.context.repository.lastChange(session.snapshot.head, metadataPath);
   }
   session.journal.candidates[candidate.id] = candidate;
   await session.save();
@@ -162,7 +165,7 @@ export async function publishRuleBuild(session: RulesSession, built: RuleBuild, 
   await publishConfiguredCandidate(result, candidate, built.source, built.tools, session.loaded.configuration.target,
     // Stage writes already include the journal. Save each returned commit
     // pointer with the next stage, recovering it by fixed path after a crash.
-    publication, { binary: rulesBinary(session.loaded.context), nativeBuild: session.loaded.nativeBuild, verifyEvidence: session.loaded.verifyEvidence }, async () => {
+    publication, { binary: rulesBinary(session.loaded.context), nativeBuild: session.loaded.nativeBuild, verifyEvidence: session.loaded.verifyEvidence, ruleFilesOnly: true }, async () => {
       if (candidate.metadataCommit) session.loaded.progress('evidence', result.id);
     }, () => {
       if (candidate.publishedAt) return;
@@ -173,10 +176,8 @@ export async function publishRuleBuild(session: RulesSession, built: RuleBuild, 
       while (Object.values(session.journal.candidates).some(other => other.id !== candidate.id && other.versionId === candidate.versionId) && length <= 36);
       if (Object.values(session.journal.candidates).some(other => other.id !== candidate.id && other.versionId === candidate.versionId)) throw new Error('Version identity collision');
     });
+  await verifyRuleCandidate(session, { ...candidate, status: 'verified' });
   candidate.status = 'verified'; delete candidate.error;
-  const evidence = await session.snapshot.read(`candidates/${candidate.id}/readback.json`);
-  if (!evidence) throw new Error('Candidate readback record missing');
-  candidate.evidenceSha256 = sha256(evidence);
   // Delivery registration persists verified + evidence identity atomically.
   // A caller that does not select this candidate must checkpoint it separately.
   return candidate;

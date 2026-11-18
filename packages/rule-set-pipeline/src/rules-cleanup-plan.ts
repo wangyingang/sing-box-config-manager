@@ -1,7 +1,8 @@
 import { isDeepStrictEqual } from 'node:util';
 import { filePaths } from './maintenance-baseline-transport.js';
 import { branchRef, type Ref } from './maintenance-refs.js';
-import { candidateFiles } from './candidate-publication.js';
+import { candidateCoreFiles } from './candidate-publication.js';
+import { verifyRuleCandidateInSnapshot } from './rules-build.js';
 import { readRuleDeliveries } from './rules-delivery.js';
 import type { CleanupPlan } from './rules-cleanup-model.js';
 import type { RulesSession } from './rules-session.js';
@@ -26,7 +27,7 @@ export async function planRulesCleanup(session: RulesSession, refs: Ref[], froze
     Object.keys(record.files).forEach(path => knownStable.add(path));
     const candidate = journal.candidates[record.candidateId];
     if (!candidate || candidate.logicalId !== record.logicalId || candidate.versionId !== record.versionId
-      || candidate.publishedAt !== record.publishedAt || !isDeepStrictEqual(candidate.source, record.source)) {
+      || candidate.publishedAt !== record.publishedAt || candidate.evidenceUrl !== record.candidateEvidenceUrl || !isDeepStrictEqual(candidate.source, record.source)) {
       blockers.push(`Current delivery ${record.logicalId} has no matching retained candidate`);
     }
   }
@@ -72,7 +73,11 @@ export async function planRulesCleanup(session: RulesSession, refs: Ref[], froze
     decisions.push({ candidateId: id, logicalId: candidate.logicalId, versionId: candidate.versionId,
       publishedAt: candidate.publishedAt, action, reasons });
     if (action === 'retain') {
-      const paths = candidateFiles(candidate.definition).map(file => `candidates/${id}/${file}`);
+      const paths = candidateCoreFiles(candidate.definition).map(file => `candidates/${id}/${file}`);
+      if (complete) {
+        try { await verifyRuleCandidateInSnapshot(snapshot, candidate, loaded.context.targetBranch); }
+        catch (error) { blockers.push(`Candidate ${id}: ${String(error)}`); }
+      }
       for (const path of paths) {
         const bytes = await snapshot.read(path);
         if (!bytes) blockers.push(`Missing retained file: ${path}`);

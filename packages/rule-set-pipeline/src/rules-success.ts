@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import { candidateStableFiles } from './activation.js';
-import { configuredBuildTools } from './configured-build.js';
+import { configuredBuildIdentity, configuredBuildTools } from './configured-build.js';
 import { inspectBinary, nativeBuildIdentity, NATIVE_VALIDATION_POLICY, type NativeTool } from './native.js';
 import { projectTerms } from './projection.js';
 import type { PublicationSnapshot } from './publication-repository.js';
@@ -13,10 +13,10 @@ import type { RulesSession } from './rules-session.js';
 type VerifiedCandidate = Awaited<ReturnType<typeof verifyRuleCandidate>>;
 interface BuildIdentity {
   tool: NativeTool;
-  tools: unknown;
+  tools: object;
   nativeBuildId: string;
 }
-const digestTools = (tools: unknown) => sha256(JSON.stringify(tools));
+const digestTools = (tools: object) => configuredBuildIdentity(tools);
 
 export function successfulRuleInput(rule: ManagedRule, source: RuleSource, qualification: QualifiedRuleCandidate): SuccessfulRuleInput {
   return { ...qualification, source, inputBindingRevision: rule.inputBindingRevision, definitionRevision: rule.definitionRevision,
@@ -32,7 +32,7 @@ function matchesRule(candidate: RuleCandidate, rule: ManagedRule) {
   return candidate.logicalId === rule.definition.id && candidate.status === 'verified' && !candidate.migrationPending
     && candidate.inputBindingRevision === rule.inputBindingRevision && candidate.definitionGeneration === rule.generation
     && definitionRevision(candidate.sourceInput, candidate.definition) === rule.definitionRevision
-    && Boolean(candidate.evidenceSha256 && candidate.versionId && candidate.publishedAt);
+    && Boolean(candidate.evidenceUrl && candidate.versionId && candidate.publishedAt);
 }
 
 export function qualifiedRuleCandidate(rule: ManagedRule, candidate: RuleCandidate, verified: VerifiedCandidate) {

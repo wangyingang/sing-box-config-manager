@@ -6,7 +6,7 @@ status: accepted
 
 2026-11-16，依据 [Spec #85](https://github.com/wangyingang/sing-box-config-manager/issues/85)，将历史维护收敛为 `cleanup`。管理者显式配置 `candidateRetentionDays`；候选首次成功发布的时间达到本次 UTC 截止边界时仍保留，实际当前版本与 pin 目标不受年龄限制。候选退出当前身份后继续按原发布时间判断，避免把长期固定误解为延长所有旧版本的保留期。本决策替代 Spec [#47](https://github.com/wangyingang/sing-box-config-manager/issues/47)/[#66](https://github.com/wangyingang/sing-box-config-manager/issues/66) 中只保留当前版本、没有最低保留期的安排；历史验收事实不改写。
 
-维护使用现有原子引用切换能力，保留 candidates/main 双分支布局及隔离单分支支持。新的发布基线复制所有保留候选的完整证据，当前指针按明确候选身份恢复；业务版本、首次发布时间、实际来源与稳定订阅字节保持不变。这样清理后仍可选择窗口内的非当前版本，而受管分支不再可达旧操作历史。其他分支和标签只报告，不删除；GitHub 物理回收时间不在此保证内。
+维护使用现有原子引用切换能力，保留 candidates/main 双分支布局及隔离单分支支持。新的发布基线复制保留候选的核心文件和已有追溯文件，当前指针按明确候选身份恢复；业务版本、首次发布时间、实际来源与稳定订阅字节保持不变。这样清理后仍可选择窗口内的非当前版本，而受管分支不再可达旧操作历史。其他分支和标签只报告，不删除；GitHub 物理回收时间不在此保证内。
 
 维护隔离与截止时间、保留集合在同一远端检查点登记。恢复沿用该计划，不因跨日或配置保留期改变扩大本轮删除范围。每次关键写入仍核对当前配置权威和远端 heads；切换后核验新基线、完成 HTTPS 回读与临时引用清理，才重新开放写入。管理者只需再次执行 `cleanup`，无需选择准备、切换或恢复阶段。查询和预览不推动维护；普通 sync 不顺带清理。
 
@@ -21,3 +21,5 @@ status: accepted
 准备、切换前复验和切换后核对可在一次 `cleanup` 内复用已校验的固定地址字节。重写后的地址首次真实下载，切换后的稳定分支入口继续通过 HTTPS 回读。当前保留树、基线身份与引用租约仍逐阶段核对。缓存容量和固定地址的可用性观察见[证据回读](../../contracts/rules-operations.md#证据回读)。[#127](https://github.com/wangyingang/sing-box-config-manager/issues/127)
 
 [#128](https://github.com/wangyingang/sing-box-config-manager/issues/128) 的成功输入记录以候选 ID 和构建身份关联保留证据。清理可改写物理地址并保留关联。候选被回收时，清理删除相应记录。成功记录不延长候选保留期。
+
+[#138](https://github.com/wangyingang/sing-box-config-manager/issues/138) 将重建期间的 HTTPS 核验限定为新候选固定地址和切换后的稳定分支规则入口。旧候选以及过渡稳定 commit 通过 Git 核验。已有转换报告和来源展示文件按原字节复制。缺少可选文件时仍可保留候选，已知存在的文件复制未完成时继续按冻结计划恢复。

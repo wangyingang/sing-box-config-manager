@@ -137,7 +137,13 @@ for (const phase of ['before-switch', 'after-switch'] as const) {
     const stable = await stableBytes(env);
     let interrupted = false;
     if (phase === 'before-switch') {
-      env.failStage(ref => { if (ref.endsWith('-journal')) { interrupted = true; throw new Error('Interrupted before baseline journal'); } });
+      env.failDownload(url => {
+        const ref = new URL(url).pathname.split('/')[3];
+        if (env.stageWrites.some(branch => branch.endsWith('-files') && env.heads.get(branch) === ref) && url.endsWith('.srs')) {
+          interrupted = true;
+          throw new Error('Interrupted new candidate readback');
+        }
+      });
     } else {
       env.afterRefs(changes => {
         if (changes.some(change => change.ref === `refs/heads/${env.context.repository.branch}` && change.after)) throw new Error('Switch reply lost');
@@ -183,6 +189,57 @@ for (const phase of ['before-switch', 'after-switch'] as const) {
       'A resumed cleanup must not switch a second baseline');
   });
 }
+
+test('cleanup 原样复制已有追溯文件，读取未完成时保留计划并可续做', { skip: !binary }, async () => {
+  const env = cleanupEnvironment(binary!, 'main');
+  const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
+  const input = request(env);
+  const first = await syncRules(input);
+  assert.equal(first.status, 'success', JSON.stringify(first));
+  env.clock('2026-12-20T00:00:00.000Z');
+  env.upstream({ openai: 'domain:later.example' });
+  const next = await syncRules(input);
+  assert.equal(next.status, 'success', JSON.stringify(next));
+  const current = next.results[0].current!;
+  const prefix = `candidates/${current.candidateId}/`;
+  const trace = prefix + 'conversion-report.json', optional = prefix + 'source.json';
+  const badReport = Buffer.from('original malformed trace record');
+  const retained = env.trees.get(env.heads.get('candidates')!)!;
+  retained.set(trace, badReport); retained.delete(optional);
+  const repository = env.context.repository, snapshot = repository.snapshot;
+  let attempts = 0, failCopy = true;
+  repository.snapshot = async branch => {
+    const observed = await snapshot(branch);
+    return { ...observed, async read(path) {
+      if (path === trace) {
+        attempts++;
+        if (failCopy) throw new Error('Trace Git read unavailable');
+      }
+      return observed.read(path);
+    } };
+  };
+  const preview = await cleanupRuleHistory({ ...input, dryRun: true });
+  assert.equal(preview.status, 'success', JSON.stringify(preview));
+  assert.equal(attempts, 0);
+  const failed = await cleanupRuleHistory(input);
+  assert.equal(failed.status, 'pending', JSON.stringify(failed));
+  assert.match(failed.error!, /Trace Git read unavailable/);
+  assert.equal(env.refWrites.length, 0);
+  assert.equal((await env.journal()).maintenance, 'maintenance');
+  failCopy = false;
+  const resumed = await cleanupRuleHistory(input);
+  assert.equal(resumed.status, 'success', JSON.stringify(resumed));
+  assert.equal(resumed.cleanup?.maintenanceId, failed.cleanup?.maintenanceId);
+  assert.equal(resumed.cleanup?.removedCandidateCount, 1);
+  const raw = resumed.readbackRequests!;
+  assert.equal(raw.length, 4);
+  assert.equal(raw.filter(url => url.endsWith('.srs')).length, 2);
+  assert.equal(raw.filter(url => url.includes('/main/stable/')).length, 2);
+  assert.equal(raw.filter(url => url.includes(`/candidates/${current.candidateId}/`)).length, 2);
+  const rebuilt = await snapshot();
+  assert.deepEqual(await rebuilt.read(trace), badReport);
+  assert.equal(await rebuilt.read(optional), undefined);
+});
 
 test('换源失败的旧交付按当前版本保护，未知发布时间及未完成候选阻塞年龄清理', { skip: !binary, timeout: 90_000 }, async () => {
   const { env, expired, latest } = await retainedFixture('acceptance-issue-85-pending');
