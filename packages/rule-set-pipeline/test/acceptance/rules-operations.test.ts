@@ -19,6 +19,7 @@ import { candidateFiles } from '../../src/candidate-publication.js';
 import { syncRules, pinRuleVersion, resumeRuleUpdates } from '../../src/rules-operations.js';
 import { getRulesStatus } from '../../src/rules-status.js';
 import { sha256 } from '../../src/release.js';
+import { countNativeCommands } from '../fixtures/native-commands.js';
 
 const originalTag = '20261104112839', updatedTag = '20261108011013';
 const originalCommit = 'f162630c8cdad6ced5ef59e606cc93919123ac57';
@@ -259,18 +260,13 @@ exec ${shellQuote(binary)} "$@"
   assert.ok(empty.rules?.every(rule => rule.deliveryState === 'not-delivered' && rule.candidateCount === 0));
   const first = await check('add-four', () => syncRules(input));
   const nativeCommands = (await readFile(tracePath, 'utf8')).trim().split('\n');
-  const nativeCounts = {
-    compile: nativeCommands.filter(command => command.startsWith('rule-set compile ')).length,
-    decompile: nativeCommands.filter(command => command.startsWith('rule-set decompile ')).length,
-    sourceLoad: nativeCommands.filter(command => command.startsWith('rule-set match ') && command.endsWith('--format source')).length,
-    binaryLoad: nativeCommands.filter(command => command.startsWith('rule-set match ') && command.endsWith('--format binary')).length,
-  };
+  const nativeCounts = countNativeCommands(nativeCommands);
   observations.push({ label: 'first-delivery-native-processes', nativeCommands, nativeCounts });
   await checkpoint('first-delivery-native-processes');
   assert.equal(nativeCounts.decompile, 0);
-  assert.ok(nativeCounts.compile >= config.ruleSets.length);
-  assert.ok(nativeCounts.sourceLoad >= config.ruleSets.length);
-  assert.ok(nativeCounts.binaryLoad >= config.ruleSets.length);
+  assert.equal(nativeCounts.compile, config.ruleSets.length);
+  assert.equal(nativeCounts.sourceLoad, config.ruleSets.length);
+  assert.equal(nativeCounts.binaryLoad, config.ruleSets.length);
   assert.deepEqual(first.results.map(x => x.id), ['openai', 'anthropic', 'google-deepmind', 'china-ip']);
   assert.ok(first.results.every(x => x.current && ['delivered', 'unchanged'].includes(x.status)));
   assert.deepEqual(checkedStatus?.rules?.map(x => x.candidateCount), [1, 1, 1, 1]);

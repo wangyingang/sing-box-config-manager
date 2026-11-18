@@ -6,13 +6,20 @@ import { sha256 } from '../../src/release.js';
 import type { RulesContext } from '../../src/rules-context.js';
 import type { RulesRepository, RuleWrites } from '../../src/rules-repository.js';
 
+interface RulesFixtureHistory {
+  heads: Map<string, string>;
+  trees: Map<string, Map<string, Buffer>>;
+  parents: Map<string, string>;
+}
+
 /** Real in-memory Git snapshots/CAS, with the same external boundary as GitHub. */
-export function rulesEnvironment(binary: string, target = 'acceptance-issue-84') {
+export function rulesEnvironment(binary: string, target = 'acceptance-issue-84', persisted?: RulesFixtureHistory) {
   let sequence = 2;
+  if (persisted) for (const head of persisted.trees.keys()) sequence = Math.max(sequence, Number.parseInt(head, 16));
   const journalBranch = target === 'main' ? 'candidates' : target;
-  const heads = new Map([[target, '1'.padStart(40, '0')], [journalBranch, '1'.padStart(40, '0')]]);
-  const trees = new Map<string, Map<string, Buffer>>([['1'.padStart(40, '0'), new Map()]]);
-  const parents = new Map<string, string>();
+  const heads = persisted?.heads ?? new Map([[target, '1'.padStart(40, '0')], [journalBranch, '1'.padStart(40, '0')]]);
+  const trees = persisted?.trees ?? new Map<string, Map<string, Buffer>>([['1'.padStart(40, '0'), new Map()]]);
+  const parents = persisted?.parents ?? new Map<string, string>();
   const writes: { branch: string; files: RuleWrites }[] = [];
   const requests: string[] = [];
   const official = parseBuildConfiguration(readOfficialConfiguration());
@@ -79,7 +86,7 @@ export function rulesEnvironment(binary: string, target = 'acceptance-issue-84')
   const context: RulesContext = { repository, targetBranch: target, allowWrites: true, binary, fetch: fetcher,
     now: () => new Date('2026-11-16T08:15:30.123Z'),
     readConfiguration: async () => ({ revision: String(revision).padStart(40, '0'), content: stringify(config, { aliasDuplicateObjects: false }), origin: 'isolated-fixture' }) };
-  return { context, writes, requests, heads, trees,
+  return { context, writes, requests, heads, trees, parents,
     config: () => structuredClone(config),
     configure(next: typeof config) { config = next; revision++; },
     upstream(rules: Record<string, string>) { Object.assign(contents, rules); upstreamRevision++; history.set(upstreamRevision, { ...contents }); },

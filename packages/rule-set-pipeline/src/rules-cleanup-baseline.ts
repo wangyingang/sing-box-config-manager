@@ -3,7 +3,7 @@ import { candidateStableFiles, verifyCandidateEvidence } from './activation.js';
 import { candidateArtifactFiles, candidateFiles } from './candidate-publication.js';
 import { filePaths, stageRef, type BaselineStage, type BaselineStages, type BaselineTransport, type PreparedBaseline } from './maintenance-baseline-transport.js';
 import type { CleanupPlan } from './rules-cleanup-model.js';
-import { inspectBinary } from './native.js';
+import { inspectBinary, type NativeBuildOptions } from './native.js';
 import { retainedCandidateDownload, type PublicationSnapshot } from './publication-repository.js';
 import { ARTIFACT_REPOSITORY, immutableUrl } from './publication.js';
 import { sha256 } from './release.js';
@@ -12,10 +12,9 @@ import { readRuleDeliveries } from './rules-delivery.js';
 import type { RulesRepository } from './rules-repository.js';
 
 const markerPath = 'pipeline/baseline.json';
-export interface RulesBaselineVerification {
+export interface RulesBaselineVerification extends NativeBuildOptions {
   transport: BaselineTransport;
   repository: RulesRepository;
-  binary: string;
   targetBranch: string;
   plan: CleanupPlan;
   runId: string;
@@ -43,7 +42,7 @@ function retainedJournal(original: RulesJournal, candidates: Record<string, Rule
 }
 
 async function verifyCandidate(snapshot: PublicationSnapshot, candidate: RuleCandidate, repository: RulesRepository,
-  targetBranch: string, binary?: string) {
+  targetBranch: string, native?: NativeBuildOptions) {
   if (!candidate.evidenceUrl || candidate.status !== 'verified' || !candidate.versionId || !candidate.publishedAt || candidate.migrationPending) {
     throw new Error(`RULE_CLEANUP_PENDING: retained candidate is incomplete: ${candidate.id}`);
   }
@@ -54,7 +53,7 @@ async function verifyCandidate(snapshot: PublicationSnapshot, candidate: RuleCan
     throw new Error(`RULE_CLEANUP_PENDING: retained version identity differs from its evidence: ${candidate.id}`);
   }
   const verified = await verifyCandidateEvidence({ candidateEvidenceUrl: candidate.evidenceUrl,
-    evidenceSha256: candidate.evidenceSha256, binary },
+    evidenceSha256: candidate.evidenceSha256, binary: native?.binary, nativeBuild: native?.nativeBuild },
   { branch: targetBranch, download: retainedCandidateDownload(snapshot, candidate.id, repository.download) }, candidate.definition, 'rollback');
   if (verified.buildId !== candidate.buildId || !isDeepStrictEqual(verified.source, candidate.source)) {
     throw new Error(`RULE_CLEANUP_PENDING: candidate source or build changed: ${candidate.id}`);
@@ -108,7 +107,7 @@ export async function verifyRulesBaseline(options: RulesBaselineVerification, st
       evidenceCommit: stages.evidence.head, evidenceSha256: sha256(evidence),
       manifestUrl: immutableUrl(stages.metadata.head, `candidates/${id}/manifest.json`),
       evidenceUrl: immutableUrl(stages.evidence.head, `candidates/${id}/readback.json`) };
-    verified.set(id, await verifyCandidate(snapshot, candidate, restricted, targetBranch, options.binary));
+    verified.set(id, await verifyCandidate(snapshot, candidate, restricted, targetBranch, options));
   }
   if (!isDeepStrictEqual(journal, retainedJournal(original, expectedCandidates))) {
     throw new Error('Baseline changed retained candidate identity, control or definition state');

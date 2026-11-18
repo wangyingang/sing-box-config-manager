@@ -1,6 +1,6 @@
 import type { RuleDefinition } from './configuration.js';
 import type { SourceReference } from './update.js';
-import { buildNative, type NativeBuild } from './native.js';
+import { buildNative, type NativeBuild, type NativeBuildOptions } from './native.js';
 import { readSourceTerms } from './projection.js';
 import { immutableUrl, type PublicationTransport } from './publication.js';
 import { sha256 } from './release.js';
@@ -35,13 +35,13 @@ export interface PublicationCandidate {
 }
 
 /** Common immutable publication gate for legacy and configured candidates. */
-export async function publishCandidate(options: {
-  candidate: PublicationCandidate; native: NativeBuild; buildId: string; binary: string;
+export async function publishCandidate(options: NativeBuildOptions & {
+  candidate: PublicationCandidate; native: NativeBuild; buildId: string;
   publication: PublicationTransport; save: () => Promise<void>;
   records: (filesCommit: string) => Record<string, Buffer>;
   beforeEvidence?: () => void;
 }) {
-  const { candidate, native, buildId, binary, publication, save } = options;
+  const { candidate, native, buildId, binary, publication, save, nativeBuild = buildNative } = options;
   const prefix = `candidates/${candidate.id}`;
   const files = Object.fromEntries(native.artifacts.map(artifact => [`${prefix}/${artifact.file}`, artifact.content]));
   // A previously committed stage must still have the same bytes in the
@@ -85,11 +85,11 @@ export async function publishCandidate(options: {
   };
   const downloaded = new Map<string, Buffer>();
   for (const [path, bytes] of Object.entries(files)) downloaded.set(path, await verify(path, bytes, filesCommit));
-  // Compile the HTTPS JSON and load both formats, then verify the actual downloaded bytes.
+  // Bind the HTTPS bytes to the compiled and loaded output for this tool.
   const route = native.usages.route;
   const json = 'artifactFiles' in route && downloaded.get(`${prefix}/${route.artifactFiles[0]}`);
   if (!json) throw new Error('Remote native JSON is missing');
-  const remoteNative = await buildNative(readSourceTerms(JSON.parse(json.toString('utf8'))), binary);
+  const remoteNative = await nativeBuild(readSourceTerms(JSON.parse(json.toString('utf8'))), binary);
   if (remoteNative.tool.sha256 !== native.tool.sha256) throw new Error('Binary changed between build and readback');
   if (remoteNative.artifacts.length !== native.artifacts.length || remoteNative.artifacts.some(artifact =>
     !downloaded.get(`${prefix}/${artifact.file}`)?.equals(artifact.content))) throw new Error('Remote native content mismatch');

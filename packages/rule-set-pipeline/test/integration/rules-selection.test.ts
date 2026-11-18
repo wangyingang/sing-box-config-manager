@@ -7,6 +7,8 @@ import { syncRules, pinRuleVersion } from '../../src/rules-operations.js';
 import { getRulesStatus } from '../../src/rules-status.js';
 import { sha256 } from '../../src/release.js';
 import { rulesEnvironment } from '../fixtures/rules-environment.js';
+import { cleanupEnvironment } from '../fixtures/cleanup-environment.js';
+import { cleanupRuleHistory } from '../../src/rules-cleanup.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
 if (!binary) throw new Error('Set SING_BOX_TEST_BINARY to an absolute 1.14.4 binary path');
@@ -56,7 +58,8 @@ async function stableBytes(env: ReturnType<typeof rulesEnvironment>) {
 
 // A damaged remote may serve the same replacement at the immutable address and
 // in the retained tree. Recompute outer digests to exercise each inner boundary.
-async function damage(env: Awaited<ReturnType<typeof versions>>, candidate: RuleCandidate) {
+async function damage(env: Pick<ReturnType<typeof rulesEnvironment>, 'context' | 'trees' | 'heads'> & { journal(): Promise<ReturnType<typeof parseRulesJournal>> },
+  candidate: RuleCandidate) {
   const prefix = `candidates/${candidate.id}/`;
   const read = async (file: string) => (await (await env.context.repository.snapshot()).read(prefix + file))!;
   const replace = (file: string, bytes?: Buffer) => {
@@ -78,6 +81,15 @@ async function damage(env: Awaited<ReturnType<typeof versions>>, candidate: Rule
     await saveEvidence();
   };
   return { read, replace, evidence, saveEvidence, change };
+}
+
+async function replaceSrs(env: Parameters<typeof damage>[0], candidate: RuleCandidate, stem: string) {
+  const d = await damage(env, candidate), invalid = Buffer.from('not an SRS file');
+  d.replace(`${stem}.srs`, invalid);
+  const record = d.evidence.readback.find((r: any) => r.url.endsWith(`/${stem}.srs`));
+  record.sha256 = sha256(invalid); record.byteLength = invalid.length;
+  await d.change('manifest.json', m => { const a = m.artifacts.find((a: any) => a.format === 'binary'); a.sha256 = sha256(invalid); a.byteLength = invalid.length; });
+  await d.change('build.json', b => { const a = b.artifacts.find((a: any) => a.format === 'binary'); a.sha256 = sha256(invalid); a.bytes = invalid.length; });
 }
 
 test('候选证据边界逐项拒绝损坏；status 只读且 pin 保留当前及兄弟集字节', async t => {
@@ -136,12 +148,7 @@ test('摘要随 SRS 篡改更新仍过不了真实原生 pin；域名与 CIDR �
   const env = await versions();
   for (const current of env.first.results.map(result => result.current!)) await t.test(current.logicalId, async () => {
     env.restore(); const candidate = (await env.journal()).candidates[current.candidateId];
-    const d = await damage(env, candidate), stem = candidate.logicalId === 'china-ip' ? 'route' : 'domains';
-    const invalid = Buffer.from('not an SRS file'); d.replace(`${stem}.srs`, invalid);
-    const record = d.evidence.readback.find((r: any) => r.url.endsWith(`/${stem}.srs`));
-    record.sha256 = sha256(invalid); record.byteLength = invalid.length;
-    await d.change('manifest.json', m => { const a = m.artifacts.find((a: any) => a.format === 'binary'); a.sha256 = sha256(invalid); a.byteLength = invalid.length; });
-    await d.change('build.json', b => { const a = b.artifacts.find((a: any) => a.format === 'binary'); a.sha256 = sha256(invalid); a.bytes = invalid.length; });
+    await replaceSrs(env, candidate, candidate.logicalId === 'china-ip' ? 'route' : 'domains');
     const snapshot = await env.context.repository.snapshot();
     // Coherent digests alone are insufficient: this passes structural checks.
     await verifyCandidateEvidence({ candidateEvidenceUrl: candidate.evidenceUrl! },
@@ -151,6 +158,23 @@ test('摘要随 SRS 篡改更新仍过不了真实原生 pin；域名与 CIDR �
     assert.equal(result.status, 'failed'); assert.match(result.results[0].error!, /Native artifact mismatch/);
     assert.equal(env.writes.length, writes); assert.deepEqual(env.heads, heads); assert.deepEqual(await stableBytes(env), before);
   });
+});
+
+test('cleanup 已验证相同 JSON 后，仍拒绝另一保留候选中摘要自洽的无效 SRS', async () => {
+  const env = cleanupEnvironment(binary!);
+  env.upstream({ openai: 'domain:shared.example', anthropic: 'domain:shared.example' });
+  const request = { context: env.context };
+  const built = await syncRules(request);
+  assert.equal(built.status, 'success', JSON.stringify(built));
+  const preview = await cleanupRuleHistory({ ...request, dryRun: true });
+  assert.equal(preview.status, 'success', JSON.stringify(preview));
+  const candidates = preview.cleanup!.plan!.retain.candidateIds;
+  assert.equal(candidates.length, 2);
+  await replaceSrs(env, (await env.journal()).candidates[candidates[1]], 'domains');
+  const result = await cleanupRuleHistory(request);
+  assert.equal(result.status, 'pending', JSON.stringify(result));
+  assert.match(result.error!, /Native artifact mismatch: domains\.srs/);
+  assert.equal(env.refWrites.length, 0);
 });
 
 test('域名与 CIDR 按版本重选只改变目标；重复 pin 幂等且停止全部上游', async () => {

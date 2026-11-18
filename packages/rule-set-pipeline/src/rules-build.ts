@@ -34,13 +34,14 @@ export async function buildRulesInput(loaded: LoadedRules, definitions: RuleDefi
     })();
   const file = input.version === 'git-branch' ? input.input.path : input.input.asset;
   const lists = convertInput(acquired.bytes, definitions, input.input.format, file);
-  return buildConfigured(loaded.configuration, definitions, rulesBinary(loaded.context), acquired.source, lists, input.input.format, file);
+  return buildConfigured(loaded.configuration, definitions, { binary: rulesBinary(loaded.context), nativeBuild: loaded.nativeBuild },
+    acquired.source, lists, input.input.format, file);
 }
 
 export async function verifyRuleCandidate(session: RulesSession, candidate: RuleCandidate, binary?: string) {
   if (!candidate.evidenceUrl || candidate.status !== 'verified') throw new Error('CANDIDATE_UNAVAILABLE: version is incomplete');
   const download = retainedCandidateDownload(session.snapshot, candidate.id, session.loaded.context.repository.download);
-  const verified = await verifyCandidateEvidence({ candidateEvidenceUrl: candidate.evidenceUrl, binary,
+  const verified = await verifyCandidateEvidence({ candidateEvidenceUrl: candidate.evidenceUrl, binary, nativeBuild: session.loaded.nativeBuild,
     evidenceSha256: candidate.evidenceSha256 }, { branch: session.loaded.context.targetBranch, download }, candidate.definition, 'rollback');
   if (verified.buildId !== candidate.buildId || !isDeepStrictEqual(verified.source, candidate.source)) throw new Error('CANDIDATE_UNAVAILABLE: stored source or build changed');
   return verified;
@@ -132,7 +133,7 @@ export async function publishRuleBuild(session: RulesSession, built: RuleBuild, 
   await publishConfiguredCandidate(result, candidate, built.source, built.tools, session.loaded.configuration.target,
     // Stage writes already include the journal. Save each returned commit
     // pointer with the next stage, recovering it by fixed path after a crash.
-    publication, rulesBinary(session.loaded.context), async () => {
+    publication, { binary: rulesBinary(session.loaded.context), nativeBuild: session.loaded.nativeBuild }, async () => {
       if (candidate.metadataCommit) session.loaded.progress('evidence', result.id);
     }, () => {
       if (candidate.publishedAt) return;

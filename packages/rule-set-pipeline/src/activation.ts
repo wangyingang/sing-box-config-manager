@@ -8,7 +8,7 @@ import { Ajv } from 'ajv';
 import manifestSchema from '../contracts/artifact-manifest.schema.json' with { type: 'json' };
 import subscriptionV2Schema from '../contracts/rule-subscription-v2.schema.json' with { type: 'json' };
 import { validCommitSource } from './github-commit.js';
-import { buildNative, nativeArtifactCommands, nativeBuildIdentity, NATIVE_VALIDATION_POLICY } from './native.js';
+import { buildNative, nativeArtifactCommands, nativeBuildIdentity, NATIVE_VALIDATION_POLICY, type NativeBuildOptions } from './native.js';
 import { ARTIFACT_MANIFEST_VERSION, CANDIDATE_READBACK_VERSION, LEGACY_BUILD_RECORD } from './candidate-publication.js';
 import { readSourceTerms, USAGES } from './projection.js';
 import { sha256, validReleaseAssetIdentities, V2FLY_RELEASE_INPUT } from './release.js';
@@ -46,7 +46,7 @@ function candidateLocation(url: string, file: string) {
 }
 
 /** Reads the complete trusted remote record chain and optionally revalidates it with sing-box. */
-export async function verifyCandidateEvidence(options: { candidateEvidenceUrl: string; binary?: string; evidenceSha256?: string },
+export async function verifyCandidateEvidence(options: Partial<NativeBuildOptions> & { candidateEvidenceUrl: string; evidenceSha256?: string },
   transport: Pick<ActivationTransport, 'branch' | 'download'>, definition?: RuleDefinition,
   operation: 'activate' | 'rollback' = 'activate') {
   const location = candidateLocation(options.candidateEvidenceUrl, 'readback.json');
@@ -124,20 +124,20 @@ export async function verifyCandidateEvidence(options: { candidateEvidenceUrl: s
   const artifactIds = manifest.artifacts.map((artifact: any) => artifact.id);
   requireThat(new Set(artifactIds).size === artifactIds.length, 'Duplicate artifact identity');
   requireThat(build.artifacts?.length === 2, 'Unexpected build artifact set');
-  const sourceBytes = await remote(`${stem}.json`, evidence.filesCommit);
-  const srsBytes = await remote(`${stem}.srs`, evidence.filesCommit);
+  const files = { source: `${stem}.json`, binary: `${stem}.srs` };
+  const sourceBytes = await remote(files.source, evidence.filesCommit);
+  const srsBytes = await remote(files.binary, evidence.filesCommit);
   const json = JSON.parse(sourceBytes.toString());
   requireThat(json.version === 4, 'Candidate Source Format mismatch');
   const terms = readSourceTerms(json);
   requireThat(terms.length > 0 && terms.every(term => (term.type === 'ip_cidr') === isCidr), 'Candidate has empty or incompatible usage content');
   requireThat(report.outputTermCount === terms.length, 'Conversion term count mismatch');
-  const native = options.binary === undefined ? undefined : await buildNative(terms, options.binary);
   requireThat(build.nativeBuildId === nativeBuildIdentity(build.tool.sha256, terms), 'Native build identity mismatch');
   const bytesByFormat = { source: sourceBytes, binary: srsBytes };
   for (const format of ['source', 'binary'] as const) {
     const artifact = manifest.artifacts.filter((entry: any) => entry.format === format);
     requireThat(artifact.length === 1, 'Duplicate or missing artifact format');
-    const a = artifact[0], bytes = bytesByFormat[format], file = `${stem}.${format === 'source' ? 'json' : 'srs'}`;
+    const a = artifact[0], bytes = bytesByFormat[format], file = files[format];
     requireThat(a.url === immutableUrl(evidence.filesCommit, `${prefix}/${file}`)
       && a.byteLength === bytes.length && a.sha256 === sha256(bytes)
       && (format === 'binary' || a.termCount === terms.length)
@@ -146,9 +146,6 @@ export async function verifyCandidateEvidence(options: { candidateEvidenceUrl: s
     requireThat(stored?.length === 1 && stored[0].sha256 === a.sha256 && stored[0].bytes === a.byteLength
       && (format === 'source' ? stored[0].termCount === a.termCount : !Object.hasOwn(stored[0], 'termCount'))
       && stored[0].format === format && equal(stored[0].requiredCapabilities, []), 'Build artifact mismatch');
-    // Exact bytes bind the downloaded artifacts to the files compiled and loaded above.
-    const reproduced = native?.artifacts.find(entry => entry.file === file);
-    requireThat(!native || reproduced?.content.equals(bytes), `Native artifact mismatch: ${file}`);
   }
   for (const usage of USAGES) {
     if (usage === layout.unavailable) {
@@ -157,6 +154,12 @@ export async function verifyCandidateEvidence(options: { candidateEvidenceUrl: s
     }
     const ids = manifest.projections[usage].artifactIds;
     requireThat(Array.isArray(ids) && ids.length === 2 && new Set(ids).size === 2 && manifest.artifacts.every((entry: any) => ids.includes(entry.id)), 'Projection mapping mismatch');
+  }
+  const native = options.binary === undefined ? undefined : await (options.nativeBuild ?? buildNative)(terms, options.binary);
+  if (native) for (const format of ['source', 'binary'] as const) {
+    const file = files[format];
+    const reproduced = native.artifacts.find(entry => entry.file === file);
+    requireThat(reproduced?.content.equals(bytesByFormat[format]), `Native artifact mismatch: ${file}`);
   }
   return { candidateId: location.id, buildId: build.buildId, evidenceUrl: options.candidateEvidenceUrl, manifest, source, bytesByFormat,
     build: { definition: build.definition, tools: build.tools, tool: build.tool },

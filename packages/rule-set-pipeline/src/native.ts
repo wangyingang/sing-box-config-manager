@@ -48,9 +48,40 @@ export function nativeArtifactCommands(source: string, srs: string): string[][] 
 }
 
 /** Local validated bytes only: no remote URLs, publication or activation state. */
-export async function buildNative(terms: readonly BuildTerm[], binary: string): Promise<NativeBuild> {
+export function buildNative(terms: readonly BuildTerm[], binary: string): Promise<NativeBuild> {
+  return validateNative(terms, binary);
+}
+
+export interface NativeBuildOptions { binary: string; nativeBuild?: typeof buildNative }
+
+function copyBuild({ artifacts, ...record }: NativeBuild): NativeBuild {
+  return { ...structuredClone(record), artifacts: artifacts.map(artifact => ({
+    ...artifact, requiredCapabilities: [], content: Buffer.from(artifact.content),
+  })) };
+}
+
+/**
+ * Share only completed native builds within one rules operation. The normalized
+ * route terms determine all rendered projections and their formats and filenames.
+ * Callers still compare their actual JSON/SRS bytes with the validated output.
+ */
+export function createOperationNativeBuilder(): typeof buildNative {
+  const passed = new Map<string, NativeBuild>();
+  return (terms, binary) => validateNative(terms, binary, passed);
+}
+
+async function validateNative(terms: readonly BuildTerm[], binary: string, passed?: Map<string, NativeBuild>) {
   const projections = projectTerms(terms);
   const tool = await inspectBinary(binary);
+  const id = nativeBuildIdentity(tool.sha256, projections.route);
+  const previous = passed?.get(id);
+  if (previous) return { ...copyBuild(previous), tool };
+  const built = await buildWithTool(projections, tool, id);
+  passed?.set(id, copyBuild(built));
+  return built;
+}
+
+async function buildWithTool(projections: ReturnType<typeof projectTerms>, tool: NativeTool, buildId: string): Promise<NativeBuild> {
   const directory = await mkdtemp(join(tmpdir(), 'rule-native-'));
   const steps: NativeStep[] = [];
   const run = async (args: string[]) => {
@@ -88,7 +119,6 @@ export async function buildNative(terms: readonly BuildTerm[], binary: string): 
     }
     // Guard against a binary replaced during validation; no passed record on drift.
     if (sha256(await readFile(tool.path)) !== tool.sha256) throw new NativeBuildError('Binary changed during build', steps);
-    const buildId = nativeBuildIdentity(tool.sha256, projections.route);
     return { status: 'built-validated', tool, buildId, artifacts, usages,
       validation: { status: 'passed', policy: NATIVE_VALIDATION_POLICY, steps } };
   } finally { await rm(directory, { recursive: true, force: true }); }

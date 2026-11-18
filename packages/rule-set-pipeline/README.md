@@ -207,6 +207,8 @@ Recipe／Template v2 跟随稳定入口，管理者 pin 会影响所有引用该
 
 CIDR 输入使用固定 `ipaddr.js 2.5.0` 解析 IPv4／IPv6 并规范化地址。生成 JSON 保留去重后的独立 CIDR 条目。原生验证依赖指定的官方 1.14.4 编译器生成 SRS，再分别使用 `rule-set match` 实际加载 JSON 和 SRS。真实集成测试用域名、正则和双栈边界验证匹配表现。
 
+同一次 `sync`、`pin`、`resume` 或 `cleanup` 中，后续阶段可以复用与实际 JSON/SRS 字节、工具 SHA-256、验证策略、格式和用途投影相符的成功证明。各阶段仍核对当前配置、规则更新控制、保留证据、订阅和写入条件。失败可重试，每次调用及重启后的恢复都重新建立操作内证明。详见[配置驱动操作契约](contracts/rules-operations.md#远端事实与版本身份)。
+
 YAML 解析使用固定版本的 [yaml](https://eemeli.org/yaml/)，拒绝语法错误、重复 key、未知 tag、多个文档和 alias。记录级诊断包含文件、列表、从零开始的记录 index，以及从一开始的 line／column。列表级诊断以文件与目标列表定位。
 
 每个非空用途分别生成 JSON／SRS，内容相同的用途复用同一组物理文件。纯域名文件同时供 Route 和 DNS 请求复用。纯 IP 的 Route／DNS 响应同样复用，混合 IR 分别输出三组文件。当前官方纯域名列表的 DNS 响应用途为 `{ status: "unavailable", reason: "empty" }`，不生成空匹配文件。`build.json` 记录构建工具内容摘要、验证策略和实际命令。[固定产物 Manifest v2](contracts/README.md) 为 Compiler 定义独立的内存契约。输入和转换报告保留逻辑计数，JSON 的 `termCount` 按投影条目计数。SRS 记录格式、字节长度、摘要与能力。

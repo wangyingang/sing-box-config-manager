@@ -8,6 +8,7 @@ import { sha256 } from './release.js';
 import { githubBaselineTransport, type BaselineTransport } from './maintenance-baseline-transport.js';
 import { gitMaintenanceRefs, type MaintenanceRefTransport } from './maintenance-refs.js';
 import { cacheImmutableGitReads } from './immutable-github.js';
+import { createOperationNativeBuilder } from './native.js';
 import { reportRulesProgress, type RulesProgress } from './rules-progress.js';
 
 const SOURCE_REPOSITORY = 'wangyingang/sing-box-config-manager';
@@ -91,6 +92,7 @@ export async function loadRulesRequest(request: RulesRequest, writeKind: 'update
   configuration.target.branch = context.targetBranch;
   const allowWrites = writeKind === 'cleanup' ? context.allowCleanupWrites ?? context.allowWrites : context.allowWrites;
   return { context, observed, configuration, dryRun: Boolean(request.dryRun), allowWrites, writeKind,
+    nativeBuild: createOperationNativeBuilder(),
     progress: (stage: RulesProgress['stage'], id?: string) => reportRulesProgress(request.onProgress, stage, id) };
 }
 export type LoadedRules = Awaited<ReturnType<typeof loadRulesRequest>>;
