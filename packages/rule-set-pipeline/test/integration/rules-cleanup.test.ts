@@ -277,10 +277,10 @@ for (const phase of ['before-switch', 'after-switch'] as const) {
     env.upstream({ openai: 'domain:blocked-by-maintenance.example' });
     assert.notEqual((await syncRules(request(env))).status, 'success');
     assert.notEqual((await pinRuleVersion({ ...request(env), id: 'openai', version: latest.versionId! })).status, 'success');
-    const resumeSourceCalls = env.sourceRequests.length;
+    const resumeSourceCalls = env.requests.length;
     assert.notEqual((await resumeRuleUpdates({ ...request(env), id: 'anthropic' })).status, 'success');
     assert.equal(env.writes.length, writes, 'Rule operations may not write through maintenance isolation');
-    assert.equal(env.sourceRequests.length, resumeSourceCalls, 'Blocked resume cannot access upstream');
+    assert.equal(env.requests.length, resumeSourceCalls, 'Blocked resume cannot access upstream');
     env.clock('2026-12-31T00:00:00.000Z');
     const configuration = env.config(); configuration.candidateRetentionDays = 1; env.configure(configuration);
     const heads = new Map(env.heads), stages = env.stageWrites.length, transactions = env.refWrites.length;
@@ -417,6 +417,7 @@ test('保留历史的场景各自拥有 Git、上游、时钟、故障与记录'
   const { env: left } = await retainedFixture('main');
   const { env: right } = await retainedFixture('main');
   const original = await right.context.repository.snapshot('main');
+  const originalParents = [...original.parents!];
   const path = 'stable/openai/domains.srs';
   const bytes = Buffer.from((await original.read(path))!);
   const journal = await right.journal();
@@ -426,12 +427,19 @@ test('保留历史的场景各自拥有 Git、上游、时钟、故障与记录'
   const branch = 'https://api.github.com/repos/gaoyifan/china-operator-ip/branches/ip-lists';
   const releaseBefore = await (await upstream(release)).json();
   const branchBefore = await (await upstream(branch)).json();
+  const originalRelease = 'https://api.github.com/repos/v2fly/domain-list-community/releases/assets/11';
+  const originalCidr = 'https://raw.githubusercontent.com/gaoyifan/china-operator-ip/' + '1'.repeat(40) + '/china46.txt';
+  const releaseBody = await (await upstream(originalRelease)).text();
+  const cidrBody = await (await upstream(originalCidr)).text();
 
   const changed = await left.context.repository.snapshot('main');
   (await changed.read(path))!.fill(0);
   left.trees.get(changed.head)!.delete(path);
   left.parents.get(changed.head)!.push('different-parent');
   left.heads.delete('main');
+  const leftJournal = await left.journal();
+  leftJournal.rules.openai.control.revision = 'fixture-control-change';
+  left.trees.get(left.heads.get(left.context.repository.branch)!)!.set(RULE_STATE_PATH, encodeRecord(leftJournal));
   left.configure({ ...left.config(), candidateRetentionDays: 1 });
   left.upstream({ openai: 'domain:other.example' });
   left.changeCidr('invalid CIDR');
@@ -444,17 +452,21 @@ test('保留历史的场景各自拥有 Git、上游、时钟、故障与记录'
   left.beforeWrite(() => { throw new Error('write fault'); });
 
   const { env: fresh } = await retainedFixture('main');
-  assert.equal(fresh.writes.length + fresh.requests.length + fresh.sourceRequests.length
-    + fresh.stageWrites.length + fresh.refWrites.length, 0);
+  assert.deepEqual([fresh.writes, fresh.requests, fresh.stageWrites, fresh.refWrites], [[], [], [], []]);
   assert.deepEqual(await fresh.journal(), journal);
   assert.deepEqual(await fresh.context.readConfiguration!(), revision);
   assert.equal(fresh.context.now!().toISOString(), '2026-11-16T00:00:00.000Z');
   const reset = await fresh.context.repository.snapshot('main');
   assert.equal(reset.head, original.head);
-  assert.deepEqual(reset.parents, original.parents);
+  assert.deepEqual(reset.parents, originalParents);
   assert.deepEqual(await reset.read(path), bytes);
   assert.deepEqual(await (await fresh.context.fetch!(release)).json(), releaseBefore);
   assert.deepEqual(await (await fresh.context.fetch!(branch)).json(), branchBefore);
+  assert.equal(await (await fresh.context.fetch!(originalRelease)).text(), releaseBody);
+  assert.equal(await (await fresh.context.fetch!(originalCidr)).text(), cidrBody);
+  const nextCidr = originalCidr.replace('1'.repeat(40), String(Number(branchBefore.commit.sha[0]) + 1).repeat(40));
+  await assert.rejects(fresh.context.fetch!(nextCidr), /Unknown CIDR fixture revision/);
+  await assert.rejects(left.context.fetch!(release), /Upstream unavailable/);
   assert.deepEqual(await fresh.context.repository.download(`https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/main/${path}`), bytes);
 
   const commit = async (env: Environment) => env.context.repository.commit('main', original.head,
@@ -462,4 +474,14 @@ test('保留历史的场景各自拥有 Git、上游、时钟、故障与记录'
   assert.equal(await commit(fresh), await commit(right), 'both scenarios allocate the same next commit from the shared base');
   assert.equal(fresh.writes.length, 1);
   assert.equal(right.writes.length, 1);
+
+  const ref = 'fixture-scenario';
+  const staged = await fresh.baseline.stage(ref, reset.head, { 'pipeline/staged.json': Buffer.from('{}') }, 'isolated stage');
+  assert.equal(left.heads.has(ref), false);
+  assert.equal(right.heads.has(ref), false);
+  await fresh.refs.update([{ ref: `refs/heads/${ref}`, before: staged, after: undefined }]);
+  assert.equal(fresh.heads.has(ref), false);
+  assert.deepEqual(fresh.stageWrites, [ref]);
+  assert.equal(fresh.refWrites.length, 1);
+  assert.deepEqual([right.stageWrites, right.refWrites], [[], []]);
 });

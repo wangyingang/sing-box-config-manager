@@ -53,7 +53,6 @@ export function rulesEnvironment(binary: string, target = 'acceptance-issue-84',
   const contents = state?.contents ?? {};
   const history = state?.history ?? new Map<number, Record<string, string>>([[1, {}]]);
   const cidrInputs = state?.cidrInputs ?? new Map([[1, '192.0.2.0/25\n2001:db8:1::/48\n']]);
-  const sourceRequests: string[] = [];
   let beforeWrite: ((files: RuleWrites) => Promise<void>) | undefined;
   const repository: RulesRepository = {
     branch: journalBranch,
@@ -90,10 +89,9 @@ export function rulesEnvironment(binary: string, target = 'acceptance-issue-84',
   };
   const fetcher: typeof fetch = async address => {
     const url = String(address);
-    sourceRequests.push(url);
+    requests.push(url);
     const cidrBranch = url === 'https://api.github.com/repos/gaoyifan/china-operator-ip/branches/ip-lists';
     const cidrBody = url.startsWith('https://raw.githubusercontent.com/gaoyifan/china-operator-ip/');
-    if (!cidrBranch && !cidrBody) requests.push(url);
     if (sourceFailure === true || typeof sourceFailure === 'string' && url.includes(sourceFailure)) {
       throw new Error('Upstream unavailable');
     }
@@ -128,7 +126,7 @@ export function rulesEnvironment(binary: string, target = 'acceptance-issue-84',
   const context: RulesContext = { repository, targetBranch: target, allowWrites: true, binary, fetch: fetcher,
     now: () => new Date('2026-11-16T08:15:30.123Z'),
     readConfiguration: async () => ({ revision: String(revision).padStart(40, '0'), content: stringify(config, { aliasDuplicateObjects: false }), origin: 'isolated-fixture' }) };
-  return { context, writes, requests, sourceRequests, heads, trees, parents,
+  return { context, writes, requests, heads, trees, parents,
     checkpoint() {
       return checkpointFixture<RulesFixtureHistory>({ heads, trees, parents, state: {
         sequence, config, revision, upstreamRevision, contents, history, cidrRevision, cidrInputs,
