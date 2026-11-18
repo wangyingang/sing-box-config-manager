@@ -6,10 +6,10 @@ import { verifyRuleCandidateInSnapshot } from './rules-build.js';
 import { readRuleDeliveries } from './rules-delivery.js';
 import type { CleanupPlan } from './rules-cleanup-model.js';
 import type { RulesSession } from './rules-session.js';
-import { definitionRevision, RULE_STATE_PATH } from './rules-model.js';
+import { definitionRevision } from './rules-model.js';
 
 export async function planRulesCleanup(session: RulesSession, refs: Ref[], frozen?: CleanupPlan): Promise<CleanupPlan> {
-  const { journal, snapshot, shared, loaded } = session;
+  const { journal, snapshot, loaded } = session;
   const stable = await session.stable();
   const deliveries = await readRuleDeliveries(stable);
   const candidateRetentionDays = frozen?.candidateRetentionDays ?? loaded.configuration.candidateRetentionDays;
@@ -67,7 +67,7 @@ export async function planRulesCleanup(session: RulesSession, refs: Ref[], froze
     if (!complete && !invalidated) {
       reasons.push(candidate.migrationPending || !candidate.publishedAt ? 'publication-time-unresolved' : 'operation-unresolved');
       blockers.push(`Candidate ${id}: ${candidate.migrationPending ?? 'publication or recovery is incomplete'}`);
-    } else if (Date.parse(candidate.publishedAt!) >= Date.parse(cutoff)) reasons.push('retention-window');
+    } else if (complete && Date.parse(candidate.publishedAt!) >= Date.parse(cutoff)) reasons.push('retention-window');
     const action = reasons.length ? 'retain' : 'discard';
     if (action === 'discard') reasons.push(invalidated ? 'invalidated-operation' : 'expired-unprotected');
     decisions.push({ candidateId: id, logicalId: candidate.logicalId, versionId: candidate.versionId,
@@ -88,12 +88,10 @@ export async function planRulesCleanup(session: RulesSession, refs: Ref[], froze
   for (const path of knownStable) retainedBytes += (await stable.read(path))!.length;
   const retained = decisions.filter(item => item.action === 'retain').map(item => item.candidateId);
   const discard = decisions.filter(item => item.action === 'discard').map(item => item.candidateId);
-  const freshBaseline = journal.lastCleanup && snapshot.parent === journal.lastCleanup.headBeforeReopen
-    && (shared || stable.head === journal.lastCleanup.stableHead);
-  const hasCleanup = discard.length > 0 || Boolean(await snapshot.read(RULE_STATE_PATH)) && !freshBaseline;
   return { candidateRetentionDays, cleanupObservedAt: observed, cutoff,
     retain: { candidateIds: retained, active: active.sort((a, b) => a.recordPath.localeCompare(b.recordPath)) },
     discard: { candidateIds: discard }, decisions, blockers: [...new Set(blockers)], retainedBytes,
     otherRefs: refs.filter(({ ref }) => ![branchRef(loaded.context.repository.branch), branchRef(loaded.context.targetBranch)].includes(ref)),
-    hasCleanup };
+    ...(journal.deletedHistoryPending && { deletedHistoryPending: true }),
+    hasCleanup: discard.length > 0 || journal.deletedHistoryPending === true };
 }

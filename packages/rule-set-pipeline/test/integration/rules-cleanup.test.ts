@@ -3,7 +3,8 @@ import test from 'node:test';
 import { cleanupRuleHistory } from '../../src/rules-cleanup.js';
 import { syncRules, pinRuleVersion, resumeRuleUpdates } from '../../src/rules-operations.js';
 import { getRulesStatus } from '../../src/rules-status.js';
-import { encodeRecord, RULE_STATE_PATH, type RulesResult } from '../../src/rules-model.js';
+import { PublicationWriteError } from '../../src/publication-repository.js';
+import { encodeRecord, parseRulesJournal, RULE_STATE_PATH, type RulesResult } from '../../src/rules-model.js';
 import { cleanupEnvironment, fourSetCleanupEnvironment } from '../fixtures/cleanup-environment.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
@@ -47,6 +48,89 @@ async function retainedFixture(target: string) {
     retained: [pinned, protectedCurrent, boundary, recent, latest, ...cidr.slice(1)] };
 }
 
+for (const target of ['acceptance-cleanup-deleted-history', 'main']) {
+  test(`${target}: 删除结案登记旧历史，核实并回收后才清除登记`, async () => {
+    const env = cleanupEnvironment(binary!, target), input = request(env);
+    const first = success(await syncRules(input));
+    const removed = current(first), retained = current(first, 'anthropic');
+    const repository = env.context.repository, commit = repository.commit;
+    const journalHead = env.heads.get(repository.branch)!;
+    const stableHead = env.heads.get(target)!;
+    const config = env.config(); config.ruleSets = config.ruleSets.filter(rule => rule.id !== removed.logicalId);
+    env.configure(config);
+    env.beforeWrite(async files => {
+      if (files[RULE_STATE_PATH] && parseRulesJournal(files[RULE_STATE_PATH]).rules.openai.lifecycle === 'deleted') {
+        throw new Error('RULE_WRITE_CONFLICT: deletion close interrupted');
+      }
+    });
+    assert.notEqual((await syncRules(input)).status, 'success');
+    const unfinished = await env.journal();
+    assert.equal(unfinished.pendingDelivery?.kind, 'delete');
+    assert.equal(unfinished.deletedHistoryPending, undefined);
+    assert.equal((await cleanupRuleHistory(input)).status, 'pending');
+    assert.deepEqual(env.stageWrites, []);
+
+    env.beforeWrite();
+    let lostResponse = false;
+    repository.commit = async (...args) => {
+      const head = await commit(...args);
+      if (args[2][RULE_STATE_PATH] && parseRulesJournal(args[2][RULE_STATE_PATH]).rules.openai.lifecycle === 'deleted') {
+        lostResponse = true;
+        throw new PublicationWriteError(head, new Error('deletion close response lost'));
+      }
+      return head;
+    };
+    success(await syncRules(input));
+    repository.commit = commit;
+    assert.ok(lostResponse);
+    const closed = await env.journal();
+    assert.equal(closed.rules.openai.lifecycle, 'deleted');
+    assert.equal(closed.pendingDelivery, undefined);
+    assert.equal(closed.candidates[removed.candidateId], undefined);
+    assert.ok(!(await repository.snapshot()).paths.some(path => path.startsWith(`candidates/${removed.candidateId}/`)));
+    assert.ok(!(await repository.snapshot(target)).paths.some(path => path.startsWith('stable/openai/')));
+    assert.ok(env.reachable().has(journalHead));
+    assert.ok(env.reachable(target).has(stableHead));
+    const preview = success(await cleanupRuleHistory({ ...input, dryRun: true }));
+    assert.deepEqual(preview.cleanup?.plan.discard.candidateIds, []);
+    assert.equal(preview.cleanup?.plan.hasCleanup, true);
+    assert.equal(preview.cleanup?.plan.deletedHistoryPending, true);
+    assert.equal(closed.deletedHistoryPending, true);
+
+    const bytes = await stableBytes(env);
+    env.failDownload(url => {
+      if (url.includes(`/${target}/stable/`)) throw new Error('Switched stable URL unavailable');
+    });
+    const interrupted = await cleanupRuleHistory(input);
+    assert.equal(interrupted.status, 'pending', JSON.stringify(interrupted));
+    assert.equal(interrupted.cleanup?.phase, 'readback');
+    assert.equal((await env.journal()).deletedHistoryPending, true);
+    assert.equal(env.reachable().has(journalHead), false);
+    assert.equal(env.reachable(target).has(stableHead), false);
+
+    env.failDownload();
+    env.clock('2027-01-01T00:00:00.000Z');
+    const cleaned = success(await cleanupRuleHistory({ context: { ...env.context } }));
+    assert.equal(cleaned.cleanup?.phase, 'completed');
+    assert.equal(cleaned.cleanup?.maintenanceId, interrupted.cleanup?.maintenanceId);
+    assert.deepEqual(cleaned.cleanup?.plan, preview.cleanup?.plan);
+    assert.equal((await env.journal()).deletedHistoryPending, undefined);
+    assert.deepEqual(new Set((await env.refs.list()).map(({ ref }) => ref)), new Set([
+      `refs/heads/${target}`, `refs/heads/${repository.branch}`,
+    ]));
+    assert.deepEqual(await stableBytes(env), bytes);
+    const status = await getRulesStatus(input); success(status);
+    const after = status.rules!.find(rule => rule.id === retained.logicalId)!;
+    assert.equal(after.current?.versionId, retained.versionId);
+    assert.equal(after.current?.publishedAt, retained.publishedAt);
+    assert.deepEqual(after.current?.source, retained.source);
+    assert.equal(after.successfulInput?.candidateId, retained.candidateId);
+    const writes = env.writes.length;
+    assert.equal(success(await cleanupRuleHistory(input)).cleanup?.phase, 'unchanged');
+    assert.equal(env.writes.length, writes);
+  });
+}
+
 for (const target of ['acceptance-issue-85', 'main']) {
   test(`${target}: 四集含 CIDR 按首次发布时间保留多版本，两轮清理后旧历史不可用仍可查询和 pin`, { skip: !binary, timeout: 120_000 }, async () => {
     const { env, expired, pinned, boundary, recent, latest, cidr, retained } = await retainedFixture(target);
@@ -73,6 +157,15 @@ for (const target of ['acceptance-issue-85', 'main']) {
     const cleaned = success(await cleanupRuleHistory(request(env)));
     assert.equal(cleaned.cleanup?.phase, 'completed');
     assert.deepEqual(await stableBytes(env), beforeBytes);
+    const readbacks = cleaned.readbackRequests!;
+    assert.equal(readbacks.length, 2 * retained.length + 2 * cleaned.cleanup!.plan.retain.active.length);
+    assert.deepEqual(readbacks.filter(url => url.includes(`/${target}/stable/`)).map(url => url.split(`/${target}/`)[1]).sort(),
+      Object.keys(beforeBytes).sort());
+    for (const { candidateId } of retained) {
+      const fixed = readbacks.filter(url => url.includes(`/candidates/${candidateId}/`));
+      assert.equal(fixed.length, 2);
+      assert.ok(fixed.some(url => url.endsWith('.json')) && fixed.some(url => url.endsWith('.srs')));
+    }
     assert.equal(env.requests.length, upstream, 'cleanup must not fetch any upstream input');
     assert.equal(env.heads.get('unrelated-work'), unknownHead);
     assert.equal(env.heads.get('refs/tags/unrelated-tag'), unknownHead);
@@ -112,17 +205,25 @@ for (const target of ['acceptance-issue-85', 'main']) {
     const selectedCidr = success(await pinRuleVersion({ ...request(env), id: 'china-ip', version: cidr[1].versionId! }));
     assert.equal(current(selectedCidr, 'china-ip').candidateId, cidr[1].candidateId);
     const secondBytes = await stableBytes(env);
-    env.clock('2026-11-17T00:00:00.000Z');
+    env.clock('2026-12-02T00:00:00.000Z');
+    const secondDiscard = [recent.candidateId, cidr[2].candidateId];
     const secondHistory = new Set(env.reachable());
     env.reachable(target).forEach(head => secondHistory.add(head));
-    success(await cleanupRuleHistory(request(env)));
+    const secondCleanup = success(await cleanupRuleHistory(request(env)));
+    assert.equal(secondCleanup.cleanup?.phase, 'completed');
+    assert.deepEqual(new Set(secondCleanup.cleanup?.plan.discard.candidateIds), new Set(secondDiscard));
     secondHistory.forEach(head => env.blockedHeads.add(head));
     assert.deepEqual(await stableBytes(env), secondBytes);
     const second = await getRulesStatus(request(env)); success(second);
     assert.equal(second.rules?.find(rule => rule.id === 'openai')?.current?.candidateId, boundary.candidateId);
+    const secondJournal = await env.journal();
     for (const version of retained) {
-      const retained = (await env.journal()).candidates[version.candidateId];
-      assert.equal(retained.versionId, version.versionId); assert.equal(retained.publishedAt, version.publishedAt);
+      const candidate = secondJournal.candidates[version.candidateId];
+      if (secondDiscard.includes(version.candidateId)) assert.equal(candidate, undefined);
+      else {
+        assert.equal(candidate.versionId, version.versionId);
+        assert.equal(candidate.publishedAt, version.publishedAt);
+      }
     }
     success(await pinRuleVersion({ ...request(env), id: 'openai', version: latest.versionId! }));
     env.clock('2026-12-18T00:00:00.000Z');
@@ -277,7 +378,8 @@ test('被新控制明确取代的在途候选可回收，未知控制记录不�
   success(await syncRules(request(env)));
   const journal = await env.journal();
   const abandoned = journal.candidates[original.candidateId];
-  abandoned.status = 'publishing'; delete abandoned.versionId; delete abandoned.publishedAt;
+  // Publication can have reserved a timestamp before losing its control revision.
+  abandoned.status = 'publishing';
   abandoned.controlRevision = '00000000-0000-0000-0000-000000000000';
   env.trees.get(env.heads.get(env.context.repository.branch)!)!.set(RULE_STATE_PATH, encodeRecord(journal));
   const result = success(await cleanupRuleHistory(request(env)));

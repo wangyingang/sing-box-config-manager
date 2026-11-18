@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { cleanupEnvironment } from '../fixtures/cleanup-environment.js';
+import { cleanupEnvironment, publishReplacementForCleanup } from '../fixtures/cleanup-environment.js';
 import { syncRules } from '../../src/rules-operations.js';
 import { prepareRulesBaseline } from '../../src/rules-cleanup-baseline.js';
 import { cleanupRuleHistory } from '../../src/rules-cleanup.js';
@@ -53,6 +53,7 @@ for (const target of ['acceptance-issue-85-other-host', 'main']) {
   test(`${target}: 证据已提交后换用不同工具 SHA 恢复，复验保留证据而不重建字节`, { skip: !binary }, async t => {
     const env = cleanupEnvironment(binary!, target);
     assert.equal((await syncRules({ context: env.context })).status, 'success');
+    const expired = await publishReplacementForCleanup(env);
     const before = await env.journal();
     env.failStage(ref => { if (ref.endsWith('-journal')) throw new Error('Interrupted after evidence'); });
     const interrupted = await cleanupRuleHistory({ context: env.context });
@@ -60,7 +61,7 @@ for (const target of ['acceptance-issue-85-other-host', 'main']) {
     const evidenceRef = env.stageWrites.find(ref => ref.endsWith('-evidence'))!;
     assert.ok(evidenceRef);
     const retained = await env.baseline.snapshot(evidenceRef);
-    const evidence = Object.fromEntries(await Promise.all(Object.keys(before.candidates).map(async id =>
+    const evidence = Object.fromEntries(await Promise.all(Object.keys(before.candidates).filter(id => id !== expired).map(async id =>
       [id, (await retained!.read(`candidates/${id}/readback.json`))!] as const)));
     const directory = await mkdtemp(join(tmpdir(), 'cleanup-other-host-'));
     t.after(() => rm(directory, { recursive: true, force: true }));

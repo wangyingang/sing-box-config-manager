@@ -23,3 +23,7 @@ status: accepted
 [#128](https://github.com/wangyingang/sing-box-config-manager/issues/128) 的成功输入记录以候选 ID 和构建身份关联保留证据。清理可改写物理地址并保留关联。候选被回收时，清理删除相应记录。成功记录不延长候选保留期。
 
 [#138](https://github.com/wangyingang/sing-box-config-manager/issues/138) 将重建期间的 HTTPS 核验限定为新候选固定地址和切换后的稳定分支规则入口。旧候选以及过渡稳定 commit 通过 Git 核验。已有转换报告和来源展示文件按原字节复制。缺少可选文件时仍可保留候选，已知存在的文件复制未完成时继续按冻结计划恢复。
+
+[#131](https://github.com/wangyingang/sing-box-config-manager/issues/131) 保留每日的保留期评估。新一轮重建由过期且不受保护的候选、已证明失效的残留，或已结案删除留下的旧历史触发。首次初始化、控制、来源观测和成功输入记录的变动可以累积在操作历史中。
+
+删除结案与 `deletedHistoryPending: true` 在同一受保护的状态提交落盘，当前树与索引移除对应文件后仍可启动回收。新基线保留待回收标记，直到稳定入口和临时引用均核实完毕，再随重新开放写入清除。已经开始的维护沿用冻结计划。该行为从空产物状态启用，回收范围是受管引用的可达历史。

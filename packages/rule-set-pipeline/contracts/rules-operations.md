@@ -111,7 +111,7 @@ Git 对象读取优化只复用完整 Git SHA 指定的不可变内容，缓存�
 
 `<stablePath>/activation.json` 是 schema 2 交付记录，保存逻辑 ID、candidateId、版本身份、真实来源、订阅和当前文件摘要。它描述实际交付，不承载更新控制。生产状态/候选位于 candidates 分支，稳定记录/文件位于 main；隔离目标共用同一 acceptance 分支。
 
-稳定写入先登记操作，再核对配置、日志 head 和维护状态，按预期 parent 非强制更新目标 ref，并读回验证。响应丢失时先识别同一次操作；不明确时返回 pending。删除移除当前受管路径及候选，保留最小代次记录防止旧任务复活，不承诺清除 Git 历史或客户端缓存。
+稳定写入先登记操作，再核对配置、日志 head 和维护状态，按预期 parent 非强制更新目标 ref，并读回验证。响应丢失时先识别同一次操作；不明确时返回 pending。删除移除当前受管路径及候选，并保留最小代次记录防止旧任务复活。有稳定文件或候选被删除时，结案状态提交同时设置 `deletedHistoryPending: true`。该标记汇总仍需回收的受管历史，即使当前树和候选索引均已移除对应内容。
 
 ## 证据回读
 
@@ -147,6 +147,7 @@ Git 中的候选登记和回读完成记录约束规则归属、来源绑定、�
 | `plan.decisions[]` | 每个候选的身份、已知版本/时间、retain/discard 及原因 |
 | `plan.retain.candidateIds`、`plan.retain.active` | 保留候选集合和按 candidateId 明确指向的实际当前交付 |
 | `plan.discard.candidateIds` | 本次可移除候选集合 |
+| `plan.deletedHistoryPending` | 值为 `true` 时，本轮规划时有已结案的删除历史待回收。完成结果仍显示原计划 |
 | `plan.blockers`、`plan.retainedBytes`、`plan.hasCleanup` | 阻塞原因、保留候选核心文件与当前稳定文件的逻辑字节数及是否存在清理工作。字节数不含纯追溯文件或 Git 对象开销 |
 | `plan.otherRefs`、`otherRefs` | 盘点时和结果中观察到的非受管引用；报告而不删除 |
 | `retainedCandidateCount`、`removedCandidateCount` | 能确认时返回的保留/移除数量 |
@@ -154,11 +155,11 @@ Git 中的候选登记和回读完成记录约束规则归属、来源绑定、�
 
 年龄按首次成功发布的 `publishedAt` 计算，UTC 连续 24 小时计一天。`publishedAt >= cutoff` 的完整候选保留；早于 cutoff 的候选仅在没有保护依赖时删除。当前交付、pin 目标、未决操作所需证据和最小控制/删除代次均受到保护。候选退出当前身份不更新时间或重新计时；未知历史时间不伪造、不按过期处理。
 
-实际执行隔离写入后保存维护身份、时间边界和完整集合；中断恢复不重新计算删除计划。关键写入仍核对当前定义、控制、generation 和 Git heads，冲突时停止。新基线复制保留候选的必需产物和已有追溯文件，并保留实际当前 candidate/version 指针。清理保留有效候选关联的成功输入，清除被回收候选的关联。物理 commit 和证据 URL 可重写，业务 `versionId`、`publishedAt`、来源、稳定 URL 与规则字节不变。
+启动重建须有过期且不受保护的候选、已证明失效的残留，或删除历史待回收标记。控制、来源观测和成功输入记录的变动本身仅增加操作历史。没有回收对象、阻塞项或待续维护时，`cleanup` 返回 `unchanged`。归属未知或未决写入仍可阻塞维护。隔离写入登记维护身份、时间边界和完整集合，中断恢复沿用该计划。关键写入仍核对当前定义、控制、generation 和 Git heads，冲突时停止。新基线复制保留候选的必需产物和已有追溯文件，并保留实际当前 candidate/version 指针。清理保留有效候选关联的成功输入，清除被回收候选的关联。物理 commit 和证据 URL 可重写，业务 `versionId`、`publishedAt`、来源、稳定 URL 与规则字节不变。
 
 切换前重跑 cleanup 复用或核实已准备对象；切换后继续回读、清理本次拥有且 head 一致的临时引用、恢复写入，不回滚旧基线。无法判定时保留隔离并返回 pending/failed。dry-run 只盘点已保存的状态与文件；`cleanup.unverified` 明示尚未执行的原生候选复验、新基线 HTTPS 回读和原子切换。存在活动维护时展示已固化计划，不恢复阶段、不写引用或 generation。status 在维护隔离期间报告 pending，并在当前检查点有计划时提供 cleanup 阶段、身份、截止时间与继续入口。
 
-历史重建覆盖 candidates 和 main，隔离目标支持单分支。其他分支/标签只报告，它们可能使旧历史继续可达；不承诺 GitHub 立即物理回收。cleanup 不访问最新上游、不改变当前选择、不解除 pin；无候选到期且无待回收历史时不重复创建基线。
+历史重建覆盖 candidates 和 main，隔离目标支持单分支。稳定入口核验完成且本轮临时引用处理完毕后，恢复写入的状态提交清除待回收标记。其他分支和标签只报告，它们可能使旧历史继续可达。GitHub 决定物理对象的回收时间。
 
 ## 一次性转换
 

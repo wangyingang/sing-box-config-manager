@@ -25,7 +25,7 @@ Pipeline 通过规则文件和元数据对接 Compiler，两者没有源码或�
 项目中有两种不同的发布与更新：
 
 - **配置发布**：固定 Recipe、模板、节点和校验结果，生成可交付的配置快照。继续编辑草稿不会改变已经发布的快照。
-- **规则交付**：管理者提交正式配置，用 `pnpm rules sync` 统一处理新增、换源、删除与最新输入。`pin` 交付选定版本并停止该集全部自动处理，`resume` 恢复 auto 并立即更新。客户端按自身机制从稳定入口获取规则。部分失败保留独立成功及失败集的原交付。详见 [CLI 操作](packages/rule-set-pipeline/README.md#操作分别产生什么结果)。`cleanup` 按正式保留期保留历史候选并重建受管 Git 历史，始终保护当前版本；中断后重跑同一命令继续。配置 push 会触发完整 sync，每日任务组合更新和历史清理；生产写入分别受更新与清理开关控制，默认关闭。失败详情保存在 Actions 摘要与结果文件，通知使用 GitHub 原生失败邮件。详见 [自动运行与通知](packages/rule-set-pipeline/README.md#actions-自动与手工运行)。代码合并不等于生产转换或启用。
+- **规则交付**：管理者提交正式配置，用 `pnpm rules sync` 统一处理新增、换源、删除与最新输入。`pin` 交付选定版本并停止该集全部自动处理，`resume` 恢复 auto 并立即更新。客户端按自身机制从稳定入口获取规则。部分失败保留独立成功及失败集的原交付。详见 [CLI 操作](packages/rule-set-pipeline/README.md#操作分别产生什么结果)。`cleanup` 每日评估保留期，只在有过期且不受保护的候选、已确认失效的残留或已删除的受管历史需要回收时重建。当前和 pin 目标受保护，中断后重跑同一命令继续。配置 push 会触发完整 sync，每日任务组合更新和历史清理；生产写入分别受更新与清理开关控制，默认关闭。失败详情保存在 Actions 摘要与结果文件，通知使用 GitHub 原生失败邮件。详见 [自动运行与通知](packages/rule-set-pipeline/README.md#actions-自动与手工运行)。代码合并不等于生产转换或启用。
 
 当前 Recipe／Template v2 使用 Rule Subscription v2 跟随已激活的规则版本。**配置快照固定，不代表客户端以后加载的规则内容固定**。模板和节点仍采用固定修订。Recipe／Template v1 继续支持固定产物绑定。见 [规则订阅决策](docs/adr/0006-follow-active-rule-subscriptions.md)和[固定产物契约](packages/rule-set-pipeline/contracts/README.md)。
 

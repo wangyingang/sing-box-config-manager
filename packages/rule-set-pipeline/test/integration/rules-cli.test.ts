@@ -53,13 +53,16 @@ test('五个 CLI 操作使用同一服务：预览零写入，pin/resume 和 Act
   let actionOutput = '';
   assert.equal(await runRuleWorkflow({ operation: 'sync', target: env.context.targetBranch }, text => { actionOutput = text; }, env.context), 0);
   assert.ok(JSON.parse(actionOutput).results.every((entry: { status: string }) => entry.status === 'unchanged'));
+  env.clock('2026-12-17T00:00:00.000Z');
   const beforeCleanup = { writes: env.writes.length, stages: env.stageWrites.length,
     refs: env.refWrites.length, upstream: env.requests.length };
   const cleanup = await run('cleanup', '--dry-run');
   assert.equal(cleanup.code, 0, JSON.stringify(cleanup.result));
   const apiCleanup = await cleanupRuleHistory({ context: env.context, dryRun: true });
   assert.deepEqual(cleanup.result, JSON.parse(JSON.stringify(apiCleanup)));
-  assert.ok(cleanup.result.cleanup.plan.retain.candidateIds.length >= 2);
+  assert.equal(cleanup.result.cleanup.phase, 'preview');
+  assert.equal(cleanup.result.cleanup.plan.retain.candidateIds.length, 2);
+  assert.equal(cleanup.result.cleanup.plan.discard.candidateIds.length, 1);
   let humanCleanup = '';
   assert.equal(await runRulesCli(['cleanup', '--dry-run'], text => { humanCleanup = text; }, env.context), 0);
   assert.match(humanCleanup, /Unverified:.*retained-candidate-native-validation.*atomic-ref-switch/);

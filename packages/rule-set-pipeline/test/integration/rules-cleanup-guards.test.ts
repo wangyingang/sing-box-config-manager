@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { randomUUID } from 'node:crypto';
 import { cleanupRuleHistory } from '../../src/rules-cleanup.js';
 import { syncRules, pinRuleVersion } from '../../src/rules-operations.js';
 import { getRulesStatus } from '../../src/rules-status.js';
 import { PublicationWriteError } from '../../src/publication-repository.js';
-import { RULE_STATE_PATH, type RulesResult } from '../../src/rules-model.js';
-import { cleanupEnvironment, fourSetCleanupEnvironment } from '../fixtures/cleanup-environment.js';
+import { encodeRecord, RULE_STATE_PATH, type RulesResult } from '../../src/rules-model.js';
+import { cleanupEnvironment, fourSetCleanupEnvironment, publishReplacementForCleanup } from '../fixtures/cleanup-environment.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
 if (!binary) throw new Error('Set SING_BOX_TEST_BINARY to an absolute 1.14.4 binary path');
@@ -68,6 +69,7 @@ for (const target of ['acceptance-cleanup-guards', 'main']) {
     const first = success(await syncRules(input)).results[0].current!;
     env.upstream({ openai: 'domain:new-current.example' });
     const latest = success(await syncRules(input)).results[0].current!;
+    env.clock('2026-12-20T00:00:00.000Z');
     const reached = barrier(), resume = barrier();
     const repository = env.context.repository, download = repository.download;
     let stalled = false;
@@ -79,7 +81,8 @@ for (const target of ['acceptance-cleanup-guards', 'main']) {
     try {
       await Promise.race([reached.waiting, oldPin.then(result => { throw new Error(`Pin ended before readback barrier: ${result.status}`); })]);
       success(await pinRuleVersion({ ...input, id: 'openai', version: latest.versionId! }));
-      success(await cleanupRuleHistory(input));
+      const cleaned = success(await cleanupRuleHistory(input));
+      assert.deepEqual(cleaned.cleanup?.plan.discard.candidateIds, [first.candidateId]);
       const after = success(await getRulesStatus(input));
       const heads = new Map(env.heads), writes = env.writes.length, journal = await env.journal();
       const snapshot = await repository.snapshot(target);
@@ -98,7 +101,9 @@ for (const target of ['acceptance-cleanup-guards', 'main']) {
 
   test(`${target}: sync 在上游等待时 cleanup 改变代次，旧会话不发布或覆盖清理结果`, { timeout: 90_000 }, async () => {
     const env = cleanupEnvironment(binary!, target), input = { context: env.context };
-    success(await syncRules(input)); env.upstream({ openai: 'domain:stale.example' });
+    success(await syncRules(input));
+    const expired = await publishReplacementForCleanup(env);
+    env.upstream({ openai: 'domain:stale.example' });
     const reached = barrier(), resume = barrier(), fetcher = env.context.fetch!;
     let stalled = false;
     const oldSync = syncRules({ context: { ...env.context, fetch: async (url, init) => {
@@ -107,7 +112,8 @@ for (const target of ['acceptance-cleanup-guards', 'main']) {
     } } });
     try {
       await Promise.race([reached.waiting, oldSync.then(result => { throw new Error(`Sync ended before upstream barrier: ${result.status}`); })]);
-      success(await cleanupRuleHistory(input));
+      const cleaned = success(await cleanupRuleHistory(input));
+      assert.deepEqual(cleaned.cleanup?.plan.discard.candidateIds, [expired]);
       const heads = new Map(env.heads), writes = env.writes.length, journal = await env.journal();
       resume.release();
       assert.notEqual((await oldSync).status, 'success');
@@ -119,6 +125,7 @@ for (const target of ['acceptance-cleanup-guards', 'main']) {
   test(`${target}: 隔离回复丢失、切换拒绝、核验检查点断线及临时引用删除失败均可续做`, { timeout: 90_000 }, async () => {
     const env = cleanupEnvironment(binary!, target), input = { context: env.context };
     success(await syncRules(input));
+    await publishReplacementForCleanup(env);
     const repository = env.context.repository, commit = repository.commit, snapshot = repository.snapshot;
     let fault: 'isolation' | 'checkpoint' | undefined = 'isolation', offline = false;
     repository.snapshot = async (...args) => { if (offline) throw new Error('Checkpoint connection lost'); return snapshot(...args); };
@@ -159,6 +166,29 @@ for (const target of ['acceptance-cleanup-guards', 'main']) {
   });
 }
 
+test('已登记的旧维护继续冻结计划，即使当前规则不会启动同样的计划', async () => {
+  const env = cleanupEnvironment(binary!, 'main'), input = { context: env.context };
+  success(await syncRules(input));
+  const unchanged = success(await cleanupRuleHistory({ ...input, dryRun: true }));
+  assert.equal(unchanged.cleanup?.phase, 'unchanged');
+
+  // The previous trigger registered maintenance after any journal write.
+  const journal = await env.journal(), repository = env.context.repository;
+  const head = env.heads.get(repository.branch)!;
+  const run = { id: randomUUID(), generation: journal.generation + 1, phase: 'isolated',
+    oldHeads: { journal: head, stable: env.heads.get('main')! },
+    plan: { ...unchanged.cleanup!.plan, hasCleanup: true } };
+  await repository.commit(repository.branch, head, {
+    [RULE_STATE_PATH]: encodeRecord({ ...journal, generation: run.generation, maintenance: 'maintenance', cleanupRun: run }),
+  }, 'Record maintenance with the previous trigger', async () => {});
+  env.clock('2026-12-21T00:00:00.000Z');
+  const result = success(await cleanupRuleHistory(input));
+  assert.equal(result.cleanup?.phase, 'completed');
+  assert.equal(result.cleanup?.maintenanceId, run.id);
+  assert.deepEqual(result.cleanup?.plan, run.plan);
+  assert.equal((await env.journal()).maintenance, 'open');
+});
+
 for (const stage of ['files', 'metadata', 'evidence'] as const) test(`${stage} 在途候选阻塞直接 cleanup，原登记和文件不变`, async () => {
   const env = cleanupEnvironment(binary!), input = { context: env.context };
   success(await syncRules(input)); env.upstream({ openai: 'domain:interrupted.example' });
@@ -180,6 +210,7 @@ for (const stage of ['files', 'metadata', 'evidence'] as const) test(`${stage} �
 for (const target of ['acceptance-cleanup-conflict', 'main']) test(`${target}: 新基线 HTTPS 失败不切换，外部 head 改变后原计划保持隔离`, async () => {
   const env = cleanupEnvironment(binary!, target), input = { context: env.context };
   success(await syncRules(input));
+  await publishReplacementForCleanup(env);
   const before = new Map(env.heads), writesBefore = env.writes.length;
   const missingTool = await cleanupRuleHistory({ context: { ...env.context, binary: undefined } });
   assert.notEqual(missingTool.status, 'success');

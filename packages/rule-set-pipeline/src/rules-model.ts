@@ -108,6 +108,8 @@ export interface RulesJournal {
   candidates: Record<string, RuleCandidate>;
   quarantinedCandidates?: Record<string, QuarantinedRuleCandidate>;
   pendingDelivery?: PendingDelivery;
+  /** A completed deletion left content reachable in managed history. */
+  deletedHistoryPending?: true;
   cleanupRun?: CleanupRun;
   cleanupCheckpoint?: CleanupCheckpoint;
   lastCleanup?: LastCleanup;
