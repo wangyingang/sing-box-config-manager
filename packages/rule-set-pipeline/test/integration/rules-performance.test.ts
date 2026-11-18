@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { appendFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { appendFileSync } from 'node:fs';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test, { type TestContext } from 'node:test';
@@ -65,6 +66,79 @@ test('sync、pin、resume 和 cleanup 各自在操作内只执行一组原生验
   assert.deepEqual(counts, Array(4).fill(oneNativeValidation), 'sync, pin, resume, cleanup');
 });
 
+test('首次交付和清理按固定地址复用回读，清理仍读取稳定分支', { skip: !binary }, async t => {
+  const env = cleanupEnvironment(binary!, 'main');
+  const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
+  const request = { context: env.context };
+  const downloads: string[] = [];
+  env.failDownload(url => { downloads.push(url); });
+
+  for (const [operation, run] of [['sync', syncRules], ['cleanup', cleanupRuleHistory]] as const) {
+    await t.test(operation, async () => {
+      downloads.length = 0;
+      const result = await run(request);
+      assert.equal(result.status, 'success', JSON.stringify(result));
+      const fixed = downloads.filter(url => /^[a-f0-9]{40}$/.test(new URL(url).pathname.split('/')[3]));
+      const candidate = Object.values((await env.journal()).candidates)[0];
+      assert.ok(fixed.includes(candidate.evidenceUrl!));
+      assert.equal(fixed.length, new Set(fixed).size, JSON.stringify(fixed.filter((url, index) => fixed.indexOf(url) !== index)));
+      assert.equal(fixed.length, operation === 'sync' ? 10 : 17);
+      if (operation === 'cleanup') {
+        const source = fixed.filter(url => url.endsWith('/domains.json') && url.includes('/candidates/'));
+        assert.equal(source.length, 2, 'the old and rewritten address both need a download');
+        const [oldBytes, newBytes] = await Promise.all(source.map(url => env.context.repository.download(url)));
+        assert.deepEqual(oldBytes, newBytes);
+        assert.deepEqual(downloads.filter(url => new URL(url).pathname.includes('/main/stable/'))
+          .map(url => url.split('/').at(-1)).sort(), ['activation.json', 'domains.json', 'domains.srs']);
+      }
+    });
+  }
+});
+
+test('同一 context 的两次 status 各自回读候选证据', { skip: !binary }, async () => {
+  const env = cleanupEnvironment(binary!, 'main');
+  const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
+  const request = { context: env.context };
+  assert.equal((await syncRules(request)).status, 'success');
+  const urls: string[] = [];
+  env.failDownload(url => { urls.push(url); });
+  for (let run = 0; run < 2; run++) {
+    const status = await getRulesStatus(request);
+    assert.equal(status.status, 'success');
+    assert.equal(status.rules![0].candidates[0].selectable, true);
+  }
+  assert.equal(new Set(urls).size, 7);
+  assert.deepEqual(urls.slice(0, 7), urls.slice(7));
+});
+
+test('pin 复用固定证据时仍拒绝当前保留树中的文件变化', { skip: !binary }, async () => {
+  const env = cleanupEnvironment(binary!, 'main');
+  const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
+  const request = { context: env.context };
+  const sync = await syncRules(request);
+  assert.equal(sync.status, 'success');
+  const candidate = Object.values((await env.journal()).candidates)[0];
+  const path = `candidates/${candidate.id}/domains.srs`;
+  const url = `https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/${candidate.filesCommit}/${path}`;
+  const original = Buffer.from(await env.context.repository.download(url));
+  const stableHead = env.heads.get('main');
+  let downloaded = 0;
+  env.failDownload(address => { if (address === url) downloaded++; });
+  let retained: Map<string, Buffer> | undefined;
+  const pin = await pinRuleVersion({ ...request, id: candidate.logicalId, version: candidate.versionId!, onProgress({ stage }) {
+    if (stage !== 'stable-write') return;
+    retained = env.trees.get(env.heads.get('candidates')!);
+    retained!.set(path, Buffer.from('replaced retained bytes'));
+  } });
+  assert.equal(pin.status, 'pending', JSON.stringify(pin));
+  assert.match(pin.results[0].error!, /differs from retained/);
+  assert.equal(downloaded, 1);
+  assert.equal(env.heads.get('main'), stableHead);
+  assert.deepEqual(await env.context.repository.download(url), original);
+  retained!.set(path, original);
+  assert.equal((await pinRuleVersion({ ...request, id: candidate.logicalId, version: candidate.versionId! })).status, 'success');
+});
+
 test('工具摘要变化时重新执行校验，两次 pin 调用共用 context 仍各自确认', { skip: !binary }, async t => {
   const { wrapper, take } = await traceNative(t);
   const env = cleanupEnvironment(wrapper, 'main');
@@ -73,16 +147,15 @@ test('工具摘要变化时重新执行校验，两次 pin 调用共用 context 
   assert.equal(sync.status, 'success', JSON.stringify(sync));
   const version = sync.results[0].current!.versionId!;
   await take();
-  let evidenceReads = 0;
-  env.failDownload(async url => {
-    if (url.endsWith('/readback.json') && ++evidenceReads === 2) {
-      await appendFile(wrapper, '\n# Different executable digest\n');
-    }
-  });
+  let toolChanged = false;
   const request = { context: env.context, id: config.ruleSets[0].id, version };
-  const pin = await pinRuleVersion(request);
+  const pin = await pinRuleVersion({ ...request, onProgress({ stage }) {
+    if (stage !== 'stable-write') return;
+    appendFileSync(wrapper, '\n# Different executable digest\n');
+    toolChanged = true;
+  } });
   assert.equal(pin.status, 'success', JSON.stringify(pin));
-  assert.ok(evidenceReads >= 2);
+  assert.ok(toolChanged);
   assert.deepEqual(await take(), { compile: 2, decompile: 0, sourceLoad: 2, binaryLoad: 2 });
   assert.equal((await pinRuleVersion(request)).status, 'success');
   assert.deepEqual(await take(), oneNativeValidation);

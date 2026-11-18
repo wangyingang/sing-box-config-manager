@@ -122,7 +122,7 @@ export async function cleanupRuleHistory(request: RulesRequest = {}): Promise<Ru
       unverified: ['retained-candidate-native-validation', 'new-baseline-HTTPS-readback', 'atomic-ref-switch'] });
     await guardCleanup(session, stableHead);
     const binary = rulesBinary(session.loaded.context);
-    const nativeBuild = session.loaded.nativeBuild;
+    const { nativeBuild, verifyEvidence } = session.loaded;
     if (session.journal.maintenance === 'open') {
       run = { id: randomUUID(), generation: session.journal.generation + 1,
         oldHeads: { journal: session.snapshot.head, stable: stableHead }, phase: 'isolated', plan };
@@ -145,7 +145,7 @@ export async function cleanupRuleHistory(request: RulesRequest = {}): Promise<Ru
       const transport = { ...cleanup.baseline, async stage(...args: Parameters<typeof cleanup.baseline.stage>) {
         await guard(); const head = await cleanup.baseline.stage(...args); await guard(); return head;
       } };
-      const verification = { transport, repository, binary, nativeBuild, targetBranch, plan: run.plan, runId: run.id, journal: session.journal };
+      const verification = { transport, repository, binary, nativeBuild, verifyEvidence, targetBranch, plan: run.plan, runId: run.id, journal: session.journal };
       if (run.phase === 'isolated') {
         const baseline = await prepareRulesBaseline({ ...verification, source: session.snapshot,
           stable: await session.stable(), now: new Date(run.plan.cleanupObservedAt) });
@@ -182,7 +182,7 @@ export async function cleanupRuleHistory(request: RulesRequest = {}): Promise<Ru
         await guardCleanup(session!, stages.stable.head);
       };
       await verifyLive();
-      await verifyRulesBaseline({ transport: cleanup.baseline, repository, binary, nativeBuild, targetBranch, plan,
+      await verifyRulesBaseline({ transport: cleanup.baseline, repository, binary, nativeBuild, verifyEvidence, targetBranch, plan,
         runId: run.id, journal: original.journal }, stages);
       const stable = await session.stable();
       for (const { recordPath, record } of plan.retain.active) {
