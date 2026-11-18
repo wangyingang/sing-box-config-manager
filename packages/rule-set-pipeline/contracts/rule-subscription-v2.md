@@ -14,6 +14,6 @@
 
 稳定 URL 交付该逻辑规则集当前激活的版本，由 `sync`、`pin` 或 `resume` 切换。Pipeline 核验候选完整性和实际远端内容，并在换源、自动交付和人工固定历史版本时保留 ID、URL、用途、格式、目标版本、能力上限及文件复用关系。客户端何时取得新内容取决于 sing-box 的原生更新机制。
 
-Rule Subscription 不包含候选 revision、sha256、字节数或条目数。[Artifact Manifest v1](README.md) 仍描述不可变候选的实际产物。配置快照固定订阅契约和发布时的配置检查证据，不固定客户端此后加载的规则字节。
+Rule Subscription 不包含候选 revision、sha256、字节数或条目数。[Artifact Manifest v2](README.md) 仍描述不可变候选的实际产物。配置快照固定订阅契约和发布时的配置检查证据，不固定客户端此后加载的规则字节。
 
-Compiler 的编译、配置发布和快照交付入口只接受 v2 订阅。Recipe／Template v1 的固定 Manifest 绑定仍可用。Pipeline 的交付也只接受 v2，按当前正式配置及逻辑 ID 核验。操作语义见 [配置驱动操作 ADR](../docs/adr/0001-configuration-driven-rule-operations.md)；管理者 pin 控制整集交付，Recipe 不增加固定版本选项。[Rule Subscription v1](rule-subscription.md) 作为历史契约保留。
+Compiler 的编译、配置发布和快照交付入口只接受 v2 订阅。Recipe／Template v1 的固定绑定使用当前 Artifact Manifest v2。Pipeline 的交付也只接受 v2，按当前正式配置及逻辑 ID 核验。操作语义见 [配置驱动操作 ADR](../docs/adr/0001-configuration-driven-rule-operations.md)；管理者 pin 控制整集交付，Recipe 不增加固定版本选项。[Rule Subscription v1](rule-subscription.md) 作为历史契约保留。

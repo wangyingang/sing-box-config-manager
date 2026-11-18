@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "synthetic:domains",
   "revision": "1",
   "targetVersion": "1.14.4",

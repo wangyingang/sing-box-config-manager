@@ -194,8 +194,8 @@ v2 不接受该绑定。迁移需要新 Recipe／Template 修订、显式改绑�
 
 ### 固定规则产物
 
-`dependencies.manifests` 接受 Pipeline 维护的[Manifest v1](../rule-set-pipeline/contracts/README.md)。
-核心入口导出 `ArtifactManifest` 和 `artifactManifestSchema`；依赖可以省略，已有调用保持兼容。
+`dependencies.manifests` 接受 Pipeline 维护的[Manifest v2](../rule-set-pipeline/contracts/README.md)。
+核心入口导出 `ArtifactManifest` 和 `artifactManifestSchema`。依赖可省略。JSON 条目需要正整数 `termCount`，SRS 条目只提供格式、地址、字节元数据和能力。
 Recipe 和 Template 的 `resources.ruleSets` 支持
 `{ kind: 'curated', tag, artifactRef: { id, revision, usage }, httpClient? }`。
 用途仅开放 `route`、`dns-query`、`dns-response`，在每个实际消费位置检查，
@@ -357,8 +357,7 @@ python3 scripts/import-legacy-fixtures.py \
 
 验收覆盖完整策略下语义错误草稿可保存但不可发布、归档旧绑定可重新发布、
 本地发布失败保留旧指针、发布快照隔离，以及公开类型和浏览器 bundle。
-迁移元数据沿用旧 manifest 的 URL、摘要与能力；新增 `byteLength`、`termCount`
-明确使用合成占位值 `1`。真实 check 不下载这些规则文件，未验证远端字节与统计。
+迁移样本沿用旧 manifest 的 URL、摘要与能力。Manifest v2 样本的 `byteLength` 和 JSON `termCount` 使用合成占位值 `1`。真实 check 不下载这些规则文件，未验证远端字节与统计。
 该次 Compiler 样本迁移未验收真实设备运行、代理连通性、在线配置订阅／激活事务，
 也未验收 Pipeline 的采集、转换、产物生产和发布。Pipeline 后续已交付的能力见
 [当前模块说明](../rule-set-pipeline/README.md)；不能把这份历史记录理解为 Pipeline 仍未实现。

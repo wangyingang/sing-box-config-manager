@@ -108,6 +108,8 @@ CI 的 sing-box 版本读取自 [Schema 构建配置](packages/config-compiler/s
 
 测试在临时目录执行 Compiler 检查和 Pipeline 原生验证。自动更新、回滚及故障恢复测试会启动隔离的 sing-box 实例和本地服务，结束后清理；不修改生产规则入口、系统代理或旧配置仓库。
 
+规则产物的原生策略验证编译和 JSON／SRS 实际加载。四集从空状态初始化的 GitHub 验收使用独立隔离目标，记录子进程计数及固定地址和稳定订阅的 HTTPS 回读。运行方式见 [Pipeline 自动化验证](packages/rule-set-pipeline/README.md#自动化验证)。
+
 五份旧配置候选保持生成语义并通过原生 check；旧 Android 配置含不支持的进程规则，正式 compile 和发布会拒绝它。
 
 当前测试和构建来自 Compiler 与 Pipeline；Web App 骨架没有占位构建或空测试。递归命令只执行模块实际声明的脚本。单独操作 Compiler：

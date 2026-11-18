@@ -1,11 +1,11 @@
 import { isDeepStrictEqual } from 'node:util';
 import { activationSubscription } from './activation.js';
-import { candidateArtifactFiles, candidateEvidenceSha256, candidateFiles } from './candidate-publication.js';
+import { CANDIDATE_READBACK_VERSION, candidateArtifactFiles, candidateEvidenceSha256, candidateFiles } from './candidate-publication.js';
 import type { RuleDefinition } from './configuration.js';
 import { filePaths, stageRef, type BaselineStage, type BaselineStages, type BaselineTransport, type PreparedBaseline } from './maintenance-baseline-transport.js';
 import type { MaintenancePlan } from './maintenance.js';
 import { buildNative, type NativeTool } from './native.js';
-import { decodedTerms } from './projection.js';
+import { readSourceTerms } from './projection.js';
 import type { PublicationRepository, PublicationSnapshot } from './publication-repository.js';
 import { ARTIFACT_REPOSITORY, immutableUrl, type PublicationTransport } from './publication.js';
 import { BASELINE_PATH, IDENTITY_PATH, STATE_PATH, type RemoteJournal } from './remote-state.js';
@@ -165,19 +165,17 @@ export async function prepareBaseline(options: Verification & {
     for (const [path, bytes] of Object.entries(metadata).filter(([path]) => path.startsWith(prefix))) {
       readbacks.push(await readback(publication, immutableUrl(metadataStage.head, path), bytes));
     }
-    const native = await buildNative(decodedTerms(JSON.parse(assets[prefix + layout.source].toString())), binary);
+    const native = await buildNative(readSourceTerms(JSON.parse(assets[prefix + layout.source].toString())), binary);
     if (native.tool.sha256 !== tool.sha256 || native.artifacts.length !== 2
       || native.artifacts.some(artifact => !assets[prefix + artifact.file]?.equals(artifact.content))) {
       throw new Error(`Baseline native bytes or tool changed: ${id}`);
     }
     const build = JSON.parse(metadata[prefix + 'build.json'].toString());
     const path = prefix + 'readback.json';
-    // Git candidates require the original validation steps as part of their build
-    // evidence. The new host is recorded separately after reproducing the bytes.
-    const originalNative = journal.state.candidates[id]?.sourceKey === undefined
-      ? { status: native.validation.status, semanticRoundTrip: native.validation.semanticRoundTrip }
-      : JSON.parse((await required(source, path)).toString()).native;
-    const record = { schemaVersion: 1, candidateId: id, status: 'remote-verified',
+    // Preserve the original native evidence. The host that reproduces the
+    // bytes at the new addresses is recorded separately.
+    const originalNative = JSON.parse((await required(source, path)).toString()).native;
+    const record = { schemaVersion: CANDIDATE_READBACK_VERSION, candidateId: id, status: 'remote-verified',
       filesCommit: files.head, metadataCommit: metadataStage.head, buildId: build.buildId, readback: readbacks,
       native: originalNative, tool: build.tool };
     if (priorEvidence) {

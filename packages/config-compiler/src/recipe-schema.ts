@@ -152,11 +152,15 @@ const httpsUrl = schema((v): v is string => {
   try { const url = new URL(v); return url.protocol === 'https:' && !!url.hostname && !url.username && !url.password; } catch { return false; }
 });
 const projection = union(object({ artifactIds: nonemptyStrings }), object({ unavailable: literal('empty') }));
-export const artifactManifestSchema = object({ schemaVersion: literal(1), id: string, revision: string,
+const artifactFields = { id: string, url: httpsUrl,
+  sha256: schema((v): v is string => typeof v === 'string' && /^[a-f0-9]{64}$/.test(v)),
+  byteLength: integer(1, Number.MAX_SAFE_INTEGER), requiredCapabilities: capabilities };
+export const artifactManifestSchema = object({ schemaVersion: literal(2), id: string, revision: string,
   targetVersion: literal('1.14.4'), sourceFormatVersion: literal(4),
-  artifacts: array(object({ id: string, format: enumeration(['source', 'binary'] as const), url: httpsUrl,
-    sha256: schema((v): v is string => typeof v === 'string' && /^[a-f0-9]{64}$/.test(v)),
-    byteLength: integer(1, Number.MAX_SAFE_INTEGER), termCount: integer(1, Number.MAX_SAFE_INTEGER), requiredCapabilities: capabilities })),
+  artifacts: array(union(
+    object({ ...artifactFields, format: literal('source'), termCount: integer(1, Number.MAX_SAFE_INTEGER) }),
+    object({ ...artifactFields, format: literal('binary') }),
+  )),
   projections: object({ route: projection, 'dns-query': projection, 'dns-response': projection }),
 });
 export type ArtifactManifest = Value<typeof artifactManifestSchema>;

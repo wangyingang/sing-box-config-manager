@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { Ajv } from 'ajv';
 import manifestSchema from '../contracts/artifact-manifest.schema.json' with { type: 'json' };
 import subscriptionV2Schema from '../contracts/rule-subscription-v2.schema.json' with { type: 'json' };
-import { candidateFiles } from './candidate-publication.js';
+import { CANDIDATE_READBACK_VERSION, candidateFiles } from './candidate-publication.js';
 import { verifyActivationCandidate, verifyCandidateEvidence } from './activation.js';
 import { githubActivation, type ActivationTransport } from './activation-transport.js';
 import { configuredLayout, parseRuleDefinition, type RuleDefinition } from './configuration.js';
@@ -152,7 +152,7 @@ export async function readRemoteStatus(options: {
       requireThat(selectedUrl.startsWith(evidencePrefix)
         && /^[a-f0-9]{40}$/.test(selectedUrl.slice(evidencePrefix.length).split('/')[0])
         && selectedUrl.slice(evidencePrefix.length + 41) === `${prefix}/readback.json`, 'Invalid candidate evidence URL');
-      requireThat(evidence.schemaVersion === 1 && evidence.status === 'remote-verified' && evidence.candidateId === id
+      requireThat(evidence.schemaVersion === CANDIDATE_READBACK_VERSION && evidence.status === 'remote-verified' && evidence.candidateId === id
         && commitId(evidence.filesCommit) && commitId(evidence.metadataCommit)
         && Array.isArray(evidence.readback) && evidence.readback.length === 6, 'Incomplete candidate evidence');
       for (const file of candidateEvidenceFiles.filter(name => name !== 'readback.json')) {

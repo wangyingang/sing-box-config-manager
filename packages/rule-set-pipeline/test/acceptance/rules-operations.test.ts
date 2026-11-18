@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { artifactManifestSchema } from '../../../config-compiler/src/index.js';
+import { NATIVE_VALIDATION_POLICY } from '../../src/native.js';
 import test from 'node:test';
 import { stringify } from 'yaml';
 import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
@@ -27,6 +31,7 @@ test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resum
   const binary = process.env.SING_BOX_TEST_BINARY, evidencePath = process.env.RULE_OPERATIONS_EVIDENCE;
   assert.ok(binary, 'Set SING_BOX_TEST_BINARY');
   assert.ok(evidencePath, 'Set RULE_OPERATIONS_EVIDENCE to a new file');
+  const firstOnly = process.env.RULE_OPERATIONS_FIRST_ONLY === '1';
   const exec = promisify(execFile);
   const token = process.env.GH_TOKEN ?? (await exec('gh', ['auth', 'token'])).stdout.trim();
   const target = `acceptance-issue-96-${randomUUID()}`;
@@ -34,10 +39,19 @@ test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resum
   const sourceIdentity = { commit: (await exec('git', ['rev-parse', 'HEAD'])).stdout.trim(),
     status: (await exec('git', ['status', '--porcelain'])).stdout,
     diffSha256: sha256((await exec('git', ['diff', 'HEAD'], { maxBuffer: 10 * 1024 * 1024 })).stdout),
-    probeSha256: sha256(await readFile(new URL(import.meta.url))), binary,
-    command: 'RULE_OPERATIONS_PROBE=1 pnpm --dir packages/rule-set-pipeline test:acceptance:rules' };
+    probeSha256: sha256(await readFile(new URL(import.meta.url))), binary, binarySha256: sha256(await readFile(binary)),
+    command: `RULE_OPERATIONS_PROBE=1 ${firstOnly ? 'RULE_OPERATIONS_FIRST_ONLY=1 ' : ''}pnpm --dir packages/rule-set-pipeline test:acceptance:rules` };
   const observations: unknown[] = [], requests: string[] = [], readbacks: unknown[] = [];
   const acquisitionAttempts: { label: string; attempt: number; requests: string[] }[] = [];
+  const nativeTrace = await mkdtemp(join(tmpdir(), 'rule-operations-native-'));
+  t.after(async () => rm(nativeTrace, { recursive: true, force: true }));
+  const tracedBinary = join(nativeTrace, 'sing-box');
+  const tracePath = join(nativeTrace, 'commands');
+  const shellQuote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
+  await writeFile(tracedBinary, `#!/bin/sh
+printf '%s\\n' "$*" >> ${shellQuote(tracePath)}
+exec ${shellQuote(binary)} "$@"
+`, { mode: 0o700 });
   const startedAt = new Date().toISOString();
   // Reserve the evidence destination before the first remote mutation.
   await writeFile(evidencePath, JSON.stringify({ target, sourceIdentity, startedAt, status: 'started' }, null, 2) + '\n', { flag: 'wx' });
@@ -136,7 +150,7 @@ test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resum
   };
   const config = parseBuildConfiguration(readOfficialConfiguration()); config.target.branch = target;
   let revision = 1;
-  const context: RulesContext = { repository, targetBranch: target, allowWrites: true, binary, token,
+  const context: RulesContext = { repository, targetBranch: target, allowWrites: true, binary: tracedBinary, token,
     readConfiguration: async () => ({ revision: String(revision).padStart(40, '0'), origin: 'isolated-github-probe', content: stringify(config) }),
     fetch: sourceFetch,
   };
@@ -214,27 +228,49 @@ test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resum
       files.push({ file, sha256: sha256(bytes), byteLength: bytes.length });
     }
     assert.equal(readback.readback.length, 6);
-    const manifest = JSON.parse((await readBytes(prefix + 'manifest.json')).toString());
+    const manifest = artifactManifestSchema.parse(JSON.parse((await readBytes(prefix + 'manifest.json')).toString()), '');
     const report = JSON.parse((await readBytes(prefix + 'conversion-report.json')).toString());
     const build = JSON.parse((await readBytes(prefix + 'build.json')).toString());
     assert.equal(manifest.id, current.logicalId); assert.equal(manifest.targetVersion, '1.14.4'); assert.equal(manifest.sourceFormatVersion, 4);
     assert.equal(build.id, current.logicalId);
     assert.equal(build.definition.list, current.logicalId === 'china-ip' ? 'all' : expectedList);
     assert.deepEqual(build.source, current.source); assert.equal(build.validation.status, 'passed');
+    assert.equal(build.validation.policy, NATIVE_VALIDATION_POLICY);
+    assert.equal(readback.native.policy, NATIVE_VALIDATION_POLICY);
     assert.deepEqual(build.source, JSON.parse((await readBytes(prefix + 'source.json')).toString()));
     if (expectedCount !== undefined) assert.equal(report.inputCount, expectedCount);
     assert.deepEqual(manifest.artifacts.map((x: { format: string }) => x.format), ['source', 'binary']);
     assert.deepEqual(manifest.projections.route, manifest.projections[current.logicalId === 'china-ip' ? 'dns-response' : 'dns-query']);
     assert.deepEqual(manifest.projections[current.logicalId === 'china-ip' ? 'dns-query' : 'dns-response'], { unavailable: 'empty' });
     for (const artifact of manifest.artifacts) {
-      await readBytes(artifact.url, artifact); assert.equal(artifact.termCount, report.outputTermCount);
-      if (expectedCount !== undefined) assert.equal(artifact.termCount, expectedCount);
+      await readBytes(artifact.url, artifact);
+      if (artifact.format === 'source') {
+        assert.equal(artifact.termCount, report.outputTermCount);
+        if (expectedCount !== undefined) assert.equal(artifact.termCount, expectedCount);
+      } else assert.ok(!Object.hasOwn(artifact, 'termCount'));
       assert.deepEqual(artifact.requiredCapabilities, []);
     }
     observations.push({ candidate: current.candidateId, source: current.source, manifest, report, build, readback, files });
     await checkpoint(`verified-candidate:${current.logicalId}`);
   }
+  assert.deepEqual((await repository.snapshot()).paths, ['README.md']);
+  const empty = await getRulesStatus(input);
+  assert.equal(empty.status, 'success', JSON.stringify(empty));
+  assert.ok(empty.rules?.every(rule => rule.deliveryState === 'not-delivered' && rule.candidateCount === 0));
   const first = await check('add-four', () => syncRules(input));
+  const nativeCommands = (await readFile(tracePath, 'utf8')).trim().split('\n');
+  const nativeCounts = {
+    compile: nativeCommands.filter(command => command.startsWith('rule-set compile ')).length,
+    decompile: nativeCommands.filter(command => command.startsWith('rule-set decompile ')).length,
+    sourceLoad: nativeCommands.filter(command => command.startsWith('rule-set match ') && command.endsWith('--format source')).length,
+    binaryLoad: nativeCommands.filter(command => command.startsWith('rule-set match ') && command.endsWith('--format binary')).length,
+  };
+  observations.push({ label: 'first-delivery-native-processes', nativeCommands, nativeCounts });
+  await checkpoint('first-delivery-native-processes');
+  assert.equal(nativeCounts.decompile, 0);
+  assert.ok(nativeCounts.compile >= config.ruleSets.length);
+  assert.ok(nativeCounts.sourceLoad >= config.ruleSets.length);
+  assert.ok(nativeCounts.binaryLoad >= config.ruleSets.length);
   assert.deepEqual(first.results.map(x => x.id), ['openai', 'anthropic', 'google-deepmind', 'china-ip']);
   assert.ok(first.results.every(x => x.current && ['delivered', 'unchanged'].includes(x.status)));
   assert.deepEqual(checkedStatus?.rules?.map(x => x.candidateCount), [1, 1, 1, 1]);
@@ -243,6 +279,7 @@ test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resum
     if (i < 3) { assert.ok('tag' in source); assert.equal(source.tag, originalTag); } else assert.equal(source.commit, originalCommit);
     await inspectCandidate(entry.current!, [25, 19, 49][i]);
   }
+  if (firstOnly) return;
   const domainSource = first.results[0].current!.source;
   assert.ok('yaml' in domainSource);
   for (const suffix of ['/latest', `/assets/${domainSource.yaml.id}`, `/assets/${domainSource.checksum.id}`, '/branches/ip-lists', '/china46.txt']) {

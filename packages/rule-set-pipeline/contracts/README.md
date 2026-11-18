@@ -1,10 +1,6 @@
-# 固定产物 Manifest v1
+# 固定产物 Manifest v2
 
-契约演进（2026-11-04）：本页保留 Spec #1 的不可变产物 Manifest v1 契约。
-当前 Recipe／Template v2 使用 [Rule Subscription v2](rule-subscription-v2.md) 描述稳定入口及兼容性约束；
-[Rule Subscription v1](rule-subscription.md) 已废止，作为历史契约保留。不能用稳定可变 URL 冒充本页的固定内容地址。
-两者分别管理，不改变 Manifest 字段含义。v1 的 #17 历史范围和证据见
-[验收记录](../../config-compiler/docs/verification/issue-17.md)。
+[#125](https://github.com/wangyingang/sing-box-config-manager/issues/125) 启用 Manifest v2，区分 JSON 的逻辑条目数与 SRS 字节元数据。Recipe／Template v2 的稳定入口继续使用 [Rule Subscription v2](rule-subscription-v2.md)。Manifest 使用固定内容地址。旧 Manifest v1 的验收范围见 [#17 历史记录](../../config-compiler/docs/verification/issue-17.md)。
 
 本目录由 Rule Set Pipeline 维护，是 Compiler 接入固定内存产物数据的边界。
 `artifact-manifest.schema.json` 定义封闭的语言无关结构，
@@ -12,9 +8,9 @@
 本页说明固定产物契约；当前管理入口见 [Pipeline README](../README.md)。`sync` 在内部构建验证后发布完整 commit 固定的 Manifest 与规则文件，完成 HTTPS 回读后才交付稳定入口。早期候选发布的历史证据见 [#18 验收](../docs/verification/issue-18.md)；当前状态与版本身份见 [操作契约](rules-operations.md)。
 
 Manifest 的 `id` 标识系统规则集，`revision` 固定整个清单的不可变修订。
-`schemaVersion: 1`、`targetVersion: "1.14.4"` 和 `sourceFormatVersion: 4`
+`schemaVersion: 2`、`targetVersion: "1.14.4"` 和 `sourceFormatVersion: 4`
 是明确支持的版本。JSON 源文件和 sing-box 二进制规则文件（SRS）都使用此固定构建目标。
-真实 binary 集成测试使用合成规则确认 v4 JSON 可编译为 SRS 并解码恢复。
+真实集成测试覆盖 v4 JSON 到 SRS 的编译和两种格式的实际加载与匹配。
 
 `artifacts` 中每项 `id` 必须全局唯一且绑定版本，推荐
 `<source>:<ruleSet>@<revision>:<format>`。同一 ID 不能在新修订中代表另一份内容。
@@ -22,7 +18,8 @@ Manifest 的 `id` 标识系统规则集，`revision` 固定整个清单的不可
 不会回退最新版本。重复清单或物理身份、映射到不存在的物理产物均拒绝解析。
 
 物理产物声明 `format: source | binary`、`url`、文件字节 `sha256`、
-`byteLength`、`termCount` 和 `requiredCapabilities`。
+`byteLength` 和 `requiredCapabilities`。只有 `format: source` 必须提供 `termCount`，
+按投影的独立逻辑条目计数。`format: binary` 不接受 `termCount`。
 摘要是实际上传文件的字节摘要，不是 URL、语义内容或 Manifest 的摘要。
 条目数、字节数必须为正整数；没有内容的用途不生成产物。
 能力词汇仅开放 `processMatching`、`packageMatching`、`dhcpDns`，从实际投影计算。

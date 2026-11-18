@@ -8,8 +8,9 @@ import { Ajv } from 'ajv';
 import manifestSchema from '../contracts/artifact-manifest.schema.json' with { type: 'json' };
 import subscriptionV2Schema from '../contracts/rule-subscription-v2.schema.json' with { type: 'json' };
 import { validCommitSource } from './github-commit.js';
-import { buildNative } from './native.js';
-import { decodedTerms, USAGES } from './projection.js';
+import { buildNative, nativeArtifactCommands, nativeBuildIdentity, NATIVE_VALIDATION_POLICY } from './native.js';
+import { ARTIFACT_MANIFEST_VERSION, CANDIDATE_READBACK_VERSION, LEGACY_BUILD_RECORD } from './candidate-publication.js';
+import { readSourceTerms, USAGES } from './projection.js';
 import { sha256, validReleaseAssetIdentities, V2FLY_RELEASE_INPUT } from './release.js';
 import { ARTIFACT_REPOSITORY, immutableUrl } from './publication.js';
 import { retainedCandidateDownload } from './publication-repository.js';
@@ -53,7 +54,7 @@ export async function verifyCandidateEvidence(options: { candidateEvidenceUrl: s
   requireThat(options.evidenceSha256 === undefined || options.evidenceSha256 === sha256(evidenceBytes),
     'CANDIDATE_UNAVAILABLE: remote readback differs from registered evidence');
   const evidence = JSON.parse(evidenceBytes.toString('utf8'));
-  requireThat(evidence.schemaVersion === 1 && evidence.status === 'remote-verified' && evidence.candidateId === location.id,
+  requireThat(evidence.schemaVersion === CANDIDATE_READBACK_VERSION && evidence.status === 'remote-verified' && evidence.candidateId === location.id,
     'Missing complete remote candidate verification');
   for (const commit of [evidence.filesCommit, evidence.metadataCommit]) requireThat(/^[a-f0-9]{40}$/.test(commit), 'Invalid candidate commit');
   requireThat(Array.isArray(evidence.readback) && evidence.readback.length === 6, 'Missing complete readback records');
@@ -85,20 +86,19 @@ export async function verifyCandidateEvidence(options: { candidateEvidenceUrl: s
       && /^[a-f0-9]{64}$/.test(source.inputSha256) && Number.isSafeInteger(source.inputBytes) && source.inputBytes > 0 && /^[a-f0-9]{64}$/.test(source.checksumSha256), 'Incomplete official source');
     requireThat(validReleaseAssetIdentities(source), 'Incomplete source asset identity');
   }
-  requireThat(equal(build.source, source) && build.status === 'built-validated' && build.validation?.status === 'passed'
-    && build.validation.semanticRoundTrip === true && Array.isArray(build.validation.steps) && build.validation.steps.length >= 4
+  const expectedSteps = nativeArtifactCommands(`${layout.stem}.json`, `${layout.stem}.srs`);
+  const completedNativeSteps = (record: any) => record?.status === 'passed' && record.policy === NATIVE_VALIDATION_POLICY
+    && Array.isArray(record.steps) && record.steps.length === expectedSteps.length
+    && expectedSteps.every((args, index) => equal(record.steps[index]?.args, args)
+      && typeof record.steps[index]?.stdout === 'string' && typeof record.steps[index]?.stderr === 'string');
+  requireThat(equal(build.source, source) && build.status === 'built-validated'
+    && completedNativeSteps(build.validation) && completedNativeSteps(evidence.native)
     && build.tool?.version === '1.14.4' && /^[a-f0-9]{64}$/.test(build.tool.sha256)
-    && evidence.native?.status === 'passed' && evidence.native.semanticRoundTrip === true
-    && evidence.tool?.sha256 === build.tool.sha256
-    && (!isCidr || evidence.tool.version === '1.14.4' && Array.isArray(evidence.native.steps) && evidence.native.steps.length >= 4),
+    && evidence.tool?.version === build.tool.version && evidence.tool.sha256 === build.tool.sha256,
     'Incomplete native validation record');
-  // Historical candidates predate explicit contract versions in the build identity.
-  const identity = { source, tools: build.tools, nativeBuildId: build.nativeBuildId };
-  if (build.contracts !== undefined) {
-    requireThat(build.contracts !== null && typeof build.contracts === 'object' && !Array.isArray(build.contracts)
-      && Object.keys(build.contracts).length === 3 && build.contracts.artifactManifest === 1
-      && build.contracts.sourceFormat === 4 && build.contracts.buildRecord === (definition ? CONFIGURED_BUILD_RECORD : 1), 'Unsupported build contracts');
-  }
+  requireThat(equal(build.contracts, { artifactManifest: ARTIFACT_MANIFEST_VERSION, sourceFormat: 4,
+    buildRecord: definition ? CONFIGURED_BUILD_RECORD : LEGACY_BUILD_RECORD }), 'Unsupported build contracts');
+  const identity = { source, tools: build.tools, nativeBuildId: build.nativeBuildId, contracts: build.contracts };
   let candidateDefinition = definition;
   if (definition) {
     // A rollback retains its original source selection. Validate that definition
@@ -106,14 +106,13 @@ export async function verifyCandidateEvidence(options: { candidateEvidenceUrl: s
     const expectedDefinition = operation === 'rollback' ? parseRuleDefinition(build.definition, isCidr ? 'cidr-text' : 'plain-yaml') : definition;
     requireThat(equal(build.definition, expectedDefinition) && expectedDefinition.id === definition.id
       && expectedDefinition.stablePath === definition.stablePath && build.id === definition.id && build.candidateId === location.id
-      && build.target?.repository === ARTIFACT_REPOSITORY && build.target?.branch === transport.branch
-      && build.contracts !== undefined, 'Configured build identity or target mismatch');
+      && build.target?.repository === ARTIFACT_REPOSITORY && build.target?.branch === transport.branch, 'Configured build identity or target mismatch');
     candidateDefinition = expectedDefinition;
   }
   const configuredIdentity = { definition: build.definition, target: build.target, source, tools: build.tools, nativeBuildId: build.nativeBuildId,
     contracts: { sourceFormat: 4, buildRecord: CONFIGURED_BUILD_RECORD } };
   requireThat(build.buildId === evidence.buildId && build.buildId === sha256(JSON.stringify(
-    definition ? configuredIdentity : build.contracts === undefined ? identity : { ...identity, contracts: build.contracts })), 'Build identity mismatch');
+    definition ? configuredIdentity : identity)), 'Build identity mismatch');
   requireThat(['inputCount', 'convertedCount', 'invalidCount', 'unsupportedCount', 'duplicateCount', 'outputTermCount']
     .every(key => Number.isSafeInteger(report[key]) && report[key] >= 0), 'Invalid conversion counts');
   requireThat(report.status === 'converted' && report.inputCount > 0 && report.inputCount === report.convertedCount
@@ -129,12 +128,11 @@ export async function verifyCandidateEvidence(options: { candidateEvidenceUrl: s
   const srsBytes = await remote(`${stem}.srs`, evidence.filesCommit);
   const json = JSON.parse(sourceBytes.toString());
   requireThat(json.version === 4, 'Candidate Source Format mismatch');
-  const terms = decodedTerms(json);
+  const terms = readSourceTerms(json);
   requireThat(terms.length > 0 && terms.every(term => (term.type === 'ip_cidr') === isCidr), 'Candidate has empty or incompatible usage content');
   requireThat(report.outputTermCount === terms.length, 'Conversion term count mismatch');
   const native = options.binary === undefined ? undefined : await buildNative(terms, options.binary);
-  requireThat(build.nativeBuildId === sha256(JSON.stringify({ policy: 'native-projection-v2', sourceFormat: 4,
-    tool: build.tool.sha256, terms })), 'Native build identity mismatch');
+  requireThat(build.nativeBuildId === nativeBuildIdentity(build.tool.sha256, terms), 'Native build identity mismatch');
   const bytesByFormat = { source: sourceBytes, binary: srsBytes };
   for (const format of ['source', 'binary'] as const) {
     const artifact = manifest.artifacts.filter((entry: any) => entry.format === format);
@@ -142,14 +140,15 @@ export async function verifyCandidateEvidence(options: { candidateEvidenceUrl: s
     const a = artifact[0], bytes = bytesByFormat[format], file = `${stem}.${format === 'source' ? 'json' : 'srs'}`;
     requireThat(a.url === immutableUrl(evidence.filesCommit, `${prefix}/${file}`)
       && a.byteLength === bytes.length && a.sha256 === sha256(bytes)
-      && (format === 'binary' && isCidr || a.termCount === terms.length)
+      && (format === 'binary' || a.termCount === terms.length)
       && a.requiredCapabilities.length === 0, `Artifact integrity or capability mismatch: ${file}`);
     const stored = build.artifacts?.filter((entry: any) => entry.file === file);
     requireThat(stored?.length === 1 && stored[0].sha256 === a.sha256 && stored[0].bytes === a.byteLength
-      && stored[0].termCount === a.termCount && stored[0].format === format && equal(stored[0].requiredCapabilities, []), 'Build artifact mismatch');
-    // buildNative recompiles, decodes and loads both formats; exact bytes prove downloaded SRS is that validated file.
+      && (format === 'source' ? stored[0].termCount === a.termCount : !Object.hasOwn(stored[0], 'termCount'))
+      && stored[0].format === format && equal(stored[0].requiredCapabilities, []), 'Build artifact mismatch');
+    // Exact bytes bind the downloaded artifacts to the files compiled and loaded above.
     const reproduced = native?.artifacts.find(entry => entry.file === file);
-    requireThat(!native || reproduced?.termCount === a.termCount && reproduced?.content.equals(bytes), `Native artifact mismatch: ${file}`);
+    requireThat(!native || reproduced?.content.equals(bytes), `Native artifact mismatch: ${file}`);
   }
   for (const usage of USAGES) {
     if (usage === layout.unavailable) {

@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import test from 'node:test';
 import { buildConfiguredCommit } from '../../src/configured-build.js';
-import { buildNative, NativeBuildError, type NativeBuild } from '../../src/native.js';
+import { buildNative, NATIVE_VALIDATION_POLICY, type NativeBuild } from '../../src/native.js';
 import { convertRules } from '../../src/convert.js';
 import { readTargetList } from '../../src/yaml-input.js';
 import { type BuildTerm } from '../../src/projection.js';
@@ -73,7 +73,8 @@ test('fixed official sample independently builds identical JSON/SRS and actual b
   assert.deepEqual(first.artifacts, second.artifacts);
   assert.equal(first.artifacts[0].content.toString(), await readFile(new URL('../fixtures/20261102130044.domains.json', import.meta.url), 'utf8'));
   for (const artifact of first.artifacts) {
-    assert.equal(artifact.termCount, 214);
+    if (artifact.format === 'source') assert.equal(artifact.termCount, 214);
+    else assert.ok(!Object.hasOwn(artifact, 'termCount'));
     assert.equal(artifact.sha256, sha256(artifact.content));
     assert.equal(artifact.bytes, artifact.content.byteLength);
     assert.deepEqual(artifact.requiredCapabilities, []);
@@ -120,7 +121,7 @@ test('固定 china46.txt 构建可重复的双栈规则，Route 与 DNS Response
   assert.deepEqual(a.native.usages.route, { artifactFiles: ['route.json', 'route.srs'] });
   assert.deepEqual(a.native.usages['dns-response'], a.native.usages.route);
   assert.deepEqual(a.native.usages['dns-query'], { status: 'unavailable', reason: 'empty' });
-  assert.equal(a.native.validation.semanticRoundTrip, true);
+  assert.equal(a.native.validation.policy, NATIVE_VALIDATION_POLICY);
   const json = a.native.artifacts.find(artifact => artifact.file === 'route.json')!;
   assert.deepEqual(JSON.parse(json.content.toString()), { version: 4, rules: [{ ip_cidr: ['192.0.2.0/24', '2001:db8::/32', '::cb00:7107/128'] }] });
   await matches(a.native, [['route', '192.0.2.1', true], ['route', '192.0.3.1', false],
@@ -157,19 +158,24 @@ test('target Go engine rejects invalid regexp and CIDR instead of returning a va
   }
 });
 
-test('compile, decode, load and semantic mismatch faults never return passed builds', async () => {
+test('wrong version, compile failure and either format failing to load prevent a passed build', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'native-fault-'));
   try {
-    for (const stage of ['version', 'compile', 'decompile', 'match', 'semantic']) {
+    for (const [stage, condition] of [
+      ['version', '"$1" = version'], ['compile', '"$2" = compile'],
+      ['source', '"$2" = match ] && [ "$6" = source'], ['binary', '"$2" = match ] && [ "$6" = binary'],
+    ]) {
       const wrapper = join(directory, stage);
-      const body = stage === 'version'
-        ? `if [ \"$1\" = version ]; then echo 'sing-box version 1.14.3'; exit 0; fi`
-        : stage === 'semantic'
-        ? `if [ "$2" = decompile ]; then printf '%s' '{"version":4,"rules":[{"domain":"corrupted.test"}]}' > "$5"; exit 0; fi`
-        : `if [ "$2" = ${stage} ]; then echo injected-${stage}-failure >&2; exit 7; fi`;
-      await writeFile(wrapper, `#!/bin/sh\n${body}\nexec '${binary.replaceAll("'", "'\\''")}' "$@"\n`);
+      const failure = stage === 'version'
+        ? "echo 'sing-box version 1.14.3'; exit 0"
+        : `echo injected-${stage}-failure >&2; exit 7`;
+      await writeFile(wrapper, `#!/bin/sh
+if [ ${condition} ]; then ${failure}; fi
+exec '${binary.replaceAll("'", "'\\''")}' "$@"
+`);
       await chmod(wrapper, 0o700);
-      await assert.rejects(buildNative(semantics, wrapper), stage === 'version' ? /Expected sing-box 1\.14\.4/ : stage === 'semantic' ? /Semantic round trip failed/ : /injected-/);
+      await assert.rejects(buildNative(semantics, wrapper),
+        stage === 'version' ? /Expected sing-box 1\.14\.4/ : new RegExp(`injected-${stage}-failure`));
     }
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
@@ -213,55 +219,9 @@ test('native CIDR coalescing preserves pure IP and mixed projection semantics wi
     }
     for (const artifact of build.artifacts) {
       const domainCount = artifact.file.startsWith('dns-response') || terms.length === adjacent.length ? 0 : 1;
-      const ipCount = artifact.file.startsWith('dns-query') ? 0 : artifact.format === 'source' ? 4 : 2;
-      assert.equal(artifact.termCount, domainCount + ipCount);
+      const ipCount = artifact.file.startsWith('dns-query') ? 0 : 4;
+      if (artifact.format === 'source') assert.equal(artifact.termCount, domainCount + ipCount);
+      else assert.ok(!Object.hasOwn(artifact, 'termCount'));
     }
-    // Independently inspect actual decoder output to lock down the trigger.
-    const directory = await mkdtemp(join(tmpdir(), 'cidr-regression-'));
-    try {
-      const srs = build.artifacts.find(artifact => artifact.file.endsWith('.srs'))!;
-      const path = join(directory, srs.file), decoded = join(directory, 'decoded.json');
-      await writeFile(path, srs.content);
-      await exec(binary, ['rule-set', 'decompile', path, '-o', decoded]);
-      const result = JSON.parse(await readFile(decoded, 'utf8'));
-      assert.deepEqual(result.rules.filter((rule: object) => 'ip_cidr' in rule), [
-        { ip_cidr: ['192.0.2.0/24', '2001:db8::/32'] },
-      ]);
-      console.log(JSON.stringify({ regression: 'adjacent-cidr', input: terms, decoded: result,
-        buildId: build.buildId, identicalRepeat: true, tool: build.tool,
-        artifacts: build.artifacts.map(({ content: _content, ...metadata }) => metadata),
-        validation: build.validation }));
-    } finally { await rm(directory, { recursive: true, force: true }); }
   }
-});
-
-test('decoded CIDR widening and missing IPv4 or IPv6 halves still block validated builds', async () => {
-  const terms: BuildTerm[] = [
-    { type: 'ip_cidr', value: '192.0.2.0/25' }, { type: 'ip_cidr', value: '192.0.2.128/25' },
-    { type: 'ip_cidr', value: '2001:db8::/33' }, { type: 'ip_cidr', value: '2001:db8:8000::/33' },
-  ];
-  const directory = await mkdtemp(join(tmpdir(), 'cidr-drift-'));
-  const failures: { decoded: string[]; message: string; steps: unknown[] }[] = [];
-  try {
-    for (const [index, decoded] of [
-      ['192.0.2.0/23', '2001:db8::/32'],
-      ['192.0.2.0/25', '2001:db8::/32'],
-      ['192.0.2.0/24', '2001:db8::/33'],
-    ].entries()) {
-      const wrapper = join(directory, `drift-${index}`);
-      const json = JSON.stringify({ version: 2, rules: [{ ip_cidr: decoded }] });
-      await writeFile(wrapper, `#!/bin/sh
-if [ "$2" = decompile ]; then printf '%s' '${json}' > "$5"; exit 0; fi
-exec '${binary.replaceAll("'", "'\\''")}' "$@"
-`);
-      await chmod(wrapper, 0o700);
-      await assert.rejects(buildNative(terms, wrapper), (error: unknown) => {
-        assert.ok(error instanceof NativeBuildError);
-        assert.match(error.message, /Semantic round trip failed/);
-        failures.push({ decoded, message: error.message, steps: error.steps });
-        return true;
-      });
-    }
-    console.log(JSON.stringify({ regression: 'cidr-drift-rejection', input: terms, failures }));
-  } finally { await rm(directory, { recursive: true, force: true }); }
 });

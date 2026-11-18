@@ -132,7 +132,7 @@ test('Pipeline fixed contract sample and Compiler boundary agree on versions, fo
   const original = artifactInput().dependencies.manifests![0]!;
   const mutations = [
     (_: any) => {},
-    (m: any) => { m.schemaVersion = 2; },
+    (m: any) => { m.schemaVersion = 1; },
     (m: any) => { m.targetVersion = '1.14.5'; },
     (m: any) => { m.sourceFormatVersion = 5; },
     (m: any) => { m.artifacts[0].format = 'unknown'; },
@@ -142,6 +142,8 @@ test('Pipeline fixed contract sample and Compiler boundary agree on versions, fo
     (m: any) => { m.artifacts[0].url = 'http://rules.example.invalid/1/a'; },
     (m: any) => { m.artifacts[0].byteLength = 0; },
     (m: any) => { m.artifacts[0].termCount = 0; },
+    (m: any) => { delete m.artifacts[0].termCount; },
+    (m: any) => { m.artifacts[0].format = 'binary'; },
     (m: any) => { m.projections.route.artifactIds = []; },
     (m: any) => { m.projections.route.artifactIds.push(m.projections.route.artifactIds[0]); },
     (m: any) => { m.artifacts[0].options = {}; },

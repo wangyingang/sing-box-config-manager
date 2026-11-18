@@ -3,13 +3,13 @@ import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promise
 import { join } from 'node:path';
 import { buildRelease } from './release-build.js';
 import { buildNative } from './native.js';
-import { decodedTerms } from './projection.js';
+import { readSourceTerms } from './projection.js';
 import { sha256, type ReleaseOptions } from './release.js';
 import type { CommitIdentity, CommitSourceRecord } from './github-commit.js';
 import type { SourceRecord } from './types.js';
 import { githubPublication, immutableUrl, type PublicationTransport } from './publication.js';
 import { processConfiguredUpdate, type ConfiguredRebuildOptions, type ConfiguredUpdateOptions } from './configured-update.js';
-import { publishCandidate } from './candidate-publication.js';
+import { ARTIFACT_MANIFEST_VERSION, LEGACY_BUILD_RECORD, publishCandidate } from './candidate-publication.js';
 import type { BuildConfiguration, RuleDefinition } from './configuration.js';
 import { openRemoteSession, selectRemoteOperation, type RemoteOperation } from './remote-state.js';
 import type { CheckRecord } from './check-rules.js';
@@ -205,8 +205,8 @@ async function processRelease(options: UpdateOptions, rebuildTag?: string) {
     };
     const built = await buildRelease(sourceOptions);
     if (!built.ok) throw new Error(JSON.stringify(built.report.diagnostics));
-    const native = await buildNative(decodedTerms(JSON.parse(built.json)), options.binary);
-    const contracts = { artifactManifest: 1, sourceFormat: 4, buildRecord: 1 };
+    const native = await buildNative(readSourceTerms(JSON.parse(built.json)), options.binary);
+    const contracts = { artifactManifest: ARTIFACT_MANIFEST_VERSION, sourceFormat: 4, buildRecord: LEGACY_BUILD_RECORD };
     const buildId = sha256(JSON.stringify({ source: built.source, tools: built.tools, nativeBuildId: native.buildId, contracts }));
     if (candidate.buildId && candidate.buildId !== buildId) throw new Error('RECOVERY_BUILD_CHANGED: original tool and build identity required');
     candidate.buildId = buildId;
@@ -215,10 +215,10 @@ async function processRelease(options: UpdateOptions, rebuildTag?: string) {
       records: filesCommit => {
         const artifactId = (file: string) => `v2fly:category-ai-!cn@${candidate!.id}:${file}`;
         const manifest = {
-          schemaVersion: 1, id: 'v2fly:category-ai-!cn', revision: candidate!.id, targetVersion: '1.14.4', sourceFormatVersion: 4,
+          schemaVersion: ARTIFACT_MANIFEST_VERSION, id: 'v2fly:category-ai-!cn', revision: candidate!.id, targetVersion: '1.14.4', sourceFormatVersion: 4,
           artifacts: native.artifacts.map(artifact => ({ id: artifactId(artifact.file), format: artifact.format,
             url: immutableUrl(filesCommit, `${prefix}/${artifact.file}`), sha256: artifact.sha256,
-            byteLength: artifact.bytes, termCount: artifact.termCount, requiredCapabilities: artifact.requiredCapabilities })),
+            byteLength: artifact.bytes, ...(artifact.format === 'source' && { termCount: artifact.termCount }), requiredCapabilities: artifact.requiredCapabilities })),
           projections: Object.fromEntries(Object.entries(native.usages).map(([usage, projection]) => [usage,
             'artifactFiles' in projection ? { artifactIds: projection.artifactFiles.map(artifactId) } : { unavailable: 'empty' }])),
         };
