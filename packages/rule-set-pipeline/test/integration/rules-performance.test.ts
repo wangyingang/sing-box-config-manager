@@ -1,18 +1,188 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { execFile } from 'node:child_process';
+import { appendFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import test, { type TestContext } from 'node:test';
+import { promisify } from 'node:util';
+import { serialize } from 'node:v8';
 import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
 import { syncRules } from '../../src/rules-operations.js';
-import { parseRulesJournal } from '../../src/rules-model.js';
+import { parseRulesJournal, RULE_STATE_PATH } from '../../src/rules-model.js';
 import { rulesEnvironment } from '../fixtures/rules-environment.js';
 import { cleanupEnvironment } from '../fixtures/cleanup-environment.js';
 import { PublicationWriteError } from '../../src/publication-repository.js';
 import { getRulesStatus } from '../../src/rules-status.js';
-import { pinRuleVersion } from '../../src/rules-operations.js';
+import { pinRuleVersion, resumeRuleUpdates } from '../../src/rules-operations.js';
 import { cleanupRuleHistory } from '../../src/rules-cleanup.js';
+import { countNativeCommands } from '../fixtures/native-commands.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
-test('正式四集首次交付只需 29 次提交，七个持久阶段保留恢复边界', { skip: !binary }, async () => {
-  const env = rulesEnvironment(binary!, 'main');
+
+async function traceNative(t: TestContext, beforeExec = '') {
+  const directory = await mkdtemp(join(tmpdir(), 'rules-native-trace-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const wrapper = join(directory, 'sing-box'), log = `${wrapper}.log`;
+  const quote = (value: string) => "'" + value.replaceAll("'", "'\"'\"'") + "'";
+  await writeFile(log, '');
+  await writeFile(wrapper, `#!/bin/sh
+printf '%s\\n' "$*" >> "$0.log"
+${beforeExec}
+exec ${quote(binary!)} "$@"
+`, { mode: 0o700 });
+  return {
+    wrapper,
+    async take() {
+      const commands = (await readFile(log, 'utf8')).trim().split('\n').filter(Boolean);
+      await writeFile(log, '');
+      return countNativeCommands(commands);
+    },
+  };
+}
+
+const oneNativeValidation = { compile: 1, decompile: 0, sourceLoad: 1, binaryLoad: 1 };
+
+test('sync、pin、resume 和 cleanup 各自在操作内只执行一组原生验证', { skip: !binary }, async t => {
+  const { wrapper, take } = await traceNative(t);
+  const env = cleanupEnvironment(wrapper, 'main');
+  const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
+  const request = { context: env.context, id: config.ruleSets[0].id };
+  const counts = [];
+  const sync = await syncRules(request);
+  assert.equal(sync.status, 'success', JSON.stringify(sync));
+  counts.push(await take());
+  const version = sync.results[0].current!.versionId!;
+  const pin = await pinRuleVersion({ ...request, version });
+  assert.equal(pin.status, 'success', JSON.stringify(pin));
+  counts.push(await take());
+  const resume = await resumeRuleUpdates(request);
+  assert.equal(resume.status, 'success', JSON.stringify(resume));
+  counts.push(await take());
+  const cleanup = await cleanupRuleHistory(request);
+  assert.equal(cleanup.status, 'success', JSON.stringify(cleanup));
+  assert.ok(env.refWrites.length);
+  counts.push(await take());
+  assert.deepEqual(counts, Array(4).fill(oneNativeValidation), 'sync, pin, resume, cleanup');
+});
+
+test('工具摘要变化时重新执行校验，两次 pin 调用共用 context 仍各自确认', { skip: !binary }, async t => {
+  const { wrapper, take } = await traceNative(t);
+  const env = cleanupEnvironment(wrapper, 'main');
+  const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
+  const sync = await syncRules({ context: env.context });
+  assert.equal(sync.status, 'success', JSON.stringify(sync));
+  const version = sync.results[0].current!.versionId!;
+  await take();
+  let evidenceReads = 0;
+  env.failDownload(async url => {
+    if (url.endsWith('/readback.json') && ++evidenceReads === 2) {
+      await appendFile(wrapper, '\n# Different executable digest\n');
+    }
+  });
+  const request = { context: env.context, id: config.ruleSets[0].id, version };
+  const pin = await pinRuleVersion(request);
+  assert.equal(pin.status, 'success', JSON.stringify(pin));
+  assert.ok(evidenceReads >= 2);
+  assert.deepEqual(await take(), { compile: 2, decompile: 0, sourceLoad: 2, binaryLoad: 2 });
+  assert.equal((await pinRuleVersion(request)).status, 'success');
+  assert.deepEqual(await take(), oneNativeValidation);
+});
+
+test('执行中途工具发生变化时拒绝首个结果，同操作中相同内容仍可重新验证', { skip: !binary }, async t => {
+  const { wrapper, take } = await traceNative(t, `
+if [ "$2" = match ] && [ "$6" = binary ] && [ ! -e "$0.changed" ]; then
+  touch "$0.changed"
+  printf '\\n# Tool changed during native validation\\n' >> "$0"
+fi`);
+  const env = rulesEnvironment(wrapper, 'main');
+  env.upstream({ openai: 'domain:shared.example', anthropic: 'domain:shared.example' });
+  const result = await syncRules({ context: env.context });
+  assert.equal(result.status, 'partial', JSON.stringify(result));
+  assert.equal(result.results[0].id, 'openai');
+  assert.match(result.results[0].error!, /Binary changed during build/);
+  assert.equal(result.results[1].status, 'delivered');
+  assert.deepEqual(await take(), { compile: 2, decompile: 0, sourceLoad: 2, binaryLoad: 2 });
+});
+
+test('失败的原生加载可在同次操作用同一工具重试', { skip: !binary }, async t => {
+  const { wrapper, take } = await traceNative(t, `
+if [ "$2" = match ] && [ "$6" = binary ] && [ ! -e "$0.failed" ]; then
+  touch "$0.failed"
+  echo 'transient binary load failure' >&2
+  exit 7
+fi`);
+  const env = rulesEnvironment(wrapper, 'main');
+  env.upstream({ openai: 'domain:shared.example', anthropic: 'domain:shared.example' });
+  const result = await syncRules({ context: env.context });
+  assert.equal(result.status, 'partial', JSON.stringify(result));
+  assert.match(result.results[0].error!, /transient binary load failure/);
+  assert.equal(result.results[1].status, 'delivered');
+  assert.deepEqual(await take(), { compile: 2, decompile: 0, sourceLoad: 2, binaryLoad: 2 });
+});
+
+test('复用 pin 原生证明后以当前正式配置保护迟到的稳定写入', { skip: !binary }, async t => {
+  const { wrapper, take } = await traceNative(t);
+  const env = cleanupEnvironment(wrapper, 'main');
+  const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
+  const sync = await syncRules({ context: env.context });
+  assert.equal(sync.status, 'success', JSON.stringify(sync));
+  const version = sync.results[0].current!.versionId!, stableHead = env.heads.get('main');
+  await take();
+  let superseded = false;
+  env.beforeWrite(async files => {
+    if (!Object.keys(files).some(path => path.startsWith('stable/'))) return;
+    env.beforeWrite();
+    superseded = true;
+    env.configure({ ...config, ruleSets: [] });
+  });
+  const result = await pinRuleVersion({ context: env.context, id: config.ruleSets[0].id, version });
+  assert.ok(superseded);
+  assert.equal(result.status, 'pending', JSON.stringify(result));
+  assert.match(result.results[0].error!, /RULE_INTENT_SUPERSEDED/);
+  assert.equal(env.heads.get('main'), stableHead);
+  assert.equal((await env.journal()).rules.openai.control.mode, 'auto');
+  assert.deepEqual(await take(), oneNativeValidation);
+});
+
+test('新 Node 进程从持久回读阶段恢复原候选并重新执行一组原生验证', { skip: !binary }, async t => {
+  const { wrapper, take } = await traceNative(t);
+  const env = rulesEnvironment(wrapper, 'main');
+  const configuration = env.config(); configuration.ruleSets = [configuration.ruleSets[0]]; env.configure(configuration);
+  const repo = env.context.repository, commit = repo.commit;
+  repo.commit = async (...args) => {
+    const head = await commit(...args);
+    if (Object.keys(args[2]).some(path => path.endsWith('/readback.json'))) throw new Error('RULE_WRITE_CONFLICT: interrupted after evidence');
+    return head;
+  };
+  assert.notEqual((await syncRules({ context: env.context })).status, 'success');
+  assert.deepEqual(await take(), oneNativeValidation);
+  const { heads, trees, parents } = env;
+  const journal = parseRulesJournal((await (await repo.snapshot()).read(RULE_STATE_PATH))!);
+  const [candidate] = Object.values(journal.candidates);
+  const path = `${wrapper}.state`;
+  await writeFile(path, serialize({ configuration, heads, trees, parents }));
+  const child = `
+    import { readFile } from 'node:fs/promises';
+    import { deserialize } from 'node:v8';
+    import { rulesEnvironment } from './test/fixtures/rules-environment.ts';
+    import { syncRules } from './src/rules-operations.ts';
+    const [path, binary] = process.argv.slice(1);
+    const persisted = deserialize(await readFile(path));
+    const env = rulesEnvironment(binary, 'main', persisted);
+    env.configure(persisted.configuration);
+    console.log(JSON.stringify(await syncRules({ context: env.context })));
+  `;
+  const { stdout } = await promisify(execFile)(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', child, path, wrapper],
+    { cwd: new URL('../../', import.meta.url) });
+  const result = JSON.parse(stdout);
+  assert.equal(result.status, 'success', stdout);
+  assert.equal(result.results[0].current.candidateId, candidate.id);
+  assert.deepEqual(await take(), oneNativeValidation);
+});
+
+test('正式四集首次交付执行四组原生验证与 29 次提交，七个持久阶段保留恢复边界', { skip: !binary }, async t => {
+  const { wrapper, take } = await traceNative(t);
+  const env = rulesEnvironment(wrapper, 'main');
   env.configure(parseBuildConfiguration(readOfficialConfiguration()));
   const fetcher = env.context.fetch!;
   env.context.fetch = async (address, init) => {
@@ -24,6 +194,7 @@ test('正式四集首次交付只需 29 次提交，七个持久阶段保留恢�
   };
   const result = await syncRules({ context: env.context });
   assert.equal(result.status, 'success', JSON.stringify(result));
+  assert.deepEqual(await take(), { compile: 4, decompile: 0, sourceLoad: 4, binaryLoad: 4 });
   assert.equal(env.writes.length, 29);
   assert.equal(env.writes.filter(write => write.branch === 'main').length, 4);
   for (const [index, rule] of result.results.entries()) {

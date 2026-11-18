@@ -583,7 +583,8 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
             if (!alreadyVerified) await verify(candidate);
           } else {
             candidate.buildId = result.buildId;
-            await publishConfiguredCandidate(result, candidate, built!.source, tools, configuration.target, session.publication, options.binary, session.save);
+            await publishConfiguredCandidate(result, candidate, built!.source, tools, configuration.target,
+              session.publication, { binary: options.binary }, session.save);
           }
         }
         candidate.phase = 'complete'; candidate.status = 'verified'; delete candidate.error;

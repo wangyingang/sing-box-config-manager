@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import ipaddrPackage from 'ipaddr.js/package.json' with { type: 'json' };
 import yamlPackage from 'yaml/package.json' with { type: 'json' };
 import packageInfo from '../package.json' with { type: 'json' };
-import { buildNative, type NativeBuild } from './native.js';
+import { buildNative, type NativeBuild, type NativeBuildOptions } from './native.js';
 import { readReleaseInput, sha256, type ReleaseOptions } from './release.js';
 import { diagnostic, type ConversionReport, type SourceRecord } from './types.js';
 import { readCommitInput, type CommitOptions, type CommitSourceRecord } from './github-commit.js';
@@ -51,7 +51,7 @@ export async function buildConfiguredRelease(options: BuildOptions & { release: 
   const input = configuredReleaseInput(configuration, definitions);
   const { bytes, source } = await readReleaseInput(options.release, input);
   const lists = convertInput(bytes, definitions, input.input.format, input.input.asset);
-  return buildConfigured(configuration, definitions, options.binary, source, lists, input.input.format, input.input.asset);
+  return buildConfigured(configuration, definitions, { binary: options.binary }, source, lists, input.input.format, input.input.asset);
 }
 
 export async function buildConfiguredCommit(options: BuildOptions & { github: CommitOptions }) {
@@ -61,7 +61,7 @@ export async function buildConfiguredCommit(options: BuildOptions & { github: Co
   if (input.version !== 'git-branch') throw new Error('Git commit build requires a configured Git source; use --release for Release sources');
   const { bytes, source } = await readCommitInput(input, options.github);
   const lists = convertInput(bytes, definitions, input.input.format, input.input.path);
-  return buildConfigured(configuration, definitions, options.binary, source, lists, input.input.format, input.input.path);
+  return buildConfigured(configuration, definitions, { binary: options.binary }, source, lists, input.input.format, input.input.path);
 }
 
 
@@ -71,8 +71,8 @@ export function convertInput(bytes: Uint8Array, definitions: RuleDefinition[], f
 }
 
 export async function buildConfigured<Source extends SourceRecord | CommitSourceRecord>(
-  configuration: BuildConfiguration, definitions: RuleDefinition[], binary: string, source: Source,
-  lists: ReadonlyMap<string, Converted>, format: 'plain-yaml' | 'cidr-text', file: string,
+  configuration: BuildConfiguration, definitions: RuleDefinition[], { binary, nativeBuild = buildNative }: NativeBuildOptions,
+  source: Source, lists: ReadonlyMap<string, Converted>, format: 'plain-yaml' | 'cidr-text', file: string,
 ) {
   const tools = await configuredBuildTools(format);
   const results: ConfiguredResult[] = [];
@@ -84,7 +84,7 @@ export async function buildConfigured<Source extends SourceRecord | CommitSource
       continue;
     }
     try {
-      const native = await buildNative(converted.terms, binary);
+      const native = await nativeBuild(converted.terms, binary);
       for (const usage of USAGES) {
         const declared = definition.usages[usage], actual = native.usages[usage];
         if ('artifact' in declared

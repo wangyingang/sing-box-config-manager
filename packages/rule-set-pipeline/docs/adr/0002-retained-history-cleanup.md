@@ -15,3 +15,5 @@ status: accepted
 多版本保留增加了存储量和原生复验成本；新基线需改写物理证据地址，并保留业务身份，因此不能只删除目录文件。实现复用现有传输与原生验证，不增设数据库、调度平台或 plan/apply 审批流程。正式配置已确定为 30 天，自动调度和失败通知的决定见 [ADR 0003](0003-automated-operations-and-native-notifications.md) 与 [#86](https://github.com/wangyingang/sing-box-config-manager/issues/86)；生产转换、历史重写与启用仍需独立授权。当前验证与交付状态见 [#85 验收记录](../../../../docs/verification/issue-85.md)。
 
 [#125](https://github.com/wangyingang/sing-box-config-manager/issues/125) 启用后，维护从新策略生成的历史中选择保留候选，沿用相同的保留与恢复规则。清理保留原构建工具和验证步骤，并记录新物理地址的字节核对及复验工具。
+
+每次调用 `cleanup` 时，准备基线、切换前复验和切换后回读可复用本次已建立的原生验证证明。各阶段仍验证固定地址、实际字节、保留树和引用租约。恢复已有检查点时，需要原生验证的阶段从本次调用取得证明。[#126](https://github.com/wangyingang/sing-box-config-manager/issues/126)

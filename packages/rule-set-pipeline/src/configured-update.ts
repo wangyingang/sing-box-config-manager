@@ -8,6 +8,7 @@ import { githubPublication, immutableUrl, type PublicationTransport } from './pu
 import { lookupRelease, type ReleaseInput } from './release.js';
 import { commitSourceKey, fullGitCommit, resolveCommit, withCommitCheckpoint, type CommitInput, type CommitSourceRecord } from './github-commit.js';
 import type { SourceRecord } from './types.js';
+import type { NativeBuildOptions } from './native.js';
 import { readUpdateState, ruleDefinitionSha256, sourceReferenceKey, type Candidate, type SourceReference, type UpdateState } from './update.js';
 import { openRemoteSession, selectRemoteOperation, type RemoteOperation } from './remote-state.js';
 import { verifyRetainedCandidate } from './candidate-recovery.js';
@@ -186,7 +187,8 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, 
         try {
           if (candidate.buildId && candidate.buildId !== result.buildId) throw new Error('RECOVERY_BUILD_CHANGED: original tool and build identity required');
           candidate.buildId = result.buildId;
-          const readback = await publishConfiguredCandidate(result, candidate, built.source, built.tools, configuration.target, publication, options.binary, save);
+          const readback = await publishConfiguredCandidate(result, candidate, built.source, built.tools, configuration.target,
+            publication, { binary: options.binary }, save);
           candidate.status = 'verified'; delete candidate.error;
           if (session) candidate.phase = 'complete';
           if (!rebuild) {
@@ -278,9 +280,10 @@ async function prepareRelease(source: ReleaseInput, options: ConfiguredUpdateOpt
 
 export async function publishConfiguredCandidate(result: Extract<Awaited<ReturnType<typeof buildConfiguredRelease>>['results'][number], { status: 'built-validated' }>,
   candidate: PublicationCandidate & { operation?: string; previousCandidateId?: string }, source: SourceRecord | CommitSourceRecord, tools: Record<string, string | number>, target: { repository: string; branch: string },
-  publication: PublicationTransport, binary: string, save: () => Promise<void>, beforeEvidence?: () => void) {
+  publication: PublicationTransport, { binary, nativeBuild }: NativeBuildOptions,
+  save: () => Promise<void>, beforeEvidence?: () => void) {
   const prefix = `candidates/${candidate.id}`;
-  return publishCandidate({ candidate, native: result.native, buildId: result.buildId, binary, publication, save, beforeEvidence,
+  return publishCandidate({ candidate, native: result.native, buildId: result.buildId, binary, nativeBuild, publication, save, beforeEvidence,
     records: filesCommit => {
       const artifactId = (file: string) => `${result.id}@${candidate.id}:${file}`;
       const manifest = { schemaVersion: ARTIFACT_MANIFEST_VERSION, id: result.id, revision: candidate.id, targetVersion: '1.14.4', sourceFormatVersion: 4,
