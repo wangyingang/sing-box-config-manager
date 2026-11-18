@@ -8,17 +8,23 @@ import { parseRulesJournal, RULE_STATE_PATH } from '../../src/rules-model.js';
 import { syncRules } from '../../src/rules-operations.js';
 import type { RulesRepository } from '../../src/rules-repository.js';
 import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
-import { rulesEnvironment } from './rules-environment.js';
+import { checkpointFixture, rulesEnvironment } from './rules-environment.js';
 
 /** The ordinary rules fixture plus immutable roots and atomic, leased ref updates. */
-export function cleanupEnvironment(binary: string, target = 'acceptance-issue-85') {
-  const env = rulesEnvironment(binary, target);
+interface CleanupFixtureState {
+  rules: NonNullable<Parameters<typeof rulesEnvironment>[2]>;
+  parents: Map<string, string[]>;
+  now: Date;
+}
+
+export function cleanupEnvironment(binary: string, target = 'acceptance-issue-85', state?: CleanupFixtureState) {
+  const env = rulesEnvironment(binary, target, state?.rules);
   const original = env.context.repository;
-  const parents = new Map<string, string[]>();
+  const parents = state?.parents ?? new Map<string, string[]>();
   const blockedHeads = new Set<string>();
   const stageWrites: string[] = [];
   const refWrites: RefChange[][] = [];
-  let now = new Date('2026-11-16T00:00:00.000Z');
+  let now = state?.now ?? new Date('2026-11-16T00:00:00.000Z');
   let stageFault: ((ref: string) => void | Promise<void>) | undefined;
   let beforeRefs: ((changes: RefChange[]) => void | Promise<void>) | undefined;
   let afterRefs: ((changes: RefChange[]) => void | Promise<void>) | undefined;
@@ -102,6 +108,10 @@ export function cleanupEnvironment(binary: string, target = 'acceptance-issue-85
   env.context.now = () => now;
   env.context.cleanup = { baseline, refs };
   return { ...env, baseline, refs, parents, blockedHeads, stageWrites, refWrites,
+    checkpoint() {
+      const rules = env.checkpoint(), cleanup = checkpointFixture({ parents, now });
+      return (): CleanupFixtureState => ({ rules: rules(), ...cleanup() });
+    },
     clock(iso: string) { now = new Date(iso); },
     failStage(callback?: typeof stageFault) { stageFault = callback; },
     beforeRefs(callback?: typeof beforeRefs) { beforeRefs = callback; },
@@ -127,22 +137,7 @@ export function fourSetCleanupEnvironment(binary: string, target: string) {
   const config = parseBuildConfiguration(readOfficialConfiguration());
   config.target.branch = target;
   env.configure(config);
-  const releaseFetch = env.context.fetch!;
-  let revision = 1;
-  const inputs = new Map([[revision, '192.0.2.0/25\n2001:db8:1::/48\n']]);
-  const sourceRequests: string[] = [];
-  env.context.fetch = async (url, init) => {
-    const address = String(url); sourceRequests.push(address);
-    if (address.endsWith('/branches/ip-lists')) return Response.json({ name: 'ip-lists', commit: { sha: String(revision).repeat(40) } });
-    if (address.startsWith('https://raw.githubusercontent.com/gaoyifan/')) {
-      const commit = address.split('/').at(-2)!;
-      const input = inputs.get(Number(commit[0]));
-      assert.equal(commit, commit[0].repeat(40)); assert.ok(input);
-      return new Response(input);
-    }
-    return releaseFetch(url, init);
-  };
-  return { ...env, sourceRequests, changeCidr(input: string) { inputs.set(++revision, input); } };
+  return env;
 }
 
 /** Replace the current OpenAI delivery and age its predecessor out of the retention window. */

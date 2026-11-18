@@ -20,7 +20,19 @@ async function stableBytes(env: Environment) {
     .map(async path => [path, await snapshot.read(path)])));
 }
 
+const retainedFixtures = new Map<string, ReturnType<typeof prepareRetainedHistory>>();
+
 async function retainedFixture(target: string) {
+  let prepared = retainedFixtures.get(target);
+  if (!prepared) {
+    prepared = prepareRetainedHistory(target);
+    retainedFixtures.set(target, prepared);
+  }
+  const { checkpoint, versions } = await prepared;
+  return { env: cleanupEnvironment(binary!, target, checkpoint()), ...structuredClone(versions) };
+}
+
+async function prepareRetainedHistory(target: string) {
   const env = fourSetCleanupEnvironment(binary!, target);
   env.clock('2026-09-01T00:00:00.000Z');
   const first = success(await syncRules(request(env)));
@@ -44,8 +56,8 @@ async function retainedFixture(target: string) {
   env.changeCidr('198.51.100.128/25\n2001:db8:4::/48\n');
   const latestResult = success(await syncRules(request(env)));
   const latest = current(latestResult); cidr.push(current(latestResult, 'china-ip'));
-  return { env, expired, pinned, boundary, recent, latest, cidr, protectedCurrent,
-    retained: [pinned, protectedCurrent, boundary, recent, latest, ...cidr.slice(1)] };
+  return { checkpoint: env.checkpoint(), versions: { expired, pinned, boundary, recent, latest, cidr, protectedCurrent,
+    retained: [pinned, protectedCurrent, boundary, recent, latest, ...cidr.slice(1)] } };
 }
 
 for (const target of ['acceptance-cleanup-deleted-history', 'main']) {
@@ -234,7 +246,7 @@ for (const target of ['acceptance-issue-85', 'main']) {
 
 for (const phase of ['before-switch', 'after-switch'] as const) {
   test(`${phase}: 一个 cleanup 恢复同一维护计划，跨日及保留期变更不扩大删除集合`, { skip: !binary, timeout: 90_000 }, async () => {
-    const { env, boundary, latest, retained } = await retainedFixture(phase === 'before-switch' ? 'acceptance-issue-85-recovery' : 'main');
+    const { env, boundary, latest, retained } = await retainedFixture(phase === 'before-switch' ? 'acceptance-issue-85' : 'main');
     const stable = await stableBytes(env);
     let interrupted = false;
     if (phase === 'before-switch') {
@@ -343,7 +355,7 @@ test('cleanup 原样复制已有追溯文件，读取未完成时保留计划并
 });
 
 test('换源失败的旧交付按当前版本保护，未知发布时间及未完成候选阻塞年龄清理', { skip: !binary, timeout: 90_000 }, async () => {
-  const { env, expired, latest } = await retainedFixture('acceptance-issue-85-pending');
+  const { env, expired, latest } = await retainedFixture('acceptance-issue-85');
   const configuration = env.config();
   configuration.sources.other = { ...configuration.sources.dlc, repository: 'failing/source' };
   configuration.ruleSets[0].source = 'other'; env.configure(configuration); env.failSource('failing/source');
@@ -399,4 +411,55 @@ test('被新控制明确取代的在途候选可回收，未知控制记录不�
   const refused = await cleanupRuleHistory(request(env));
   assert.equal(refused.status, 'failed'); assert.match(refused.error!, /RULE_STATE_CORRUPT/);
   assert.deepEqual(await env.refs.list(), refs); assert.equal(env.refWrites.length, count); assert.equal(env.writes.length, writes);
+});
+
+test('保留历史的场景各自拥有 Git、上游、时钟、故障与记录', async () => {
+  const { env: left } = await retainedFixture('main');
+  const { env: right } = await retainedFixture('main');
+  const original = await right.context.repository.snapshot('main');
+  const path = 'stable/openai/domains.srs';
+  const bytes = Buffer.from((await original.read(path))!);
+  const journal = await right.journal();
+  const revision = await right.context.readConfiguration!();
+  const upstream = right.context.fetch!;
+  const release = 'https://api.github.com/repos/v2fly/domain-list-community/releases/latest';
+  const branch = 'https://api.github.com/repos/gaoyifan/china-operator-ip/branches/ip-lists';
+  const releaseBefore = await (await upstream(release)).json();
+  const branchBefore = await (await upstream(branch)).json();
+
+  const changed = await left.context.repository.snapshot('main');
+  (await changed.read(path))!.fill(0);
+  left.trees.get(changed.head)!.delete(path);
+  left.parents.get(changed.head)!.push('different-parent');
+  left.heads.delete('main');
+  left.configure({ ...left.config(), candidateRetentionDays: 1 });
+  left.upstream({ openai: 'domain:other.example' });
+  left.changeCidr('invalid CIDR');
+  left.clock('2027-01-01T00:00:00.000Z');
+  left.failSource(true);
+  left.failStage(() => { throw new Error('stage fault'); });
+  left.beforeRefs(() => { throw new Error('ref fault'); });
+  left.afterRefs(() => { throw new Error('lost ref response'); });
+  left.failDownload(() => { throw new Error('Raw fault'); });
+  left.beforeWrite(() => { throw new Error('write fault'); });
+
+  const { env: fresh } = await retainedFixture('main');
+  assert.equal(fresh.writes.length + fresh.requests.length + fresh.sourceRequests.length
+    + fresh.stageWrites.length + fresh.refWrites.length, 0);
+  assert.deepEqual(await fresh.journal(), journal);
+  assert.deepEqual(await fresh.context.readConfiguration!(), revision);
+  assert.equal(fresh.context.now!().toISOString(), '2026-11-16T00:00:00.000Z');
+  const reset = await fresh.context.repository.snapshot('main');
+  assert.equal(reset.head, original.head);
+  assert.deepEqual(reset.parents, original.parents);
+  assert.deepEqual(await reset.read(path), bytes);
+  assert.deepEqual(await (await fresh.context.fetch!(release)).json(), releaseBefore);
+  assert.deepEqual(await (await fresh.context.fetch!(branch)).json(), branchBefore);
+  assert.deepEqual(await fresh.context.repository.download(`https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/main/${path}`), bytes);
+
+  const commit = async (env: Environment) => env.context.repository.commit('main', original.head,
+    { 'pipeline/scenario.json': Buffer.from('{}') }, 'isolated scenario', async () => {});
+  assert.equal(await commit(fresh), await commit(right), 'both scenarios allocate the same next commit from the shared base');
+  assert.equal(fresh.writes.length, 1);
+  assert.equal(right.writes.length, 1);
 });

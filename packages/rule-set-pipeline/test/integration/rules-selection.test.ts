@@ -6,16 +6,29 @@ import { syncRules, pinRuleVersion } from '../../src/rules-operations.js';
 import { getRulesStatus } from '../../src/rules-status.js';
 import { immutableUrl } from '../../src/publication.js';
 import { sha256 } from '../../src/release.js';
-import { rulesEnvironment } from '../fixtures/rules-environment.js';
+import { checkpointFixture, rulesEnvironment } from '../fixtures/rules-environment.js';
 import { cleanupEnvironment } from '../fixtures/cleanup-environment.js';
 import { cleanupRuleHistory } from '../../src/rules-cleanup.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
 if (!binary) throw new Error('Set SING_BOX_TEST_BINARY to an absolute 1.14.4 binary path');
 
-// One real domain + CIDR build per version, shared by the independent corruptions.
-// Only the external source and Git/CAS boundaries are replaced.
+const versionFixtures = new Map<string, ReturnType<typeof prepareVersions>>();
+
 async function versions(target = 'acceptance-selection') {
+  let prepared = versionFixtures.get(target);
+  if (!prepared) {
+    prepared = prepareVersions(target);
+    versionFixtures.set(target, prepared);
+  }
+  const { checkpoint, results } = await prepared;
+  const env = rulesEnvironment(binary!, target, checkpoint());
+  const journal = async () => parseRulesJournal((await (await env.context.repository.snapshot()).read(RULE_STATE_PATH))!);
+  return { ...env, ...results(), journal };
+}
+
+// Prepare two real versions per layout, then re-open the data in each scenario.
+async function prepareVersions(target: string) {
   const env = rulesEnvironment(binary!, target);
   const config = env.config();
   config.sources.cidr = { repository: 'gaoyifan/china-operator-ip', version: 'git-branch', branch: 'ip-lists',
@@ -23,31 +36,14 @@ async function versions(target = 'acceptance-selection') {
   config.ruleSets[1] = { id: 'china-ip', source: 'cidr', list: 'all', stablePath: 'stable/china-ip',
     usages: { route: { artifact: 'route' }, 'dns-query': { unavailable: 'empty' }, 'dns-response': { artifact: 'route' } } };
   env.configure(config);
-  let revision = 1;
-  const fetcher = env.context.fetch!;
-  env.context.fetch = async (address, init) => {
-    const url = String(address);
-    if (url.includes('gaoyifan/china-operator-ip')) return url.includes('/branches/')
-      ? Response.json({ name: 'ip-lists', commit: { sha: String(revision).repeat(40) } })
-      : new Response(revision === 1 ? '192.0.2.0/25\n2001:db8:1::/48\n' : '192.0.2.128/25\n2001:db8:2::/48\n');
-    return fetcher(address, init);
-  };
   const first = await syncRules({ context: env.context });
   assert.equal(first.status, 'success', JSON.stringify(first));
   const original = new Map(await stableBytes(env));
-  revision++;
+  env.changeCidr('192.0.2.128/25\n2001:db8:2::/48\n');
   env.upstream({ openai: 'domain:new.example' });
   const second = await syncRules({ context: env.context });
   assert.equal(second.status, 'success', JSON.stringify(second));
-  const journal = async () => parseRulesJournal((await (await env.context.repository.snapshot()).read(RULE_STATE_PATH))!);
-  // Restore independent fault cases to identical real, validated candidate bytes.
-  const heads = new Map(env.heads);
-  const trees = new Map([...env.trees].map(([head, tree]) => [head, new Map(tree)]));
-  const restore = () => {
-    env.heads.clear(); for (const [ref, head] of heads) env.heads.set(ref, head);
-    env.trees.clear(); for (const [head, tree] of trees) env.trees.set(head, new Map(tree));
-  };
-  return { ...env, first, second, original, journal, restore };
+  return { checkpoint: env.checkpoint(), results: checkpointFixture({ first, second, original }) };
 }
 
 async function stableBytes(env: ReturnType<typeof rulesEnvironment>) {
@@ -77,7 +73,10 @@ async function damage(env: Pick<ReturnType<typeof rulesEnvironment>, 'context' |
     const journal = await env.journal(); alter(journal.candidates[candidate.id]);
     env.trees.get(env.heads.get(env.context.repository.branch)!)!.set(RULE_STATE_PATH, encodeRecord(journal));
   };
-  return { read, replace, evidence, saveEvidence, change, changeCandidate };
+  const replaceRetained = (file: string, bytes: Buffer) => {
+    env.trees.get(env.heads.get(env.context.repository.branch)!)!.set(prefix + file, bytes);
+  };
+  return { read, replace, replaceRetained, evidence, saveEvidence, change, changeCandidate };
 }
 
 async function replaceSrs(env: Parameters<typeof damage>[0], candidate: RuleCandidate, stem: string) {
@@ -90,9 +89,8 @@ async function replaceSrs(env: Parameters<typeof damage>[0], candidate: RuleCand
 }
 
 test('候选证据边界逐项拒绝损坏；status 只读且 pin 保留当前及兄弟集字节', async t => {
-  const env = await versions();
-  const candidate = (await env.journal()).candidates[env.first.results[0].current!.candidateId];
-  const cases: [string, RegExp, (d: Awaited<ReturnType<typeof damage>>) => Promise<void> | void][] = [
+  type Corruption = (d: Awaited<ReturnType<typeof damage>>) => Promise<void> | void;
+  const cases: [string, RegExp, Corruption][] = [
     ['wrong-rule', /identity mismatch/, d => d.change('manifest.json', m => { m.id = 'china-ip'; })],
     ['duplicate-artifact', /Duplicate artifact identity/, d => d.change('manifest.json', m => { m.artifacts[1].id = m.artifacts[0].id; })],
     ['extra-artifact', /Unsupported candidate projections/, d => d.change('manifest.json', m => { m.artifacts.push({ ...m.artifacts[0], id: 'extra' }); })],
@@ -122,10 +120,12 @@ test('候选证据边界逐项拒绝损坏；status 只读且 pin 保留当前�
       { artifactManifest: 1, sourceFormat: 4 }, { artifactManifest: 2, sourceFormat: 4, buildRecord: 4 }]
       .map((contracts, index) => [`build-contracts-${index}`, /Unsupported build contracts/,
         (d: Awaited<ReturnType<typeof damage>>) => d.change('build.json', b => { b.contracts = contracts; })] as typeof cases[number]),
-    ['retained-replacement', /Readback integrity mismatch/, d => { env.trees.get(env.heads.get(env.context.repository.branch)!)!.set(`candidates/${candidate.id}/domains.srs`, Buffer.from('replaced retained bytes')); }],
+    ['retained-replacement', /Readback integrity mismatch/, d => d.replaceRetained('domains.srs', Buffer.from('replaced retained bytes'))],
   ];
   for (const [fault, expected, corrupt] of cases) await t.test(fault, async () => {
-    env.restore(); await corrupt(await damage(env, candidate));
+    const env = await versions();
+    const candidate = (await env.journal()).candidates[env.first.results[0].current!.candidateId];
+    await corrupt(await damage(env, candidate));
     const before = await stableBytes(env), heads = new Map(env.heads), writes = env.writes.length;
     const status = await getRulesStatus({ context: env.context });
     assert.equal(status.status, 'success', JSON.stringify(status));
@@ -223,9 +223,10 @@ test('status 报告悬空交付，重复 pin 修正已固定版本的交付记�
 });
 
 test('摘要随 SRS 篡改更新仍过不了真实原生 pin；域名与 CIDR 当前及兄弟集不变', async t => {
-  const env = await versions();
-  for (const current of env.first.results.map(result => result.current!)) await t.test(current.logicalId, async () => {
-    env.restore(); const candidate = (await env.journal()).candidates[current.candidateId];
+  const { first } = await versions();
+  for (const current of first.results.map(result => result.current!)) await t.test(current.logicalId, async () => {
+    const env = await versions();
+    const candidate = (await env.journal()).candidates[current.candidateId];
     await replaceSrs(env, candidate, candidate.logicalId === 'china-ip' ? 'route' : 'domains');
     const status = await getRulesStatus({ context: env.context });
     assert.equal(status.rules!.find(rule => rule.id === current.logicalId)?.candidates.find(entry => entry.id === candidate.id)?.selectable, true);
@@ -299,12 +300,11 @@ test('候选不在保留登记中时，旧不可变地址仍能下载也不能�
 });
 
 test('当前订阅或交付损坏时拒绝 pin；订阅字段顺序不改变契约', async t => {
-  const env = await versions('main');
-  const old = env.first.results[0].current!;
   const path = 'stable/openai/activation.json';
   for (const fault of ['missing', 'schema', 'identity', 'repository', 'branch', 'path', 'file-set', 'mapping', 'usage', 'capability', 'reuse', 'record', 'bytes', 'binary']) {
     await t.test(fault, async () => {
-      env.restore();
+      const env = await versions('main');
+      const old = env.first.results[0].current!;
       const tree = env.trees.get(env.heads.get('main')!)!;
       const record = JSON.parse(tree.get(path)!.toString()), p = record.subscription.projections;
       if (fault === 'missing') delete record.subscription;
@@ -330,7 +330,8 @@ test('当前订阅或交付损坏时拒绝 pin；订阅字段顺序不改变契�
       assert.equal(env.writes.length, writes); assert.deepEqual(env.heads, heads); assert.deepEqual(await stableBytes(env), before);
     });
   }
-  env.restore();
+  const env = await versions('main');
+  const old = env.first.results[0].current!;
   const tree = env.trees.get(env.heads.get('main')!)!;
   const record = JSON.parse(tree.get(path)!.toString());
   for (const usage of ['route', 'dns-query']) {
@@ -342,9 +343,9 @@ test('当前订阅或交付损坏时拒绝 pin；订阅字段顺序不改变契�
 });
 
 test('status 报告残缺候选但不补证据、不读上游、不推动恢复', async t => {
-  const env = await versions();
   for (const file of ['domains.json', 'manifest.json', 'readback.json']) await t.test(file, async () => {
-    env.restore(); env.upstream({ openai: `domain:${file}.example` });
+    const env = await versions();
+    env.upstream({ openai: `domain:${file}.example` });
     env.beforeWrite(async files => { if (Object.keys(files).some(path => path.endsWith('/' + file))) throw new Error('injected publication interruption'); });
     const interrupted = await syncRules({ context: env.context });
     assert.notEqual(interrupted.status, 'success'); env.beforeWrite();
@@ -366,7 +367,7 @@ test('当前候选证据丢失或损坏时 status 保留真实交付，候选不
   const current = env.second.results[0].current!;
   const healthy = (await getRulesStatus({ context: env.context })).rules!.find(rule => rule.id === 'openai')!;
   for (const fault of ['missing', 'corrupt']) await t.test(fault, async () => {
-    env.restore();
+    const env = await versions('main');
     const candidate = (await env.journal()).candidates[current.candidateId];
     const d = await damage(env, candidate);
     d.replace('readback.json', fault === 'missing' ? undefined : Buffer.from('corrupt evidence'));
@@ -442,11 +443,11 @@ for (const target of ['acceptance-selection', 'main']) {
   });
 
   test(`${target}: pin 响应丢失先核实远端，查询不恢复且重试不重复交付`, async t => {
-    const env = await versions(target);
-    const repo = env.context.repository, commit = repo.commit, snapshot = repo.snapshot, download = repo.download;
-    const old = env.first.results[0].current!;
     for (const mode of ['registration', 'applied', 'not-applied', 'unknown', 'readback']) await t.test(mode, async () => {
-      env.restore(); let injected = false, offline = false;
+      const env = await versions(target);
+      const repo = env.context.repository, commit = repo.commit, snapshot = repo.snapshot, download = repo.download;
+      const old = env.first.results[0].current!;
+      let injected = false, offline = false;
       const before = await stableBytes(env), originalTotal = env.writes.length;
       const stableWrites = () => env.writes.filter(write => Object.keys(write.files).some(path => path.startsWith('stable/'))).length;
       const originalWrites = stableWrites();
@@ -525,10 +526,10 @@ for (const target of ['acceptance-selection', 'main']) {
   });
 
   test(`${target}: pin 写入前配置、维护、代次或 head 变化不会被旧会话覆盖`, async t => {
-    const env = await versions(target);
-    const old = env.first.results[0].current!;
     for (const race of ['configuration', 'maintenance', 'generation', 'head']) await t.test(race, async () => {
-      env.restore(); const before = await stableBytes(env); let raced = false, heads: Map<string, string> | undefined;
+      const env = await versions(target);
+      const old = env.first.results[0].current!;
+      const before = await stableBytes(env); let raced = false, heads: Map<string, string> | undefined;
       env.beforeWrite(async files => {
         if (!Object.keys(files).some(path => path.startsWith('stable/'))) return;
         env.beforeWrite(); raced = true;
