@@ -1,10 +1,10 @@
 import { isDeepStrictEqual } from 'node:util';
 import { candidateStableFiles } from './activation.js';
-import { configuredBuildTools } from './configured-build.js';
+import { matchesRuleDelivery } from './rules-delivery.js';
+import { configuredBuildIdentity, configuredBuildTools } from './configured-build.js';
 import { inspectBinary, nativeBuildIdentity, NATIVE_VALIDATION_POLICY, type NativeTool } from './native.js';
 import { projectTerms } from './projection.js';
 import type { PublicationSnapshot } from './publication-repository.js';
-import { sha256 } from './release.js';
 import { verifyRuleCandidate, type PreparedRulesInput, type RuleBuild, type ValidRuleBuild } from './rules-build.js';
 import { rulesBinary } from './rules-context.js';
 import { definitionRevision, type ManagedRule, type QualifiedRuleCandidate, type RuleCandidate, type RuleDelivery, type RuleSource, type SuccessfulRuleInput } from './rules-model.js';
@@ -13,10 +13,10 @@ import type { RulesSession } from './rules-session.js';
 type VerifiedCandidate = Awaited<ReturnType<typeof verifyRuleCandidate>>;
 interface BuildIdentity {
   tool: NativeTool;
-  tools: unknown;
+  tools: object;
   nativeBuildId: string;
 }
-const digestTools = (tools: unknown) => sha256(JSON.stringify(tools));
+const digestTools = (tools: object) => configuredBuildIdentity(tools);
 
 export function successfulRuleInput(rule: ManagedRule, source: RuleSource, qualification: QualifiedRuleCandidate): SuccessfulRuleInput {
   return { ...qualification, source, inputBindingRevision: rule.inputBindingRevision, definitionRevision: rule.definitionRevision,
@@ -32,7 +32,7 @@ function matchesRule(candidate: RuleCandidate, rule: ManagedRule) {
   return candidate.logicalId === rule.definition.id && candidate.status === 'verified' && !candidate.migrationPending
     && candidate.inputBindingRevision === rule.inputBindingRevision && candidate.definitionGeneration === rule.generation
     && definitionRevision(candidate.sourceInput, candidate.definition) === rule.definitionRevision
-    && Boolean(candidate.evidenceSha256 && candidate.versionId && candidate.publishedAt);
+    && Boolean(candidate.evidenceUrl && candidate.versionId && candidate.publishedAt);
 }
 
 export function qualifiedRuleCandidate(rule: ManagedRule, candidate: RuleCandidate, verified: VerifiedCandidate) {
@@ -44,19 +44,16 @@ export function qualifiedRuleCandidate(rule: ManagedRule, candidate: RuleCandida
 
 async function currentCandidate(session: RulesSession, rule: ManagedRule, current: RuleDelivery | undefined, stableSnapshot?: PublicationSnapshot) {
   const candidate = current && session.journal.candidates[current.candidateId];
-  if (!current || !candidate || !matchesRule(candidate, rule) || candidate.evidenceUrl !== current.candidateEvidenceUrl || candidate.versionId !== current.versionId
-    || candidate.publishedAt !== current.publishedAt || !isDeepStrictEqual(candidate.source, current.source)) return;
+  if (!current || !candidate || !matchesRule(candidate, rule)) return;
   const verified = await verifyRuleCandidate(session, candidate);
   const qualification = qualifiedRuleCandidate(rule, candidate, verified);
   if (!qualification) return;
   const files = candidateStableFiles(verified, current.subscription, rule.definition, session.loaded.context.targetBranch);
   const stable = stableSnapshot ?? await session.stable();
   const record = await stable.read(`${rule.definition.stablePath}/activation.json`);
-  if (!record || !isDeepStrictEqual(JSON.parse(record.toString()), current)
-    || Object.keys(files).length !== Object.keys(current.files).length) return;
+  if (!record || !isDeepStrictEqual(JSON.parse(record.toString()), current) || !matchesRuleDelivery(current, candidate, files)) return;
   for (const [path, bytes] of Object.entries(files)) {
-    const evidence = current.files[path];
-    if (evidence?.sha256 !== sha256(bytes) || evidence.byteLength !== bytes.length || !(await stable.read(path))?.equals(bytes)) return;
+    if (!(await stable.read(path))?.equals(bytes)) return;
   }
   return { qualification, verified };
 }

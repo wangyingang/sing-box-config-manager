@@ -1,3 +1,4 @@
+import { parseRulesJournal, RULE_STATE_PATH } from '../../src/rules-model.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { syncRules, pinRuleVersion, resumeRuleUpdates } from '../../src/rules-operations.js';
@@ -200,8 +201,12 @@ test('有效证据中的 version/time 可补回缺失检查点，既有版本冲
   for (const conflict of [false, true]) {
     const env = cleanupEnvironment(binary!);
     const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
-    env.failDownload(url => { if (url.endsWith('/readback.json')) throw new Error('evidence HTTP unavailable'); });
-    assert.equal((await syncRules({ context: env.context })).status, 'failed');
+    env.beforeWrite(async files => {
+      const state = files[RULE_STATE_PATH];
+      if (state && parseRulesJournal(state).pendingDelivery) throw new Error('RULE_WRITE_CONFLICT: interrupted after evidence');
+    });
+    assert.notEqual((await syncRules({ context: env.context })).status, 'success');
+    env.beforeWrite();
     const journal = await env.journal(), candidate = Object.values(journal.candidates)[0];
     const identity = { versionId: candidate.versionId, publishedAt: candidate.publishedAt };
     // Legal compatibility sample, not a naturally atomic current publisher

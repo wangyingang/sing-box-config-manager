@@ -16,6 +16,12 @@ export type { BuildConfiguration, RuleDefinition } from './configuration.js';
 
 export const CONFIGURED_BUILD_RECORD = 3;
 
+export function configuredBuildIdentity(identity: object) {
+  return sha256(JSON.stringify(identity, (_key, value) => value && typeof value === 'object' && !Array.isArray(value)
+    ? Object.fromEntries(Object.keys(value).sort().map(key => [key, value[key]]))
+    : value));
+}
+
 export type ConfiguredResult = { id: string; definition: RuleDefinition; status: 'failed'; report: ConversionReport; error: string }
   | { id: string; definition: RuleDefinition; status: 'built-validated'; report: ConversionReport; native: NativeBuild; buildId: string };
 
@@ -93,8 +99,8 @@ export async function buildConfigured<Source extends SourceRecord | CommitSource
           throw new Error(`Built artifacts do not match configured usage: ${usage}`);
         }
       }
-      const buildId = sha256(JSON.stringify({ definition, target: configuration.target, source, tools, nativeBuildId: native.buildId,
-        contracts: { sourceFormat: 4, buildRecord: CONFIGURED_BUILD_RECORD } }));
+      const buildId = configuredBuildIdentity({ definition, target: configuration.target, source, tools, nativeBuildId: native.buildId,
+        contracts: { sourceFormat: 4, buildRecord: CONFIGURED_BUILD_RECORD } });
       results.push({ id: definition.id, definition, status: 'built-validated', report, native, buildId });
     } catch (error) {
       report.status = 'failed';

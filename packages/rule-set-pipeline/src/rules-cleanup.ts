@@ -145,10 +145,9 @@ export async function cleanupRuleHistory(request: RulesRequest = {}): Promise<Ru
       const transport = { ...cleanup.baseline, async stage(...args: Parameters<typeof cleanup.baseline.stage>) {
         await guard(); const head = await cleanup.baseline.stage(...args); await guard(); return head;
       } };
-      const verification = { transport, repository, binary, nativeBuild, verifyEvidence, targetBranch, plan: run.plan, runId: run.id, journal: session.journal };
+      const verification = { transport, repository, binary, nativeBuild, verifyEvidence, targetBranch, plan: run.plan, runId: run.id, journal: session.journal, source: session.snapshot };
       if (run.phase === 'isolated') {
-        const baseline = await prepareRulesBaseline({ ...verification, source: session.snapshot,
-          stable: await session.stable(), now: new Date(run.plan.cleanupObservedAt) });
+        const baseline = await prepareRulesBaseline({ ...verification, stable: await session.stable(), now: new Date(run.plan.cleanupObservedAt) });
         run = { ...run, phase: 'prepared', baseline, preparedFrom: session.snapshot.head };
         session = await checkpoint(session, { ...session.journal, cleanupRun: run }, run.oldHeads.stable);
         phase = 'prepared';
@@ -183,11 +182,11 @@ export async function cleanupRuleHistory(request: RulesRequest = {}): Promise<Ru
       };
       await verifyLive();
       await verifyRulesBaseline({ transport: cleanup.baseline, repository, binary, nativeBuild, verifyEvidence, targetBranch, plan,
-        runId: run.id, journal: original.journal }, stages);
+        runId: run.id, journal: original.journal, source: original.snapshot }, stages);
       const stable = await session.stable();
-      for (const { recordPath, record } of plan.retain.active) {
-        for (const path of [recordPath, ...Object.keys(record.files)]) {
-          const actual = await repository.download(`https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${targetBranch}/${path}`);
+      for (const { record } of plan.retain.active) {
+        for (const path of Object.keys(record.files)) {
+          const actual = await session.loaded.downloadEvidence(`https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${targetBranch}/${path}`);
           if (!(await stable.read(path))?.equals(actual)) throw new Error(`RULE_CLEANUP_PENDING: stable URL readback differs: ${path}`);
         }
       }

@@ -41,6 +41,7 @@ export function cleanupEnvironment(binary: string, target = 'acceptance-issue-85
       return head;
     },
     async lastChange(head, path) {
+      if (!env.trees.get(head)?.has(path)) throw new Error(`Missing Git path: ${head}/${path}`);
       assert.ok(!blockedHeads.has(head), `Old path history used: ${head}`);
       while (parents.get(head)?.length === 1) {
         const parent = parents.get(head)![0];

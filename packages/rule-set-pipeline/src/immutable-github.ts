@@ -7,7 +7,8 @@ export function cacheImmutableGitReads(request: typeof ghJson): typeof ghJson {
   return async (args, input, token) => {
     const path = args[1];
     const immutable = args.length === 2 && args[0] === 'api' && input === undefined && token === undefined
-      && /^repos\/[\w.-]+\/[\w.-]+\/(?:git\/(?:blobs|commits)\/[a-f0-9]{40}|git\/trees\/[a-f0-9]{40}\?recursive=1|contents\/[^?#]+\?ref=[a-f0-9]{40})$/.test(path);
+      && (/^repos\/[\w.-]+\/[\w.-]+\/(?:git\/(?:blobs|commits)\/[a-f0-9]{40}|git\/trees\/[a-f0-9]{40}\?recursive=1|contents\/[^?#]+\?ref=[a-f0-9]{40})$/.test(path)
+        || /^repos\/[\w.-]+\/[\w.-]+\/commits\?sha=[a-f0-9]{40}&path=[^&#]+&per_page=1$/.test(path));
     if (!immutable) return request(args, input, token);
     let pending = cache.get(path);
     if (!pending) {

@@ -186,7 +186,7 @@ for (const target of ['acceptance-cleanup-conflict', 'main']) test(`${target}: æ
   assert.deepEqual(env.heads, before); assert.equal(env.writes.length, writesBefore); assert.equal(env.stageWrites.length, 0);
   env.failDownload(url => {
     const ref = new URL(url).pathname.split('/')[3];
-    if (env.stageWrites.some(branch => env.heads.get(branch) === ref) && url.includes('/stable/')) throw new Error('New baseline HTTPS unavailable');
+    if (env.stageWrites.some(branch => branch.endsWith('-files') && env.heads.get(branch) === ref) && url.endsWith('.srs')) throw new Error('New baseline HTTPS unavailable');
   });
   const failed = await cleanupRuleHistory(input);
   assert.equal(failed.status, 'pending', JSON.stringify(failed)); assert.match(failed.error!, /New baseline HTTPS unavailable/);

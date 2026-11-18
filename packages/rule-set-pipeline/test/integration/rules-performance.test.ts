@@ -11,12 +11,14 @@ import { serialize } from 'node:v8';
 import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
 import { sha256 } from '../../src/release.js';
 import { pinRuleVersion, resumeRuleUpdates, syncRules } from '../../src/rules-operations.js';
-import { encodeRecord, parseRulesJournal, RULE_STATE_PATH } from '../../src/rules-model.js';
+import { encodeRecord, parseRulesJournal, RULE_RECEIPT_PATH, RULE_STATE_PATH } from '../../src/rules-model.js';
 import { rulesEnvironment } from '../fixtures/rules-environment.js';
 import { cleanupEnvironment } from '../fixtures/cleanup-environment.js';
 import { PublicationWriteError } from '../../src/publication-repository.js';
 import { getRulesStatus } from '../../src/rules-status.js';
 import { cleanupRuleHistory } from '../../src/rules-cleanup.js';
+import { candidateArtifactFiles } from '../../src/candidate-publication.js';
+import { immutableUrl } from '../../src/publication.js';
 import { countNativeCommands } from '../fixtures/native-commands.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
@@ -336,7 +338,7 @@ test('缺少候选证据时重新构建，原证据仍存的旧输入不能跳�
   assert.equal(first.status, 'success', JSON.stringify(first));
   const original = first.results[0].current!;
   const journal = await env.journal();
-  delete journal.candidates[original.candidateId].evidenceSha256;
+  delete journal.candidates[original.candidateId].evidenceUrl;
   const repo = env.context.repository;
   await repo.commit(repo.branch, (await repo.snapshot()).head, { [RULE_STATE_PATH]: encodeRecord(journal) }, 'fixture', async () => {});
   await take();
@@ -446,6 +448,26 @@ test('稳定回读恢复成功后记账，候选 HTTPS 断开不阻塞已应用�
   assert.deepEqual(after.rules.openai.successfulInput?.source, pending.record.source);
 });
 
+test('单分支稳定交付回读回执原提交，后续 head 不改变固定地址', { skip: !binary }, async () => {
+  const env = rulesEnvironment(binary!, 'acceptance-receipt-commit');
+  const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
+  const repo = env.context.repository, commit = repo.commit;
+  let deliveryCommit: string | undefined;
+  repo.commit = async (...args) => {
+    const head = await commit(...args);
+    if (args[2][RULE_RECEIPT_PATH] && Object.keys(args[2]).some(path => path.startsWith('stable/'))) {
+      deliveryCommit = head;
+      await commit(args[0], head, { 'unrelated.txt': Buffer.from('appended after stable write') }, 'fixture append', async () => {});
+    }
+    return head;
+  };
+  const result = await syncRules({ context: env.context });
+  assert.equal(result.status, 'success', JSON.stringify(result));
+  assert.ok(deliveryCommit);
+  const stable = Object.keys(result.results[0].current!.files).map(path => immutableUrl(deliveryCommit!, path));
+  assert.deepEqual(result.readbackRequests?.filter(url => url.includes('/stable/')).sort(), stable.sort());
+});
+
 test('首次 sync、pin 和 cleanup 各执行一组原生验证，同版本 resume 使用历史证明', { skip: !binary }, async t => {
   const { wrapper, take } = await traceNative(t);
   const env = cleanupEnvironment(wrapper, 'main');
@@ -469,7 +491,7 @@ test('首次 sync、pin 和 cleanup 各执行一组原生验证，同版本 resu
   assert.deepEqual(counts, [oneNativeValidation, oneNativeValidation, noNativeValidation, oneNativeValidation], 'sync, pin, resume, cleanup');
 });
 
-test('首次交付和清理按固定地址复用回读，清理仍读取稳定分支', { skip: !binary }, async t => {
+test('首次交付与清理只回读各自需要的规则地址', { skip: !binary }, async t => {
   const env = cleanupEnvironment(binary!, 'main');
   const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
   const request = { context: env.context };
@@ -481,40 +503,50 @@ test('首次交付和清理按固定地址复用回读，清理仍读取稳定�
       downloads.length = 0;
       const result = await run(request);
       assert.equal(result.status, 'success', JSON.stringify(result));
-      const fixed = downloads.filter(url => /^[a-f0-9]{40}$/.test(new URL(url).pathname.split('/')[3]));
       const candidate = Object.values((await env.journal()).candidates)[0];
-      assert.ok(fixed.includes(candidate.evidenceUrl!));
-      assert.equal(fixed.length, new Set(fixed).size, JSON.stringify(fixed.filter((url, index) => fixed.indexOf(url) !== index)));
-      assert.equal(fixed.length, operation === 'sync' ? 10 : 17);
-      if (operation === 'cleanup') {
-        const source = fixed.filter(url => url.endsWith('/domains.json') && url.includes('/candidates/'));
-        assert.equal(source.length, 2, 'the old and rewritten address both need a download');
-        const [oldBytes, newBytes] = await Promise.all(source.map(url => env.context.repository.download(url)));
-        assert.deepEqual(oldBytes, newBytes);
-        assert.deepEqual(downloads.filter(url => new URL(url).pathname.includes('/main/stable/'))
-          .map(url => url.split('/').at(-1)).sort(), ['activation.json', 'domains.json', 'domains.srs']);
-      }
+      const stable = operation === 'sync' ? env.heads.get('main') : 'main';
+      const paths = ['domains.json', 'domains.srs'];
+      assert.deepEqual(downloads.map(url => new URL(url).pathname).sort(), [
+        ...paths.map(file => `/wangyingang/sing-box-rule-artifacts/${candidate.filesCommit}/candidates/${candidate.id}/${file}`),
+        ...paths.map(file => `/wangyingang/sing-box-rule-artifacts/${stable}/${config.ruleSets[0].stablePath}/${file}`),
+      ].sort());
     });
   }
 });
 
-test('同一 context 的两次 status 各自回读候选证据', { skip: !binary }, async () => {
+test('status、预览与无回收 cleanup 检查 Git 且没有 Raw 请求或写入', { skip: !binary }, async () => {
   const env = cleanupEnvironment(binary!, 'main');
   const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
   const request = { context: env.context };
   assert.equal((await syncRules(request)).status, 'success');
+  const version = (await getRulesStatus(request)).rules![0].candidates[0].versionId!;
+  assert.equal((await cleanupRuleHistory(request)).status, 'success');
+  const writes = env.writes.length;
   const urls: string[] = [];
   env.failDownload(url => { urls.push(url); });
   for (let run = 0; run < 2; run++) {
     const status = await getRulesStatus(request);
     assert.equal(status.status, 'success');
     assert.equal(status.rules![0].candidates[0].selectable, true);
+    assert.deepEqual(status.readbackRequests, []);
   }
-  assert.equal(new Set(urls).size, 7);
-  assert.deepEqual(urls.slice(0, 7), urls.slice(7));
+  const selection = { ...request, id: config.ruleSets[0].id, dryRun: true };
+  for (const run of [
+    () => syncRules(selection), () => pinRuleVersion({ ...selection, version }), () => resumeRuleUpdates(selection),
+    () => cleanupRuleHistory(selection),
+  ]) {
+    const preview = await run();
+    assert.equal(preview.status, 'success', JSON.stringify(preview));
+    assert.deepEqual(preview.readbackRequests, []);
+  }
+  const unchanged = await cleanupRuleHistory(request);
+  assert.equal(unchanged.status, 'success', JSON.stringify(unchanged));
+  assert.equal(unchanged.cleanup?.phase, 'unchanged');
+  assert.deepEqual(urls, []);
+  assert.equal(env.writes.length, writes);
 });
 
-test('pin 复用固定证据时仍拒绝当前保留树中的文件变化', { skip: !binary }, async () => {
+test('pin 在稳定写入前重新读取当前保留树并拒绝字节变化', { skip: !binary }, async () => {
   const env = cleanupEnvironment(binary!, 'main');
   const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
   const request = { context: env.context };
@@ -534,8 +566,8 @@ test('pin 复用固定证据时仍拒绝当前保留树中的文件变化', { sk
     retained!.set(path, Buffer.from('replaced retained bytes'));
   } });
   assert.equal(pin.status, 'pending', JSON.stringify(pin));
-  assert.match(pin.results[0].error!, /differs from retained/);
-  assert.equal(downloaded, 1);
+  assert.match(pin.results[0].error!, /Readback integrity mismatch/);
+  assert.equal(downloaded, 0);
   assert.equal(env.heads.get('main'), stableHead);
   assert.deepEqual(await env.context.repository.download(url), original);
   retained!.set(path, original);
@@ -656,7 +688,7 @@ test('新 Node 进程从持久回读阶段恢复原候选并重新执行一组�
   assert.deepEqual(await take(), oneNativeValidation);
 });
 
-test('正式四集首次交付执行四组原生验证与 29 次提交，后续输入未变时零正文、原生验证与提交', { skip: !binary }, async t => {
+test('正式四集首次交付回读 16 个规则地址，成功基线重复同步的五项预算均为零', { skip: !binary }, async t => {
   const { wrapper, take } = await traceNative(t);
   const env = rulesEnvironment(wrapper, 'main');
   env.configure(parseBuildConfiguration(readOfficialConfiguration()));
@@ -670,31 +702,43 @@ test('正式四集首次交付执行四组原生验证与 29 次提交，后续�
       : new Response('192.0.2.0/24\n2001:db8::/32\n');
     return fetcher(address, init);
   };
+  const raw = new Map<string, Buffer>();
+  const repository = env.context.repository, download = repository.download;
+  repository.download = async url => {
+    const bytes = await download(url);
+    assert.ok(!raw.has(url), `duplicate Raw request: ${url}`);
+    raw.set(url, Buffer.from(bytes));
+    return bytes;
+  };
   const result = await syncRules({ context: env.context });
   assert.equal(result.status, 'success', JSON.stringify(result));
   assert.deepEqual(await take(), { compile: 4, decompile: 0, sourceLoad: 4, binaryLoad: 4 });
-  assert.equal(env.writes.length, 29);
+  const writes = env.writes.length;
   assert.equal(env.writes.filter(write => write.branch === 'main').length, 4);
-  for (const [index, rule] of result.results.entries()) {
-    const id = rule.current!.candidateId;
-    const stages = env.writes.slice(1 + index * 7, 8 + index * 7);
-    const journals = stages.map(write => write.files['pipeline/state.json'])
-      .map(bytes => bytes ? parseRulesJournal(bytes) : undefined);
-    assert.equal(journals[0]!.candidates[id].status, 'building');
-    assert.equal(journals[1]!.candidates[id].status, 'publishing');
-    assert.ok(Object.keys(stages[1].files).some(path => path.endsWith('.srs')));
-    assert.ok(journals[2]!.candidates[id].filesCommit);
-    assert.ok(stages[2].files[`candidates/${id}/manifest.json`]);
-    assert.ok(journals[3]!.candidates[id].metadataCommit);
-    assert.ok(journals[3]!.candidates[id].manifestUrl);
-    assert.ok(stages[3].files[`candidates/${id}/readback.json`]);
-    assert.equal(journals[4]!.candidates[id].status, 'verified');
-    assert.equal(journals[4]!.pendingDelivery?.record?.candidateId, id);
-    assert.equal(stages[5].branch, 'main');
-    assert.ok(stages[5].files['pipeline/rule-operation.json']);
-    assert.equal(journals[6]!.pendingDelivery, undefined);
-    assert.equal(journals[6]!.candidates[id].versionId, rule.current!.versionId);
+  const retained = await repository.snapshot(), stable = await repository.snapshot('main');
+  const journal = parseRulesJournal((await retained.read(RULE_STATE_PATH))!);
+  const expected: string[] = [];
+  for (const rule of result.results) {
+    const current = rule.current!;
+    const candidate = journal.candidates[current.candidateId];
+    const stableCommit = await repository.lastChange(stable.head, `${candidate.definition.stablePath}/activation.json`);
+    for (const file of Object.values(candidateArtifactFiles(candidate.definition))) {
+      const candidatePath = `candidates/${candidate.id}/${file}`;
+      const stablePath = `${candidate.definition.stablePath}/${file}`;
+      const candidateUrl = immutableUrl(candidate.filesCommit!, candidatePath);
+      const stableUrl = immutableUrl(stableCommit, stablePath);
+      expected.push(candidateUrl, stableUrl);
+      const bytes = await retained.read(candidatePath);
+      assert.ok(bytes?.length);
+      assert.deepEqual(raw.get(candidateUrl), bytes);
+      assert.deepEqual(raw.get(stableUrl), bytes);
+      assert.equal(sha256(bytes!), current.files[stablePath].sha256);
+    }
   }
+  assert.equal(raw.size, 16);
+  assert.deepEqual([...raw.keys()].sort(), expected.sort());
+  assert.deepEqual(result.readbackRequests, [...raw.keys()]);
+  raw.clear();
   assert.equal(gitBodies, 1);
   gitBodies = 0;
   env.requests.length = 0;
@@ -706,7 +750,9 @@ test('正式四集首次交付执行四组原生验证与 29 次提交，后续�
   assert.deepEqual(env.requests.filter(url => url.includes('/releases/assets/')), []);
   assert.equal(env.requests.filter(url => url.endsWith('/releases/latest')).length, 1);
   assert.deepEqual(await take(), noNativeValidation);
-  assert.equal(env.writes.length, 29);
+  assert.equal(env.writes.length, writes);
+  assert.equal(raw.size, 0);
+  assert.deepEqual(unchanged.readbackRequests, []);
 });
 
 for (const target of ['main', 'acceptance-performance']) for (const stage of [1, 2, 3, 4, 5, 6, 7]) {

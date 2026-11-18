@@ -9,6 +9,7 @@ import { isDeepStrictEqual } from 'node:util';
 
 export const ARTIFACT_MANIFEST_VERSION = 2;
 export const CANDIDATE_READBACK_VERSION = 2;
+export const RULE_READBACK_VERSION = 3;
 export const LEGACY_BUILD_RECORD = 2;
 
 export function candidateArtifactFiles(definition?: RuleDefinition) {
@@ -17,9 +18,15 @@ export function candidateArtifactFiles(definition?: RuleDefinition) {
   return { source: `${stem}.json`, binary: `${stem}.srs` };
 }
 
-export function candidateFiles(definition?: RuleDefinition) {
+export const candidateTraceFiles = ['source.json', 'conversion-report.json'];
+
+export function candidateCoreFiles(definition?: RuleDefinition) {
   const { source, binary } = candidateArtifactFiles(definition);
-  return [source, binary, 'manifest.json', 'source.json', 'conversion-report.json', 'build.json', 'readback.json'];
+  return [source, binary, 'manifest.json', 'build.json', 'readback.json'];
+}
+
+export function candidateFiles(definition?: RuleDefinition) {
+  return [...candidateCoreFiles(definition), ...candidateTraceFiles];
 }
 
 /** The journal binds Git candidates to the exact bytes of their readback record. */
@@ -41,6 +48,7 @@ export async function publishCandidate(options: NativeBuildOptions & {
   publication: PublicationTransport; save: () => Promise<void>;
   records: (filesCommit: string) => Record<string, Buffer>;
   beforeEvidence?: () => void;
+  ruleFilesOnly?: boolean;
   verifyEvidence?: VerifyEvidence;
 }) {
   const { candidate, native, buildId, binary, publication, save, nativeBuild = buildNative } = options;
@@ -61,7 +69,16 @@ export async function publishCandidate(options: NativeBuildOptions & {
   const filesCommit = candidate.filesCommit ??= await publication.commit(files, `候选 ${candidate.id}：规则文件`);
   await save();
   const records = options.records(filesCommit);
-  if (candidate.metadataCommit) {
+  if (candidate.metadataCommit && options.ruleFilesOnly) {
+    const manifest = `${prefix}/manifest.json`, build = `${prefix}/build.json`;
+    const originalManifest = await retained?.read(manifest), originalBuild = await retained?.read(build);
+    if (!originalManifest || !originalBuild
+      || !isDeepStrictEqual(JSON.parse(originalManifest.toString()), JSON.parse(records[manifest].toString()))
+      || !isDeepStrictEqual(candidateBuildFacts(originalBuild), candidateBuildFacts(records[build]))) {
+      throw new Error('CANDIDATE_UNAVAILABLE: missing or changed retained metadata');
+    }
+  }
+  if (candidate.metadataCommit && !options.ruleFilesOnly) {
     // The executable location is diagnostic, not part of the build identity.
     // Preserve the original immutable record when an identical tool is installed
     // at a different path on the recovery machine.
@@ -79,18 +96,11 @@ export async function publishCandidate(options: NativeBuildOptions & {
   const metadataCommit = candidate.metadataCommit ??= await publication.commit(records, `候选 ${candidate.id}：Manifest 与构建记录`);
   candidate.manifestUrl = immutableUrl(metadataCommit, `${prefix}/manifest.json`);
   await save();
-  const readback: { url: string; sha256: string; byteLength: number; exactBytes: true }[] = [];
+  const readback: RuleReadback[] = [];
   const verify = async (path: string, expected: Buffer, commit: string) => {
-    const url = immutableUrl(commit, path);
-    const actual = await verifyEvidence(async download => {
-      const bytes = await download(url);
-      if (bytes.length !== expected.length || sha256(bytes) !== sha256(expected) || !bytes.equals(expected)) {
-        throw new Error(`Readback content mismatch: ${url}`);
-      }
-      return bytes;
-    });
-    readback.push({ url, sha256: sha256(actual), byteLength: actual.length, exactBytes: true });
-    return actual;
+    const { bytes, record } = await verifyRuleFile(verifyEvidence, immutableUrl(commit, path), expected);
+    readback.push(record);
+    return bytes;
   };
   const downloaded = new Map<string, Buffer>();
   for (const [path, bytes] of Object.entries(files)) downloaded.set(path, await verify(path, bytes, filesCommit));
@@ -102,14 +112,37 @@ export async function publishCandidate(options: NativeBuildOptions & {
   if (remoteNative.tool.sha256 !== native.tool.sha256) throw new Error('Binary changed between build and readback');
   if (remoteNative.artifacts.length !== native.artifacts.length || remoteNative.artifacts.some(artifact =>
     !downloaded.get(`${prefix}/${artifact.file}`)?.equals(artifact.content))) throw new Error('Remote native content mismatch');
-  for (const [path, bytes] of Object.entries(records)) await verify(path, bytes, metadataCommit);
+  if (!options.ruleFilesOnly) {
+    for (const [path, bytes] of Object.entries(records)) await verify(path, bytes, metadataCommit);
+  }
   options.beforeEvidence?.();
-  const evidence = Buffer.from(JSON.stringify({ schemaVersion: CANDIDATE_READBACK_VERSION, candidateId: candidate.id, status: 'remote-verified',
+  const evidence = Buffer.from(JSON.stringify({ schemaVersion: options.ruleFilesOnly ? RULE_READBACK_VERSION : CANDIDATE_READBACK_VERSION,
+    candidateId: candidate.id, status: 'remote-verified',
     ...(candidate.publishedAt ? { publishedAt: candidate.publishedAt, versionId: candidate.versionId } : {}),
-    filesCommit, metadataCommit, buildId, readback, native: remoteNative.validation, tool: remoteNative.tool }, null, 2) + '\n');
+    filesCommit, metadataCommit, buildId, readback,
+    ...(!options.ruleFilesOnly && { native: remoteNative.validation, tool: remoteNative.tool }) }, null, 2) + '\n');
   const evidencePath = `${prefix}/readback.json`;
   candidate.evidenceCommit ??= await publication.commit({ [evidencePath]: evidence }, `候选 ${candidate.id}：HTTPS 回读验证`);
   candidate.evidenceUrl = immutableUrl(candidate.evidenceCommit, evidencePath);
-  await verify(evidencePath, evidence, candidate.evidenceCommit);
+  if (!options.ruleFilesOnly) await verify(evidencePath, evidence, candidate.evidenceCommit);
   return readback;
+}
+
+function candidateBuildFacts(bytes: Buffer) {
+  const build = JSON.parse(bytes.toString());
+  const { id, candidateId, buildId, definition, target, contracts, tools, nativeBuildId, status } = build;
+  return { id, candidateId, buildId, definition, target, contracts, tools, nativeBuildId, status,
+    tool: { version: build.tool?.version, sha256: build.tool?.sha256 },
+    validation: { status: build.validation?.status, policy: build.validation?.policy } };
+}
+
+export interface RuleReadback { url: string; sha256: string; byteLength: number; exactBytes: true }
+
+export async function verifyRuleFile(verify: VerifyEvidence, url: string, expected: Buffer) {
+  return verify(async download => {
+    const bytes = await download(url);
+    if (!bytes.equals(expected)) throw new Error(`Readback content mismatch: ${url}`);
+    const record: RuleReadback = { url, sha256: sha256(bytes), byteLength: bytes.length, exactBytes: true };
+    return { bytes, record };
+  });
 }

@@ -63,7 +63,8 @@ async function plannedDeliveryFiles(session: RulesSession, pending: PendingDeliv
   const candidate = session.journal.candidates[record.candidateId];
   if (!candidate) throw new Error('CANDIDATE_UNAVAILABLE: pending delivery has no retained version');
   const verified = await verifyRuleCandidate(session, candidate, rulesBinary(session.loaded.context));
-  const files: RuleWrites = candidateStableFiles(verified, record.subscription, pending.afterRule.definition, session.loaded.context.targetBranch);
+  const subscription = ruleSubscription(session, pending.afterRule, record);
+  const files: RuleWrites = candidateStableFiles(verified, subscription, pending.afterRule.definition, session.loaded.context.targetBranch);
   files[`${pending.afterRule.definition.stablePath}/activation.json`] = encodeRecord(record);
   return files;
 }
@@ -71,9 +72,17 @@ async function plannedDeliveryFiles(session: RulesSession, pending: PendingDeliv
 const evidenceFor = (files: RuleWrites) => Object.fromEntries(Object.entries(files).map(([path, bytes]) =>
   [path, bytes === null ? null : { sha256: sha256(bytes), byteLength: bytes.length }]));
 
+export function matchesRuleDelivery(current: RuleDelivery, candidate: RuleCandidate, files: Record<string, Buffer>) {
+  return current.logicalId === candidate.logicalId && current.candidateId === candidate.id
+    && current.versionId === candidate.versionId && current.publishedAt === candidate.publishedAt
+    && current.candidateEvidenceUrl === candidate.evidenceUrl && isDeepStrictEqual(current.source, candidate.source)
+    && isDeepStrictEqual(current.files, evidenceFor(files));
+}
+
 async function receiptMatches(snapshot: PublicationSnapshot, id: string) {
   const bytes = await snapshot.read(RULE_RECEIPT_PATH);
-  return bytes && JSON.parse(bytes.toString()).id === id;
+  const receipt = bytes && JSON.parse(bytes.toString());
+  return receipt?.schemaVersion === 2 && receipt.id === id;
 }
 
 async function verifyChanges(snapshot: PublicationSnapshot, changes: PendingDelivery['changes']) {
@@ -114,7 +123,8 @@ export async function recoverRuleDelivery(session: RulesSession) {
   if (session.loaded.dryRun) throw new Error('RULE_WRITE_PENDING: preview does not resume a pending delivery');
   const repository = session.loaded.context.repository;
   let stable = await session.stable();
-  let applied = await receiptMatches(stable, pending.id);
+  const applied = await receiptMatches(stable, pending.id);
+  let deliveryCommit: string | undefined;
   if (!applied && pending.configurationRevision !== session.loaded.observed.revision) {
     // Fence the old stable parent before dropping its registration: a late PATCH
     // can no longer recreate deleted files or restore a superseded pin.
@@ -134,12 +144,11 @@ export async function recoverRuleDelivery(session: RulesSession) {
     files[RULE_RECEIPT_PATH] = encodeRecord({ schemaVersion: 2, id: pending.id });
     try {
       if (session.shared) await session.save(files);
-      else await repository.commit(session.loaded.context.targetBranch, pending.stableHead, files,
+      else deliveryCommit = await repository.commit(session.loaded.context.targetBranch, pending.stableHead, files,
         `交付规则 ${pending.logicalId}：${pending.kind}`, session.guard);
     } catch (error) {
       stable = await session.stable();
-      applied = Boolean(await receiptMatches(stable, pending.id));
-      if (!applied) throw new Error(`RULE_WRITE_PENDING: ${error instanceof PublicationWriteError ? error.attemptedCommit : String(error)}`, { cause: error });
+      if (!await receiptMatches(stable, pending.id)) throw new Error(`RULE_WRITE_PENDING: ${error instanceof PublicationWriteError ? error.attemptedCommit : String(error)}`, { cause: error });
     }
     stable = await session.stable();
   }
@@ -148,12 +157,16 @@ export async function recoverRuleDelivery(session: RulesSession) {
   await verifyChanges(stable, pending.changes);
   // Git success and HTTPS readback are separate facts. Keep the registration if
   // readback fails, so status can show the committed version and pending check.
-  for (const [path, expected] of Object.entries(pending.changes)) {
-    if (!expected) continue;
-    await session.loaded.verifyEvidence(async download => {
-      const actual = await download(immutableUrl(stable.head, path));
-      if (actual.length !== expected.byteLength || sha256(actual) !== expected.sha256) throw new Error('RULE_WRITE_PENDING: committed HTTPS readback differs');
-    });
+  if (pending.record) {
+    const commit = deliveryCommit ?? await repository.lastChange(stable.head, RULE_RECEIPT_PATH);
+    for (const [path, expected] of Object.entries(pending.record.files)) {
+      await session.loaded.verifyEvidence(async download => {
+        const actual = await download(immutableUrl(commit, path));
+        if (actual.length !== expected.byteLength || sha256(actual) !== expected.sha256) {
+          throw new Error('RULE_WRITE_PENDING: committed HTTPS readback differs');
+        }
+      });
+    }
   }
   await finishDelivery(session, pending, stable);
 }

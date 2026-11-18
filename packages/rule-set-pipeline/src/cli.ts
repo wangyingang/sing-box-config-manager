@@ -54,10 +54,12 @@ function humanResult(result: RulesResult & { rules?: RuleStatus[]; maintenance?:
     if (row.changes?.length) lines.push(`  Changes: ${row.changes.join(', ')}`);
     if (row.error) lines.push(`  Error: ${row.error}`);
     if (row.continueWith) lines.push(`  Continue: pnpm rules ${row.continueWith}`);
+    if (detailed && row.verified?.length) lines.push(`  Verified: ${row.verified.join(', ')}`);
     if (row.reliedOn?.length) lines.push(`  Relied on: ${row.reliedOn.join(', ')}`);
     if (row.unverified?.length) lines.push(`  Unverified: ${row.unverified.join(', ')}`);
     if (status) {
       lines.push(`  Candidates: ${status.candidateCount}; configuration difference=${status.configurationDifference}`);
+      if (status.deliveryIssue) lines.push(`  Delivery issue: ${status.deliveryIssue}`);
       if (status.pendingOperation) lines.push(`  Pending: ${status.pendingOperation}`);
     }
     if (detailed || row.error || row.changes?.includes('change-source')) {
@@ -65,7 +67,10 @@ function humanResult(result: RulesResult & { rules?: RuleStatus[]; maintenance?:
       if (row.current) lines.push(`  Delivered source: ${JSON.stringify(row.current.source)}`);
       if (row.successfulInput) lines.push(`  Last successful input: ${JSON.stringify(row.successfulInput.source)} (candidate=${row.successfulInput.candidateId})`);
       if (status) {
-        for (const candidate of status.candidates) lines.push(`  ${candidate.versionId ?? candidate.id}: ${candidate.current ? 'current; ' : ''}${candidate.selectable ? 'selectable' : candidate.reason ?? 'unavailable'}; published=${candidate.publishedAt ?? 'unknown'}; source=${JSON.stringify(candidate.source)}`);
+        for (const candidate of status.candidates) {
+          lines.push(`  ${candidate.versionId ?? candidate.id}: ${candidate.current ? 'current; ' : ''}${candidate.selectable ? 'selectable' : candidate.reason ?? 'unavailable'}; published=${candidate.publishedAt ?? 'unknown'}; source=${JSON.stringify(candidate.source)}`);
+          if (candidate.missingTraceFiles?.length) lines.push(`    Missing trace files: ${candidate.missingTraceFiles.join(', ')}`);
+        }
         for (const url of status.stableUrls) lines.push(`  ${url}`);
       }
     }
