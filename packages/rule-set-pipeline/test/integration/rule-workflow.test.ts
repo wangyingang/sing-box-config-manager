@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { runRuleAutomation, runRuleWorkflow } from '../../src/rule-workflow.js';
+import type { readSchedulePreflight } from '../../src/rules-status.js';
 import type { RulesResult } from '../../src/rules-model.js';
 import { cleanupEnvironment } from '../fixtures/cleanup-environment.js';
 
@@ -11,7 +12,7 @@ test('自动编排沿用固定与恢复控制，续做清理后才访问上游�
 }, async () => {
   const env = cleanupEnvironment(binary!, 'acceptance-issue-86');
   async function automatic(event: 'push' | 'schedule') {
-    const results: RulesResult[] = [];
+    const results: (RulesResult | Awaited<ReturnType<typeof readSchedulePreflight>>)[] = [];
     const code = await runRuleAutomation({ event, target: env.context.targetBranch }, text => results.push(JSON.parse(text)), env.context);
     return { code, results };
   }
@@ -25,13 +26,16 @@ test('自动编排沿用固定与恢复控制，续做清理后才访问上游�
   const first = await automatic('push');
   assert.equal(first.code, 0, JSON.stringify(first));
   assert.deepEqual(first.results.map(result => result.operation), ['sync']);
-  const original = first.results[0].results.find(row => row.id === 'openai')!.current!.versionId!;
+  const pushedSync = first.results[0];
+  assert.ok(pushedSync.operation === 'sync');
+  const original = pushedSync.results.find(row => row.id === 'openai')!.current!.versionId!;
   await manual('pin', 'openai', original);
   env.upstream({ openai: 'domain:automatic-new.example', anthropic: 'domain:automatic-anthropic.example' });
   const daily = await automatic('schedule');
   assert.equal(daily.code, 0, JSON.stringify(daily));
   assert.deepEqual(daily.results.map(result => result.operation), ['schedule-preflight', 'sync', 'cleanup']);
   const sync = daily.results[1];
+  assert.ok(sync.operation === 'sync');
   const pinned = sync.results.find(row => row.id === 'openai')!;
   assert.equal(pinned.status, 'pinned-skipped');
   assert.equal(pinned.current!.versionId, original);
@@ -68,9 +72,21 @@ test('自动编排沿用固定与恢复控制，续做清理后才访问上游�
   const failed = await automatic('schedule');
   assert.equal(failed.code, 1, JSON.stringify(failed));
   assert.deepEqual(failed.results.map(result => result.operation), ['schedule-preflight', 'sync', 'cleanup']);
-  assert.equal(failed.results[1].status, 'partial');
-  assert.equal(failed.results[1].results.find(row => row.id === 'openai')!.status, 'delivered');
-  assert.equal(failed.results[1].results.find(row => row.id === 'anthropic')!.status, 'failed');
+  const failedSync = failed.results[1];
+  assert.ok(failedSync.operation === 'sync');
+  assert.equal(failedSync.status, 'partial');
+  assert.equal(failedSync.results.find(row => row.id === 'openai')!.status, 'delivered');
+  assert.equal(failedSync.results.find(row => row.id === 'anthropic')!.status, 'failed');
   assert.equal(failed.results[2].status, 'success');
   assert.equal((await env.journal()).maintenance, 'open');
+
+  env.failSource(false);
+  const retry = await automatic('schedule');
+  assert.equal(retry.code, 0, JSON.stringify(retry));
+  const preflight = retry.results.find(result => result.operation === 'schedule-preflight')!;
+  assert.equal(preflight.status, 'success');
+  assert.equal(preflight.exitCode, 0);
+  const observed = preflight.results.find(row => row.id === 'anthropic')!;
+  assert.match(observed.lastFailure ?? '', /Upstream unavailable/);
+  assert.ok(!('status' in observed));
 });

@@ -53,7 +53,7 @@ export async function runRuleWorkflow(request: RuleWorkflowRequest, report: Work
   }
 }
 
-function sharedStateException(row: { status: string; error?: string }) {
+function sharedStateException(row: { status?: string; error?: string }) {
   return row.status === 'superseded'
     || /RULE_(WRITE_|INTENT_|MAINTENANCE|STATE_|TARGET_|MIGRATION)|PUBLICATION_(PENDING|CONFLICT)/.test(row.error ?? '');
 }
@@ -62,15 +62,6 @@ function uncertainSharedState(result: WorkflowResult) {
   if (result.status === 'disabled') return false;
   return result.status === 'pending' || Boolean(result.error)
     || result.results?.some(row => row.status === 'pending' || sharedStateException(row));
-}
-
-// Preflight only routes a registered delivery to sync. The service rechecks the
-// operation, receipts, intent and CAS before it can make any shared write.
-function registeredDeliveryRecovery(result: Awaited<ReturnType<typeof readSchedulePreflight>>) {
-  const pending = result.results.filter(row => row.status === 'pending');
-  return result.status === 'pending' && !result.error && pending.length > 0
-    && pending.every(row => Boolean(row.pendingOperation))
-    && !result.results.some(sharedStateException);
 }
 
 /** Trigger orchestration is internal; daily is deliberately not a sixth manager operation. */
@@ -99,13 +90,16 @@ export async function runRuleAutomation(request: { event: 'push' | 'schedule'; t
     return sync.exitCode || cleanup.exitCode ? 1 : 0;
   }
   const observed = await readSchedulePreflight({ context: execution });
-  const recoverDelivery = registeredDeliveryRecovery(observed);
+  const blocked = !observed.observedHeads || Boolean(observed.error)
+    || observed.results.some(row => sharedStateException({ error: row.lastFailure }));
+  // A registration only routes the run to sync. Sync verifies intent, receipts and CAS before writing.
+  const recoverDelivery = !blocked && observed.status === 'pending' && observed.results.some(row => row.pendingOperation);
   report(JSON.stringify({ ...observed, ...(recoverDelivery && observed.maintenance !== 'maintenance' && { continueWith: 'sync' }) }));
   if (observed.maintenance === 'maintenance') {
     const resumed = await operation('cleanup');
     // A disabled cleanup is not evidence that maintenance was completed.
     if (resumed.exitCode !== 0 || resumed.status !== 'success') return 1;
-  } else if (!observed.observedHeads || (uncertainSharedState(observed) && !recoverDelivery)) {
+  } else if (blocked || (observed.status === 'pending' && !recoverDelivery)) {
     return 1;
   }
   const sync = await operation('sync');

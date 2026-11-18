@@ -41,9 +41,9 @@ Node 请求可选传入 `onProgress(event)`，事件为 `RulesProgress`（`stage
 
 main 的 sync/pin/resume 写入受 `RULE_UPDATE_ENABLED` 控制，cleanup 写入独立受 `RULE_CLEANUP_ENABLED` 控制；只有值为 `true` 时启用，缺省关闭。环境门禁属于共享应用服务，CLI、Node 默认宿主和 Actions 一致；它不改变单集 auto/pinned。门禁关闭时返回配置修订、目标、`status: disabled`、`exitCode: 0` 和未应用原因。status 与 dry-run 允许只读检查，不因此获得写权限。
 
-配置 push 调用完整 sync；schedule 正常先 sync 后 cleanup，存在活动维护时先 cleanup 续做，确认恢复可写后再同步。自动编排保留各次应用服务结果，并聚合退出码；独立单集失败不会回滚其他成功，也不能被之后的 cleanup 成功覆盖。共享状态未明或维护仍未完成时停止相关写入；pending/partial/failed 使整个运行非成功。手工 sync 不暗中清理，手工 cleanup 不更新上游，不公开 daily 或内部维护阶段入口。
+配置 push 调用完整 sync。schedule 通常在预检后调用 sync 和 cleanup。两个生产门禁均关闭时，直接报告这两个操作未应用。自动编排保留各阶段结果，实际操作中的失败、部分失败、未解决的 pending 和共享状态异常均使整次运行失败。普通来源故障后仍可执行安全清理，先前成功的变更继续生效。手工 sync 与 cleanup 各自执行所选操作。
 
-每日 Actions 的内部 `schedule-preflight` 报告从正式配置、journal 和当前稳定交付获得的观察结果。`verified` 列出本次完成的检查，`observedHeads` 记录观察时的 Git heads，`results` 可包含当前交付、更新控制和待恢复交付登记。历史候选可选性由人工 status 审计。
+每日 Actions 的内部 `schedule-preflight` 报告从正式配置、journal 和当前稳定交付获得的观察结果。`verified` 列出本次完成的检查，`observedHeads` 记录观察时的 Git heads，`results` 可包含当前交付、更新控制和待恢复交付登记。`lastFailure` 来自 journal 已保存的失败。历史候选可选性由人工 status 审计。
 
 活动维护先交给 cleanup，确认恢复可写后再调用 sync。仅关联已登记交付、且无整体或逐集共享异常的 pending 可以路由到 sync 恢复。sync 重新读取持久状态并核对原操作、回执、摘要、意图和 heads/CAS。sync 仍 pending、共享状态未明或更新门禁关闭导致登记交付仍待恢复时，停止后续 cleanup。缺少登记依据、损坏、不可读、目标不符及迁移归属未决状态继续阻断。
 

@@ -79,11 +79,24 @@ async function observeRules(loaded: LoadedRules) {
   return { session, stable, deliveries, definitions, ids, observedHeads: { journal: session.snapshot.head, stable: stable.head } };
 }
 
-interface SchedulePreflight extends OperationReport<'schedule-preflight'> {
+interface ObservedRuleFacts extends Pick<RuleResult, 'id' | 'current' | 'control'> {
+  lastFailure?: string;
+  pendingOperation?: string;
+}
+
+async function observeRuleFacts(session: RulesSession, id: string, stable: Awaited<ReturnType<RulesSession['stable']>>, current?: RuleResult['current']) {
+  const accepted = await observedRule(session, id, stable);
+  const pending = session.journal.pendingDelivery;
+  const facts: ObservedRuleFacts = { id, current, control: accepted?.control, lastFailure: accepted?.lastFailure,
+    pendingOperation: pending?.logicalId === id ? pending.id : undefined };
+  return { accepted, facts };
+}
+
+interface SchedulePreflight extends Omit<OperationReport<'schedule-preflight'>, 'results'> {
   maintenance?: RulesSession['journal']['maintenance'];
   verified?: string[];
   continueWith?: 'cleanup' | 'sync';
-  results: (RuleResult & { pendingOperation?: string })[];
+  results: ObservedRuleFacts[];
 }
 
 /** The schedule routes on shared state and current delivery; candidate verification belongs to the operation that needs it. */
@@ -92,15 +105,13 @@ export async function readSchedulePreflight(request: { context: LoadedRules['con
   try {
     loaded = await loadRulesRequest(request);
     const { session, stable, deliveries, ids, observedHeads } = await observeRules(loaded);
-    const { maintenance, pendingDelivery } = session.journal;
+    const { maintenance } = session.journal;
     const results: SchedulePreflight['results'] = [];
     for (const id of ids) {
-      const accepted = await observedRule(session, id, stable);
-      const pendingOperation = pendingDelivery?.logicalId === id ? pendingDelivery.id : undefined;
-      results.push({ id, current: deliveries.get(id), control: accepted?.control, pendingOperation,
-        status: pendingOperation ? 'pending' : accepted?.lastFailure ? 'failed' : 'unchanged', error: accepted?.lastFailure });
+      const { facts } = await observeRuleFacts(session, id, stable, deliveries.get(id));
+      results.push(facts);
     }
-    return { ...rulesReport(session, 'schedule-preflight', results), results, maintenance, observedHeads,
+    return { ...rulesReport(session, 'schedule-preflight', []), results, maintenance, observedHeads,
       verified: ['official-configuration', 'journal-structure', 'stable-files'],
       continueWith: maintenance === 'maintenance' ? 'cleanup' : undefined };
   } catch (error) { return rulesFailure('schedule-preflight', request, error, loaded); }
@@ -117,9 +128,9 @@ export async function getRulesStatus(request: RulesRequest & { id?: string } = {
     for (const id of ids.filter(id => !request.id || id === request.id)) {
       loaded.progress('status', id);
       const definition = definitions.get(id);
-      const accepted = await observedRule(session, id, stable);
-      const expectedSource = definition && session.loaded.configuration.sources[definition.source];
       const current = deliveries.get(id);
+      const { accepted, facts: { lastFailure, ...facts } } = await observeRuleFacts(session, id, stable, current);
+      const expectedSource = definition && session.loaded.configuration.sources[definition.source];
       const candidates: RuleStatus['candidates'] = [];
       const currentCandidate = current && session.journal.candidates[current.candidateId];
       let deliveryIssue = current && (currentCandidate?.logicalId !== id || currentCandidate.status !== 'verified')
@@ -155,14 +166,13 @@ export async function getRulesStatus(request: RulesRequest & { id?: string } = {
       candidates.sort((a, b) => (b.publishedAt ?? '').localeCompare(a.publishedAt ?? '') || a.id.localeCompare(b.id));
       const configurationDifference = !definition ? 'delete' : !accepted || accepted.lifecycle === 'deleted' ? 'add'
         : definitionRevision(expectedSource!, definition) !== accepted.definitionRevision ? 'change' : 'none';
-      rules.push({ id, status: session.journal.pendingDelivery?.logicalId === id ? 'pending' : accepted?.lastFailure ? 'failed' : 'unchanged',
-        current, control: accepted?.control, expectedSource,
+      rules.push({ ...facts, status: facts.pendingOperation ? 'pending' : lastFailure ? 'failed' : 'unchanged', expectedSource,
         successfulInput: session.journal.rules[id]?.successfulInput, deliveryState: current ? 'delivered' : 'not-delivered',
         lifecycle: accepted?.lifecycle, acceptedConfigurationRevision: accepted?.configurationRevision, configurationDifference,
         stableUrls: Object.keys(current?.files ?? {}).map(path => `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${session.loaded.context.targetBranch}/${path}`),
         candidates, candidateCount: candidates.filter(candidate => candidate.selectable).length,
         verified: ['stable-files', ...(!deliveryIssue ? ['candidate-git-eligibility'] : [])],
-        error: accepted?.lastFailure, deliveryIssue, pendingOperation: session.journal.pendingDelivery?.logicalId === id ? session.journal.pendingDelivery.id : undefined });
+        error: lastFailure, deliveryIssue });
     }
     const cleanup = session.journal.cleanupRun ?? session.journal.cleanupCheckpoint;
     return { ...rulesReport(session, 'status', rules), rules, maintenance: session.journal.maintenance, quarantinedCandidates: session.journal.quarantinedCandidates,
