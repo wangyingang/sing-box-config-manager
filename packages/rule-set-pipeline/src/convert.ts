@@ -10,6 +10,7 @@ export type ConversionResult = { ok: true; terms: RuleTerm[]; report: Conversion
 function regexpAttributeSeparator(value: string): number {
   // An attribute tail contains no colon. Earlier :@ occurrences belong to the expression.
   const separator = value.lastIndexOf(':@');
+  if (separator < 0) return -1;
   let beforeEscape = separator;
   while (value[beforeEscape - 1] === '\\') beforeEscape--;
   return (separator - beforeEscape) % 2 === 0 ? separator : -1;
@@ -40,7 +41,9 @@ export function convertRules(rules: readonly InputRule[]): ConversionResult {
     const attributes = sourceType === 'regexp' ? regexpAttributeSeparator(value) : value.indexOf(':@');
     if (attributes !== -1) {
       const tail = value.slice(attributes + 1);
-      if (/^@[A-Za-z0-9!]+(?:,@[A-Za-z0-9!]+)*$/.test(tail)) {
+      const validTail = /^@[A-Za-z0-9!]+(?:,@[A-Za-z0-9!]+)*$/.test(tail);
+      // V2Fly lowercases attributes before serializing. Keep uppercase literals in regexps.
+      if (validTail && (sourceType !== 'regexp' || tail === tail.toLowerCase())) {
         value = value.slice(0, attributes);
         report.attributeRecordCount++;
       } else if (sourceType !== 'regexp') {

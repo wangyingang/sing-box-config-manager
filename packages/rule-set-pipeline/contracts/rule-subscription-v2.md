@@ -8,7 +8,7 @@
 
 `targetVersion` 固定为 `1.14.4`，`sourceFormatVersion` 固定为 `4`。`projections` 必须声明 `route`、`dns-query`、`dns-response`。可用用途包含 SRS `binary` 入口和可选 JSON `source` 入口；不可用用途声明 `{ "unavailable": "empty" }`。每个入口包含完整 HTTPS `url` 和非重复的 `requiredCapabilities` 数组。能力词汇限于 `processMatching`、`packageMatching`、`dhcpDns`。未知版本、格式、字段或能力均拒绝。
 
-正式配置中的三个域名集分别为 Route 和 DNS Query 复用同一组 JSON／SRS 文件，DNS Response 不可用。`china-ip` 为 Route 和 DNS Response 复用 `route.json` 和 `route.srs`，DNS Query 不可用。Pipeline 交付 `china-ip` 时要求两个可用用途都声明 JSON 和 SRS 入口。见 [正式配置](../config/rulesets.yml)。
+正式配置中的域名集为 Route 和 DNS Query 复用 `domains.json` 和 `domains.srs`，DNS Response 不可用。`china-ip` 和 `chatgpt-voice` 为 Route 和 DNS Response 复用 `route.json` 和 `route.srs`，DNS Query 不可用。Pipeline 交付这些规则集时要求两个可用用途都声明 JSON 和 SRS 入口。见 [正式配置](../config/rulesets.yml)。
 
 一个本地绑定可选择多个可用用途，前提是这些用途指向同一 SRS URL。同一稳定 URL 在任意声明中的格式和能力必须一致。不同逻辑 ID 的稳定路径由可信宿主保证互斥。Compiler 检查结构、用途、共享入口声明和 Client Profile 能力。远程字节由可信宿主核验。
 

@@ -220,7 +220,7 @@ Recipe／Template v2 跟随稳定入口，管理者 pin 会影响所有引用该
 
 `domain/full/keyword/regexp` 分别映射为 `domain_suffix/domain/domain_keyword/domain_regex`。每种谓词单独放在一条 Headless Rule 中，规则集合保持 OR 语义。只对同类型、同值去重，按上述类型顺序和字符串代码单元顺序排序。规范化会复制为固定 `{type, value}` 结构，调用方的对象字段顺序不影响验证或构建身份。
 
-展开列表的 `:@attr1,@attr2` 尾部作为元数据记录。所有条目仍按各自的匹配类型转换。正则只分离字符串末尾符合属性语法且冒号未转义的尾部，保留正文里的 `:@`、大小写、Unicode、尾点和正则转义。空值、非法字符、域名空 label／非法边界／超长 label 均失败。正则不使用 JavaScript 引擎预判，目标 Go 引擎由原生加载步骤检查。1.14.4 在 regexp 匹配前将请求域名转为小写，但不改写表达式；大写字面表达式不会因此变成大小写无关。
+展开列表的 `:@attr1,@attr2` 尾部作为元数据记录。所有条目仍按各自的匹配类型转换。正则末尾的未转义 `:@attr1,@attr2` 按属性语法读取，属性名由小写 ASCII 字母、数字或 `!` 组成。正文保留大小写、Unicode、尾点和转义。若要匹配同形字面量，可转义冒号，例如用 `\:@cn` 匹配 `:@cn`。空值、非法字符、域名空 label／非法边界／超长 label 均失败。正则不使用 JavaScript 引擎预判，目标 Go 引擎由原生加载步骤检查。1.14.4 在 regexp 匹配前将请求域名转为小写，但不改写表达式；大写字面表达式不会因此变成大小写无关。
 
 CIDR 输入使用固定 `ipaddr.js 2.5.0` 解析 IPv4／IPv6 并规范化地址。生成 JSON 保留去重后的独立 CIDR 条目。原生验证依赖指定的官方 1.14.4 编译器生成 SRS，再分别使用 `rule-set match` 实际加载 JSON 和 SRS。真实集成测试用域名、正则和双栈边界验证匹配表现。
 
@@ -293,7 +293,7 @@ pnpm --dir packages/rule-set-pipeline test:acceptance:automation
 
 证据目录保存本地探针源码身份、受审查 branch/SHA、每次配置内容与 commit、运行及 attempt、实际工作流/checkout SHA、摘要与业务结果、生产 refs/Actions variables 前后对照及隔离清理结果。门禁未打开时跳过，不能作为验收通过。默认 CI 与完整本地验证不会启用此远端写入入口；本地拒绝测试使用外部 `gh` 故障模拟，不能代替真实 push/dispatch，也不能把手工通过表述为 schedule 已观察或邮件已实收。当前覆盖、旧 suite 退役及实际执行证据见 [#100 记录](../../docs/verification/issue-100.md)。
 
-旧 `test:publication`、`test:activation`、`test:rollback`、`test:rebuild` 命令已在独有断言迁移通过后移除，不保留兼容别名。`test:release` 运行固定官方 Release 的只读验收，覆盖单列表基线、三个既有 V2Fly 域名集的回归，以及八个新增域名集的构建和匹配。范围与统一验证的 `--release` 一致。单独运行时，设置 `SING_BOX_TEST_BINARY` 为 sing-box 1.14.4 的绝对路径，再运行 `pnpm --dir packages/rule-set-pipeline test:release`。规则、清理、自动化和 transport 的远端写入验收均使用上文的独立入口。迁移去向和执行证据见 [#101 记录](../../docs/verification/issue-101.md)。
+旧 `test:publication`、`test:activation`、`test:rollback`、`test:rebuild` 命令已在独有断言迁移通过后移除，不保留兼容别名。`test:release` 运行固定官方 Release 的只读验收，覆盖单列表基线、三个既有 V2Fly 域名集的回归，以及八个新增域名集的构建与原生加载，并核对代表性匹配。范围与统一验证的 `--release` 一致。单独运行时，设置 `SING_BOX_TEST_BINARY` 为 sing-box 1.14.4 的绝对路径，再运行 `pnpm --dir packages/rule-set-pipeline test:release`。规则、清理、自动化和 transport 的远端写入验收均使用上文的独立入口。迁移去向和执行证据见 [#101 记录](../../docs/verification/issue-101.md)。
 
 #84 的验收范围包含新增、换源、删除、pin、resume、部分失败、查询/预览与一次性转换；真实 GitHub 生命周期在专用 `acceptance-*` 分支验证，不写生产分支。场景与远端证据见 [#84 验收记录](../../docs/verification/issue-84.md)，最终源码和交付状态以 [Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84) 的 PR 交付证据为准。
 

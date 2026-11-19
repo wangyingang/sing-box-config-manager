@@ -60,36 +60,41 @@ test('固定官方 Release 一次读取三集，分别原生验证且重复构�
   }) }));
 });
 
-const addedLists = {
-  'china-domains': 'geolocation-cn', global: 'geolocation-!cn', apple: 'apple', microsoft: 'microsoft',
-  docker: 'docker', github: 'github', google: 'google', youtube: 'youtube',
-};
-const attributedRegex = {
-  'china-domains': String.raw`^.+-mihayo\.akamaized\.net$`,
-  global: String.raw`.+\.awsdns-cn-[0-9][0-9]\.(biz|com|net|top)$`,
-  google: String.raw`^r+[0-9]+(---|\.)sn-(2x3|ni5|j5o)\w{5}\.googlevideo\.com$`,
-};
-const matchProbes: Record<string, [domain: string, expected: boolean, predicate?: 'domain_regex'][]> = {
-  'china-domains': [
-    ['x-mihayo.akamaized.net', true, 'domain_regex'], ['x-mihay0.akamaized.net', false, 'domain_regex'],
-  ],
-  global: [['x.awsdns-cn-12.biz', true, 'domain_regex'], ['x.awsdns-cn-aa.biz', false, 'domain_regex']],
-  github: [
-    ['github-api.arkoselabs.com', true], ['sub.github-api.arkoselabs.com', false],
-    ['github.com', true], ['sub.github.com', true], ['badgithub.com', false],
-  ],
-  // Both domains match the googlevideo.com suffix. Assert the regex rule separately.
-  google: [
-    ['r1---sn-2x3abcde.googlevideo.com', true, 'domain_regex'],
-    ['r1---sn-z23abcde.googlevideo.com', false, 'domain_regex'],
-  ],
+const releaseCases: Record<string, {
+  list: string;
+  regex?: string;
+  probes?: [domain: string, expected: boolean][];
+}> = {
+  'china-domains': {
+    list: 'geolocation-cn', regex: String.raw`^.+-mihayo\.akamaized\.net$`,
+    probes: [['x-mihayo.akamaized.net', true], ['x-mihay0.akamaized.net', false]],
+  },
+  global: {
+    list: 'geolocation-!cn', regex: String.raw`.+\.awsdns-cn-[0-9][0-9]\.(biz|com|net|top)$`,
+    probes: [['x.awsdns-cn-12.biz', true], ['x.awsdns-cn-aa.biz', false]],
+  },
+  apple: { list: 'apple' },
+  microsoft: { list: 'microsoft' },
+  docker: { list: 'docker' },
+  github: {
+    list: 'github', probes: [
+      ['github-api.arkoselabs.com', true], ['sub.github-api.arkoselabs.com', false],
+      ['github.com', true], ['sub.github.com', true], ['badgithub.com', false],
+    ],
+  },
+  google: {
+    list: 'google', regex: String.raw`^r+[0-9]+(---|\.)sn-(2x3|ni5|j5o)\w{5}\.googlevideo\.com$`,
+    // Both domains match the googlevideo.com suffix. Assert the regex rule separately.
+    probes: [['r1---sn-2x3abcde.googlevideo.com', true], ['r1---sn-z23abcde.googlevideo.com', false]],
+  },
+  youtube: { list: 'youtube' },
 };
 
 test('固定官方 Release 共用一份校验输入构建八个新增域名集，JSON/SRS 保留匹配类型', { timeout: 180_000 }, async t => {
   const configuration = await readFile(new URL('../../config/rulesets.yml', import.meta.url), 'utf8');
   const binary = process.env.SING_BOX_TEST_BINARY ?? '';
   const requests: string[] = [];
-  const result = await buildConfiguredRelease({ configuration, binary, selectedIds: Object.keys(addedLists),
+  const result = await buildConfiguredRelease({ configuration, binary, selectedIds: Object.keys(releaseCases),
     release: { tag: '20261118141523', token: process.env.GITHUB_TOKEN, fetch: (input, init) => {
       requests.push(String(input));
       return fetch(input, init);
@@ -106,7 +111,8 @@ test('固定官方 Release 共用一份校验输入构建八个新增域名集�
     assert.equal(asset.id, id);
     assert.equal(requests.filter(url => url.endsWith(`/assets/${id}`)).length, 1);
   }
-  assert.deepEqual(result.results.map(({ id, definition }) => [id, definition.list]), Object.entries(addedLists));
+  assert.deepEqual(result.results.map(({ id, definition }) => [id, definition.list]),
+    Object.entries(releaseCases).map(([id, entry]) => [id, entry.list]));
   const directory = await mkdtemp(join(tmpdir(), 'v2fly-release-match-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
 
@@ -126,19 +132,18 @@ test('固定官方 Release 共用一份校验输入构建八个新增域名集�
     assert.deepEqual(native.artifacts.map(artifact => artifact.file), ['domains.json', 'domains.srs']);
     const parsed = JSON.parse(native.artifacts[0].content.toString());
     assert.equal(parsed.version, 4);
-    const expression = attributedRegex[id as keyof typeof attributedRegex];
-    if (expression) {
-      assert.ok(parsed.rules.some((item: { domain_regex?: string[] }) => item.domain_regex?.includes(expression)), id);
+    const { regex, probes = [] } = releaseCases[id];
+    if (regex) {
+      assert.ok(parsed.rules.some((item: { domain_regex?: string[] }) => item.domain_regex?.includes(regex)), id);
     }
     for (const artifact of native.artifacts) {
       assert.ok(artifact.bytes > 0 && artifact.content.length > 0, `${id}/${artifact.file}`);
       const file = join(directory, `${id}-${artifact.file}`);
-      const probes = matchProbes[id] ?? [];
       if (probes.length) await writeFile(file, artifact.content);
-      for (const [domain, expected, predicate] of probes) {
+      for (const [domain, expected] of probes) {
         const { stdout, stderr } = await exec(binary, ['rule-set', 'match', file, domain, '--format', artifact.format]);
         const output = stdout + stderr;
-        const matched = output.split('\n').some(line => line.startsWith('match rules.') && (!predicate || line.includes(`: ${predicate}=`)));
+        const matched = output.split('\n').some(line => line.startsWith('match rules.') && (!regex || line.includes(': domain_regex=')));
         assert.equal(matched, expected, `${id}/${artifact.file}/${domain}: ${output}`);
       }
     }
