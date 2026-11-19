@@ -4,7 +4,7 @@ import { candidateArtifactFiles, candidateTraceFiles, candidateCoreFiles, RULE_R
 import { filePaths, stageRef, type BaselineStage, type BaselineStages, type BaselineTransport, type PreparedBaseline } from './maintenance-baseline-transport.js';
 import { verifyWithoutEvidenceCache, type VerifyEvidence } from './evidence-download.js';
 import type { CleanupPlan } from './rules-cleanup-model.js';
-import { openAiVoiceSnapshotPath, validOpenAiVoiceSource, verifyOpenAiVoiceSnapshot } from './openai-voice-source.js';
+import { candidateInputSnapshot } from './rule-source-adapters.js';
 import { inspectBinary, type NativeBuildOptions } from './native.js';
 import type { PublicationSnapshot } from './publication-repository.js';
 import { immutableUrl } from './publication.js';
@@ -103,18 +103,18 @@ export async function verifyRulesBaseline(options: RulesBaselineVerification, st
       evidenceUrl: immutableUrl(stages.evidence.head, `candidates/${id}/readback.json`) };
     delete expectedCandidates[id].evidenceSha256;
     if (!isDeepStrictEqual(expectedCandidates[id], candidate)) throw new Error(`Baseline candidate identity or addresses changed: ${id}`);
-    if (validOpenAiVoiceSource(candidate.source)) {
-      verifyOpenAiVoiceSnapshot(candidate.source, await snapshot.read(openAiVoiceSnapshotPath(id)));
-    }
+    await candidateInputSnapshot(candidate)?.read(snapshot);
     verified.set(id, await verifyBaselineCandidate(snapshot, candidate, options, verifyEvidence));
   }
   if (!isDeepStrictEqual(journal, retainedJournal(original, expectedCandidates))) {
     throw new Error('Baseline changed retained candidate identity, control or definition state');
   }
-  const candidatePaths = new Set(plan.retain.candidateIds.flatMap(id => [
-    ...candidateCoreFiles(journal.candidates[id].definition).map(file => `candidates/${id}/${file}`), ...tracePaths(options.source, id),
-    ...(validOpenAiVoiceSource(journal.candidates[id].source) ? [openAiVoiceSnapshotPath(id)] : []),
-  ]));
+  const candidatePaths = new Set(plan.retain.candidateIds.flatMap(id => {
+    const candidate = journal.candidates[id];
+    const input = candidateInputSnapshot(candidate);
+    return [...candidateCoreFiles(candidate.definition).map(file => `candidates/${id}/${file}`), ...tracePaths(options.source, id),
+      ...(input ? [input.path] : [])];
+  }));
   if (!isDeepStrictEqual(new Set(filePaths(snapshot.paths).filter(path => path.startsWith('candidates/'))), candidatePaths)) {
     throw new Error('Baseline retained candidate file set differs from plan');
   }
@@ -173,11 +173,11 @@ export async function prepareRulesBaseline(options: RulesBaselineVerification & 
     const prefix = `candidates/${id}/`;
     assets[prefix + layout.source] = verified.bytesByFormat.source;
     assets[prefix + layout.binary] = verified.bytesByFormat.binary;
-    if (validOpenAiVoiceSource(candidate.source)) {
-      const path = openAiVoiceSnapshotPath(id);
-      const bytes = await required(source, path);
-      verifyOpenAiVoiceSnapshot(candidate.source, bytes);
-      metadata[path] = bytes;
+    const input = candidateInputSnapshot(candidate);
+    if (input) {
+      const bytes = await required(source, input.path);
+      input.verify(bytes);
+      metadata[input.path] = bytes;
     }
     metadata[prefix + 'manifest.json'] = encodeRecord(verified.manifest);
     for (const path of [prefix + 'build.json', ...tracePaths(source, id)]) metadata[path] = await required(source, path);

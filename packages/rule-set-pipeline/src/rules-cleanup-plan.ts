@@ -7,7 +7,7 @@ import { readRuleDeliveries } from './rules-delivery.js';
 import type { CleanupPlan } from './rules-cleanup-model.js';
 import type { RulesSession } from './rules-session.js';
 import { definitionRevision } from './rules-model.js';
-import { openAiVoiceSnapshotPath, validOpenAiVoiceSource, verifyOpenAiVoiceSnapshot } from './openai-voice-source.js';
+import { candidateInputSnapshot } from './rule-source-adapters.js';
 
 export async function planRulesCleanup(session: RulesSession, refs: Ref[], frozen?: CleanupPlan): Promise<CleanupPlan> {
   const { journal, snapshot, loaded } = session;
@@ -92,9 +92,9 @@ export async function planRulesCleanup(session: RulesSession, refs: Ref[], froze
   const hasCleanup = discard.length > 0 || journal.deletedHistoryPending === true;
   if (hasCleanup) {
     for (const id of retained) {
-      const source = journal.candidates[id]?.source;
-      if (!validOpenAiVoiceSource(source)) continue;
-      try { verifyOpenAiVoiceSnapshot(source, await snapshot.read(openAiVoiceSnapshotPath(id))); }
+      const candidate = journal.candidates[id];
+      if (!candidate) continue;
+      try { await candidateInputSnapshot(candidate)?.read(snapshot); }
       catch (error) { blockers.push(`Candidate ${id}: ${String(error)}`); }
     }
   }
