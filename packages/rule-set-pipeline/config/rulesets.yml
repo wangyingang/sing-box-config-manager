@@ -31,6 +31,13 @@ sources:
     input:
       format: domain-suffix-text
       path: gfw.txt
+  blackmatrix7:
+    repository: blackmatrix7/ios_rule_script
+    version: git-branch
+    branch: master
+    input:
+      format: typed-domain-text
+      path: rule/Clash/OneDrive/OneDrive.list
 ruleSets:
   - id: openai
     source: dlc
@@ -140,6 +147,14 @@ ruleSets:
     source: loyalsoldier
     list: all
     stablePath: stable/gfw
+    usages:
+      route: { artifact: domains }
+      dns-query: { artifact: domains }
+      dns-response: { unavailable: empty }
+  - id: onedrive
+    source: blackmatrix7
+    list: all
+    stablePath: stable/onedrive
     usages:
       route: { artifact: domains }
       dns-query: { artifact: domains }

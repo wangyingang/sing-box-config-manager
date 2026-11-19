@@ -137,3 +137,49 @@ test('gfw 缺失、非法或空输入的诊断包含固定文件', async () => {
     ['gfw', 'failed', [['EMPTY_INPUT', 'gfw.txt']]],
   ]);
 });
+
+test('onedrive 拒绝非法条件和用途，过滤后为空时保留进程过滤记录', async () => {
+  const configuration = readOfficialConfiguration();
+  const commit = 'c'.repeat(40);
+  const path = 'rule/Clash/OneDrive/OneDrive.list';
+  const branchUrl = 'https://api.github.com/repos/blackmatrix7/ios_rule_script/branches/master';
+  const inputUrl = `https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/${commit}/${path}`;
+  const build = (input: string | Uint8Array<ArrayBuffer>) => buildConfiguredCommit({
+    configuration, selectedIds: ['onedrive'], binary: '/unused',
+    github: { commit, fetch: async url => {
+      if (String(url) === branchUrl) return Response.json({ name: 'master', commit: { sha: commit } });
+      assert.equal(String(url), inputUrl);
+      return new Response(input);
+    } },
+  });
+  const invalid = await build([
+    '# heading', 'DOMAIN-SUFFIX,*.example.test', 'DOMAIN-KEYWORD,bad keyword',
+    'IP-CIDR,192.0.2.0/24', 'PROCESS-NAME,', 'PROCESS-NAME,OneDrive,extra', 'DOMAIN-KEYWORD',
+  ].join('\n'));
+  const [result] = invalid.results;
+  assert.equal(result.id, 'onedrive');
+  assert.equal(result.status, 'failed');
+  assert.deepEqual(result.report.diagnostics.map(d => [d.code, d.file, d.list, d.line]), [
+    ['INVALID_RULE', path, 'all', 2], ['INVALID_RULE', path, 'all', 3],
+    ['UNSUPPORTED_TYPE', path, 'all', 4], ['INVALID_RULE', path, 'all', 5],
+    ['INVALID_RULE', path, 'all', 6], ['INVALID_RULE', path, 'all', 7],
+  ]);
+  assert.deepEqual(result.report.filteredRules, []);
+
+  const empty = await build('# heading\r\n\r\nPROCESS-NAME,OneDrive');
+  assert.equal(empty.results[0].status, 'failed');
+  assert.deepEqual(empty.results[0].report.diagnostics.map(d => [d.code, d.file]), [['EMPTY_INPUT', path]]);
+  assert.deepEqual(empty.results[0].report.filteredRules, [{ type: 'PROCESS-NAME', value: 'OneDrive', line: 3 }]);
+
+  const utf8 = await build(Uint8Array.of(0xff));
+  assert.equal(utf8.results[0].status, 'failed');
+  assert.deepEqual(utf8.results[0].report.diagnostics.map(d => [d.code, d.file]), [['INVALID_UTF8', path]]);
+
+  const config = parseBuildConfiguration(configuration);
+  const onedrive = config.ruleSets.find(rule => rule.id === 'onedrive')!;
+  onedrive.usages['dns-response'] = { artifact: 'domains' };
+  await assert.rejects(buildConfiguredCommit({
+    configuration: JSON.stringify(config), selectedIds: ['onedrive'], binary: '/unused',
+    github: { fetch: async () => assert.fail('Invalid usages must fail before source access') },
+  }), /onedrive.*OneDrive\.list.*dns-response/);
+});

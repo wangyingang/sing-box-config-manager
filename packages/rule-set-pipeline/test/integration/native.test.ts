@@ -163,6 +163,48 @@ test('正式 gfw 从固定 Git 文件构建，JSON/SRS 后缀匹配保留标签�
     ['route', 'other.example', true], ['dns-query', 'sub.xn--bcher-kva.example', true]]);
 });
 
+test('正式 onedrive 从固定 Git 文件构建，保留后缀和关键词并记录进程过滤', async () => {
+  const repository = 'blackmatrix7/ios_rule_script';
+  const path = 'rule/Clash/OneDrive/OneDrive.list';
+  const commit = 'c'.repeat(40);
+  const url = `https://raw.githubusercontent.com/${repository}/${commit}/${path}`;
+  const input = '\uFEFF  # OneDrive\r\n\r\n DOMAIN-SUFFIX, SharePoint.Example. \r\n'
+    + 'DOMAIN-SUFFIX,sharepoint.example\nDOMAIN-KEYWORD,Cloud-Drive\nDOMAIN-KEYWORD,cloud-drive\n'
+    + 'DOMAIN-KEYWORD,SharePoint.Example\nPROCESS-NAME,OneDriveUpdater\n';
+  const built = await buildConfiguredCommit({
+    configuration: readOfficialConfiguration(), selectedIds: ['onedrive'], binary,
+    github: { commit, fetch: async address => {
+      if (String(address) === `https://api.github.com/repos/${repository}/branches/master`) {
+        return Response.json({ name: 'master', commit: { sha: commit } });
+      }
+      assert.equal(String(address), url);
+      return new Response(input);
+    } },
+  });
+  assert.deepEqual(built.source, {
+    kind: 'github-commit', repository, branch: 'master', commit, file: { path, url },
+    inputSha256: sha256(input), inputBytes: Buffer.byteLength(input),
+  });
+  const [rule] = built.results;
+  assert.equal(rule.status, 'built-validated', JSON.stringify(rule.report.diagnostics));
+  assert.equal(rule.definition.stablePath, 'stable/onedrive');
+  assert.equal(rule.report.inputCount, 6);
+  assert.equal(rule.report.duplicateCount, 2);
+  assert.deepEqual(rule.report.filteredRules, [{ type: 'PROCESS-NAME', value: 'OneDriveUpdater', line: 8 }]);
+  assert.deepEqual(rule.native.usages.route, { artifactFiles: ['domains.json', 'domains.srs'] });
+  assert.deepEqual(rule.native.usages['dns-query'], rule.native.usages.route);
+  assert.deepEqual(rule.native.usages['dns-response'], { status: 'unavailable', reason: 'empty' });
+  assert.deepEqual(JSON.parse(rule.native.artifacts[0].content.toString()), {
+    version: 4, rules: [
+      { domain_suffix: ['sharepoint.example'] },
+      { domain_keyword: ['cloud-drive', 'sharepoint.example'] },
+    ],
+  });
+  await matches(rule.native, [['route', 'sub.sharepoint.example', true], ['dns-query', 'xcloud-drivey.example', true],
+    ['route', 'xcloud-drivey.example', true], ['dns-query', 'xcloud-driv-y.example', false],
+    ['route', 'xsharepoint.example', true], ['route', 'onedriveupdater.example', false]]);
+});
+
 test('pure IP and mixed synthetic IR use only applicable predicates and deduplicate physical files', async () => {
   const ip: BuildTerm = { type: 'ip_cidr', value: '192.0.2.0/24' };
   const ipv6: BuildTerm = { type: 'ip_cidr', value: '2001:db8::/32' };

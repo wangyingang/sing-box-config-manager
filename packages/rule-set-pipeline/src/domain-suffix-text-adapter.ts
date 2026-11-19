@@ -1,6 +1,4 @@
-import { isIP } from 'node:net';
-import { domainToASCII } from 'node:url';
-import { isDomainName } from './convert.js';
+import { normalizeBareDomain } from './convert.js';
 import { normalizeTerms } from './projection.js';
 import { diagnostic, emptyReport, type RuleTerm } from './types.js';
 
@@ -20,11 +18,8 @@ export function convertDomainSuffixText(bytes: Uint8Array, file: string, list: s
     const value = line.replace(/^[ \t]+|[ \t]+$/g, '');
     if (!value) continue;
     report.inputCount++;
-    // Check bare syntax first: domainToASCII also accepts parts of some URLs.
-    const name = value.replace(/\.$/, '');
-    const domain = /^[\p{L}\p{M}\p{N}.-]+$/u.test(name) && domainToASCII(name);
-    // The 255-octet DNS name includes the root and label lengths.
-    if (!domain || !isDomainName(domain) || domain.length > 253 || domain.endsWith('.') || isIP(domain)) {
+    const domain = normalizeBareDomain(value);
+    if (!domain) {
       report.invalidCount++;
       report.diagnostics.push(diagnostic('INVALID_RULE', 'Expected one bare domain name', {
         file, list, line: index + 1, column: line.indexOf(value) + 1,
