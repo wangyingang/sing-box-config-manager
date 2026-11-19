@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { syncRules, pinRuleVersion, resumeRuleUpdates } from '../../src/rules-operations.js';
 import { getRulesStatus } from '../../src/rules-status.js';
+import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
 import { sha256 } from '../../src/release.js';
 import { rulesEnvironment } from '../fixtures/rules-environment.js';
 import { baselineConfiguration } from '../fixtures/baseline-configuration.js';
@@ -118,6 +119,92 @@ for (const fault of ['release-offline', 'checksum', 'yaml', 'missing-list', 'inv
     for (let i = 0; i < 4; i++) if (expected[i] === 'delivered') assert.deepEqual(retried.results[i].current, result.results[i].current);
   });
 }
+
+test('gfw 经 sync 交付并可核验，非法 Git 更新保留 gfw 且不阻断独立规则集', async () => {
+  const env = rulesEnvironment(binary!, 'acceptance-gfw');
+  const request = { context: env.context };
+  const config = parseBuildConfiguration(readOfficialConfiguration());
+  config.target.branch = env.context.targetBranch;
+  config.ruleSets = config.ruleSets.filter(rule => ['openai', 'gfw'].includes(rule.id));
+  env.configure(config);
+  const releaseFetch = env.context.fetch!;
+  let commit = 'a'.repeat(40), input = 'example.test\n';
+  const repo = 'Loyalsoldier/v2ray-rules-dat';
+  const branchUrl = `https://api.github.com/repos/${repo}/branches/release`;
+  const inputUrl = () => `https://raw.githubusercontent.com/${repo}/${commit}/gfw.txt`;
+  env.context.fetch = async (url, init) => {
+    if (String(url) === branchUrl) return Response.json({ name: 'release', commit: { sha: commit } });
+    if (String(url) === inputUrl()) return new Response(input);
+    return releaseFetch(url, init);
+  };
+
+  const first = await syncRules(request);
+  assert.equal(first.status, 'success', JSON.stringify(first));
+  assert.deepEqual(first.results.map(({ id, status }) => [id, status]), [['openai', 'delivered'], ['gfw', 'delivered']]);
+  const current = first.results[1].current!;
+  assert.deepEqual(current.source, { kind: 'github-commit', repository: repo, branch: 'release', commit,
+    file: { path: 'gfw.txt', url: inputUrl() }, inputSha256: sha256(input), inputBytes: Buffer.byteLength(input) });
+
+  const status = await getRulesStatus({ context: { ...env.context }, id: 'gfw' });
+  assert.equal(status.status, 'success', JSON.stringify(status));
+  const [visible] = status.rules!;
+  assert.equal(visible.deliveryState, 'delivered');
+  assert.equal(visible.candidateCount, 1);
+  assert.deepEqual(visible.current, current);
+  assert.deepEqual(visible.candidates.map(({ id, current, selectable, source }) => [id, current, selectable, source]),
+    [[current.candidateId, true, true, current.source]]);
+
+  const stablePrefix = 'https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-gfw/stable/gfw/';
+  const formats = {
+    source: { url: stablePrefix + 'domains.json', requiredCapabilities: [] },
+    binary: { url: stablePrefix + 'domains.srs', requiredCapabilities: [] },
+  };
+  assert.deepEqual(visible.stableUrls.sort(), Object.values(formats).map(x => x.url).sort());
+  assert.deepEqual(current.subscription, {
+    schemaVersion: 2, systemRuleSetId: 'gfw', targetVersion: '1.14.4', sourceFormatVersion: 4,
+    projections: { route: { formats }, 'dns-query': { formats }, 'dns-response': { unavailable: 'empty' } },
+  });
+  const prefix = `candidates/${current.candidateId}/`;
+  const snapshot = await env.context.repository.snapshot();
+  const manifest = JSON.parse((await snapshot.read(prefix + 'manifest.json'))!.toString());
+  const build = JSON.parse((await snapshot.read(prefix + 'build.json'))!.toString());
+  const evidence = JSON.parse((await env.context.repository.download(current.candidateEvidenceUrl)).toString());
+  assert.equal(manifest.id, 'gfw');
+  assert.equal(manifest.revision, current.candidateId);
+  assert.deepEqual(manifest.projections, {
+    route: { artifactIds: manifest.artifacts.map((a: { id: string }) => a.id) },
+    'dns-query': manifest.projections.route, 'dns-response': { unavailable: 'empty' },
+  });
+  assert.equal(build.buildId, evidence.buildId);
+  assert.equal(build.buildId, first.results[1].successfulInput?.buildId);
+  assert.equal(build.tool.version, '1.14.4');
+  assert.equal(build.tools.conversionPolicy, 'domain-suffix-text-v1');
+  assert.deepEqual(build.source, current.source);
+  for (const format of ['source', 'binary'] as const) {
+    const artifact = manifest.artifacts.find((a: { format: string }) => a.format === format)!;
+    const stable = await env.context.repository.download(formats[format].url);
+    assert.deepEqual(stable, await env.context.repository.download(artifact.url));
+    assert.equal(artifact.sha256, sha256(stable));
+    assert.equal(artifact.byteLength, stable.length);
+  }
+
+  commit = 'b'.repeat(40); input = '*.example.test\n';
+  env.upstream({ openai: 'domain:updated.example' });
+  const partial = await syncRules({ context: { ...env.context } });
+  assert.equal(partial.status, 'partial', JSON.stringify(partial));
+  const [openai, gfw] = partial.results;
+  assert.equal(openai.status, 'delivered');
+  assert.notEqual(openai.current?.versionId, first.results[0].current?.versionId);
+  assert.equal(gfw.status, 'failed');
+  assert.match(gfw.error!, /gfw\.txt.*line 1/);
+  assert.deepEqual(gfw.current, current);
+  assert.deepEqual(gfw.successfulInput, first.results[1].successfulInput);
+  const after = await getRulesStatus({ ...request, id: 'gfw' });
+  assert.deepEqual(after.rules?.[0].current, current);
+  assert.equal(after.rules?.[0].candidateCount, 1);
+  console.log(JSON.stringify({ gfwDelivery: { current, manifest, buildId: build.buildId, candidateReadback: evidence.readback },
+    invalidUpdate: { gfw: gfw.status, retained: gfw.current?.versionId, healthyOpenAI: openai.status } }));
+});
 
 test('首次同步缺少单列表时该集未交付且无候选，其他三集独立成功', async () => {
   const env = fourSources(), request = { context: env.context }, fetcher = env.context.fetch!;

@@ -12,10 +12,17 @@ export type SourceInput = ReleaseInput | CommitInput | OpenAiVoiceInput;
 export type SourceFormat = SourceInput['input']['format'];
 type ConfiguredUsage = { artifact: 'domains' | 'route' } | { unavailable: 'empty' };
 
+const formatCapabilities = {
+  'plain-yaml': { artifact: 'domains', namedLists: true },
+  'domain-suffix-text': { artifact: 'domains', namedLists: false },
+  'cidr-text': { artifact: 'route', namedLists: false },
+  'openai-voice-json': { artifact: 'route', namedLists: false },
+} as const satisfies Record<SourceFormat, { artifact: 'domains' | 'route'; namedLists: boolean }>;
+
 export function configuredLayout(format: SourceFormat) {
-  return format !== 'plain-yaml'
-    ? { stem: 'route', dns: 'dns-response', unavailable: 'dns-query' } as const
-    : { stem: 'domains', dns: 'dns-query', unavailable: 'dns-response' } as const;
+  return formatCapabilities[format].artifact === 'domains'
+    ? { stem: 'domains', dns: 'dns-query', unavailable: 'dns-response' } as const
+    : { stem: 'route', dns: 'dns-response', unavailable: 'dns-query' } as const;
 }
 export interface RuleDefinition { id: string; source: string; list: string; stablePath: string; usages: Record<Usage, ConfiguredUsage> }
 export interface BuildConfiguration {
@@ -47,7 +54,7 @@ export function parseRuleDefinition(input: unknown, format: SourceFormat = 'plai
   const { id, source, list, stablePath: path, usages } = exact(input, ['id', 'source', 'list', 'stablePath', 'usages'], 'rule definition');
   if (typeof id !== 'string' || !logicalId.test(id)) throw new Error(`Invalid logical ID: ${String(id)}`);
   if (typeof source !== 'string' || !logicalId.test(source)) throw new Error(`Invalid source ID: ${String(source)}`);
-  if (typeof list !== 'string' || (format !== 'plain-yaml' ? list !== 'all' : !/^[a-z0-9][a-z0-9!._-]*$/.test(list))) {
+  if (typeof list !== 'string' || (formatCapabilities[format].namedLists ? !/^[a-z0-9][a-z0-9!._-]*$/.test(list) : list !== 'all')) {
     throw new Error(`Invalid ${format} list: ${String(list)}`);
   }
   if (typeof path !== 'string' || !stablePath.test(path)) {
@@ -78,14 +85,17 @@ export function parseSource(input: unknown): SourceInput {
   const source = exact(raw, raw.version === 'git-branch' ? ['repository', 'version', 'branch', 'input'] : ['repository', 'version', 'input'], 'source');
   if (!validRepository(source.repository)) throw new Error('Invalid GitHub source repository');
   const file = mapping(source.input, 'source input');
-  if (file.format !== 'plain-yaml' && file.format !== 'cidr-text') throw new Error('Unsupported input format');
   if (source.version === 'latest-release') {
     exact(file, ['format', 'asset', 'checksum'], 'Release input');
+    if (file.format !== 'plain-yaml' && file.format !== 'cidr-text') throw new Error('Unsupported Release input format');
     if (!validInputFile(file.asset) || !validInputFile(file.checksum) || file.asset === file.checksum) throw new Error('Invalid Release asset or checksum');
     return { repository: source.repository, version: 'latest-release', input: { format: file.format, asset: file.asset, checksum: file.checksum } };
   }
   if (source.version === 'git-branch') {
     exact(file, ['format', 'path'], 'Git input');
+    if (file.format !== 'plain-yaml' && file.format !== 'cidr-text' && file.format !== 'domain-suffix-text') {
+      throw new Error('Unsupported Git input format');
+    }
     if (!validBranch(source.branch) || !validInputPath(file.path)) throw new Error('Invalid Git branch or input path');
     return { repository: source.repository, version: 'git-branch', branch: source.branch, input: { format: file.format, path: file.path } };
   }
@@ -115,9 +125,17 @@ export function parseBuildConfiguration(input: string): BuildConfiguration {
   if (!Array.isArray(raw.ruleSets)) throw new Error('ruleSets must be an explicit sequence');
   const ids = new Set<string>(), paths = new Set<string>();
   const ruleSets = raw.ruleSets.map(entry => {
-    const { source } = mapping(entry, 'rule definition');
-    if (typeof source !== 'string' || !Object.hasOwn(sources, source)) throw new Error(`Unknown source: ${String(source)}`);
-    const rule = parseRuleDefinition(entry, sources[source].input.format);
+    const { id, source } = mapping(entry, 'rule definition');
+    if (typeof source !== 'string' || !Object.hasOwn(sources, source)) {
+      throw new Error(`Rule set ${String(id)}: unknown source ${String(source)}`);
+    }
+    const input = sources[source].input;
+    let rule: RuleDefinition;
+    try { rule = parseRuleDefinition(entry, input.format); }
+    catch (error) {
+      const file = 'path' in input ? input.path : 'asset' in input ? input.asset : input.url;
+      throw new Error(`Rule set ${String(id)}, source ${source} (${file}): ${(error as Error).message}`, { cause: error });
+    }
     if (ids.has(rule.id)) throw new Error(`Duplicate logical ID: ${rule.id}`);
     const path = rule.stablePath;
     if ([...paths].some(other => other === path || other.startsWith(`${path}/`) || path.startsWith(`${other}/`))) {

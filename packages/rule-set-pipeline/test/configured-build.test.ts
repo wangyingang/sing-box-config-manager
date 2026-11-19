@@ -3,7 +3,7 @@ import { releaseConfiguration } from './fixtures/release-configuration.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { sha256 } from '../src/release.js';
-import { buildConfiguredRelease, parseBuildConfiguration } from '../src/configured-build.js';
+import { buildConfiguredCommit, buildConfiguredRelease, parseBuildConfiguration } from '../src/configured-build.js';
 
 const tag = '20261104112839';
 const configuration = releaseConfiguration();
@@ -103,5 +103,37 @@ test('新增列表缺失或非法时报告列表位置，共用来源的兄弟�
     [code, file, list, index])), [
     ['TARGET_LIST_COUNT', 'dlc.dat_plain.yml', 'geolocation-!cn', undefined],
     ['INVALID_RULE', 'dlc.dat_plain.yml', 'google', 0],
+  ]);
+});
+
+test('gfw 用途错误在获取输入前定位到规则集和文件', async () => {
+  const config = parseBuildConfiguration(readOfficialConfiguration());
+  const gfw = config.ruleSets.find(rule => rule.id === 'gfw')!;
+  gfw.usages['dns-query'] = { unavailable: 'empty' };
+  await assert.rejects(buildConfiguredCommit({
+    configuration: JSON.stringify(config), selectedIds: ['gfw'], binary: '/unused',
+    github: { fetch: async () => assert.fail('Invalid usages must fail before source access') },
+  }), /gfw.*gfw\.txt.*dns-query/);
+});
+
+test('gfw 缺失、非法或空输入的诊断包含固定文件', async () => {
+  const commit = 'a'.repeat(40);
+  const build = (input: Response) => buildConfiguredCommit({
+    configuration: readOfficialConfiguration(), selectedIds: ['gfw'], binary: '/unused',
+    github: { commit, fetch: async url => String(url).includes('/branches/')
+      ? Response.json({ name: 'release', commit: { sha: commit } }) : input },
+  });
+  await assert.rejects(build(new Response(null, { status: 404 })), {
+    code: 'DOWNLOAD_FAILED', message: /gfw.*\/gfw\.txt/,
+  });
+  const tooLong = ['a'.repeat(63), 'b'.repeat(63), 'c'.repeat(63), 'd'.repeat(62)].join('.');
+  const invalid = await build(new Response(
+    `example.test\n*.example.test\nhttps://example.test\n192.0.2.1\nexample.test:@tag\n${tooLong}\n`));
+  assert.deepEqual(invalid.results.map(({ id, status, report }) => [id, status, report.diagnostics.map(d => [d.code, d.file, d.line])]), [
+    ['gfw', 'failed', [2, 3, 4, 5, 6].map(line => ['INVALID_RULE', 'gfw.txt', line])],
+  ]);
+  const empty = await build(new Response('\n \t\r\n'));
+  assert.deepEqual(empty.results.map(({ id, status, report }) => [id, status, report.diagnostics.map(d => [d.code, d.file])]), [
+    ['gfw', 'failed', [['EMPTY_INPUT', 'gfw.txt']]],
   ]);
 });
