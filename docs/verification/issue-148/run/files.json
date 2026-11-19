@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "files": [
+    {
+      "path": "check.log",
+      "byteLength": 53301,
+      "sha256": "0d51ed5ca1270e10c78c8268f3327f0c1bc2362568d60c6694f1b3ee47453478"
+    },
+    {
+      "path": "client-cidr-operations.json",
+      "byteLength": 87889,
+      "sha256": "59ac2d46a982505d4ef9bee858581e0ea90da1f87f701c9e1bc61cffb86b7566"
+    },
+    {
+      "path": "client-domain-operations.json",
+      "byteLength": 39263,
+      "sha256": "f5f91470e195119c142017b3616efa16432e57af53c4b757add55b454340f1c2"
+    },
+    {
+      "path": "client-failure-cache.json",
+      "byteLength": 13187,
+      "sha256": "f645ea6fe34fd611ef3b398de155a1e81547f7c931847f31fec508cd5de8f339"
+    },
+    {
+      "path": "integration.log",
+      "byteLength": 204359,
+      "sha256": "c1dd1ba9c630448f97bfa0f3f8f66048de3dccafd92e7d4b31cc506b4124258b"
+    },
+    {
+      "path": "pnpm-version.stderr.log",
+      "byteLength": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "pnpm-version.stdout.log",
+      "byteLength": 8,
+      "sha256": "abb3ce293b7ae818d9d22051b093e51415a4de46f6dd529189c4feb458037cb5"
+    },
+    {
+      "path": "release.log",
+      "byteLength": 10701,
+      "sha256": "4d36a950c415dea2dd4e0fbe1c73c7ca3a9cb5deb6031321a64082a836596c1c"
+    },
+    {
+      "path": "sing-box-version.stderr.log",
+      "byteLength": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "sing-box-version.stdout.log",
+      "byteLength": 357,
+      "sha256": "9811c090325893260aef4b4b36d2f10065041502bdbd1da6bf76e0b2479e7147"
+    },
+    {
+      "path": "summary.json",
+      "byteLength": 5983,
+      "sha256": "9dddc348b8dd4f582c0c7b0d503f71f971d966413d7dd596e53d4fb3060a0778"
+    }
+  ]
+}

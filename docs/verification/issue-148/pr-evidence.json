@@ -1,0 +1,76 @@
+{
+  "pr": {
+    "repository": "wangyingang/sing-box-config-manager",
+    "defaultBranch": "main",
+    "pullRequest": {
+      "number": 152,
+      "url": "https://github.com/wangyingang/sing-box-config-manager/pull/152",
+      "state": "OPEN",
+      "draft": false,
+      "baseBranch": "main",
+      "headCommit": "11e3e09011b2fe966031affeb3382b515ab3cc21",
+      "mergeCommit": null,
+      "headBranch": "codex/issue-148",
+      "headRepository": "wangyingang/sing-box-config-manager"
+    },
+    "closingIssues": [
+      "wangyingang/sing-box-config-manager#148"
+    ]
+  },
+  "evidence": {
+    "comments": [
+      {
+        "id": "IC_kwDOVfXgm88AAAABolU9Ew",
+        "url": "https://github.com/wangyingang/sing-box-config-manager/pull/152#issuecomment-7018462483",
+        "body": "<!-- codex-pull-request-review-summary -->\n<!-- codex-review-state:v1 {\"code_review\":{\"commit_sha\":\"11e3e09011b2fe966031affeb3382b515ab3cc21\",\"has_any_findings\":false,\"has_unresolved_findings\":false,\"status\":\"completed\"},\"security_review\":{\"commit_sha\":null,\"has_any_findings\":null,\"has_unresolved_findings\":null,\"status\":null}} -->\n\n<details>\n<summary><strong>Codex Review Summary</strong>: ✅ Completed</summary>\n\nThis comment shows the latest Codex review activity on this pull request.\n\n| Review | Status | Commit | Review trigger |\n| --- | --- | --- | --- |\n| 📝 **Code Review** | ✅ **Completed** <relative-time datetime=\"2026-11-19T18:40:47.933066Z\">2026-11-19T18:40:47.933066Z</relative-time> | `11e3e09` | PR opened |\n\n\n\n<details> <summary>ℹ️ About Codex in GitHub</summary>\n<br/>\n\n[Your team has set up Codex to review pull requests in this repo](https://chatgpt.com/codex/cloud/settings/general). Reviews are triggered when you\n- Open a pull request for review\n- Mark a draft as ready\n- Comment \"@codex review\" or \"@codex security review\".\n\nCodex reacts with 👀 while any review is running, comments if it has suggestions, and reacts with 👍 once all reviews finish with no findings.\n\n</details>\n\n</details>",
+        "author": {
+          "login": "chatgpt-codex-connector"
+        },
+        "createdAt": "2026-11-19T18:39:25Z",
+        "updatedAt": "2026-11-19T18:40:48Z"
+      }
+    ],
+    "reviews": [],
+    "threads": [],
+    "ci": {
+      "commit": "11e3e09011b2fe966031affeb3382b515ab3cc21",
+      "state": "SUCCESS",
+      "checks": [
+        {
+          "__typename": "CheckRun",
+          "id": "CR_kwDOVfXgm88AAAAfneu0rw",
+          "name": "Detect changes",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/wangyingang/sing-box-config-manager/actions/runs/44590094353/job/135793456303"
+        },
+        {
+          "__typename": "CheckRun",
+          "id": "CR_kwDOVfXgm88AAAAfnevANA",
+          "name": "Native sing-box",
+          "status": "COMPLETED",
+          "conclusion": "SKIPPED",
+          "detailsUrl": "https://github.com/wangyingang/sing-box-config-manager/actions/runs/44590094353/job/135793459252"
+        },
+        {
+          "__typename": "CheckRun",
+          "id": "CR_kwDOVfXgm88AAAAfne4x6Q",
+          "name": "Workspace checks",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/wangyingang/sing-box-config-manager/actions/runs/44590094353/job/135793619433"
+        }
+      ]
+    },
+    "cloud": [
+      {
+        "url": "https://github.com/wangyingang/sing-box-config-manager/pull/152#issuecomment-7018462483",
+        "updatedAt": "2026-11-19T18:40:48Z",
+        "commit_sha": "11e3e09011b2fe966031affeb3382b515ab3cc21",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      }
+    ]
+  }
+}

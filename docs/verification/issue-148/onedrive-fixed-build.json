@@ -1,0 +1,287 @@
+{
+  "repositoryHead": "11e3e09011b2fe966031affeb3382b515ab3cc21",
+  "source": {
+    "kind": "github-commit",
+    "repository": "blackmatrix7/ios_rule_script",
+    "branch": "master",
+    "commit": "0b6897dc17e0c513d25449c935a9694818e32f0c",
+    "file": {
+      "path": "rule/Clash/OneDrive/OneDrive.list",
+      "url": "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/0b6897dc17e0c513d25449c935a9694818e32f0c/rule/Clash/OneDrive/OneDrive.list"
+    },
+    "inputSha256": "cf4f6b24e434b6c6033b70fc88cf7e33f5aaa0f353f6963ced770f5fa1ae6c9b",
+    "inputBytes": 735
+  },
+  "definition": {
+    "id": "onedrive",
+    "source": "blackmatrix7",
+    "list": "all",
+    "stablePath": "stable/onedrive",
+    "usages": {
+      "route": {
+        "artifact": "domains"
+      },
+      "dns-query": {
+        "artifact": "domains"
+      },
+      "dns-response": {
+        "unavailable": "empty"
+      }
+    }
+  },
+  "buildId": "c284d55d115ee6957084cfb50870e50241b97ce8a3fc8fc0844a7ba405ef653e",
+  "nativeBuildId": "e8613b13466e0e7774c59d28711643186b7e479d8b4e947926d2feffc52623ee",
+  "tools": {
+    "pipeline": "0.1.0",
+    "implementationSha256": "16688c194e2ae4c9d37b151bcf0130998ffaec239f9cf90b2fb20aa90d13dd22",
+    "conversionPolicy": "typed-domain-text-v1",
+    "node": "26.13.0",
+    "yaml": "2.9.1",
+    "sourceFormat": 4
+  },
+  "status": "built-validated",
+  "tool": {
+    "path": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+    "version": "1.14.4",
+    "identity": "sing-box version 1.14.4\n\nEnvironment: go1.26.10 darwin/arm64\nTags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0\nRevision: c005f35300ce76427dc285481ec5695f5b179cd2\nCGO: enabled",
+    "sha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2"
+  },
+  "usages": {
+    "route": {
+      "artifactFiles": [
+        "domains.json",
+        "domains.srs"
+      ]
+    },
+    "dns-query": {
+      "artifactFiles": [
+        "domains.json",
+        "domains.srs"
+      ]
+    },
+    "dns-response": {
+      "status": "unavailable",
+      "reason": "empty"
+    }
+  },
+  "validation": {
+    "status": "passed",
+    "policy": "native-compile-load-v1",
+    "steps": [
+      {
+        "args": [
+          "rule-set",
+          "compile",
+          "domains.json",
+          "-o",
+          "domains.srs"
+        ],
+        "stdout": "",
+        "stderr": ""
+      },
+      {
+        "args": [
+          "rule-set",
+          "match",
+          "domains.json",
+          "native-validation.invalid",
+          "--format",
+          "source"
+        ],
+        "stdout": "",
+        "stderr": ""
+      },
+      {
+        "args": [
+          "rule-set",
+          "match",
+          "domains.srs",
+          "native-validation.invalid",
+          "--format",
+          "binary"
+        ],
+        "stdout": "",
+        "stderr": ""
+      }
+    ]
+  },
+  "report": {
+    "status": "converted",
+    "inputCount": 18,
+    "convertedCount": 16,
+    "unsupportedCount": 0,
+    "invalidCount": 0,
+    "duplicateCount": 0,
+    "outputTermCount": 16,
+    "attributeRecordCount": 0,
+    "typeCounts": {
+      "domain_suffix": {
+        "input": 13,
+        "converted": 13,
+        "output": 13
+      },
+      "domain": {
+        "input": 0,
+        "converted": 0,
+        "output": 0
+      },
+      "domain_keyword": {
+        "input": 3,
+        "converted": 3,
+        "output": 3
+      },
+      "domain_regex": {
+        "input": 0,
+        "converted": 0,
+        "output": 0
+      }
+    },
+    "usageCounts": {
+      "route": 16,
+      "dns-query": 16,
+      "dns-response": 0
+    },
+    "diagnostics": [],
+    "filteredRules": [
+      {
+        "type": "PROCESS-NAME",
+        "value": "OneDrive",
+        "line": 25
+      },
+      {
+        "type": "PROCESS-NAME",
+        "value": "OneDriveUpdater",
+        "line": 26
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "file": "domains.json",
+      "sha256": "bf5b223c60555033f61a1f4c19c1a8deba5b79abf47001848a125be2cc66db41",
+      "bytes": 563,
+      "requiredCapabilities": [],
+      "format": "source",
+      "termCount": 16
+    },
+    {
+      "file": "domains.srs",
+      "sha256": "c294fe0d9a20ec433a67af492fa8f53b3f7b47f6b85fa9894e226c1934e2344b",
+      "bytes": 237,
+      "requiredCapabilities": [],
+      "format": "binary"
+    }
+  ],
+  "decompiledRulesEqualSource": true,
+  "decompiledSourceFormat": 2,
+  "matches": [
+    {
+      "file": "domains.json",
+      "domain": "sharepoint.com",
+      "expected": true,
+      "actual": true
+    },
+    {
+      "file": "domains.json",
+      "domain": "cdn.sharepoint.com",
+      "expected": true,
+      "actual": true
+    },
+    {
+      "file": "domains.json",
+      "domain": "notsharepoint.com",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "file": "domains.json",
+      "domain": "sharepoint.com.example",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "file": "domains.json",
+      "domain": "xskydrivey.example",
+      "expected": true,
+      "actual": true
+    },
+    {
+      "file": "domains.json",
+      "domain": "xsky-drivey.example",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "file": "domains.json",
+      "domain": "xonedrivey.example",
+      "expected": true,
+      "actual": true
+    },
+    {
+      "file": "domains.json",
+      "domain": "x1drvy.example",
+      "expected": true,
+      "actual": true
+    },
+    {
+      "file": "domains.json",
+      "domain": "unrelated.invalid",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "file": "domains.srs",
+      "domain": "sharepoint.com",
+      "expected": true,
+      "actual": true
+    },
+    {
+      "file": "domains.srs",
+      "domain": "cdn.sharepoint.com",
+      "expected": true,
+      "actual": true
+    },
+    {
+      "file": "domains.srs",
+      "domain": "notsharepoint.com",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "file": "domains.srs",
+      "domain": "sharepoint.com.example",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "file": "domains.srs",
+      "domain": "xskydrivey.example",
+      "expected": true,
+      "actual": true
+    },
+    {
+      "file": "domains.srs",
+      "domain": "xsky-drivey.example",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "file": "domains.srs",
+      "domain": "xonedrivey.example",
+      "expected": true,
+      "actual": true
+    },
+    {
+      "file": "domains.srs",
+      "domain": "x1drvy.example",
+      "expected": true,
+      "actual": true
+    },
+    {
+      "file": "domains.srs",
+      "domain": "unrelated.invalid",
+      "expected": false,
+      "actual": false
+    }
+  ]
+}

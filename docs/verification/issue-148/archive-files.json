@@ -1,0 +1,92 @@
+[
+  {
+    "file": "README.md",
+    "byteLength": 2912,
+    "sha256": "8276001d67437e5d87c31e1550a95c816952d08203070eb47447ae3491368df2"
+  },
+  {
+    "file": "inspection.json",
+    "byteLength": 4461,
+    "sha256": "f56468c1f172e70042e25a0de851bb5da57251a414cd85eeaa8b6ac446f8537a"
+  },
+  {
+    "file": "onedrive-fixed-build.json",
+    "byteLength": 6838,
+    "sha256": "f8c46e104efa497b5a7c78002eb44db31b03731dc687939551207633953b9de9"
+  },
+  {
+    "file": "pr-evidence.json",
+    "byteLength": 3776,
+    "sha256": "1f1a92793c33bc1447d4b2e897db598a4eba3d6c24996fe2e1f8d2478e6d1b16"
+  },
+  {
+    "file": "production-state.json",
+    "byteLength": 1847,
+    "sha256": "345dc3d7642e7f882740874f881e65b888453dfdd80c7ae864e7444a5abf5020"
+  },
+  {
+    "file": "run/check.log",
+    "byteLength": 53301,
+    "sha256": "0d51ed5ca1270e10c78c8268f3327f0c1bc2362568d60c6694f1b3ee47453478"
+  },
+  {
+    "file": "run/client-cidr-operations.json",
+    "byteLength": 87889,
+    "sha256": "59ac2d46a982505d4ef9bee858581e0ea90da1f87f701c9e1bc61cffb86b7566"
+  },
+  {
+    "file": "run/client-domain-operations.json",
+    "byteLength": 39263,
+    "sha256": "f5f91470e195119c142017b3616efa16432e57af53c4b757add55b454340f1c2"
+  },
+  {
+    "file": "run/client-failure-cache.json",
+    "byteLength": 13187,
+    "sha256": "f645ea6fe34fd611ef3b398de155a1e81547f7c931847f31fec508cd5de8f339"
+  },
+  {
+    "file": "run/files.json",
+    "byteLength": 1807,
+    "sha256": "ac31fcb3f13d58df71662b0b8c9e80e2f281bc63ede5ba290334034184956298"
+  },
+  {
+    "file": "run/integration.log",
+    "byteLength": 204359,
+    "sha256": "c1dd1ba9c630448f97bfa0f3f8f66048de3dccafd92e7d4b31cc506b4124258b"
+  },
+  {
+    "file": "run/pnpm-version.stderr.log",
+    "byteLength": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "file": "run/pnpm-version.stdout.log",
+    "byteLength": 8,
+    "sha256": "abb3ce293b7ae818d9d22051b093e51415a4de46f6dd529189c4feb458037cb5"
+  },
+  {
+    "file": "run/release.log",
+    "byteLength": 10701,
+    "sha256": "4d36a950c415dea2dd4e0fbe1c73c7ca3a9cb5deb6031321a64082a836596c1c"
+  },
+  {
+    "file": "run/sing-box-version.stderr.log",
+    "byteLength": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "file": "run/sing-box-version.stdout.log",
+    "byteLength": 357,
+    "sha256": "9811c090325893260aef4b4b36d2f10065041502bdbd1da6bf76e0b2479e7147"
+  },
+  {
+    "file": "run/summary.json",
+    "byteLength": 5983,
+    "sha256": "9dddc348b8dd4f582c0c7b0d503f71f971d966413d7dd596e53d4fb3060a0778"
+  },
+  {
+    "file": "verify-fixed-build.mjs",
+    "byteLength": 4929,
+    "sha256": "c255d22a797df0b3489b282f865dc6ac70921636d2ae4cdf0a7a5216de1bfd01"
+  }
+]

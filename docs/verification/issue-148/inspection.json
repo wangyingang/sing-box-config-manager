@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 1,
+  "inspectedAt": "2026-11-19T18:41:24.669Z",
+  "status": "passed",
+  "evidence": [
+    {
+      "directory": "/Users/wangyg/Development/Working/sing-box-config-manager-issue-148-evidence/final-run",
+      "status": "passed",
+      "integrityStatus": "passed",
+      "source": {
+        "commit": "11e3e09011b2fe966031affeb3382b515ab3cc21",
+        "clean": true,
+        "status": "",
+        "trackedDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "scope": "check-native-release",
+      "verificationStatus": "passed",
+      "steps": [
+        {
+          "name": "check",
+          "exitCode": 0,
+          "signal": null,
+          "tests": 442,
+          "pass": 442,
+          "fail": 0,
+          "skipped": 0,
+          "cancelled": 0,
+          "todo": 0,
+          "log": {
+            "path": "check.log",
+            "byteLength": 53301,
+            "sha256": "0d51ed5ca1270e10c78c8268f3327f0c1bc2362568d60c6694f1b3ee47453478"
+          }
+        },
+        {
+          "name": "integration",
+          "exitCode": 0,
+          "signal": null,
+          "tests": 305,
+          "pass": 305,
+          "fail": 0,
+          "skipped": 0,
+          "cancelled": 0,
+          "todo": 0,
+          "log": {
+            "path": "integration.log",
+            "byteLength": 204359,
+            "sha256": "c1dd1ba9c630448f97bfa0f3f8f66048de3dccafd92e7d4b31cc506b4124258b"
+          }
+        },
+        {
+          "name": "release",
+          "exitCode": 0,
+          "signal": null,
+          "tests": 3,
+          "pass": 3,
+          "fail": 0,
+          "skipped": 0,
+          "cancelled": 0,
+          "todo": 0,
+          "log": {
+            "path": "release.log",
+            "byteLength": 10701,
+            "sha256": "4d36a950c415dea2dd4e0fbe1c73c7ca3a9cb5deb6031321a64082a836596c1c"
+          }
+        }
+      ],
+      "errors": [],
+      "files": {
+        "total": 11,
+        "checked": 11,
+        "failures": []
+      },
+      "tools": {
+        "node": {
+          "version": "v26.13.0",
+          "executable": "/Users/wangyg/.local/share/mise/installs/node/26.13.0/bin/node"
+        },
+        "pnpm": {
+          "expected": "10.33.2",
+          "launcher": "/Users/wangyg/.local/share/mise/installs/node/lts/bin/pnpm",
+          "launcherSha256": "7c2a67995976b5b592b611d8b236e3b0633bd654fb49aedd96c6eb7ce04c9cbb",
+          "actual": "10.33.2"
+        },
+        "singBox": {
+          "path": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+          "expectedVersion": "1.14.4",
+          "sha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2",
+          "identity": "sing-box version 1.14.4\n\nEnvironment: go1.26.10 darwin/arm64\nTags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0\nRevision: c005f35300ce76427dc285481ec5695f5b179cd2\nCGO: enabled",
+          "version": "1.14.4"
+        }
+      },
+      "preflight": [
+        {
+          "name": "pnpm-version",
+          "exitCode": 0,
+          "signal": null,
+          "tests": 0,
+          "pass": 0,
+          "fail": 0,
+          "skipped": 0,
+          "cancelled": 0,
+          "todo": 0,
+          "log": {
+            "path": "pnpm-version.stderr.log",
+            "byteLength": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "stdout": {
+            "path": "pnpm-version.stdout.log",
+            "byteLength": 8,
+            "sha256": "abb3ce293b7ae818d9d22051b093e51415a4de46f6dd529189c4feb458037cb5"
+          }
+        },
+        {
+          "name": "sing-box-version",
+          "exitCode": 0,
+          "signal": null,
+          "tests": 0,
+          "pass": 0,
+          "fail": 0,
+          "skipped": 0,
+          "cancelled": 0,
+          "todo": 0,
+          "log": {
+            "path": "sing-box-version.stderr.log",
+            "byteLength": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "stdout": {
+            "path": "sing-box-version.stdout.log",
+            "byteLength": 357,
+            "sha256": "9811c090325893260aef4b4b36d2f10065041502bdbd1da6bf76e0b2479e7147"
+          }
+        }
+      ]
+    }
+  ]
+}
