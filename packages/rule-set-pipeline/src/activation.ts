@@ -150,7 +150,12 @@ export async function verifyCandidateEvidence(options: Partial<NativeBuildOption
   if (report) {
     requireThat(['inputCount', 'convertedCount', 'invalidCount', 'unsupportedCount', 'duplicateCount', 'outputTermCount']
       .every(key => Number.isSafeInteger(report[key]) && report[key] >= 0), 'Invalid conversion counts');
-    requireThat(report.status === 'converted' && report.inputCount > 0 && report.inputCount === report.convertedCount
+    const filtered = report.filteredRules === undefined ? [] : report.filteredRules;
+    requireThat(Array.isArray(filtered) && (filtered.length === 0
+      || (build.tools?.conversionPolicy === 'typed-domain-text-v1' && filtered.every(rule =>
+        rule?.type === 'PROCESS-NAME' && typeof rule.value === 'string' && rule.value.length > 0
+        && Number.isSafeInteger(rule.line) && rule.line > 0))), 'Invalid filtered conversion entries');
+    requireThat(report.status === 'converted' && report.convertedCount > 0 && report.inputCount === report.convertedCount + filtered.length
       && report.invalidCount === 0 && report.unsupportedCount === 0 && report.diagnostics?.length === 0
       && report.outputTermCount === report.convertedCount - report.duplicateCount, 'Incomplete conversion record');
   }

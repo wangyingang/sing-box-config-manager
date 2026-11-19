@@ -23,6 +23,7 @@ export interface ConversionReport {
   duplicateCount: number;
   outputTermCount: number;
   attributeRecordCount: number;
+  filteredRules?: { type: 'PROCESS-NAME'; value: string; line: number }[];
   typeCounts: Record<TermType, TermCounts> & { ip_cidr?: TermCounts };
   usageCounts: Record<'route' | 'dns-query' | 'dns-response', number>;
   diagnostics: Diagnostic[];

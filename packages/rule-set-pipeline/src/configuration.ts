@@ -4,7 +4,7 @@ import { validRepository, validBranch, validInputPath, validInputFile } from './
 import { isMap, parseDocument, visit } from 'yaml';
 import { USAGES, type Usage } from './projection.js';
 import { ARTIFACT_REPOSITORY } from './publication.js';
-import { CHINA_IP_INPUT, type CommitInput } from './github-commit.js';
+import { CHINA_IP_INPUT, isCommitInputFormat, type CommitInput } from './github-commit.js';
 import { OPENAI_VOICE_URL, type OpenAiVoiceInput } from './openai-voice-source.js';
 import { V2FLY_RELEASE_INPUT, type ReleaseInput } from './release.js';
 
@@ -15,6 +15,7 @@ type ConfiguredUsage = { artifact: 'domains' | 'route' } | { unavailable: 'empty
 const formatCapabilities = {
   'plain-yaml': { artifact: 'domains', namedLists: true },
   'domain-suffix-text': { artifact: 'domains', namedLists: false },
+  'typed-domain-text': { artifact: 'domains', namedLists: false },
   'cidr-text': { artifact: 'route', namedLists: false },
   'openai-voice-json': { artifact: 'route', namedLists: false },
 } as const satisfies Record<SourceFormat, { artifact: 'domains' | 'route'; namedLists: boolean }>;
@@ -93,9 +94,7 @@ export function parseSource(input: unknown): SourceInput {
   }
   if (source.version === 'git-branch') {
     exact(file, ['format', 'path'], 'Git input');
-    if (file.format !== 'plain-yaml' && file.format !== 'cidr-text' && file.format !== 'domain-suffix-text') {
-      throw new Error('Unsupported Git input format');
-    }
+    if (!isCommitInputFormat(file.format)) throw new Error('Unsupported Git input format');
     if (!validBranch(source.branch) || !validInputPath(file.path)) throw new Error('Invalid Git branch or input path');
     return { repository: source.repository, version: 'git-branch', branch: source.branch, input: { format: file.format, path: file.path } };
   }

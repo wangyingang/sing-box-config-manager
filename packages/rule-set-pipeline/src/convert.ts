@@ -1,3 +1,5 @@
+import { isIP } from 'node:net';
+import { domainToASCII } from 'node:url';
 import { renderRuleJson } from './projection.js';
 import { diagnostic, emptyReport, TERM_TYPES, type ConversionReport, type InputRule, type RuleTerm, type TermType } from './types.js';
 
@@ -11,6 +13,18 @@ export function isDomainName(value: string): boolean {
   return value.length <= 254
     && /^[\p{L}\p{N}](?:[\p{L}\p{N}-]*[\p{L}\p{N}])?(?:\.[\p{L}\p{N}](?:[\p{L}\p{N}-]*[\p{L}\p{N}])?)*\.?$/u.test(value)
     && value.replace(/\.$/, '').split('.').every(label => label.length <= 63);
+}
+
+export function normalizeBareDomain(value: string): string | undefined {
+  // Check bare syntax first: domainToASCII also accepts parts of some URLs.
+  const name = value.replace(/\.$/, '');
+  const domain = /^[\p{L}\p{M}\p{N}.-]+$/u.test(name) && domainToASCII(name);
+  // The 255-octet DNS name includes the root and label lengths.
+  if (domain && isDomainName(domain) && domain.length <= 253 && !domain.endsWith('.') && !isIP(domain)) return domain;
+}
+
+export function isDomainKeyword(value: string): boolean {
+  return /^[\p{L}\p{N}.-]+$/u.test(value);
 }
 
 function regexpAttributeSeparator(value: string): number {
@@ -62,7 +76,7 @@ export function convertRules(rules: readonly InputRule[]): ConversionResult {
     if ((sourceType === 'domain' || sourceType === 'full') && !isDomainName(value)) {
       invalid('域名匹配值非法'); continue;
     }
-    if (sourceType === 'keyword' && !/^[\p{L}\p{N}.-]+$/u.test(value)) {
+    if (sourceType === 'keyword' && !isDomainKeyword(value)) {
       invalid('keyword 含有非法域名字符'); continue;
     }
     // Do not compile with JS RegExp: sing-box uses Go's engine (#16).

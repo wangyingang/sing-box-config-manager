@@ -10,6 +10,7 @@ import { configuredInput, configuredReleaseInput, parseBuildConfiguration, type 
 import { convertOpenAiVoice, type OpenAiVoiceSource } from './openai-voice-source.js';
 import { convertPlainYaml } from './plain-yaml-adapter.js';
 import { convertDomainSuffixText } from './domain-suffix-text-adapter.js';
+import { convertTypedDomainText } from './typed-domain-text-adapter.js';
 import { convertCidrText } from './cidr-text-adapter.js';
 import { USAGES, type BuildTerm } from './projection.js';
 
@@ -32,6 +33,7 @@ export async function configuredBuildTools(format: SourceFormat = 'plain-yaml') 
     'types', 'projection', 'native'];
   if (format === 'cidr-text') files.push('github-commit', 'cidr-text-adapter');
   if (format === 'domain-suffix-text') files.push('github-commit', 'domain-suffix-text-adapter');
+  if (format === 'typed-domain-text') files.push('github-commit', 'typed-domain-text-adapter');
   if (format === 'openai-voice-json') files.push('openai-voice-source', 'cidr-text-adapter');
   const implementationSha256 = sha256(Buffer.concat(await Promise.all(
     files.map(name =>
@@ -81,6 +83,7 @@ export async function buildConfiguredCommit(options: BuildOptions & { github: Co
 const wholeFileConverters = {
   'cidr-text': convertCidrText,
   'domain-suffix-text': convertDomainSuffixText,
+  'typed-domain-text': convertTypedDomainText,
   'openai-voice-json': convertOpenAiVoice,
 };
 

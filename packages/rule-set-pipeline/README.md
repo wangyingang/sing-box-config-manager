@@ -68,16 +68,18 @@ pnpm rules sync --config /path/to/rulesets-draft.yml --dry-run --json
 
 配置使用 `schemaVersion: 3`，必须显式声明正整数 `candidateRetentionDays`。正式配置和样例采用已确定的 30 天策略；`cleanup` 读取正式值，不自行设置默认保留期。`ruleSets` 必须显式存在。`ruleSets: []` 与空 `sources: {}` 可以表达删除全部受管规则；配置缺失、无法读取、未知字段、无效引用、重复 ID 或重叠稳定路径均在写入前拒绝。
 
-正式配置为域名集 `openai`、`anthropic`、`google-deepmind`、`china-domains`、`global`、`apple`、`microsoft`、`docker`、`github`、`google`、`youtube` 和 `gfw` 定义 Route 与 DNS query 共用的 `domains.json` 和 `domains.srs`。`china-domains` 选择 V2Fly 的 `geolocation-cn`，`global` 选择 `geolocation-!cn`，其余 V2Fly 规则集选择与 ID 同名的列表。DNS response 对这些域名集不可用。规则集保留上游重叠，匹配优先级由客户端配置中的规则顺序决定。
+正式配置为域名集 `openai`、`anthropic`、`google-deepmind`、`china-domains`、`global`、`apple`、`microsoft`、`docker`、`github`、`google`、`youtube`、`gfw` 和 `onedrive` 定义 Route 与 DNS query 共用的 `domains.json` 和 `domains.srs`。`china-domains` 选择 V2Fly 的 `geolocation-cn`，`global` 选择 `geolocation-!cn`，其余 V2Fly 规则集选择与 ID 同名的列表。DNS response 对这些域名集不可用。规则集保留上游重叠，匹配优先级由客户端配置中的规则顺序决定。
 
 `gfw` 使用独立的上游域名分类。[Loyalsoldier 的 `release:gfw.txt`](https://github.com/Loyalsoldier/v2ray-rules-dat/blob/release/gfw.txt)
+
+`onedrive` 读取完整上游清单。保留域名后缀和子串关键词匹配，转换报告记录过滤的进程条件。[blackmatrix7 的 `master:rule/Clash/OneDrive/OneDrive.list`](https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/OneDrive/OneDrive.list)
 
 `china-ip` 和 `chatgpt-voice` 为地址集，可用于 Route 与 DNS response。各集使用独立的 `stable/<id>`，实际交付以产物清单和稳定入口为准。GitHub 来源可以更换仓库、资产、路径或列表。
 
 | 获取方式 | 必填输入 | 支持的解析语义 |
 | --- | --- | --- |
 | `latest-release` | GitHub `repository`、`input.asset`、`input.checksum` | `plain-yaml` 或 `cidr-text` |
-| `git-branch` | GitHub `repository`、`branch`、`input.path` | `plain-yaml`、`cidr-text` 或 `domain-suffix-text` |
+| `git-branch` | GitHub `repository`、`branch`、`input.path` | `plain-yaml`、`cidr-text`、`domain-suffix-text` 或 `typed-domain-text` |
 | `openai-voice` | `input.url: https://openai.com/chatgpt-voice.json` | `openai-voice-json` |
 
 `plain-yaml` 专指现有规则列表语义，不接受任意 YAML；`cidr-text` 为逐行 IPv4/IPv6 CIDR，`list` 固定为 `all`。`domain-suffix-text` 同样使用 `list: all`，跳过空行，将每行一个裸域名转换为 `domain_suffix`。转换使用小写 DNS 名称，国际化域名使用 ASCII A-label，并移除末尾的根域点。非法条目或空输入使该规则集本次构建失败。未知获取方式和格式拒绝，新增能力须经开发接入。来源内容的分类和覆盖范围由上游维护，本模块不做多源合并、质量评分或 IP 地理归属验证。
