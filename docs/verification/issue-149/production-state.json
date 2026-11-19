@@ -1,0 +1,52 @@
+{
+  "workflow": {
+    "conclusion": "success",
+    "headSha": "8875d9c1c34a9674e812f8e757f9051a5031f9b9",
+    "status": "completed",
+    "url": "https://github.com/wangyingang/sing-box-config-manager/actions/runs/44595807023"
+  },
+  "execution": {
+    "runId": "44595807023",
+    "runAttempt": "1",
+    "eventSha": "8875d9c1c34a9674e812f8e757f9051a5031f9b9",
+    "workflowSha": "8875d9c1c34a9674e812f8e757f9051a5031f9b9",
+    "checkoutCommit": "8875d9c1c34a9674e812f8e757f9051a5031f9b9"
+  },
+  "result": {
+    "event": "push",
+    "target": "main",
+    "exitCode": 0,
+    "results": [
+      {
+        "operation": "sync",
+        "dryRun": false,
+        "configurationRevision": "8875d9c1c34a9674e812f8e757f9051a5031f9b9",
+        "configurationOrigin": "wangyingang/sing-box-config-manager@main",
+        "target": {
+          "repository": "wangyingang/sing-box-rule-artifacts",
+          "branch": "main"
+        },
+        "status": "disabled",
+        "exitCode": 0,
+        "results": [],
+        "error": "RULE_UPDATE_ENABLED is disabled; configuration has not been applied (未应用)"
+      }
+    ]
+  },
+  "artifactBranches": {
+    "main": {
+      "before": "b3c3f5324a7fd023cff4583fb3b3e522591a0aa9",
+      "after": "b3c3f5324a7fd023cff4583fb3b3e522591a0aa9",
+      "paths": [
+        "README.md"
+      ]
+    },
+    "candidates": {
+      "before": "b3c3f5324a7fd023cff4583fb3b3e522591a0aa9",
+      "after": "b3c3f5324a7fd023cff4583fb3b3e522591a0aa9",
+      "paths": [
+        "README.md"
+      ]
+    }
+  }
+}

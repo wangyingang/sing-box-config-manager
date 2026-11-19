@@ -1,0 +1,2843 @@
+{
+  "identity": {
+    "commit": "49da1f48efbb7375342fc52a05b76173e215691b",
+    "clean": true
+  },
+  "configurationSha256": "c73361933d1663b3f0ccc8772b5d939bfea39d7374fd78dd33472df998bf67c8",
+  "ruleSets": [
+    {
+      "id": "openai",
+      "definition": {
+        "id": "openai",
+        "source": "dlc",
+        "list": "openai",
+        "stablePath": "stable/openai",
+        "usages": {
+          "route": {
+            "artifact": "domains"
+          },
+          "dns-query": {
+            "artifact": "domains"
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      "source": {
+        "repository": "v2fly/domain-list-community",
+        "releaseId": 450083966,
+        "tag": "20261118141523",
+        "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+        "yaml": {
+          "id": 763666587,
+          "name": "dlc.dat_plain.yml",
+          "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+        },
+        "checksum": {
+          "id": 763666591,
+          "name": "dlc.dat_plain.yml.sha256sum",
+          "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+        },
+        "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+        "inputBytes": 3778556,
+        "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+      },
+      "tools": {
+        "pipeline": "0.1.0",
+        "implementationSha256": "0ecf2b2a4d7ee2431e1afef28a99fc8b45d41404aca93a9818c8220d9621587d",
+        "conversionPolicy": "v2fly-domain-v1",
+        "node": "26.13.0",
+        "yaml": "2.9.1",
+        "sourceFormat": 4
+      },
+      "tool": {
+        "path": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+        "version": "1.14.4",
+        "identity": "sing-box version 1.14.4\n\nEnvironment: go1.26.10 darwin/arm64\nTags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0\nRevision: c005f35300ce76427dc285481ec5695f5b179cd2\nCGO: enabled",
+        "sha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2"
+      },
+      "validation": {
+        "status": "passed",
+        "policy": "native-compile-load-v1",
+        "steps": [
+          {
+            "args": [
+              "rule-set",
+              "compile",
+              "domains.json",
+              "-o",
+              "domains.srs"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "domains.json",
+              "native-validation.invalid",
+              "--format",
+              "source"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "domains.srs",
+              "native-validation.invalid",
+              "--format",
+              "binary"
+            ],
+            "stdout": "",
+            "stderr": ""
+          }
+        ]
+      },
+      "report": {
+        "status": "converted",
+        "inputCount": 25,
+        "convertedCount": 25,
+        "unsupportedCount": 0,
+        "invalidCount": 0,
+        "duplicateCount": 0,
+        "outputTermCount": 25,
+        "attributeRecordCount": 4,
+        "typeCounts": {
+          "domain_suffix": {
+            "input": 14,
+            "converted": 14,
+            "output": 14
+          },
+          "domain": {
+            "input": 10,
+            "converted": 10,
+            "output": 10
+          },
+          "domain_keyword": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          },
+          "domain_regex": {
+            "input": 1,
+            "converted": 1,
+            "output": 1
+          }
+        },
+        "usageCounts": {
+          "route": 25,
+          "dns-query": 25,
+          "dns-response": 0
+        },
+        "diagnostics": []
+      },
+      "usages": {
+        "route": {
+          "artifactFiles": [
+            "domains.json",
+            "domains.srs"
+          ]
+        },
+        "dns-query": {
+          "artifactFiles": [
+            "domains.json",
+            "domains.srs"
+          ]
+        },
+        "dns-response": {
+          "status": "unavailable",
+          "reason": "empty"
+        }
+      },
+      "buildId": "dd66c34ff8c0f567c930073fd369bf689303d5b830b124feec1f0a45dfd1904e",
+      "nativeBuildId": "04b2e041efa0173a38f0243909d3afcdde14bf12bbb5dc5e410ab1a4e37b7d84",
+      "artifacts": [
+        {
+          "file": "domains.json",
+          "sha256": "a70096077d78af43df6f56dbad775c27e8b0be7c92a81e36baaf8229b04de5d5",
+          "bytes": 1036,
+          "requiredCapabilities": [],
+          "format": "source",
+          "termCount": 25
+        },
+        {
+          "file": "domains.srs",
+          "sha256": "481b2b2c45202ef9b4b2ac0ef3e4e371296d0aa4cb1f245c450ecd1edde9b5d7",
+          "bytes": 485,
+          "requiredCapabilities": [],
+          "format": "binary"
+        }
+      ]
+    },
+    {
+      "id": "anthropic",
+      "definition": {
+        "id": "anthropic",
+        "source": "dlc",
+        "list": "anthropic",
+        "stablePath": "stable/anthropic",
+        "usages": {
+          "route": {
+            "artifact": "domains"
+          },
+          "dns-query": {
+            "artifact": "domains"
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      "source": {
+        "repository": "v2fly/domain-list-community",
+        "releaseId": 450083966,
+        "tag": "20261118141523",
+        "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+        "yaml": {
+          "id": 763666587,
+          "name": "dlc.dat_plain.yml",
+          "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+        },
+        "checksum": {
+          "id": 763666591,
+          "name": "dlc.dat_plain.yml.sha256sum",
+          "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+        },
+        "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+        "inputBytes": 3778556,
+        "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+      },
+      "tools": {
+        "pipeline": "0.1.0",
+        "implementationSha256": "0ecf2b2a4d7ee2431e1afef28a99fc8b45d41404aca93a9818c8220d9621587d",
+        "conversionPolicy": "v2fly-domain-v1",
+        "node": "26.13.0",
+        "yaml": "2.9.1",
+        "sourceFormat": 4
+      },
+      "tool": {
+        "path": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+        "version": "1.14.4",
+        "identity": "sing-box version 1.14.4\n\nEnvironment: go1.26.10 darwin/arm64\nTags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0\nRevision: c005f35300ce76427dc285481ec5695f5b179cd2\nCGO: enabled",
+        "sha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2"
+      },
+      "validation": {
+        "status": "passed",
+        "policy": "native-compile-load-v1",
+        "steps": [
+          {
+            "args": [
+              "rule-set",
+              "compile",
+              "domains.json",
+              "-o",
+              "domains.srs"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "domains.json",
+              "native-validation.invalid",
+              "--format",
+              "source"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "domains.srs",
+              "native-validation.invalid",
+              "--format",
+              "binary"
+            ],
+            "stdout": "",
+            "stderr": ""
+          }
+        ]
+      },
+      "report": {
+        "status": "converted",
+        "inputCount": 21,
+        "convertedCount": 21,
+        "unsupportedCount": 0,
+        "invalidCount": 0,
+        "duplicateCount": 0,
+        "outputTermCount": 21,
+        "attributeRecordCount": 2,
+        "typeCounts": {
+          "domain_suffix": {
+            "input": 18,
+            "converted": 18,
+            "output": 18
+          },
+          "domain": {
+            "input": 3,
+            "converted": 3,
+            "output": 3
+          },
+          "domain_keyword": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          },
+          "domain_regex": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          }
+        },
+        "usageCounts": {
+          "route": 21,
+          "dns-query": 21,
+          "dns-response": 0
+        },
+        "diagnostics": []
+      },
+      "usages": {
+        "route": {
+          "artifactFiles": [
+            "domains.json",
+            "domains.srs"
+          ]
+        },
+        "dns-query": {
+          "artifactFiles": [
+            "domains.json",
+            "domains.srs"
+          ]
+        },
+        "dns-response": {
+          "status": "unavailable",
+          "reason": "empty"
+        }
+      },
+      "buildId": "87853aab09d8501f3da5c6195e7920d9d8616c4bedbf155901ee28ff296d6af9",
+      "nativeBuildId": "3672c62149529a3d638470095a7272e6292489dbc03b7f080effe3754210766d",
+      "artifacts": [
+        {
+          "file": "domains.json",
+          "sha256": "2f50f77b8c2d6885e40d729dc16a8c830e4364f00330231ded8f696e636fff84",
+          "bytes": 704,
+          "requiredCapabilities": [],
+          "format": "source",
+          "termCount": 21
+        },
+        {
+          "file": "domains.srs",
+          "sha256": "6bdf4ebc85d20b873b860875dd00030c40a673d92152a8fbae26a367f02fd8d1",
+          "bytes": 326,
+          "requiredCapabilities": [],
+          "format": "binary"
+        }
+      ]
+    },
+    {
+      "id": "google-deepmind",
+      "definition": {
+        "id": "google-deepmind",
+        "source": "dlc",
+        "list": "google-deepmind",
+        "stablePath": "stable/google-deepmind",
+        "usages": {
+          "route": {
+            "artifact": "domains"
+          },
+          "dns-query": {
+            "artifact": "domains"
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      "source": {
+        "repository": "v2fly/domain-list-community",
+        "releaseId": 450083966,
+        "tag": "20261118141523",
+        "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+        "yaml": {
+          "id": 763666587,
+          "name": "dlc.dat_plain.yml",
+          "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+        },
+        "checksum": {
+          "id": 763666591,
+          "name": "dlc.dat_plain.yml.sha256sum",
+          "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+        },
+        "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+        "inputBytes": 3778556,
+        "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+      },
+      "tools": {
+        "pipeline": "0.1.0",
+        "implementationSha256": "0ecf2b2a4d7ee2431e1afef28a99fc8b45d41404aca93a9818c8220d9621587d",
+        "conversionPolicy": "v2fly-domain-v1",
+        "node": "26.13.0",
+        "yaml": "2.9.1",
+        "sourceFormat": 4
+      },
+      "tool": {
+        "path": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+        "version": "1.14.4",
+        "identity": "sing-box version 1.14.4\n\nEnvironment: go1.26.10 darwin/arm64\nTags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0\nRevision: c005f35300ce76427dc285481ec5695f5b179cd2\nCGO: enabled",
+        "sha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2"
+      },
+      "validation": {
+        "status": "passed",
+        "policy": "native-compile-load-v1",
+        "steps": [
+          {
+            "args": [
+              "rule-set",
+              "compile",
+              "domains.json",
+              "-o",
+              "domains.srs"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "domains.json",
+              "native-validation.invalid",
+              "--format",
+              "source"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "domains.srs",
+              "native-validation.invalid",
+              "--format",
+              "binary"
+            ],
+            "stdout": "",
+            "stderr": ""
+          }
+        ]
+      },
+      "report": {
+        "status": "converted",
+        "inputCount": 49,
+        "convertedCount": 49,
+        "unsupportedCount": 0,
+        "invalidCount": 0,
+        "duplicateCount": 0,
+        "outputTermCount": 49,
+        "attributeRecordCount": 0,
+        "typeCounts": {
+          "domain_suffix": {
+            "input": 33,
+            "converted": 33,
+            "output": 33
+          },
+          "domain": {
+            "input": 16,
+            "converted": 16,
+            "output": 16
+          },
+          "domain_keyword": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          },
+          "domain_regex": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          }
+        },
+        "usageCounts": {
+          "route": 49,
+          "dns-query": 49,
+          "dns-response": 0
+        },
+        "diagnostics": []
+      },
+      "usages": {
+        "route": {
+          "artifactFiles": [
+            "domains.json",
+            "domains.srs"
+          ]
+        },
+        "dns-query": {
+          "artifactFiles": [
+            "domains.json",
+            "domains.srs"
+          ]
+        },
+        "dns-response": {
+          "status": "unavailable",
+          "reason": "empty"
+        }
+      },
+      "buildId": "49ff320c7756f214db3966a1f0b3b5960015fb68999c3ac2139e5b8a46e6c81a",
+      "nativeBuildId": "6e6dc752483e91217ce96dc00f154db644e1944b2a8e2720d99539755e89ff78",
+      "artifacts": [
+        {
+          "file": "domains.json",
+          "sha256": "1f417b044c3cff900faa62bd5df7f92cb0bfca8c288c9f64689ccd17ffd83322",
+          "bytes": 1830,
+          "requiredCapabilities": [],
+          "format": "source",
+          "termCount": 49
+        },
+        {
+          "file": "domains.srs",
+          "sha256": "652abe66df71563d3836fccafd551448935b7551a00fe9af572062bd7008fa45",
+          "bytes": 594,
+          "requiredCapabilities": [],
+          "format": "binary"
+        }
+      ]
+    },
+    {
+      "id": "china-domains",
+      "definition": {
+        "id": "china-domains",
+        "source": "dlc",
+        "list": "geolocation-cn",
+        "stablePath": "stable/china-domains",
+        "usages": {
+          "route": {
+            "artifact": "domains"
+          },
+          "dns-query": {
+            "artifact": "domains"
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      "source": {
+        "repository": "v2fly/domain-list-community",
+        "releaseId": 450083966,
+        "tag": "20261118141523",
+        "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+        "yaml": {
+          "id": 763666587,
+          "name": "dlc.dat_plain.yml",
+          "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+        },
+        "checksum": {
+          "id": 763666591,
+          "name": "dlc.dat_plain.yml.sha256sum",
+          "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+        },
+        "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+        "inputBytes": 3778556,
+        "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+      },
+      "tools": {
+        "pipeline": "0.1.0",
+        "implementationSha256": "0ecf2b2a4d7ee2431e1afef28a99fc8b45d41404aca93a9818c8220d9621587d",
+        "conversionPolicy": "v2fly-domain-v1",
+        "node": "26.13.0",
+        "yaml": "2.9.1",
+        "sourceFormat": 4
+      },
+      "tool": {
+        "path": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+        "version": "1.14.4",
+        "identity": "sing-box version 1.14.4\n\nEnvironment: go1.26.10 darwin/arm64\nTags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0\nRevision: c005f35300ce76427dc285481ec5695f5b179cd2\nCGO: enabled",
+        "sha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2"
+      },
+      "validation": {
+        "status": "passed",
+        "policy": "native-compile-load-v1",
+        "steps": [
+          {
+            "args": [
+              "rule-set",
+              "compile",
+              "domains.json",
+              "-o",
+              "domains.srs"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "domains.json",
+              "native-validation.invalid",
+              "--format",
+              "source"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "domains.srs",
+              "native-validation.invalid",
+              "--format",
+              "binary"
+            ],
+            "stdout": "",
+            "stderr": ""
+          }
+        ]
+      },
+      "report": {
+        "status": "converted",
+        "inputCount": 8463,
+        "convertedCount": 8463,
+        "unsupportedCount": 0,
+        "invalidCount": 0,
+        "duplicateCount": 0,
+        "outputTermCount": 8463,
+        "attributeRecordCount": 550,
+        "typeCounts": {
+          "domain_suffix": {
+            "input": 8414,
+            "converted": 8414,
+            "output": 8414
+          },
+          "domain": {
+            "input": 46,
+            "converted": 46,
+            "output": 46
+          },
+          "domain_keyword": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          },
+          "domain_regex": {
+            "input": 3,
+            "converted": 3,
+            "output": 3
+          }
+        },
+        "usageCounts": {
+          "route": 8463,
+          "dns-query": 8463,
+          "dns-response": 0
+        },
+        "diagnostics": []
+      },
+      "usages": {
+        "route": {
+          "artifactFiles": [
+            "domains.json",
+            "domains.srs"
+          ]
+        },
+        "dns-query": {
+          "artifactFiles": [
+            "domains.json",
+            "domains.srs"
+          ]
+        },
+        "dns-response": {
+          "status": "unavailable",
+          "reason": "empty"
+        }
+      },
+      "buildId": "36ff74027b222972c7cf73a17f53e033f139ae800ae9434f92177188f7d84353",
+      "nativeBuildId": "1a76c81addf085c7ce5ec8ee1c095c6ad1d33fde233c91c1123d3a9234ad214a",
+      "artifacts": [
+        {
+          "file": "domains.json",
+          "sha256": "dd2c6e600d9714eacc47b783beb6aca1738aa506b3c475aa1d6ac7fb6e909136",
+          "bytes": 204014,
+          "requiredCapabilities": [],
+          "format": "source",
+          "termCount": 8463
+        },
+        {
+          "file": "domains.srs",
+          "sha256": "5572d2c40839b39cd604fca8153f4f6b2601311cd208a434cfcd1a1030bb41dc",
+          "bytes": 43963,
+          "requiredCapabilities": [],
+          "format": "binary"
+        }
+      ]
+    },
+    {
+      "id": "global",
+      "definition": {
+        "id": "global",
+        "source": "dlc",
+        "list": "geolocation-!cn",
+        "stablePath": "stable/global",
+        "usages": {
+          "route": {
+            "artifact": "domains"
+          },
+          "dns-query": {
+            "artifact": "domains"
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      "source": {
+        "repository": "v2fly/domain-list-community",
+        "releaseId": 450083966,
+        "tag": "20261118141523",
+        "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+        "yaml": {
+          "id": 763666587,
+          "name": "dlc.dat_plain.yml",
+          "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+        },
+        "checksum": {
+          "id": 763666591,
+          "name": "dlc.dat_plain.yml.sha256sum",
+          "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+        },
+        "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+        "inputBytes": 3778556,
+        "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+      },
+      "tools": {
+        "pipeline": "0.1.0",
+        "implementationSha256": "0ecf2b2a4d7ee2431e1afef28a99fc8b45d41404aca93a9818c8220d9621587d",
+        "conversionPolicy": "v2fly-domain-v1",
+        "node": "26.13.0",
+        "yaml": "2.9.1",
+        "sourceFormat": 4
+      },
+      "tool": {
+        "path": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+        "version": "1.14.4",
+        "identity": "sing-box version 1.14.4\n\nEnvironment: go1.26.10 darwin/arm64\nTags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0\nRevision: c005f35300ce76427dc285481ec5695f5b179cd2\nCGO: enabled",
+        "sha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2"
+      },
+      "validation": {
+        "status": "passed",
+        "policy": "native-compile-load-v1",
+        "steps": [
+          {
+            "args": [
+              "rule-set",
+              "compile",
+              "domains.json",
+              "-o",
+              "domains.srs"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "domains.json",
+              "native-validation.invalid",
+              "--format",
+              "source"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "domains.srs",
+              "native-validation.invalid",
+              "--format",
+              "binary"
+            ],
+            "stdout": "",
+            "stderr": ""
+          }
+        ]
+      },
+      "report": {
+        "status": "converted",
+        "inputCount": 25223,
+        "convertedCount": 25223,
+        "unsupportedCount": 0,
+        "invalidCount": 0,
+        "duplicateCount": 0,
+        "outputTermCount": 25223,
+        "attributeRecordCount": 1512,
+        "typeCounts": {
+          "domain_suffix": {
+            "input": 24284,
+            "converted": 24284,
+            "output": 24284
+          },
+          "domain": {
+            "input": 781,
+            "converted": 781,
+            "output": 781
+          },
+          "domain_keyword": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          },
+          "domain_regex": {
+            "input": 158,
+            "converted": 158,
+            "output": 158
+          }
+        },
+        "usageCounts": {
+          "route": 25223,
+          "dns-query": 25223,
+          "dns-response": 0
+        },
+        "diagnostics": []
+      },
+      "usages": {
+        "route": {
+          "artifactFiles": [
+            "domains.json",
+            "domains.srs"
+          ]
+        },
+        "dns-query": {
+          "artifactFiles": [
+            "domains.json",
+            "domains.srs"
+          ]
+        },
+        "dns-response": {
+          "status": "unavailable",
+          "reason": "empty"
+        }
+      },
+      "buildId": "3e44c2e7e57ed7b561db4c80319358033beb4b70fe7768a318cd20cdd5339ce2",
+      "nativeBuildId": "80fe5a28c6da3e7d5e28ad820c6371a55d2e979a465bad58a4ff14074f1b1f6f",
+      "artifacts": [
+        {
+          "file": "domains.json",
+          "sha256": "7680a6c8fe2b2ff017641ca5338f5ee4d23d956c9419de69f471514f9725cbfa",
+          "bytes": 657333,
+          "requiredCapabilities": [],
+          "format": "source",
+          "termCount": 25223
+        },
+        {
+          "file": "domains.srs",
+          "sha256": "c155925ca5d6b31237b660259302fdb42482ea84245b1e635f2d1f5b96205c52",
+          "bytes": 156882,
+          "requiredCapabilities": [],
+          "format": "binary"
+        }
+      ]
+    },
+    {
+      "id": "apple",
+      "definition": {
+        "id": "apple",
+        "source": "dlc",
+        "list": "apple",
+        "stablePath": "stable/apple",
+        "usages": {
+          "route": {
+            "artifact": "domains"
+          },
+          "dns-query": {
+            "artifact": "domains"
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      "source": {
+        "repository": "v2fly/domain-list-community",
+        "releaseId": 450083966,
+        "tag": "20261118141523",
+        "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+        "yaml": {
+          "id": 763666587,
+          "name": "dlc.dat_plain.yml",
+          "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+        },
+        "checksum": {
+          "id": 763666591,
+          "name": "dlc.dat_plain.yml.sha256sum",
+          "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+        },
+        "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+        "inputBytes": 3778556,
+        "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+      },
+      "tools": {
+        "pipeline": "0.1.0",
+        "implementationSha256": "0ecf2b2a4d7ee2431e1afef28a99fc8b45d41404aca93a9818c8220d9621587d",
+        "conversionPolicy": "v2fly-domain-v1",
+        "node": "26.13.0",
+        "yaml": "2.9.1",
+        "sourceFormat": 4
+      },
+      "tool": {
+        "path": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+        "version": "1.14.4",
+        "identity": "sing-box version 1.14.4\n\nEnvironment: go1.26.10 darwin/arm64\nTags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0\nRevision: c005f35300ce76427dc285481ec5695f5b179cd2\nCGO: enabled",
+        "sha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2"
+      },
+      "validation": {
+        "status": "passed",
+        "policy": "native-compile-load-v1",
+        "steps": [
+          {
+            "args": [
+              "rule-set",
+              "compile",
+              "domains.json",
+              "-o",
+              "domains.srs"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "domains.json",
+              "native-validation.invalid",
+              "--format",
+              "source"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "domains.srs",
+              "native-validation.invalid",
+              "--format",
+              "binary"
+            ],
+            "stdout": "",
+            "stderr": ""
+          }
+        ]
+      },
+      "report": {
+        "status": "converted",
+        "inputCount": 1791,
+        "convertedCount": 1791,
+        "unsupportedCount": 0,
+        "invalidCount": 0,
+        "duplicateCount": 0,
+        "outputTermCount": 1791,
+        "attributeRecordCount": 307,
+        "typeCounts": {
+          "domain_suffix": {
+            "input": 1541,
+            "converted": 1541,
+            "output": 1541
+          },
+          "domain": {
+            "input": 250,
+            "converted": 250,
+            "output": 250
+          },
+          "domain_keyword": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          },
+          "domain_regex": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          }
+        },
+        "usageCounts": {
+          "route": 1791,
+          "dns-query": 1791,
+          "dns-response": 0
+        },
+        "diagnostics": []
+      },
+      "usages": {
+        "route": {
+          "artifactFiles": [
+            "domains.json",
+            "domains.srs"
+          ]
+        },
+        "dns-query": {
+          "artifactFiles": [
+            "domains.json",
+            "domains.srs"
+          ]
+        },
+        "dns-response": {
+          "status": "unavailable",
+          "reason": "empty"
+        }
+      },
+      "buildId": "78c146aff9e56b347c0fb1808cc6dc15e026a884a4c359e18d7563f959116ebd",
+      "nativeBuildId": "422ad133045a262a9d53b6df6cc68f90f015b984e73ae24cf668263a1a133b1f",
+      "artifacts": [
+        {
+          "file": "domains.json",
+          "sha256": "9e6cc2bbdf49f7540d9fb4eeabf42cf476cf704e91e89628557373adf3701cc3",
+          "bytes": 53601,
+          "requiredCapabilities": [],
+          "format": "source",
+          "termCount": 1791
+        },
+        {
+          "file": "domains.srs",
+          "sha256": "f2707c6e86f68b1cf44c2ecda98030956fb03e2dec552b65965f569e1da1e422",
+          "bytes": 15916,
+          "requiredCapabilities": [],
+          "format": "binary"
+        }
+      ]
+    },
+    {
+      "id": "microsoft",
+      "definition": {
+        "id": "microsoft",
+        "source": "dlc",
+        "list": "microsoft",
+        "stablePath": "stable/microsoft",
+        "usages": {
+          "route": {
+            "artifact": "domains"
+          },
+          "dns-query": {
+            "artifact": "domains"
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      "source": {
+        "repository": "v2fly/domain-list-community",
+        "releaseId": 450083966,
+        "tag": "20261118141523",
+        "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+        "yaml": {
+          "id": 763666587,
+          "name": "dlc.dat_plain.yml",
+          "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+        },
+        "checksum": {
+          "id": 763666591,
+          "name": "dlc.dat_plain.yml.sha256sum",
+          "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+        },
+        "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+        "inputBytes": 3778556,
+        "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+      },
+      "tools": {
+        "pipeline": "0.1.0",
+        "implementationSha256": "0ecf2b2a4d7ee2431e1afef28a99fc8b45d41404aca93a9818c8220d9621587d",
+        "conversionPolicy": "v2fly-domain-v1",
+        "node": "26.13.0",
+        "yaml": "2.9.1",
+        "sourceFormat": 4
+      },
+      "tool": {
+        "path": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+        "version": "1.14.4",
+        "identity": "sing-box version 1.14.4\n\nEnvironment: go1.26.10 darwin/arm64\nTags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0\nRevision: c005f35300ce76427dc285481ec5695f5b179cd2\nCGO: enabled",
+        "sha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2"
+      },
+      "validation": {
+        "status": "passed",
+        "policy": "native-compile-load-v1",
+        "steps": [
+          {
+            "args": [
+              "rule-set",
+              "compile",
+              "domains.json",
+              "-o",
+              "domains.srs"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "domains.json",
+              "native-validation.invalid",
+              "--format",
+              "source"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "domains.srs",
+              "native-validation.invalid",
+              "--format",
+              "binary"
+            ],
+            "stdout": "",
+            "stderr": ""
+          }
+        ]
+      },
+      "report": {
+        "status": "converted",
+        "inputCount": 712,
+        "convertedCount": 712,
+        "unsupportedCount": 0,
+        "invalidCount": 0,
+        "duplicateCount": 0,
+        "outputTermCount": 712,
+        "attributeRecordCount": 210,
+        "typeCounts": {
+          "domain_suffix": {
+            "input": 640,
+            "converted": 640,
+            "output": 640
+          },
+          "domain": {
+            "input": 72,
+            "converted": 72,
+            "output": 72
+          },
+          "domain_keyword": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          },
+          "domain_regex": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          }
+        },
+        "usageCounts": {
+          "route": 712,
+          "dns-query": 712,
+          "dns-response": 0
+        },
+        "diagnostics": []
+      },
+      "usages": {
+        "route": {
+          "artifactFiles": [
+            "domains.json",
+            "domains.srs"
+          ]
+        },
+        "dns-query": {
+          "artifactFiles": [
+            "domains.json",
+            "domains.srs"
+          ]
+        },
+        "dns-response": {
+          "status": "unavailable",
+          "reason": "empty"
+        }
+      },
+      "buildId": "7d70a7c3e11637222869f89771614fa5266209f2409a66f653c944c2efc07dc3",
+      "nativeBuildId": "60632f70119913e25425141007aec7297f029485dd12a2b95827500e5ce87031",
+      "artifacts": [
+        {
+          "file": "domains.json",
+          "sha256": "1ccfdb68b011a47194e4d80dd33d09a3f1e863ca6333cdc4e828a4d2eabff67f",
+          "bytes": 20802,
+          "requiredCapabilities": [],
+          "format": "source",
+          "termCount": 712
+        },
+        {
+          "file": "domains.srs",
+          "sha256": "f418743e05510367c47a5f7b60283299f089097f90d72e132990ce3e5e9f1ba8",
+          "bytes": 6702,
+          "requiredCapabilities": [],
+          "format": "binary"
+        }
+      ]
+    },
+    {
+      "id": "docker",
+      "definition": {
+        "id": "docker",
+        "source": "dlc",
+        "list": "docker",
+        "stablePath": "stable/docker",
+        "usages": {
+          "route": {
+            "artifact": "domains"
+          },
+          "dns-query": {
+            "artifact": "domains"
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      "source": {
+        "repository": "v2fly/domain-list-community",
+        "releaseId": 450083966,
+        "tag": "20261118141523",
+        "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+        "yaml": {
+          "id": 763666587,
+          "name": "dlc.dat_plain.yml",
+          "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+        },
+        "checksum": {
+          "id": 763666591,
+          "name": "dlc.dat_plain.yml.sha256sum",
+          "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+        },
+        "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+        "inputBytes": 3778556,
+        "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+      },
+      "tools": {
+        "pipeline": "0.1.0",
+        "implementationSha256": "0ecf2b2a4d7ee2431e1afef28a99fc8b45d41404aca93a9818c8220d9621587d",
+        "conversionPolicy": "v2fly-domain-v1",
+        "node": "26.13.0",
+        "yaml": "2.9.1",
+        "sourceFormat": 4
+      },
+      "tool": {
+        "path": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+        "version": "1.14.4",
+        "identity": "sing-box version 1.14.4\n\nEnvironment: go1.26.10 darwin/arm64\nTags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0\nRevision: c005f35300ce76427dc285481ec5695f5b179cd2\nCGO: enabled",
+        "sha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2"
+      },
+      "validation": {
+        "status": "passed",
+        "policy": "native-compile-load-v1",
+        "steps": [
+          {
+            "args": [
+              "rule-set",
+              "compile",
+              "domains.json",
+              "-o",
+              "domains.srs"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "domains.json",
+              "native-validation.invalid",
+              "--format",
+              "source"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "domains.srs",
+              "native-validation.invalid",
+              "--format",
+              "binary"
+            ],
+            "stdout": "",
+            "stderr": ""
+          }
+        ]
+      },
+      "report": {
+        "status": "converted",
+        "inputCount": 6,
+        "convertedCount": 6,
+        "unsupportedCount": 0,
+        "invalidCount": 0,
+        "duplicateCount": 0,
+        "outputTermCount": 6,
+        "attributeRecordCount": 0,
+        "typeCounts": {
+          "domain_suffix": {
+            "input": 4,
+            "converted": 4,
+            "output": 4
+          },
+          "domain": {
+            "input": 2,
+            "converted": 2,
+            "output": 2
+          },
+          "domain_keyword": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          },
+          "domain_regex": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          }
+        },
+        "usageCounts": {
+          "route": 6,
+          "dns-query": 6,
+          "dns-response": 0
+        },
+        "diagnostics": []
+      },
+      "usages": {
+        "route": {
+          "artifactFiles": [
+            "domains.json",
+            "domains.srs"
+          ]
+        },
+        "dns-query": {
+          "artifactFiles": [
+            "domains.json",
+            "domains.srs"
+          ]
+        },
+        "dns-response": {
+          "status": "unavailable",
+          "reason": "empty"
+        }
+      },
+      "buildId": "e2a2b9614a54a7227f4850b40c48c8923f9cb5a8e3091ecf0a3272a937487791",
+      "nativeBuildId": "30710cb8aa6fdc9cdbe1e1556ef5812c6cb94cb537718f9c13faf67cfd1462bf",
+      "artifacts": [
+        {
+          "file": "domains.json",
+          "sha256": "9447a56a0228a8363375ec02875abde7492bf0c771d6cba4763bbc105a3a5a34",
+          "bytes": 355,
+          "requiredCapabilities": [],
+          "format": "source",
+          "termCount": 6
+        },
+        {
+          "file": "domains.srs",
+          "sha256": "1f66f663694e9aa2b8b986f6dc8c3fa67eafd8e4ad268b81bfa9ea4b6b0a58fe",
+          "bytes": 208,
+          "requiredCapabilities": [],
+          "format": "binary"
+        }
+      ]
+    },
+    {
+      "id": "github",
+      "definition": {
+        "id": "github",
+        "source": "dlc",
+        "list": "github",
+        "stablePath": "stable/github",
+        "usages": {
+          "route": {
+            "artifact": "domains"
+          },
+          "dns-query": {
+            "artifact": "domains"
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      "source": {
+        "repository": "v2fly/domain-list-community",
+        "releaseId": 450083966,
+        "tag": "20261118141523",
+        "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+        "yaml": {
+          "id": 763666587,
+          "name": "dlc.dat_plain.yml",
+          "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+        },
+        "checksum": {
+          "id": 763666591,
+          "name": "dlc.dat_plain.yml.sha256sum",
+          "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+        },
+        "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+        "inputBytes": 3778556,
+        "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+      },
+      "tools": {
+        "pipeline": "0.1.0",
+        "implementationSha256": "0ecf2b2a4d7ee2431e1afef28a99fc8b45d41404aca93a9818c8220d9621587d",
+        "conversionPolicy": "v2fly-domain-v1",
+        "node": "26.13.0",
+        "yaml": "2.9.1",
+        "sourceFormat": 4
+      },
+      "tool": {
+        "path": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+        "version": "1.14.4",
+        "identity": "sing-box version 1.14.4\n\nEnvironment: go1.26.10 darwin/arm64\nTags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0\nRevision: c005f35300ce76427dc285481ec5695f5b179cd2\nCGO: enabled",
+        "sha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2"
+      },
+      "validation": {
+        "status": "passed",
+        "policy": "native-compile-load-v1",
+        "steps": [
+          {
+            "args": [
+              "rule-set",
+              "compile",
+              "domains.json",
+              "-o",
+              "domains.srs"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "domains.json",
+              "native-validation.invalid",
+              "--format",
+              "source"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "domains.srs",
+              "native-validation.invalid",
+              "--format",
+              "binary"
+            ],
+            "stdout": "",
+            "stderr": ""
+          }
+        ]
+      },
+      "report": {
+        "status": "converted",
+        "inputCount": 64,
+        "convertedCount": 64,
+        "unsupportedCount": 0,
+        "invalidCount": 0,
+        "duplicateCount": 0,
+        "outputTermCount": 64,
+        "attributeRecordCount": 4,
+        "typeCounts": {
+          "domain_suffix": {
+            "input": 33,
+            "converted": 33,
+            "output": 33
+          },
+          "domain": {
+            "input": 31,
+            "converted": 31,
+            "output": 31
+          },
+          "domain_keyword": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          },
+          "domain_regex": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          }
+        },
+        "usageCounts": {
+          "route": 64,
+          "dns-query": 64,
+          "dns-response": 0
+        },
+        "diagnostics": []
+      },
+      "usages": {
+        "route": {
+          "artifactFiles": [
+            "domains.json",
+            "domains.srs"
+          ]
+        },
+        "dns-query": {
+          "artifactFiles": [
+            "domains.json",
+            "domains.srs"
+          ]
+        },
+        "dns-response": {
+          "status": "unavailable",
+          "reason": "empty"
+        }
+      },
+      "buildId": "ab21ccdd264dc5c006f248e2c5f174227d4ec7159c0cde5a75464398ca6d1785",
+      "nativeBuildId": "41d9bc7cf54e708b9039cb0d98b7c5cf46609a8748aee2aaee05b845824fcd4f",
+      "artifacts": [
+        {
+          "file": "domains.json",
+          "sha256": "a6d13f172f3ef7a1603a62baa5f9f0bb048dca910e29a7eecf633df110b2f1ca",
+          "bytes": 2682,
+          "requiredCapabilities": [],
+          "format": "source",
+          "termCount": 64
+        },
+        {
+          "file": "domains.srs",
+          "sha256": "870bcad14e670a18894f479e477495bd5b736cff2110ab6205253f4a2e930e45",
+          "bytes": 808,
+          "requiredCapabilities": [],
+          "format": "binary"
+        }
+      ]
+    },
+    {
+      "id": "google",
+      "definition": {
+        "id": "google",
+        "source": "dlc",
+        "list": "google",
+        "stablePath": "stable/google",
+        "usages": {
+          "route": {
+            "artifact": "domains"
+          },
+          "dns-query": {
+            "artifact": "domains"
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      "source": {
+        "repository": "v2fly/domain-list-community",
+        "releaseId": 450083966,
+        "tag": "20261118141523",
+        "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+        "yaml": {
+          "id": 763666587,
+          "name": "dlc.dat_plain.yml",
+          "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+        },
+        "checksum": {
+          "id": 763666591,
+          "name": "dlc.dat_plain.yml.sha256sum",
+          "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+        },
+        "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+        "inputBytes": 3778556,
+        "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+      },
+      "tools": {
+        "pipeline": "0.1.0",
+        "implementationSha256": "0ecf2b2a4d7ee2431e1afef28a99fc8b45d41404aca93a9818c8220d9621587d",
+        "conversionPolicy": "v2fly-domain-v1",
+        "node": "26.13.0",
+        "yaml": "2.9.1",
+        "sourceFormat": 4
+      },
+      "tool": {
+        "path": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+        "version": "1.14.4",
+        "identity": "sing-box version 1.14.4\n\nEnvironment: go1.26.10 darwin/arm64\nTags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0\nRevision: c005f35300ce76427dc285481ec5695f5b179cd2\nCGO: enabled",
+        "sha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2"
+      },
+      "validation": {
+        "status": "passed",
+        "policy": "native-compile-load-v1",
+        "steps": [
+          {
+            "args": [
+              "rule-set",
+              "compile",
+              "domains.json",
+              "-o",
+              "domains.srs"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "domains.json",
+              "native-validation.invalid",
+              "--format",
+              "source"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "domains.srs",
+              "native-validation.invalid",
+              "--format",
+              "binary"
+            ],
+            "stdout": "",
+            "stderr": ""
+          }
+        ]
+      },
+      "report": {
+        "status": "converted",
+        "inputCount": 966,
+        "convertedCount": 966,
+        "unsupportedCount": 0,
+        "invalidCount": 0,
+        "duplicateCount": 0,
+        "outputTermCount": 966,
+        "attributeRecordCount": 189,
+        "typeCounts": {
+          "domain_suffix": {
+            "input": 839,
+            "converted": 839,
+            "output": 839
+          },
+          "domain": {
+            "input": 125,
+            "converted": 125,
+            "output": 125
+          },
+          "domain_keyword": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          },
+          "domain_regex": {
+            "input": 2,
+            "converted": 2,
+            "output": 2
+          }
+        },
+        "usageCounts": {
+          "route": 966,
+          "dns-query": 966,
+          "dns-response": 0
+        },
+        "diagnostics": []
+      },
+      "usages": {
+        "route": {
+          "artifactFiles": [
+            "domains.json",
+            "domains.srs"
+          ]
+        },
+        "dns-query": {
+          "artifactFiles": [
+            "domains.json",
+            "domains.srs"
+          ]
+        },
+        "dns-response": {
+          "status": "unavailable",
+          "reason": "empty"
+        }
+      },
+      "buildId": "c08d3b9299ff390043f1d3a02773ffd90603452b80f33887214183575317071c",
+      "nativeBuildId": "2c92f3efa696f724182c2869da28f51c97e24f0292b364288d2be2930e3a4baa",
+      "artifacts": [
+        {
+          "file": "domains.json",
+          "sha256": "67b9c9e1d0ea23d2080f5a5b15098e108e95be2f8539aa32b8498540316fdd3a",
+          "bytes": 25016,
+          "requiredCapabilities": [],
+          "format": "source",
+          "termCount": 966
+        },
+        {
+          "file": "domains.srs",
+          "sha256": "f3b09639e72ba0376655bc3cf509019967b9c6daeff0ef3cf4520484d2773b9e",
+          "bytes": 7432,
+          "requiredCapabilities": [],
+          "format": "binary"
+        }
+      ]
+    },
+    {
+      "id": "youtube",
+      "definition": {
+        "id": "youtube",
+        "source": "dlc",
+        "list": "youtube",
+        "stablePath": "stable/youtube",
+        "usages": {
+          "route": {
+            "artifact": "domains"
+          },
+          "dns-query": {
+            "artifact": "domains"
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      "source": {
+        "repository": "v2fly/domain-list-community",
+        "releaseId": 450083966,
+        "tag": "20261118141523",
+        "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+        "yaml": {
+          "id": 763666587,
+          "name": "dlc.dat_plain.yml",
+          "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+        },
+        "checksum": {
+          "id": 763666591,
+          "name": "dlc.dat_plain.yml.sha256sum",
+          "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+        },
+        "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+        "inputBytes": 3778556,
+        "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+      },
+      "tools": {
+        "pipeline": "0.1.0",
+        "implementationSha256": "0ecf2b2a4d7ee2431e1afef28a99fc8b45d41404aca93a9818c8220d9621587d",
+        "conversionPolicy": "v2fly-domain-v1",
+        "node": "26.13.0",
+        "yaml": "2.9.1",
+        "sourceFormat": 4
+      },
+      "tool": {
+        "path": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+        "version": "1.14.4",
+        "identity": "sing-box version 1.14.4\n\nEnvironment: go1.26.10 darwin/arm64\nTags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0\nRevision: c005f35300ce76427dc285481ec5695f5b179cd2\nCGO: enabled",
+        "sha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2"
+      },
+      "validation": {
+        "status": "passed",
+        "policy": "native-compile-load-v1",
+        "steps": [
+          {
+            "args": [
+              "rule-set",
+              "compile",
+              "domains.json",
+              "-o",
+              "domains.srs"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "domains.json",
+              "native-validation.invalid",
+              "--format",
+              "source"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "domains.srs",
+              "native-validation.invalid",
+              "--format",
+              "binary"
+            ],
+            "stdout": "",
+            "stderr": ""
+          }
+        ]
+      },
+      "report": {
+        "status": "converted",
+        "inputCount": 178,
+        "convertedCount": 178,
+        "unsupportedCount": 0,
+        "invalidCount": 0,
+        "duplicateCount": 0,
+        "outputTermCount": 178,
+        "attributeRecordCount": 2,
+        "typeCounts": {
+          "domain_suffix": {
+            "input": 177,
+            "converted": 177,
+            "output": 177
+          },
+          "domain": {
+            "input": 1,
+            "converted": 1,
+            "output": 1
+          },
+          "domain_keyword": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          },
+          "domain_regex": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          }
+        },
+        "usageCounts": {
+          "route": 178,
+          "dns-query": 178,
+          "dns-response": 0
+        },
+        "diagnostics": []
+      },
+      "usages": {
+        "route": {
+          "artifactFiles": [
+            "domains.json",
+            "domains.srs"
+          ]
+        },
+        "dns-query": {
+          "artifactFiles": [
+            "domains.json",
+            "domains.srs"
+          ]
+        },
+        "dns-response": {
+          "status": "unavailable",
+          "reason": "empty"
+        }
+      },
+      "buildId": "f99127118ed5612ef467abcc5c102b323b040fd849fb429107de27abfa4237fe",
+      "nativeBuildId": "1938639953e36b0bb1b0c772ef6a988ccc230ca6d1cb95484c68752a146a02ac",
+      "artifacts": [
+        {
+          "file": "domains.json",
+          "sha256": "38295c61f484ccbf4ba6375b649553298c841766e1ad6f2ea9a181af5d42bcc5",
+          "bytes": 4467,
+          "requiredCapabilities": [],
+          "format": "source",
+          "termCount": 178
+        },
+        {
+          "file": "domains.srs",
+          "sha256": "a0b1e05d6df5862ee6405ab7b9d18f13e8f559175b4539aa5e96006121ef75a3",
+          "bytes": 1168,
+          "requiredCapabilities": [],
+          "format": "binary"
+        }
+      ]
+    },
+    {
+      "id": "china-ip",
+      "definition": {
+        "id": "china-ip",
+        "source": "china-operator-ip",
+        "list": "all",
+        "stablePath": "stable/china-ip",
+        "usages": {
+          "route": {
+            "artifact": "route"
+          },
+          "dns-query": {
+            "unavailable": "empty"
+          },
+          "dns-response": {
+            "artifact": "route"
+          }
+        }
+      },
+      "source": {
+        "kind": "github-commit",
+        "repository": "gaoyifan/china-operator-ip",
+        "branch": "ip-lists",
+        "commit": "be3de75a9698c50193c35c1215509e89d5d5cf6f",
+        "file": {
+          "path": "china46.txt",
+          "url": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/be3de75a9698c50193c35c1215509e89d5d5cf6f/china46.txt"
+        },
+        "inputSha256": "cc2acc4a6c0c9378573140c86ecbf343a9fc99c42aa53d59554feb7238841f68",
+        "inputBytes": 154234
+      },
+      "tools": {
+        "pipeline": "0.1.0",
+        "implementationSha256": "4fd00924c7bd5dfa24921cb7ec3876886dc72856ddb7ca6ee44f60da04429881",
+        "conversionPolicy": "cidr-text-v1",
+        "node": "26.13.0",
+        "yaml": "2.9.1",
+        "sourceFormat": 4,
+        "ipaddr": "2.5.0"
+      },
+      "tool": {
+        "path": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+        "version": "1.14.4",
+        "identity": "sing-box version 1.14.4\n\nEnvironment: go1.26.10 darwin/arm64\nTags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0\nRevision: c005f35300ce76427dc285481ec5695f5b179cd2\nCGO: enabled",
+        "sha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2"
+      },
+      "validation": {
+        "status": "passed",
+        "policy": "native-compile-load-v1",
+        "steps": [
+          {
+            "args": [
+              "rule-set",
+              "compile",
+              "route.json",
+              "-o",
+              "route.srs"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "route.json",
+              "native-validation.invalid",
+              "--format",
+              "source"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "route.srs",
+              "native-validation.invalid",
+              "--format",
+              "binary"
+            ],
+            "stdout": "",
+            "stderr": ""
+          }
+        ]
+      },
+      "report": {
+        "status": "converted",
+        "inputCount": 9673,
+        "convertedCount": 9673,
+        "unsupportedCount": 0,
+        "invalidCount": 0,
+        "duplicateCount": 0,
+        "outputTermCount": 9673,
+        "attributeRecordCount": 0,
+        "typeCounts": {
+          "domain_suffix": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          },
+          "domain": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          },
+          "domain_keyword": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          },
+          "domain_regex": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          },
+          "ip_cidr": {
+            "input": 9673,
+            "converted": 9673,
+            "output": 9673
+          }
+        },
+        "usageCounts": {
+          "route": 9673,
+          "dns-query": 0,
+          "dns-response": 9673
+        },
+        "diagnostics": []
+      },
+      "usages": {
+        "route": {
+          "artifactFiles": [
+            "route.json",
+            "route.srs"
+          ]
+        },
+        "dns-query": {
+          "status": "unavailable",
+          "reason": "empty"
+        },
+        "dns-response": {
+          "artifactFiles": [
+            "route.json",
+            "route.srs"
+          ]
+        }
+      },
+      "buildId": "a8fd4fd9a91dfbe693f98ab6a7ff725bc7297ac2ed87183b941df5ec8599fb27",
+      "nativeBuildId": "7dc742d6e881dbc4339ee477dff19a20b66ce02b2eb1755c0f2d227dfac4f26d",
+      "artifacts": [
+        {
+          "file": "route.json",
+          "sha256": "c9bf767ff90bfecc7732dcf6c390f75623ed149561e648df953b8273c1f0bb07",
+          "bytes": 260712,
+          "requiredCapabilities": [],
+          "format": "source",
+          "termCount": 9673
+        },
+        {
+          "file": "route.srs",
+          "sha256": "6ed8b6685f23d5265dc275e1fd7cde6d902936902ee72199fc7697c292dfb440",
+          "bytes": 36442,
+          "requiredCapabilities": [],
+          "format": "binary"
+        }
+      ]
+    },
+    {
+      "id": "gfw",
+      "definition": {
+        "id": "gfw",
+        "source": "loyalsoldier",
+        "list": "all",
+        "stablePath": "stable/gfw",
+        "usages": {
+          "route": {
+            "artifact": "domains"
+          },
+          "dns-query": {
+            "artifact": "domains"
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      "source": {
+        "kind": "github-commit",
+        "repository": "Loyalsoldier/v2ray-rules-dat",
+        "branch": "release",
+        "commit": "3914c5cf42be87696db5139fc4b7d681b09b8d4a",
+        "file": {
+          "path": "gfw.txt",
+          "url": "https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/3914c5cf42be87696db5139fc4b7d681b09b8d4a/gfw.txt"
+        },
+        "inputSha256": "cd8db183d21c1ae65daa5cf3fd54a2b316b3b7f71fad6cb1621d523ad60be7dc",
+        "inputBytes": 59822
+      },
+      "tools": {
+        "pipeline": "0.1.0",
+        "implementationSha256": "016442a4466f215596c65a4fc2693c2bb9ad9986d3bdc24d24bb17b82e1236c3",
+        "conversionPolicy": "domain-suffix-text-v1",
+        "node": "26.13.0",
+        "yaml": "2.9.1",
+        "sourceFormat": 4
+      },
+      "tool": {
+        "path": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+        "version": "1.14.4",
+        "identity": "sing-box version 1.14.4\n\nEnvironment: go1.26.10 darwin/arm64\nTags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0\nRevision: c005f35300ce76427dc285481ec5695f5b179cd2\nCGO: enabled",
+        "sha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2"
+      },
+      "validation": {
+        "status": "passed",
+        "policy": "native-compile-load-v1",
+        "steps": [
+          {
+            "args": [
+              "rule-set",
+              "compile",
+              "domains.json",
+              "-o",
+              "domains.srs"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "domains.json",
+              "native-validation.invalid",
+              "--format",
+              "source"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "domains.srs",
+              "native-validation.invalid",
+              "--format",
+              "binary"
+            ],
+            "stdout": "",
+            "stderr": ""
+          }
+        ]
+      },
+      "report": {
+        "status": "converted",
+        "inputCount": 4453,
+        "convertedCount": 4453,
+        "unsupportedCount": 0,
+        "invalidCount": 0,
+        "duplicateCount": 0,
+        "outputTermCount": 4453,
+        "attributeRecordCount": 0,
+        "typeCounts": {
+          "domain_suffix": {
+            "input": 4453,
+            "converted": 4453,
+            "output": 4453
+          },
+          "domain": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          },
+          "domain_keyword": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          },
+          "domain_regex": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          }
+        },
+        "usageCounts": {
+          "route": 4453,
+          "dns-query": 4453,
+          "dns-response": 0
+        },
+        "diagnostics": []
+      },
+      "usages": {
+        "route": {
+          "artifactFiles": [
+            "domains.json",
+            "domains.srs"
+          ]
+        },
+        "dns-query": {
+          "artifactFiles": [
+            "domains.json",
+            "domains.srs"
+          ]
+        },
+        "dns-response": {
+          "status": "unavailable",
+          "reason": "empty"
+        }
+      },
+      "buildId": "5ab026f248b0a711be9854f9a0e02d518c3d1285563896801202dbfda17a4ea1",
+      "nativeBuildId": "8843a8fb83296c1bbd065b7fd61170f1c24935c5d69a25f9a19ce3714e292f44",
+      "artifacts": [
+        {
+          "file": "domains.json",
+          "sha256": "85927f603b1c88997636c9f7f3e4dcdfbcc495cd7f82182fda89d29fd7cc1c4d",
+          "bytes": 108886,
+          "requiredCapabilities": [],
+          "format": "source",
+          "termCount": 4453
+        },
+        {
+          "file": "domains.srs",
+          "sha256": "45fac0dbb876e5c4c3f878578a7f2379201b4a75b39a25767daab4f077df6011",
+          "bytes": 28909,
+          "requiredCapabilities": [],
+          "format": "binary"
+        }
+      ]
+    },
+    {
+      "id": "onedrive",
+      "definition": {
+        "id": "onedrive",
+        "source": "blackmatrix7",
+        "list": "all",
+        "stablePath": "stable/onedrive",
+        "usages": {
+          "route": {
+            "artifact": "domains"
+          },
+          "dns-query": {
+            "artifact": "domains"
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      "source": {
+        "kind": "github-commit",
+        "repository": "blackmatrix7/ios_rule_script",
+        "branch": "master",
+        "commit": "0b6897dc17e0c513d25449c935a9694818e32f0c",
+        "file": {
+          "path": "rule/Clash/OneDrive/OneDrive.list",
+          "url": "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/0b6897dc17e0c513d25449c935a9694818e32f0c/rule/Clash/OneDrive/OneDrive.list"
+        },
+        "inputSha256": "cf4f6b24e434b6c6033b70fc88cf7e33f5aaa0f353f6963ced770f5fa1ae6c9b",
+        "inputBytes": 735
+      },
+      "tools": {
+        "pipeline": "0.1.0",
+        "implementationSha256": "8fc66ddd82e8a661b07add6e8806a041b5fdeb466cabd3cff4ac9088d657b3a7",
+        "conversionPolicy": "typed-domain-text-v1",
+        "node": "26.13.0",
+        "yaml": "2.9.1",
+        "sourceFormat": 4
+      },
+      "tool": {
+        "path": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+        "version": "1.14.4",
+        "identity": "sing-box version 1.14.4\n\nEnvironment: go1.26.10 darwin/arm64\nTags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0\nRevision: c005f35300ce76427dc285481ec5695f5b179cd2\nCGO: enabled",
+        "sha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2"
+      },
+      "validation": {
+        "status": "passed",
+        "policy": "native-compile-load-v1",
+        "steps": [
+          {
+            "args": [
+              "rule-set",
+              "compile",
+              "domains.json",
+              "-o",
+              "domains.srs"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "domains.json",
+              "native-validation.invalid",
+              "--format",
+              "source"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "domains.srs",
+              "native-validation.invalid",
+              "--format",
+              "binary"
+            ],
+            "stdout": "",
+            "stderr": ""
+          }
+        ]
+      },
+      "report": {
+        "status": "converted",
+        "inputCount": 18,
+        "convertedCount": 16,
+        "unsupportedCount": 0,
+        "invalidCount": 0,
+        "duplicateCount": 0,
+        "outputTermCount": 16,
+        "attributeRecordCount": 0,
+        "typeCounts": {
+          "domain_suffix": {
+            "input": 13,
+            "converted": 13,
+            "output": 13
+          },
+          "domain": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          },
+          "domain_keyword": {
+            "input": 3,
+            "converted": 3,
+            "output": 3
+          },
+          "domain_regex": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          }
+        },
+        "usageCounts": {
+          "route": 16,
+          "dns-query": 16,
+          "dns-response": 0
+        },
+        "diagnostics": [],
+        "filteredRules": [
+          {
+            "type": "PROCESS-NAME",
+            "value": "OneDrive",
+            "line": 25
+          },
+          {
+            "type": "PROCESS-NAME",
+            "value": "OneDriveUpdater",
+            "line": 26
+          }
+        ]
+      },
+      "usages": {
+        "route": {
+          "artifactFiles": [
+            "domains.json",
+            "domains.srs"
+          ]
+        },
+        "dns-query": {
+          "artifactFiles": [
+            "domains.json",
+            "domains.srs"
+          ]
+        },
+        "dns-response": {
+          "status": "unavailable",
+          "reason": "empty"
+        }
+      },
+      "buildId": "06a9820e48857cce3ec05e6981ab185ecced8783b8e61b2b0d16dfc342e64c03",
+      "nativeBuildId": "e8613b13466e0e7774c59d28711643186b7e479d8b4e947926d2feffc52623ee",
+      "artifacts": [
+        {
+          "file": "domains.json",
+          "sha256": "bf5b223c60555033f61a1f4c19c1a8deba5b79abf47001848a125be2cc66db41",
+          "bytes": 563,
+          "requiredCapabilities": [],
+          "format": "source",
+          "termCount": 16
+        },
+        {
+          "file": "domains.srs",
+          "sha256": "c294fe0d9a20ec433a67af492fa8f53b3f7b47f6b85fa9894e226c1934e2344b",
+          "bytes": 237,
+          "requiredCapabilities": [],
+          "format": "binary"
+        }
+      ]
+    },
+    {
+      "id": "stream",
+      "definition": {
+        "id": "stream",
+        "source": "sukka",
+        "list": "all",
+        "stablePath": "stable/stream",
+        "usages": {
+          "route": {
+            "artifact": "domains"
+          },
+          "dns-query": {
+            "artifact": "domains"
+          },
+          "dns-response": {
+            "unavailable": "empty"
+          }
+        }
+      },
+      "source": {
+        "kind": "github-commit",
+        "repository": "SukkaLab/ruleset.skk.moe",
+        "branch": "master",
+        "commit": "838801f009734aa324e7d42d7b7b51561d1df5ba",
+        "file": {
+          "path": "sing-box/non_ip/stream.json",
+          "url": "https://raw.githubusercontent.com/SukkaLab/ruleset.skk.moe/838801f009734aa324e7d42d7b7b51561d1df5ba/sing-box/non_ip/stream.json"
+        },
+        "inputSha256": "88487bf51615620ee8fcca449fad6199db6968dc429804acb7ad3348a5df8ed5",
+        "inputBytes": 7653
+      },
+      "tools": {
+        "pipeline": "0.1.0",
+        "implementationSha256": "9a1198afae0ca90447ec89df9fa6e6f6511051a9cbbb07d707a9650fe48572bb",
+        "conversionPolicy": "sing-box-domain-json-v1",
+        "node": "26.13.0",
+        "yaml": "2.9.1",
+        "sourceFormat": 4
+      },
+      "tool": {
+        "path": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+        "version": "1.14.4",
+        "identity": "sing-box version 1.14.4\n\nEnvironment: go1.26.10 darwin/arm64\nTags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0\nRevision: c005f35300ce76427dc285481ec5695f5b179cd2\nCGO: enabled",
+        "sha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2"
+      },
+      "validation": {
+        "status": "passed",
+        "policy": "native-compile-load-v1",
+        "steps": [
+          {
+            "args": [
+              "rule-set",
+              "compile",
+              "domains.json",
+              "-o",
+              "domains.srs"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "domains.json",
+              "native-validation.invalid",
+              "--format",
+              "source"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "domains.srs",
+              "native-validation.invalid",
+              "--format",
+              "binary"
+            ],
+            "stdout": "",
+            "stderr": ""
+          }
+        ]
+      },
+      "report": {
+        "status": "converted",
+        "inputCount": 274,
+        "convertedCount": 274,
+        "unsupportedCount": 0,
+        "invalidCount": 0,
+        "duplicateCount": 0,
+        "outputTermCount": 274,
+        "attributeRecordCount": 0,
+        "typeCounts": {
+          "domain_suffix": {
+            "input": 200,
+            "converted": 200,
+            "output": 200
+          },
+          "domain": {
+            "input": 60,
+            "converted": 60,
+            "output": 60
+          },
+          "domain_keyword": {
+            "input": 14,
+            "converted": 14,
+            "output": 14
+          },
+          "domain_regex": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          }
+        },
+        "usageCounts": {
+          "route": 274,
+          "dns-query": 274,
+          "dns-response": 0
+        },
+        "diagnostics": []
+      },
+      "usages": {
+        "route": {
+          "artifactFiles": [
+            "domains.json",
+            "domains.srs"
+          ]
+        },
+        "dns-query": {
+          "artifactFiles": [
+            "domains.json",
+            "domains.srs"
+          ]
+        },
+        "dns-response": {
+          "status": "unavailable",
+          "reason": "empty"
+        }
+      },
+      "buildId": "f191b7c42440aa233ef1872d28a2bfe77c869f5ebb753673f1bd3e9ba213ec40",
+      "nativeBuildId": "85c39de266a9332549967b7c0a2be95373707616de7282520a8874fa59f60ffe",
+      "artifacts": [
+        {
+          "file": "domains.json",
+          "sha256": "d9681c23db68a039bee87134b223ca565812259e3831d0e6771ed41fe04c2614",
+          "bytes": 7677,
+          "requiredCapabilities": [],
+          "format": "source",
+          "termCount": 274
+        },
+        {
+          "file": "domains.srs",
+          "sha256": "a495177e3b1e8e82220ddd82851e2f20ced2f5d1f040ff1f74a8508d74ee94af",
+          "bytes": 2651,
+          "requiredCapabilities": [],
+          "format": "binary"
+        }
+      ]
+    },
+    {
+      "id": "chatgpt-voice",
+      "definition": {
+        "id": "chatgpt-voice",
+        "source": "openai-voice",
+        "list": "all",
+        "stablePath": "stable/chatgpt-voice",
+        "usages": {
+          "route": {
+            "artifact": "route"
+          },
+          "dns-query": {
+            "unavailable": "empty"
+          },
+          "dns-response": {
+            "artifact": "route"
+          }
+        }
+      },
+      "source": {
+        "kind": "openai-voice",
+        "url": "https://openai.com/chatgpt-voice.json",
+        "inputSha256": "e0e4df0f751d5025d24b3177191fd2484213599f64a001f732c7ca4881fbce2c",
+        "inputBytes": 88,
+        "etag": "\"verification-149\""
+      },
+      "tools": {
+        "pipeline": "0.1.0",
+        "implementationSha256": "0dd5445fa835090e8403441d891b9626de1148c2e0aa382402b190a86a3dc949",
+        "conversionPolicy": "openai-voice-json-v1",
+        "node": "26.13.0",
+        "yaml": "2.9.1",
+        "sourceFormat": 4,
+        "ipaddr": "2.5.0"
+      },
+      "tool": {
+        "path": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+        "version": "1.14.4",
+        "identity": "sing-box version 1.14.4\n\nEnvironment: go1.26.10 darwin/arm64\nTags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0\nRevision: c005f35300ce76427dc285481ec5695f5b179cd2\nCGO: enabled",
+        "sha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2"
+      },
+      "validation": {
+        "status": "passed",
+        "policy": "native-compile-load-v1",
+        "steps": [
+          {
+            "args": [
+              "rule-set",
+              "compile",
+              "route.json",
+              "-o",
+              "route.srs"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "route.json",
+              "native-validation.invalid",
+              "--format",
+              "source"
+            ],
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "rule-set",
+              "match",
+              "route.srs",
+              "native-validation.invalid",
+              "--format",
+              "binary"
+            ],
+            "stdout": "",
+            "stderr": ""
+          }
+        ]
+      },
+      "report": {
+        "status": "converted",
+        "inputCount": 2,
+        "convertedCount": 2,
+        "unsupportedCount": 0,
+        "invalidCount": 0,
+        "duplicateCount": 0,
+        "outputTermCount": 2,
+        "attributeRecordCount": 0,
+        "typeCounts": {
+          "domain_suffix": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          },
+          "domain": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          },
+          "domain_keyword": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          },
+          "domain_regex": {
+            "input": 0,
+            "converted": 0,
+            "output": 0
+          },
+          "ip_cidr": {
+            "input": 2,
+            "converted": 2,
+            "output": 2
+          }
+        },
+        "usageCounts": {
+          "route": 2,
+          "dns-query": 0,
+          "dns-response": 2
+        },
+        "diagnostics": []
+      },
+      "usages": {
+        "route": {
+          "artifactFiles": [
+            "route.json",
+            "route.srs"
+          ]
+        },
+        "dns-query": {
+          "status": "unavailable",
+          "reason": "empty"
+        },
+        "dns-response": {
+          "artifactFiles": [
+            "route.json",
+            "route.srs"
+          ]
+        }
+      },
+      "buildId": "a1fb396088f3ace835384de20fe096dc644ad1835e54cb82ef3a81c17da9a9e6",
+      "nativeBuildId": "9c0138a4bdfaa34d9da6916694be2f7ec63bb63ea2245d182073a14658bb8ee7",
+      "artifacts": [
+        {
+          "file": "route.json",
+          "sha256": "0a35cb86a36d37fd2079e3b66e24d4a1ffb5c41df4c7402a9643f373ca520dfe",
+          "bytes": 126,
+          "requiredCapabilities": [],
+          "format": "source",
+          "termCount": 2
+        },
+        {
+          "file": "route.srs",
+          "sha256": "c2603e43eefc3fa5cd890c5e58f0e3b5130df8657ed1ce9c963089da8dccc6a0",
+          "bytes": 48,
+          "requiredCapabilities": [],
+          "format": "binary"
+        }
+      ]
+    }
+  ],
+  "streamMatch": [
+    {
+      "path": "/Users/wangyg/Development/Working/sing-box-config-manager-issue-149-evidence/fixed-final/upstream-stream.json",
+      "format": "source",
+      "domain": "tubi.tv",
+      "matchingFields": [
+        "domain"
+      ],
+      "matched": true
+    },
+    {
+      "path": "/Users/wangyg/Development/Working/sing-box-config-manager-issue-149-evidence/fixed-final/domains.json",
+      "format": "source",
+      "domain": "tubi.tv",
+      "matchingFields": [
+        "domain"
+      ],
+      "matched": true
+    },
+    {
+      "path": "/Users/wangyg/Development/Working/sing-box-config-manager-issue-149-evidence/fixed-final/domains.srs",
+      "format": "binary",
+      "domain": "tubi.tv",
+      "matchingFields": [
+        "domain"
+      ],
+      "matched": true
+    },
+    {
+      "path": "/Users/wangyg/Development/Working/sing-box-config-manager-issue-149-evidence/fixed-final/upstream-stream.json",
+      "format": "source",
+      "domain": "sub.viu.tv",
+      "matchingFields": [
+        "domain_suffix"
+      ],
+      "matched": true
+    },
+    {
+      "path": "/Users/wangyg/Development/Working/sing-box-config-manager-issue-149-evidence/fixed-final/domains.json",
+      "format": "source",
+      "domain": "sub.viu.tv",
+      "matchingFields": [
+        "domain_suffix"
+      ],
+      "matched": true
+    },
+    {
+      "path": "/Users/wangyg/Development/Working/sing-box-config-manager-issue-149-evidence/fixed-final/domains.srs",
+      "format": "binary",
+      "domain": "sub.viu.tv",
+      "matchingFields": [
+        "domain_suffix"
+      ],
+      "matched": true
+    },
+    {
+      "path": "/Users/wangyg/Development/Working/sing-box-config-manager-issue-149-evidence/fixed-final/upstream-stream.json",
+      "format": "source",
+      "domain": "xnetflixdnstesty.invalid",
+      "matchingFields": [
+        "domain_keyword"
+      ],
+      "matched": true
+    },
+    {
+      "path": "/Users/wangyg/Development/Working/sing-box-config-manager-issue-149-evidence/fixed-final/domains.json",
+      "format": "source",
+      "domain": "xnetflixdnstesty.invalid",
+      "matchingFields": [
+        "domain_keyword"
+      ],
+      "matched": true
+    },
+    {
+      "path": "/Users/wangyg/Development/Working/sing-box-config-manager-issue-149-evidence/fixed-final/domains.srs",
+      "format": "binary",
+      "domain": "xnetflixdnstesty.invalid",
+      "matchingFields": [
+        "domain_keyword"
+      ],
+      "matched": true
+    },
+    {
+      "path": "/Users/wangyg/Development/Working/sing-box-config-manager-issue-149-evidence/fixed-final/upstream-stream.json",
+      "format": "source",
+      "domain": "unrelated.invalid",
+      "matchingFields": [],
+      "matched": false
+    },
+    {
+      "path": "/Users/wangyg/Development/Working/sing-box-config-manager-issue-149-evidence/fixed-final/domains.json",
+      "format": "source",
+      "domain": "unrelated.invalid",
+      "matchingFields": [],
+      "matched": false
+    },
+    {
+      "path": "/Users/wangyg/Development/Working/sing-box-config-manager-issue-149-evidence/fixed-final/domains.srs",
+      "format": "binary",
+      "domain": "unrelated.invalid",
+      "matchingFields": [],
+      "matched": false
+    },
+    {
+      "path": "/Users/wangyg/Development/Working/sing-box-config-manager-issue-149-evidence/fixed-final/upstream-stream.json",
+      "format": "source",
+      "domain": "sub.tubi.tv",
+      "matchingFields": [],
+      "matched": false
+    },
+    {
+      "path": "/Users/wangyg/Development/Working/sing-box-config-manager-issue-149-evidence/fixed-final/domains.json",
+      "format": "source",
+      "domain": "sub.tubi.tv",
+      "matchingFields": [],
+      "matched": false
+    },
+    {
+      "path": "/Users/wangyg/Development/Working/sing-box-config-manager-issue-149-evidence/fixed-final/domains.srs",
+      "format": "binary",
+      "domain": "sub.tubi.tv",
+      "matchingFields": [],
+      "matched": false
+    },
+    {
+      "path": "/Users/wangyg/Development/Working/sing-box-config-manager-issue-149-evidence/fixed-final/upstream-stream.json",
+      "format": "source",
+      "domain": "notviu.tv",
+      "matchingFields": [],
+      "matched": false
+    },
+    {
+      "path": "/Users/wangyg/Development/Working/sing-box-config-manager-issue-149-evidence/fixed-final/domains.json",
+      "format": "source",
+      "domain": "notviu.tv",
+      "matchingFields": [],
+      "matched": false
+    },
+    {
+      "path": "/Users/wangyg/Development/Working/sing-box-config-manager-issue-149-evidence/fixed-final/domains.srs",
+      "format": "binary",
+      "domain": "notviu.tv",
+      "matchingFields": [],
+      "matched": false
+    }
+  ]
+}
