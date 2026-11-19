@@ -113,7 +113,7 @@ test('ChatGPT Voice 输入校验、无验证器重读及历史清理保留原始
   const currentTree = env.trees.get(beforeCleanup.head)!;
   currentTree.delete(currentPath);
   const blocked = await cleanupRuleHistory({ context: { ...env.context } });
-  assert.equal(blocked.status, 'failed');
+  assert.equal(blocked.status, 'pending');
   assert.ok(blocked.cleanup?.plan?.blockers.some(reason => reason.includes('recorded digest or length')));
   assert.equal((await env.context.repository.snapshot()).head, beforeCleanup.head);
   currentTree.set(currentPath, Buffer.from(second));

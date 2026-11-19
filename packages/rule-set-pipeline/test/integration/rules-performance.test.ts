@@ -123,16 +123,9 @@ test('Release 与 Git 输入更新后同语义保留交付，零编译和加载�
   env.configure(config);
   let revision = 'a', cidr = '192.0.2.0/24\n2001:db8::/32\n';
   const fetcher = env.context.fetch!;
-  let gitBodies = 0, voiceBodies = 0;
+  let gitBodies = 0;
   env.context.fetch = async (address, init) => {
     const url = String(address);
-    if (url === 'https://openai.com/chatgpt-voice.json') {
-      assert.equal(new Headers(init?.headers).has('Authorization'), false);
-      const headers = { etag: '"voice-fixture"' };
-      if (new Headers(init?.headers).get('If-None-Match') === headers.etag) return new Response(null, { status: 304, headers });
-      voiceBodies++;
-      return Response.json({ prefixes: [{ ipv4Prefix: '198.51.100.0/24' }] }, { headers });
-    }
     if (url.startsWith('https://raw.githubusercontent.com/gaoyifan/')) gitBodies++;
     if (url.includes('gaoyifan/china-operator-ip')) return url.includes('/branches/')
       ? Response.json({ name: 'ip-lists', commit: { sha: revision.repeat(40) } })
@@ -176,7 +169,7 @@ test('Release 与 Git 输入更新后同语义保留交付，零编译和加载�
   env.requests.length = 0;
   const repeated = await syncRules(request);
   assert.equal(repeated.status, 'success', JSON.stringify(repeated));
-  assert.equal(gitBodies, 0); assert.equal(voiceBodies, 1);
+  assert.equal(gitBodies, 0);
   assert.deepEqual(env.requests.filter(url => url.includes('/releases/assets/')), []);
   for (const result of repeated.results) {
     assert.ok(result.verified?.includes('source-identity'));
