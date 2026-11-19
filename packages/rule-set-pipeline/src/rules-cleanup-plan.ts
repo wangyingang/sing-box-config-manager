@@ -7,6 +7,7 @@ import { readRuleDeliveries } from './rules-delivery.js';
 import type { CleanupPlan } from './rules-cleanup-model.js';
 import type { RulesSession } from './rules-session.js';
 import { definitionRevision } from './rules-model.js';
+import { openAiVoiceSnapshotPath, validOpenAiVoiceSource, verifyOpenAiVoiceSnapshot } from './openai-voice-source.js';
 
 export async function planRulesCleanup(session: RulesSession, refs: Ref[], frozen?: CleanupPlan): Promise<CleanupPlan> {
   const { journal, snapshot, loaded } = session;
@@ -88,10 +89,19 @@ export async function planRulesCleanup(session: RulesSession, refs: Ref[], froze
   for (const path of knownStable) retainedBytes += (await stable.read(path))!.length;
   const retained = decisions.filter(item => item.action === 'retain').map(item => item.candidateId);
   const discard = decisions.filter(item => item.action === 'discard').map(item => item.candidateId);
+  const hasCleanup = discard.length > 0 || journal.deletedHistoryPending === true;
+  if (hasCleanup) {
+    for (const id of retained) {
+      const source = journal.candidates[id]?.source;
+      if (!validOpenAiVoiceSource(source)) continue;
+      try { verifyOpenAiVoiceSnapshot(source, await snapshot.read(openAiVoiceSnapshotPath(id))); }
+      catch (error) { blockers.push(`Candidate ${id}: ${String(error)}`); }
+    }
+  }
   return { candidateRetentionDays, cleanupObservedAt: observed, cutoff,
     retain: { candidateIds: retained, active: active.sort((a, b) => a.recordPath.localeCompare(b.recordPath)) },
     discard: { candidateIds: discard }, decisions, blockers: [...new Set(blockers)], retainedBytes,
     otherRefs: refs.filter(({ ref }) => ![branchRef(loaded.context.repository.branch), branchRef(loaded.context.targetBranch)].includes(ref)),
     ...(journal.deletedHistoryPending && { deletedHistoryPending: true }),
-    hasCleanup: discard.length > 0 || journal.deletedHistoryPending === true };
+    hasCleanup };
 }

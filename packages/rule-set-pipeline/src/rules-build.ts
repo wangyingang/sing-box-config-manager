@@ -7,6 +7,8 @@ import type { RuleDefinition, SourceInput } from './configuration.js';
 import type { CommitSourceRecord } from './github-commit.js';
 import { probeCommitInput, readPinnedCommitInput } from './git-input-probe.js';
 import { lookupRelease, readReleaseInput, type ReleaseOptions } from './release.js';
+import { OPENAI_VOICE_FILE, openAiVoiceSnapshotPath, probeOpenAiVoiceInput, validOpenAiVoiceSource,
+  verifyOpenAiVoiceSnapshot } from './openai-voice-source.js';
 import { probeReleaseInput } from './release-input-probe.js';
 import type { SourceRecord } from './types.js';
 import type { RulesRepository } from './rules-repository.js';
@@ -26,17 +28,30 @@ interface RuleSourceProbe {
   unchanged?(previous: RuleSource): Promise<RuleSource | undefined>;
 }
 
-async function pinRulesSource(input: SourceInput, network: Pick<ReleaseOptions, 'fetch' | 'token'>, fixed?: RuleCandidate): Promise<RuleSourceProbe> {
+interface FixedRuleInput {
+  candidate: RuleCandidate;
+  snapshot: PublicationSnapshot;
+}
+
+async function pinRulesSource(input: SourceInput, network: Pick<ReleaseOptions, 'fetch' | 'token'>, fixed?: FixedRuleInput): Promise<RuleSourceProbe> {
+  if (input.version === 'openai-voice') {
+    if (!fixed) return probeOpenAiVoiceInput(network.fetch);
+    const { candidate, snapshot } = fixed;
+    const source = candidate.source;
+    if (!validOpenAiVoiceSource(source)) throw new Error('Invalid recorded ChatGPT Voice input identity');
+    return { read: async () => ({ source,
+      bytes: verifyOpenAiVoiceSnapshot(source, await snapshot.read(openAiVoiceSnapshotPath(candidate.id))) }) };
+  }
   if (input.version === 'git-branch') {
     if (fixed) {
-      const expectedSource = fixed.source as CommitSourceRecord;
+      const expectedSource = fixed.candidate.source as CommitSourceRecord;
       const { inputSha256: _hash, inputBytes: _bytes, ...identity } = expectedSource;
       return { read: () => readPinnedCommitInput(input, network, identity, expectedSource) };
     }
     const probe = await probeCommitInput(input, network);
-    return { read: probe.read, unchanged: async previous => 'kind' in previous ? probe.unchanged(previous) : undefined };
+    return { read: probe.read, unchanged: async previous => 'kind' in previous && previous.kind === 'github-commit' ? probe.unchanged(previous) : undefined };
   }
-  const expectedSource = fixed?.source as SourceRecord | undefined;
+  const expectedSource = fixed?.candidate.source as SourceRecord | undefined;
   const metadata = await lookupRelease(input, expectedSource ? String(expectedSource.releaseId) : 'latest', network);
   if (typeof metadata.tag_name !== 'string') throw new Error('Release metadata has no tag');
   const options = { ...network, tag: metadata.tag_name, releaseMetadata: metadata, expectedSource };
@@ -48,33 +63,36 @@ async function pinRulesSource(input: SourceInput, network: Pick<ReleaseOptions, 
 export interface PreparedRulesInput {
   source: RuleSource;
   lists: ReturnType<typeof convertInput>;
+  inputSnapshot?: Uint8Array;
   format: SourceInput['input']['format'];
   file: string;
 }
 
 /** Pin a shared source once, then read and convert only the lists that need its body. */
-export async function resolveRulesInput(loaded: LoadedRules, definitions: RuleDefinition[], fixed?: RuleCandidate) {
-  const input = fixed?.sourceInput ?? loaded.configuration.sources[definitions[0].source];
+export async function resolveRulesInput(loaded: LoadedRules, definitions: RuleDefinition[], fixed?: FixedRuleInput) {
+  const input = fixed?.candidate.sourceInput ?? loaded.configuration.sources[definitions[0].source];
   const probe = await pinRulesSource(input, { fetch: loaded.context.fetch, token: loaded.context.token }, fixed);
   const format = input.input.format;
-  const file = input.version === 'git-branch' ? input.input.path : input.input.asset;
+  const file = input.version === 'openai-voice' ? OPENAI_VOICE_FILE : input.version === 'git-branch' ? input.input.path : input.input.asset;
   return {
     unchanged: probe.unchanged,
     async read(selected: RuleDefinition[]): Promise<PreparedRulesInput> {
       loaded.progress('source', selected.map(rule => rule.id).join(', '));
       const acquired = await probe.read();
-      return { source: acquired.source, lists: convertInput(acquired.bytes, selected, format, file), format, file };
+      return { source: acquired.source, lists: convertInput(acquired.bytes, selected, format, file), format, file,
+        ...(input.version === 'openai-voice' && { inputSnapshot: acquired.bytes }) };
     },
   };
 }
 
 export async function buildPreparedRules(loaded: LoadedRules, definitions: RuleDefinition[], input: PreparedRulesInput) {
   loaded.progress('build', definitions.map(rule => rule.id).join(', '));
-  return buildConfigured(loaded.configuration, definitions, { binary: rulesBinary(loaded.context), nativeBuild: loaded.nativeBuild },
+  const built = await buildConfigured(loaded.configuration, definitions, { binary: rulesBinary(loaded.context), nativeBuild: loaded.nativeBuild },
     input.source, input.lists, input.format, input.file);
+  return { ...built, inputSnapshot: input.inputSnapshot };
 }
 
-export async function buildRulesInput(loaded: LoadedRules, definitions: RuleDefinition[], fixed?: RuleCandidate) {
+export async function buildRulesInput(loaded: LoadedRules, definitions: RuleDefinition[], fixed?: FixedRuleInput) {
   return buildPreparedRules(loaded, definitions, await (await resolveRulesInput(loaded, definitions, fixed)).read(definitions));
 }
 
@@ -100,6 +118,10 @@ export async function recoverPublishedRuleCandidate(session: RulesSession, candi
   const path = `candidates/${candidate.id}/readback.json`;
   const bytes = await session.snapshot.read(path);
   if (!bytes) return undefined;
+  const source = candidate.source;
+  if (validOpenAiVoiceSource(source)) {
+    verifyOpenAiVoiceSnapshot(source, await session.snapshot.read(openAiVoiceSnapshotPath(candidate.id)));
+  }
   const evidence = JSON.parse(bytes.toString());
   const evidenceCommit = candidate.evidenceCommit ?? await session.loaded.context.repository.lastChange(session.snapshot.head, path);
   const recovered: RuleCandidate = { ...candidate, status: 'verified', evidenceCommit,
@@ -137,8 +159,12 @@ export async function publishRuleBuild(session: RulesSession, built: RuleBuild, 
     if (!candidate.filesCommit && session.snapshot.paths.includes(filesPath)) candidate.filesCommit = await session.loaded.context.repository.lastChange(session.snapshot.head, filesPath);
     if (!candidate.metadataCommit && session.snapshot.paths.includes(metadataPath)) candidate.metadataCommit = await session.loaded.context.repository.lastChange(session.snapshot.head, metadataPath);
   }
+  const checkpoint: Record<string, Buffer> = {};
+  if (!recovering && validOpenAiVoiceSource(candidate.source)) {
+    checkpoint[openAiVoiceSnapshotPath(candidate.id)] = Buffer.from(verifyOpenAiVoiceSnapshot(candidate.source, built.inputSnapshot));
+  }
   session.journal.candidates[candidate.id] = candidate;
-  await session.save();
+  await session.save(checkpoint);
   // Immutable stage writes and their journal checkpoint share the same CAS.
   // If a response was lost before the stage pointer was saved, find that exact
   // retained stage rather than uploading another candidate.

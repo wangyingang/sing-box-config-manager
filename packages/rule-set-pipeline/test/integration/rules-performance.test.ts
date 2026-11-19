@@ -158,7 +158,7 @@ test('Release 与 Git 输入更新后同语义保留交付，零编译和加载�
   const release = observed.rules!.find(rule => rule.id === 'openai')!.successfulInput;
   const git = observed.rules!.find(rule => rule.id === 'china-ip')!.successfulInput;
   assert.equal(release?.source && 'releaseId' in release.source && release.source.releaseId, 4);
-  assert.equal(git?.source.commit, 'b'.repeat(40));
+  assert.ok(git && 'commit' in git.source); assert.equal(git.source.commit, 'b'.repeat(40));
   for (const result of next.results) {
     assert.ok(result.reliedOn?.includes('historical-native'));
     assert.ok(!result.verified?.includes('native'));
@@ -228,7 +228,8 @@ test('Git 分支移动后只复用可信的同路径 blob，缺失或改变时�
     revision = id;
     const result = await syncRules({ context: env.context });
     assert.equal(result.status, 'success', JSON.stringify(result));
-    assert.equal(result.results[0].successfulInput?.source.commit, commit(id));
+    const source = result.results[0].successfulInput?.source;
+    assert.ok(source && 'commit' in source); assert.equal(source.commit, commit(id));
     assert.equal(requests.filter(url => url.includes('/branches/')).length, 1);
     return { result: result.results[0], downloads: requests.filter(url => url.startsWith('https://raw.githubusercontent.com/')).length };
   };
@@ -248,7 +249,8 @@ test('Git 分支移动后只复用可信的同路径 blob，缺失或改变时�
   const changed = await sync(3);
   assert.equal(changed.downloads, 1);
   assert.equal(changed.result.status, 'delivered');
-  assert.equal(changed.result.current?.source.commit, commit(3));
+  const source = changed.result.current?.source;
+  assert.ok(source && 'commit' in source); assert.equal(source.commit, commit(3));
   assert.deepEqual(await take(), oneNativeValidation);
   for (const id of [4, 5]) {
     const fallback = await sync(id);
@@ -265,7 +267,8 @@ test('Release 按附件 ID 和摘要短路，保留同 tag 替换与首次或回
   const config = env.config();
   config.ruleSets = [config.ruleSets[0]];
   env.configure(config);
-  const repo = config.sources.dlc.repository;
+  const dlc = config.sources.dlc; assert.equal(dlc.version, 'latest-release');
+  const repo = dlc.repository;
   const tag = 'fixed-tag';
   let checksumFailures = 0;
   let assetId = 11, rule = 'domain:a.example', yamlDigest = true, checksumDigest = true, badChecksum = false;
@@ -813,14 +816,21 @@ test('新 Node 进程从持久回读阶段恢复原候选并重新执行一组�
   assert.deepEqual(await take(), oneNativeValidation);
 });
 
-test('正式四集首次交付回读 16 个规则地址，成功基线重复同步的五项预算均为零', { skip: !binary }, async t => {
+test('正式五集首次交付回读 20 个规则地址，成功基线重复同步的五项预算均为零', { skip: !binary }, async t => {
   const { wrapper, take } = await traceNative(t);
   const env = rulesEnvironment(wrapper, 'main');
   env.configure(parseBuildConfiguration(readOfficialConfiguration()));
   const fetcher = env.context.fetch!;
-  let gitBodies = 0;
+  let gitBodies = 0, voiceBodies = 0;
   env.context.fetch = async (address, init) => {
     const url = String(address);
+    if (url === 'https://openai.com/chatgpt-voice.json') {
+      assert.equal(new Headers(init?.headers).has('Authorization'), false);
+      const headers = { etag: '"voice-fixture"' };
+      if (new Headers(init?.headers).get('If-None-Match') === headers.etag) return new Response(null, { status: 304, headers });
+      voiceBodies++;
+      return Response.json({ prefixes: [{ ipv4Prefix: '198.51.100.0/24' }] }, { headers });
+    }
     if (url.startsWith('https://raw.githubusercontent.com/gaoyifan/')) gitBodies++;
     if (url.includes('gaoyifan/china-operator-ip')) return url.includes('/branches/')
       ? Response.json({ name: 'ip-lists', commit: { sha: 'b'.repeat(40) } })
@@ -837,9 +847,9 @@ test('正式四集首次交付回读 16 个规则地址，成功基线重复同�
   };
   const result = await syncRules({ context: env.context });
   assert.equal(result.status, 'success', JSON.stringify(result));
-  assert.deepEqual(await take(), { compile: 4, decompile: 0, sourceLoad: 4, binaryLoad: 4 });
+  assert.deepEqual(await take(), { compile: 5, decompile: 0, sourceLoad: 5, binaryLoad: 5 });
   const writes = env.writes.length;
-  assert.equal(env.writes.filter(write => write.branch === 'main').length, 4);
+  assert.equal(env.writes.filter(write => write.branch === 'main').length, 5);
   const retained = await repository.snapshot(), stable = await repository.snapshot('main');
   const journal = parseRulesJournal((await retained.read(RULE_STATE_PATH))!);
   const expected: string[] = [];
@@ -860,7 +870,7 @@ test('正式四集首次交付回读 16 个规则地址，成功基线重复同�
       assert.equal(sha256(bytes!), current.files[stablePath].sha256);
     }
   }
-  assert.equal(raw.size, 16);
+  assert.equal(raw.size, 20);
   assert.deepEqual([...raw.keys()].sort(), expected.sort());
   assert.deepEqual(result.readbackRequests, [...raw.keys()]);
   raw.clear();
@@ -871,7 +881,7 @@ test('正式四集首次交付回读 16 个规则地址，成功基线重复同�
   assert.equal(unchanged.status, 'success', JSON.stringify(unchanged));
   assert.deepEqual(unchanged.results.map(rule => rule.current), result.results.map(rule => rule.current));
   assert.ok(unchanged.results.every(rule => rule.status === 'unchanged' && rule.verified?.includes('source-identity')));
-  assert.equal(gitBodies, 0);
+  assert.equal(gitBodies, 0); assert.equal(voiceBodies, 1);
   assert.deepEqual(env.requests.filter(url => url.includes('/releases/assets/')), []);
   assert.equal(env.requests.filter(url => url.endsWith('/releases/latest')).length, 1);
   assert.deepEqual(await take(), noNativeValidation);

@@ -114,7 +114,8 @@ test('Git 首次输入下载失败尚无候选，重试按最新分支建立候�
   env.offline(false); env.advance(); env.requests.length = 0;
   const result = await syncRules({ context: { ...env.context } });
   assert.equal(result.status, 'success', JSON.stringify(result));
-  assert.equal(result.results[0].current?.source.commit, env.latest);
+  const source = result.results[0].current?.source;
+  assert.ok(source && 'commit' in source); assert.equal(source.commit, env.latest);
   assert.equal(Object.keys((await env.journal()).candidates).length, 1);
   assert.ok(env.requests.some(url => url.includes('/branches/')));
   assert.ok(!env.requests.some(url => url.includes(`/${env.fixed}/`)));
@@ -126,7 +127,8 @@ for (const file of ['route.json', 'route.srs']) {
     env.failDownload(url => { if (url.endsWith('/' + file)) throw new Error('stage HTTPS unavailable'); });
     assert.equal((await syncRules({ context: env.context })).status, 'failed');
     const candidate = Object.values((await env.journal()).candidates)[0];
-    assert.equal(candidate.status, 'publishing'); assert.equal(candidate.source.commit, env.fixed);
+    assert.equal(candidate.status, 'publishing');
+    assert.ok('commit' in candidate.source); assert.equal(candidate.source.commit, env.fixed);
     const retained = await bytesUnder(env, `candidates/${candidate.id}/`);
     assert.ok(retained.has(`candidates/${candidate.id}/${file}`));
     env.failDownload(); env.advance(); env.requests.length = 0; env.clock('2026-11-19T00:00:00.000Z');

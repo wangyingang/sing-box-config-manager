@@ -6,10 +6,12 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { artifactManifestSchema } from '../../../config-compiler/src/index.js';
+import { OPENAI_VOICE_URL, OPENAI_VOICE_FILE, validOpenAiVoiceSource } from '../../src/openai-voice-source.js';
 import { NATIVE_VALIDATION_POLICY } from '../../src/native.js';
 import test from 'node:test';
 import { stringify } from 'yaml';
 import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
+import { convertCidrText } from '../../src/cidr-text-adapter.js';
 import { createGitCommit } from '../../src/publication-repository.js';
 import { ARTIFACT_REPOSITORY, GitHubHttpError, ghJson } from '../../src/publication.js';
 import { githubRulesRepository } from '../../src/rules-repository.js';
@@ -26,7 +28,7 @@ const originalCommit = 'f162630c8cdad6ced5ef59e606cc93919123ac57';
 const updatedCommit = '62bc1fc8b015bece77271b568e10d6337915bc96';
 
 /** Only discovery is pinned. Source bytes, Git writes and HTTPS readback are real. */
-test('GitHub 四集双来源：新增、独立更新、换源、逐集 pin/resume、删除，生产 refs/开关不变', {
+test('GitHub 隔离验收：正式规则集首次交付或四集生命周期，生产 refs/开关不变', {
   skip: process.env.RULE_OPERATIONS_PROBE !== '1', timeout: 3_600_000,
 }, async t => {
   const binary = process.env.SING_BOX_TEST_BINARY, evidencePath = process.env.RULE_OPERATIONS_EVIDENCE;
@@ -111,7 +113,7 @@ exec ${shellQuote(binary)} "$@"
     assert.deepEqual(cleanupErrors, []); assert.deepEqual(remaining, []); assert.deepEqual(after, before);
     console.log(JSON.stringify({ target, cleaned: true, productionUnchanged: true, evidencePath }));
   });
-  const head = await createGitCommit((path, input) => api(path, input), { 'README.md': Buffer.from(`Issue 96 isolated probe ${target}\n`) }, '隔离四集交付验收');
+  const head = await createGitCommit((path, input) => api(path, input), { 'README.md': Buffer.from(`Issue 96 isolated probe ${target}\n`) }, '隔离规则集交付验收');
   await api('git/refs', { ref: `refs/heads/${target}`, sha: head }); created = true;
   const repository = githubRulesRepository(target, request);
   const download = repository.download;
@@ -137,8 +139,18 @@ exec ${shellQuote(binary)} "$@"
     }
     sources.set(address, response.clone()); return response;
   };
+  const voiceInputs = new Map<string, Uint8Array>();
   const sourceFetch: typeof fetch = async (url, init) => {
     const address = String(url); requests.push(address);
+    if (address === OPENAI_VOICE_URL) {
+      assert.equal(new Headers(init?.headers).has('Authorization'), false);
+      const response = await fetch(url, init);
+      if (response.ok) {
+        const bytes = new Uint8Array(await response.clone().arrayBuffer());
+        voiceInputs.set(sha256(bytes), bytes);
+      }
+      return response;
+    }
     if (address.endsWith('/branches/ip-lists')) {
       const branch = await (await upstream(address, init)).json();
       assert.equal(branch.name, 'ip-lists');
@@ -150,6 +162,7 @@ exec ${shellQuote(binary)} "$@"
     return upstream(address.replace(/\/releases\/latest$/, `/releases/tags/${tag}`), init);
   };
   const config = parseBuildConfiguration(readOfficialConfiguration()); config.target.branch = target;
+  if (!firstOnly) config.ruleSets = config.ruleSets.filter(rule => rule.id !== 'chatgpt-voice');
   let revision = 1;
   const context: RulesContext = { repository, targetBranch: target, allowWrites: true, binary: tracedBinary, token,
     readConfiguration: async () => ({ revision: String(revision).padStart(40, '0'), origin: 'isolated-github-probe', content: stringify(config) }),
@@ -228,7 +241,25 @@ exec ${shellQuote(binary)} "$@"
     assert.equal(readback.candidateId, current.candidateId); assert.equal(readback.versionId, current.versionId);
     assert.equal(readback.readback.length, 2);
     const files = [];
-    for (const file of candidateFiles(config.ruleSets.find(x => x.id === current.logicalId))) {
+    const definition = config.ruleSets.find(x => x.id === current.logicalId)!;
+    const isCidr = 'artifact' in definition.usages.route && definition.usages.route.artifact === 'route';
+    const retainedFiles = candidateFiles(definition);
+    if (validOpenAiVoiceSource(current.source)) {
+      const input = await readGit(OPENAI_VOICE_FILE);
+      const downloaded = voiceInputs.get(current.source.inputSha256);
+      assert.equal(input.byteLength, current.source.inputBytes);
+      assert.equal(sha256(input), current.source.inputSha256);
+      assert.deepEqual(new Uint8Array(input), downloaded);
+      const { prefixes } = JSON.parse(input.toString());
+      const addresses = prefixes.map((entry: { ipv4Prefix?: string; ipv6Prefix?: string }) => entry.ipv4Prefix ?? entry.ipv6Prefix);
+      const expected = convertCidrText(Buffer.from(addresses.join('\n')), OPENAI_VOICE_FILE, 'all');
+      assert.ok(expected.ok);
+      const route = JSON.parse((await readGit('route.json')).toString());
+      assert.deepEqual(route.rules, [{ ip_cidr: expected.terms.map(term => term.value) }]);
+      expectedCount = addresses.length;
+      retainedFiles.push(OPENAI_VOICE_FILE);
+    }
+    for (const file of retainedFiles) {
       const bytes = await readGit(file);
       for (const entry of readback.readback.filter((x: { url: string }) => x.url.endsWith('/' + file))) {
         assert.deepEqual(await readBytes(entry.url, entry), bytes);
@@ -240,19 +271,19 @@ exec ${shellQuote(binary)} "$@"
     const build = JSON.parse((await readGit('build.json')).toString());
     assert.equal(manifest.id, current.logicalId); assert.equal(manifest.targetVersion, '1.14.4'); assert.equal(manifest.sourceFormatVersion, 4);
     assert.equal(build.id, current.logicalId);
-    assert.equal(build.definition.list, current.logicalId === 'china-ip' ? 'all' : expectedList);
+    assert.equal(build.definition.list, isCidr ? 'all' : expectedList);
     assert.deepEqual(build.source, current.source); assert.equal(build.validation.status, 'passed');
     assert.equal(build.validation.policy, NATIVE_VALIDATION_POLICY);
     assert.deepEqual(build.source, JSON.parse((await readGit('source.json')).toString()));
     if (expectedCount !== undefined) assert.equal(report.inputCount, expectedCount);
     assert.deepEqual(manifest.artifacts.map((x: { format: string }) => x.format), ['source', 'binary']);
-    assert.deepEqual(manifest.projections.route, manifest.projections[current.logicalId === 'china-ip' ? 'dns-response' : 'dns-query']);
-    assert.deepEqual(manifest.projections[current.logicalId === 'china-ip' ? 'dns-query' : 'dns-response'], { unavailable: 'empty' });
+    assert.deepEqual(manifest.projections.route, manifest.projections[isCidr ? 'dns-response' : 'dns-query']);
+    assert.deepEqual(manifest.projections[isCidr ? 'dns-query' : 'dns-response'], { unavailable: 'empty' });
     for (const artifact of manifest.artifacts) {
       await readBytes(artifact.url, artifact);
       if (artifact.format === 'source') {
         assert.equal(artifact.termCount, report.outputTermCount);
-        if (expectedCount !== undefined) assert.equal(artifact.termCount, expectedCount);
+        if (expectedCount !== undefined && !validOpenAiVoiceSource(current.source)) assert.equal(artifact.termCount, expectedCount);
       } else assert.ok(!Object.hasOwn(artifact, 'termCount'));
       assert.deepEqual(artifact.requiredCapabilities, []);
     }
@@ -263,7 +294,7 @@ exec ${shellQuote(binary)} "$@"
   const empty = await getRulesStatus(input);
   assert.equal(empty.status, 'success', JSON.stringify(empty));
   assert.ok(empty.rules?.every(rule => rule.deliveryState === 'not-delivered' && rule.candidateCount === 0));
-  const first = await check('add-four', () => syncRules(input));
+  const first = await check('first-delivery', () => syncRules(input));
   const nativeCommands = (await readFile(tracePath, 'utf8')).trim().split('\n');
   const nativeCounts = countNativeCommands(nativeCommands);
   observations.push({ label: 'first-delivery-native-processes', nativeCommands, nativeCounts });
@@ -272,12 +303,14 @@ exec ${shellQuote(binary)} "$@"
   assert.equal(nativeCounts.compile, config.ruleSets.length);
   assert.equal(nativeCounts.sourceLoad, config.ruleSets.length);
   assert.equal(nativeCounts.binaryLoad, config.ruleSets.length);
-  assert.deepEqual(first.results.map(x => x.id), ['openai', 'anthropic', 'google-deepmind', 'china-ip']);
+  assert.deepEqual(first.results.map(x => x.id), config.ruleSets.map(rule => rule.id));
   assert.ok(first.results.every(x => x.current && ['delivered', 'unchanged'].includes(x.status)));
-  assert.deepEqual(checkedStatus?.rules?.map(x => x.candidateCount), [1, 1, 1, 1]);
+  assert.deepEqual(checkedStatus?.rules?.map(x => x.candidateCount), config.ruleSets.map(() => 1));
   for (const [i, entry] of first.results.entries()) {
     const source = entry.current!.source;
-    if (i < 3) { assert.ok('tag' in source); assert.equal(source.tag, originalTag); } else assert.equal(source.commit, originalCommit);
+    if (entry.id === 'chatgpt-voice') assert.ok(validOpenAiVoiceSource(source));
+    else if (entry.id === 'china-ip') { assert.ok('commit' in source); assert.equal(source.commit, originalCommit); }
+    else { assert.ok('tag' in source); assert.equal(source.tag, originalTag); }
     await inspectCandidate(entry.current!, [25, 19, 49][i]);
   }
   if (firstOnly) return;
@@ -290,7 +323,8 @@ exec ${shellQuote(binary)} "$@"
   const cidr = await check('cidr-only', () => syncRules(input), 'china-ip');
   assert.deepEqual(cidr.results.slice(0, 3).map(x => x.status), ['unchanged', 'unchanged', 'unchanged']);
   assert.notEqual(cidr.results[3].current?.versionId, first.results[3].current?.versionId);
-  assert.equal(cidr.results[3].current?.source.commit, updatedCommit);
+  const cidrSource = cidr.results[3].current?.source;
+  assert.ok(cidrSource && 'commit' in cidrSource); assert.equal(cidrSource.commit, updatedCommit);
   tag = updatedTag;
   const updated = await check('release-update', () => syncRules(input));
   assert.ok(updated.results.filter(x => x.id !== 'anthropic').every(x => x.status === 'unchanged'));

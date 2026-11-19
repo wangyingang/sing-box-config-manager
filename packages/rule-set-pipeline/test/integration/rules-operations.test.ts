@@ -52,13 +52,17 @@ test('换源失败保留交付但撤销 pin；别名保持 pin；旧来源可明
   let config = env.config(); config.sources.alias = config.sources.dlc;
   config.ruleSets[0].source = 'alias'; env.configure(config);
   assert.equal((await syncRules(request)).results.find(x => x.id === 'openai')?.status, 'pinned-skipped');
-  config = env.config(); config.sources.alias = { ...config.sources.alias, repository: 'another/rules' }; env.configure(config);
+  config = env.config();
+  const alias = config.sources.alias; assert.equal(alias.version, 'latest-release');
+  config.sources.alias = { ...alias, repository: 'another/rules' }; env.configure(config);
   env.failSource('another/rules'); const changed = await syncRules(request);
   assert.equal(changed.status, 'partial', JSON.stringify(changed));
   const failed = changed.results.find(x => x.id === 'openai')!;
   assert.equal(failed.control?.mode, 'auto'); assert.equal(failed.current?.versionId, old.versionId);
-  assert.equal(failed.expectedSource?.repository, 'another/rules');
-  assert.equal((await getRulesStatus({ ...request, id: 'openai' })).rules?.[0].current?.source.repository, old.source.repository);
+  assert.ok(failed.expectedSource?.version === 'latest-release'); assert.equal(failed.expectedSource.repository, 'another/rules');
+  const selectedSource = (await getRulesStatus({ ...request, id: 'openai' })).rules?.[0].current?.source;
+  assert.ok(selectedSource && 'repository' in selectedSource && 'repository' in old.source);
+  assert.equal(selectedSource.repository, old.source.repository);
   env.failSource(false); assert.equal((await syncRules(request)).status, 'success');
   const repin = await pinRuleVersion({ ...request, id: 'openai', version: old.versionId! });
   assert.equal(repin.status, 'success', JSON.stringify(repin)); const count = env.writes.length;
@@ -73,7 +77,8 @@ test('混合新增换源删除独立完成；空集合删除全部；重加不�
   const env = rulesEnvironment(binary!); const request = { context: env.context };
   const first = await syncRules(request);
   await pinRuleVersion({ ...request, id: 'openai', version: first.results[0].current!.versionId! });
-  const config = env.config(); config.sources.failing = { ...config.sources.dlc, repository: 'failing/source' };
+  const config = env.config(); const dlc = config.sources.dlc; assert.equal(dlc.version, 'latest-release');
+  config.sources.failing = { ...dlc, repository: 'failing/source' };
   config.ruleSets = [{ ...config.ruleSets[0], source: 'failing' },
     { ...config.ruleSets[1], id: 'new-rule', list: 'other', stablePath: 'stable/new-rule' }];
   env.configure(config); env.failSource('failing/source'); const mixed = await syncRules(request);
@@ -109,7 +114,8 @@ test('查询、三个 dry-run 和无效 pin 零写入；草稿不能写；首次
 
 test('固定目标不请求其独立上游，其他集继续；旧配置在写前失效', { skip: !binary }, async () => {
   const env = rulesEnvironment(binary!); const request = { context: env.context };
-  const config = env.config(); config.sources.independent = { ...config.sources.dlc, repository: 'separate/rules' };
+  const config = env.config(); const dlc = config.sources.dlc; assert.equal(dlc.version, 'latest-release');
+  config.sources.independent = { ...dlc, repository: 'separate/rules' };
   config.ruleSets[0].source = 'independent'; env.configure(config);
   const first = await syncRules(request);
   await pinRuleVersion({ ...request, id: 'openai', version: first.results[0].current!.versionId! });

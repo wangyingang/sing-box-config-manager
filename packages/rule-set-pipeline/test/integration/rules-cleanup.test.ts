@@ -357,7 +357,8 @@ test('cleanup 原样复制已有追溯文件，读取未完成时保留计划并
 test('换源失败的旧交付按当前版本保护，未知发布时间及未完成候选阻塞年龄清理', { skip: !binary, timeout: 90_000 }, async () => {
   const { env, expired, latest } = await retainedFixture('acceptance-issue-85');
   const configuration = env.config();
-  configuration.sources.other = { ...configuration.sources.dlc, repository: 'failing/source' };
+  const dlc = configuration.sources.dlc; assert.equal(dlc.version, 'latest-release');
+  configuration.sources.other = { ...dlc, repository: 'failing/source' };
   configuration.ruleSets[0].source = 'other'; env.configure(configuration); env.failSource('failing/source');
   assert.equal((await syncRules(request(env))).status, 'partial');
   env.clock('2027-01-01T00:00:00.000Z');

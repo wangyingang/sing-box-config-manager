@@ -1,3 +1,4 @@
+import type { OpenAiVoiceSource } from './openai-voice-source.js';
 import type { VerifyEvidence } from './evidence-download.js';
 import { randomUUID } from 'node:crypto';
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
@@ -49,6 +50,7 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, 
   }
   const definitions = selected ? configuration.ruleSets.filter(rule => selected.includes(rule.id)) : configuration.ruleSets;
   const source = configuredInput(configuration, definitions);
+  if (source.version === 'openai-voice') throw new Error('Use sync for ChatGPT Voice sources');
   const git = source.version === 'git-branch';
   if (git ? options.sampleTag || options.retryRelease || rebuild?.release !== undefined
     : rebuild?.commit !== undefined) throw new Error('Use a fixed version matching the configured source (--commit or --release)');
@@ -280,7 +282,7 @@ async function prepareRelease(source: ReleaseInput, options: ConfiguredUpdateOpt
 }
 
 export async function publishConfiguredCandidate(result: Extract<Awaited<ReturnType<typeof buildConfiguredRelease>>['results'][number], { status: 'built-validated' }>,
-  candidate: PublicationCandidate & { operation?: string; previousCandidateId?: string }, source: SourceRecord | CommitSourceRecord, tools: Record<string, string | number>, target: { repository: string; branch: string },
+  candidate: PublicationCandidate & { operation?: string; previousCandidateId?: string }, source: SourceRecord | CommitSourceRecord | OpenAiVoiceSource, tools: Record<string, string | number>, target: { repository: string; branch: string },
   publication: PublicationTransport, { binary, nativeBuild, verifyEvidence, ruleFilesOnly }: NativeBuildOptions & { verifyEvidence?: VerifyEvidence; ruleFilesOnly?: boolean },
   save: () => Promise<void>, beforeEvidence?: () => void) {
   const prefix = `candidates/${candidate.id}`;

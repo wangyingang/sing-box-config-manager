@@ -8,7 +8,7 @@
 
 `target.repository` 固定为 `wangyingang/sing-box-rule-artifacts`；分支只能是 `main` 或受限 `acceptance-*`。`ruleSets` 中 ID 唯一，`source` 必须存在，`stablePath` 为互不重叠的 `stable/` 路径。显式空集合表示删除全部；缺少集合、读取失败或解析错误不能解释为删除。
 
-获取机制与解析语义分别声明：GitHub Release 资产使用 `version: latest-release` 和 asset/checksum；固定 Git 分支输入使用 `version: git-branch`、branch/path。两者都接受已有的 `plain-yaml` 规则列表或 `cidr-text` 语义，不开放任意 YAML、动态插件或新格式。固定来源记录保存真实仓库、Release/commit 身份、输入文件、摘要和字节数；恢复使用登记的固定输入。
+获取机制与解析语义分别声明：GitHub Release 资产使用 `version: latest-release` 和 asset/checksum；固定 Git 分支输入使用 `version: git-branch`、branch/path。两者都接受已有的 `plain-yaml` 规则列表或 `cidr-text` 语义，来源记录保存真实仓库、Release/commit 身份、输入文件、摘要和字节数。官方 ChatGPT Voice 使用 `version: openai-voice`、`format: openai-voice-json` 和固定 `https://openai.com/chatgpt-voice.json`，读取非空 `prefixes` 列表中的 `ipv4Prefix` 或 `ipv6Prefix`，使用现有 CIDR 规则处理。其来源记录保存 URL、原始字节的 SHA-256 和长度，以及可用的强 ETag。恢复使用登记的固定输入。
 
 ## 共同结果
 
@@ -75,7 +75,9 @@ status 只读取，不登记操作、更新检查时间、恢复维护或发送�
 - **Git** 同一实际仓库、文件路径和完整 commit 可以直接确认。分支移动时，系统从 GitHub 的固定 commit 逐级核对树，在两个 commit 的同一路径查找普通文件。只有完整树中的 blob SHA 一致且大小与已成功处理的字节相符时才省略正文。分支名、大小、符号链接和截断的树本身不能证明文件未变。缺少可信 blob 时读取当前固定 commit 的正文。
 - **Release** 先解析实际 Release、tag、源码 commit 和两个附件的身份。GitHub 上传完成的正文附件 SHA-256 与已验证正文相符时，继续核对校验附件。摘要绑定本次探测得到的实际附件 ID、名称与地址，附件 ID 变化时也要重新核对摘要。校验附件可通过 GitHub 的 SHA-256 或重新读取小校验附件来确认。正文摘要缺失或任一附件的摘要无法确认相同时，进入正文处理。首次、回退和固定输入恢复时仍按附件 ID 下载，并校验校验附件的格式、目标文件和正文 SHA-256。tag、名称、源码 commit、修改时间和大小都不足以替代附件证据。
 
-同源规则集合并最新身份探测和必要的正文下载。各集独立核对前提并保存成功事实。当前交付可以沿用时，新 Git commit 或新 Release 的成功记录只影响下次探测，保留候选的来源、版本和首次发布时间仍取自最初交付。正式配置修订和成功事实均未变时，正常同步只读取必要证据，规则正文下载、`compile`、JSON/SRS 原生加载及 Git 提交均为 0。
+- **ChatGPT Voice** 用已成功输入的强 ETag 发起条件 GET。可信的 304 可沿用成功事实；304 未回显相同强 ETag 时退回无条件 GET。200 的正文以实际 SHA-256 核对。缺少强 ETag 时读取正文，同一操作复用本次已下载字节。恢复从候选的原始快照核对长度和 SHA-256，快照缺失或损坏时报告候选失败。
+
+同源规则集合并最新身份探测和必要的正文下载。各集独立核对前提并保存成功事实。当前交付可以沿用时，新 Git commit 或新 Release 的成功记录只影响下次探测，保留候选的来源、版本和首次发布时间仍取自最初交付。正式配置修订、成功事实和正文均未变时，正常同步只读取必要证据，`compile`、JSON/SRS 原生加载及 Git 提交均为 0。上游证据足以确认字节一致时，规则正文下载也为 0。
 
 ## 远端事实与版本身份
 
@@ -85,13 +87,13 @@ status 只读取，不登记操作、更新检查时间、恢复维护或发送�
 
 候选文件位于 `candidates/<id>/`，仍使用固定 commit 地址、Manifest、构建记录与 readback 证据。候选首次成功发布保存 UTC ISO 8601 `publishedAt`，并以时间和候选稳定短身份组成 `versionId`，例如 `2026-11-16T12:34:56.789Z~1234abcd`。时间相同的候选仍由完整身份区分，短身份冲突时延长；不覆盖旧候选。pin、resume、重试和再次交付不刷新原版本身份或时间。有效内容与构建条件未变时，完整的当前交付可继续使用。
 
-`successfulInput` 保存已核实的 Git commit/文件或 Release/资产身份及输入摘要，绑定 `inputBindingRevision`、`definitionRevision`、`definitionGeneration`、`toolSha256`、`buildToolsSha256`、`validationPolicy`、`nativeBuildId`、`candidateId` 和 `buildId`。定义包括用途，因此规范化内容身份与定义一起约束实际用途投影。版本来源仍取自生成候选的原输入。
+`successfulInput` 保存已核实的 Git、Release 或官方 ChatGPT Voice 来源身份及输入摘要，绑定 `inputBindingRevision`、`definitionRevision`、`definitionGeneration`、`toolSha256`、`buildToolsSha256`、`validationPolicy`、`nativeBuildId`、`candidateId` 和 `buildId`。定义包括用途，因此规范化内容身份与定义一起约束实际用途投影。版本来源仍取自生成候选的原输入。
 
 同步和恢复只在稳定规则文件的固定 commit 正文回读通过，或本次从 Git 核实完整现有交付可复用后推进该集的成功记录。共享来源的失败项保留各自此前适用的记录。同一成功事实没有观测时间字段，重复处理无需提交。缺少记录、上次失败、工具或策略变化、当前候选不匹配或候选证据不足时走常规构建和验证。共享稳定文件缺失或摘要不符时仍停止写入。实质定义变化与删除会清除旧记录。同一来源的别名变更沿用有效定义判断。
 
 正式配置状态先单独保存。每集正常首次交付采用以下 7 个持久阶段，沿用现有 schema、分支与稳定 URL，不重写历史：
 
-1. 登记候选，固定来源及 buildId，状态为 building。
+1. 登记候选，固定来源及 buildId，状态为 building。ChatGPT Voice 的 `candidates/<id>/chatgpt-voice.json` 原始快照与登记写在同一次提交。
 2. 上传 JSON/SRS，同时保存 publishing 状态。
 3. 上传 Manifest、构建记录及追溯文件，同时保存规则文件所在 commit。
 4. 固定 commit 的 JSON 和 SRS 正文校验通过后保存回读记录，同时保存元数据 commit、地址和已确定的版本身份。
@@ -155,7 +157,7 @@ Git 中的候选登记和回读完成记录约束规则归属、来源绑定、�
 
 年龄按首次成功发布的 `publishedAt` 计算，UTC 连续 24 小时计一天。`publishedAt >= cutoff` 的完整候选保留；早于 cutoff 的候选仅在没有保护依赖时删除。当前交付、pin 目标、未决操作所需证据和最小控制/删除代次均受到保护。候选退出当前身份不更新时间或重新计时；未知历史时间不伪造、不按过期处理。
 
-启动重建须有过期且不受保护的候选、已证明失效的残留，或删除历史待回收标记。控制、来源观测和成功输入记录的变动本身仅增加操作历史。没有回收对象、阻塞项或待续维护时，`cleanup` 返回 `unchanged`。归属未知或未决写入仍可阻塞维护。隔离写入登记维护身份、时间边界和完整集合，中断恢复沿用该计划。关键写入仍核对当前定义、控制、generation 和 Git heads，冲突时停止。新基线复制保留候选的必需产物和已有追溯文件，并保留实际当前 candidate/version 指针。清理保留有效候选关联的成功输入，清除被回收候选的关联。物理 commit 和证据 URL 可重写，业务 `versionId`、`publishedAt`、来源、稳定 URL 与规则字节不变。
+启动重建须有过期且不受保护的候选、已证明失效的残留，或删除历史待回收标记。控制、来源观测和成功输入记录的变动本身仅增加操作历史。没有回收对象、阻塞项或待续维护时，`cleanup` 返回 `unchanged`。归属未知或未决写入仍可阻塞维护。隔离写入登记维护身份、时间边界和完整集合，中断恢复沿用该计划。关键写入仍核对当前定义、控制、generation 和 Git heads，冲突时停止。新基线复制保留候选的必需产物、已核对摘要的 ChatGPT Voice 原始输入及已有追溯文件，并保留实际当前 candidate/version 指针。清理保留有效候选关联的成功输入，清除被回收候选的关联。物理 commit 和证据 URL 可重写，业务 `versionId`、`publishedAt`、来源、稳定 URL 与规则字节不变。
 
 切换前重跑 cleanup 复用或核实已准备对象；切换后继续回读、清理本次拥有且 head 一致的临时引用、恢复写入，不回滚旧基线。无法判定时保留隔离并返回 pending/failed。dry-run 只盘点已保存的状态与文件；`cleanup.unverified` 明示尚未执行的原生候选复验、新基线 HTTPS 回读和原子切换。存在活动维护时展示已固化计划，不恢复阶段、不写引用或 generation。status 在维护隔离期间报告 pending，并在当前检查点有计划时提供 cleanup 阶段、身份、截止时间与继续入口。
 
