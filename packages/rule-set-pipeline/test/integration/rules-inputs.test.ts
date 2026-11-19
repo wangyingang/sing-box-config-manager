@@ -300,17 +300,27 @@ for (const mechanism of ['latest-release', 'git-branch'] as const) for (const fo
   });
 }
 
-test('onedrive 经 sync 交付两种域名格式，保留过滤报告及固定来源', async () => {
-  const env = rulesEnvironment(binary!, 'acceptance-onedrive');
+const gitDomainDeliveries = [
+  {
+    id: 'onedrive', repository: 'blackmatrix7/ios_rule_script', path: 'rule/Clash/OneDrive/OneDrive.list',
+    input: 'DOMAIN-SUFFIX,sharepoint.example\nDOMAIN-KEYWORD,onedrive\nPROCESS-NAME,OneDrive\n',
+    policy: 'typed-domain-text-v1', filtered: [{ type: 'PROCESS-NAME', value: 'OneDrive', line: 3 }], terms: 2,
+  },
+  {
+    id: 'stream', repository: 'SukkaLab/ruleset.skk.moe', path: 'sing-box/non_ip/stream.json',
+    input: JSON.stringify({ version: 2, rules: [{ domain: ['exact.example'],
+      domain_suffix: ['suffix.example'], domain_keyword: ['needle'] }] }),
+    policy: 'sing-box-domain-json-v1', filtered: undefined, terms: 3,
+  },
+];
+for (const { id, repository, path, input, policy, filtered, terms } of gitDomainDeliveries) test(`${id} 经 sync 交付两种域名格式并保留转换报告及固定来源`, async () => {
+  const env = rulesEnvironment(binary!, `acceptance-${id}`);
   const configuration = parseBuildConfiguration(readOfficialConfiguration());
   configuration.target.branch = env.context.targetBranch;
-  configuration.ruleSets = configuration.ruleSets.filter(rule => rule.id === 'onedrive');
+  configuration.ruleSets = configuration.ruleSets.filter(rule => rule.id === id);
   env.configure(configuration);
 
-  const repository = 'blackmatrix7/ios_rule_script';
-  const path = 'rule/Clash/OneDrive/OneDrive.list';
   const commit = 'c'.repeat(40);
-  const input = 'DOMAIN-SUFFIX,sharepoint.example\nDOMAIN-KEYWORD,onedrive\nPROCESS-NAME,OneDrive\n';
   const url = `https://raw.githubusercontent.com/${repository}/${commit}/${path}`;
   const upstream = env.context.fetch!;
   env.context.fetch = async (address, init) => {
@@ -322,22 +332,22 @@ test('onedrive 经 sync 交付两种域名格式，保留过滤报告及固定�
   const request = { context: env.context };
   const result = await syncRules(request);
   assert.equal(result.status, 'success', JSON.stringify(result));
-  assert.deepEqual(result.results.map(({ id, status }) => [id, status]), [['onedrive', 'delivered']]);
+  assert.deepEqual(result.results.map(({ id, status }) => [id, status]), [[id, 'delivered']]);
   const current = result.results[0].current!;
   assert.deepEqual(current.source, { kind: 'github-commit', repository, branch: 'master', commit,
     file: { path, url }, inputSha256: sha256(input), inputBytes: Buffer.byteLength(input) });
 
-  const status = await getRulesStatus({ ...request, id: 'onedrive' });
+  const status = await getRulesStatus({ ...request, id });
   assert.equal(status.status, 'success', JSON.stringify(status));
   assert.equal(status.rules?.[0].deliveryState, 'delivered');
   assert.deepEqual(status.rules?.[0].current, current);
-  const stablePrefix = 'https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-onedrive/stable/onedrive/';
+  const stablePrefix = `https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/${env.context.targetBranch}/stable/${id}/`;
   const formats = {
     source: { url: stablePrefix + 'domains.json', requiredCapabilities: [] },
     binary: { url: stablePrefix + 'domains.srs', requiredCapabilities: [] },
   };
   assert.deepEqual(current.subscription, {
-    schemaVersion: 2, systemRuleSetId: 'onedrive', targetVersion: '1.14.4', sourceFormatVersion: 4,
+    schemaVersion: 2, systemRuleSetId: id, targetVersion: '1.14.4', sourceFormatVersion: 4,
     projections: { route: { formats }, 'dns-query': { formats }, 'dns-response': { unavailable: 'empty' } },
   });
 
@@ -346,13 +356,14 @@ test('onedrive 经 sync 交付两种域名格式，保留过滤报告及固定�
   const manifest = JSON.parse((await snapshot.read(prefix + 'manifest.json'))!.toString());
   const build = JSON.parse((await snapshot.read(prefix + 'build.json'))!.toString());
   const report = JSON.parse((await snapshot.read(prefix + 'conversion-report.json'))!.toString());
-  assert.equal(manifest.id, 'onedrive');
+  assert.equal(manifest.id, id);
   assert.equal(manifest.revision, current.candidateId);
   assert.deepEqual(manifest.projections['dns-query'], manifest.projections.route);
   assert.deepEqual(manifest.projections['dns-response'], { unavailable: 'empty' });
-  assert.equal(build.tools.conversionPolicy, 'typed-domain-text-v1');
+  assert.equal(build.tools.conversionPolicy, policy);
   assert.equal(build.tool.version, '1.14.4');
-  assert.deepEqual(report.filteredRules, [{ type: 'PROCESS-NAME', value: 'OneDrive', line: 3 }]);
+  assert.deepEqual(report.filteredRules, filtered);
+  assert.equal(report.outputTermCount, terms);
   for (const format of ['source', 'binary'] as const) {
     const artifact = manifest.artifacts.find((entry: { format: string }) => entry.format === format);
     assert.ok(artifact);
@@ -361,5 +372,5 @@ test('onedrive 经 sync 交付两种域名格式，保留过滤报告及固定�
     assert.equal(sha256(stable), artifact.sha256);
     assert.deepEqual(stable, await env.context.repository.download(artifact.url));
   }
-  console.log(JSON.stringify({ onedriveDelivery: { current, manifest, buildId: build.buildId, filtered: report.filteredRules } }));
+  console.log(JSON.stringify({ gitDomainDelivery: { id, current, manifest, buildId: build.buildId, filtered, terms } }));
 });

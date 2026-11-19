@@ -16,6 +16,7 @@ const formatCapabilities = {
   'plain-yaml': { artifact: 'domains', namedLists: true },
   'domain-suffix-text': { artifact: 'domains', namedLists: false },
   'typed-domain-text': { artifact: 'domains', namedLists: false },
+  'sing-box-domain-json': { artifact: 'domains', namedLists: false },
   'cidr-text': { artifact: 'route', namedLists: false },
   'openai-voice-json': { artifact: 'route', namedLists: false },
 } as const satisfies Record<SourceFormat, { artifact: 'domains' | 'route'; namedLists: boolean }>;

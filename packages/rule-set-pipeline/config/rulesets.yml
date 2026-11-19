@@ -38,6 +38,13 @@ sources:
     input:
       format: typed-domain-text
       path: rule/Clash/OneDrive/OneDrive.list
+  sukka:
+    repository: SukkaLab/ruleset.skk.moe
+    version: git-branch
+    branch: master
+    input:
+      format: sing-box-domain-json
+      path: sing-box/non_ip/stream.json
 ruleSets:
   - id: openai
     source: dlc
@@ -155,6 +162,14 @@ ruleSets:
     source: blackmatrix7
     list: all
     stablePath: stable/onedrive
+    usages:
+      route: { artifact: domains }
+      dns-query: { artifact: domains }
+      dns-response: { unavailable: empty }
+  - id: stream
+    source: sukka
+    list: all
+    stablePath: stable/stream
     usages:
       route: { artifact: domains }
       dns-query: { artifact: domains }
