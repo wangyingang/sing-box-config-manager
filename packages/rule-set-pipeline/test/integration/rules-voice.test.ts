@@ -5,7 +5,7 @@ import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/co
 import { OPENAI_VOICE_URL, openAiVoiceSnapshotPath, probeOpenAiVoiceInput } from '../../src/openai-voice-source.js';
 import { sha256 } from '../../src/release.js';
 import { cleanupRuleHistory } from '../../src/rules-cleanup.js';
-import { RULE_STATE_PATH } from '../../src/rules-model.js';
+import { parseRulesJournal, RULE_STATE_PATH } from '../../src/rules-model.js';
 import { pinRuleVersion, syncRules } from '../../src/rules-operations.js';
 import { getRulesStatus } from '../../src/rules-status.js';
 import { cleanupEnvironment } from '../fixtures/cleanup-environment.js';
@@ -79,6 +79,45 @@ test('ChatGPT Voice 恢复原始快照，损坏时拒绝使用新上游替代', 
   assert.equal(updated.status, 'success', JSON.stringify(updated));
   assert.notEqual(updated.results[0].current?.candidateId, registered.id);
   assert.equal(updated.results[0].current?.source.inputSha256, sha256(second));
+});
+
+test('ChatGPT Voice 发布回读已登记时仍核对原始快照，恢复沿用原版本', async () => {
+  const { env, req, validators, setInput } = fixture();
+  env.beforeWrite(async files => {
+    const state = files[RULE_STATE_PATH];
+    if (state && parseRulesJournal(state).pendingDelivery) throw new Error('RULE_WRITE_CONFLICT: interrupted after evidence');
+  });
+  assert.notEqual((await syncRules(req)).status, 'success');
+  env.beforeWrite();
+  const [candidate] = Object.values((await env.journal()).candidates);
+  assert.ok(candidate);
+  const prefix = `candidates/${candidate.id}/`;
+  const path = prefix + 'chatgpt-voice.json';
+  const snapshot = await env.context.repository.snapshot();
+  const readback = await snapshot.read(prefix + 'readback.json');
+  assert.ok(readback);
+  const { versionId, publishedAt } = JSON.parse(readback.toString());
+  assert.ok(versionId && publishedAt);
+  assert.deepEqual(await snapshot.read(path), Buffer.from(first));
+  setInput(second, '"voice-b"');
+
+  env.trees.get(snapshot.head)!.delete(path);
+  const refused = await syncRules({ context: { ...env.context } });
+  assert.equal(refused.status, 'failed');
+  assert.match(refused.results[0].error!, /recorded digest or length/);
+  assert.equal(refused.results[0].current, undefined);
+  assert.deepEqual(refused.readbackRequests, []);
+  assert.deepEqual(validators, [null]);
+
+  const failedHead = (await env.context.repository.snapshot()).head;
+  env.trees.get(failedHead)!.set(path, Buffer.from(first));
+  const recovered = await syncRules({ context: { ...env.context } });
+  assert.equal(recovered.status, 'success', JSON.stringify(recovered));
+  assert.equal(recovered.results[0].current?.candidateId, candidate.id);
+  assert.equal(recovered.results[0].current?.versionId, versionId);
+  assert.equal(recovered.results[0].current?.publishedAt, publishedAt);
+  assert.deepEqual(recovered.results[0].current?.source, candidate.source);
+  assert.deepEqual(validators, [null]);
 });
 
 test('ChatGPT Voice 输入校验、无验证器重读及历史清理保留原始快照', async () => {
