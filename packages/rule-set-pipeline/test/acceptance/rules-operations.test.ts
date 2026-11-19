@@ -10,7 +10,7 @@ import { OPENAI_VOICE_URL, OPENAI_VOICE_FILE, validOpenAiVoiceSource } from '../
 import { NATIVE_VALIDATION_POLICY } from '../../src/native.js';
 import test from 'node:test';
 import { stringify } from 'yaml';
-import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
+import { baselineConfiguration } from '../fixtures/baseline-configuration.js';
 import { convertCidrText } from '../../src/cidr-text-adapter.js';
 import { createGitCommit } from '../../src/publication-repository.js';
 import { ARTIFACT_REPOSITORY, GitHubHttpError, ghJson } from '../../src/publication.js';
@@ -161,8 +161,7 @@ exec ${shellQuote(binary)} "$@"
     }
     return upstream(address.replace(/\/releases\/latest$/, `/releases/tags/${tag}`), init);
   };
-  const config = parseBuildConfiguration(readOfficialConfiguration()); config.target.branch = target;
-  if (!firstOnly) config.ruleSets = config.ruleSets.filter(rule => rule.id !== 'chatgpt-voice');
+  const config = baselineConfiguration(firstOnly); config.target.branch = target;
   let revision = 1;
   const context: RulesContext = { repository, targetBranch: target, allowWrites: true, binary: tracedBinary, token,
     readConfiguration: async () => ({ revision: String(revision).padStart(40, '0'), origin: 'isolated-github-probe', content: stringify(config) }),

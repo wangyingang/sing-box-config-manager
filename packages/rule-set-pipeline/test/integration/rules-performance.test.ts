@@ -20,6 +20,7 @@ import { runRuleAutomation, runRuleWorkflow } from '../../src/rule-workflow.js';
 import { cleanupRuleHistory } from '../../src/rules-cleanup.js';
 import { candidateArtifactFiles } from '../../src/candidate-publication.js';
 import { immutableUrl } from '../../src/publication.js';
+import { baselineConfiguration } from '../fixtures/baseline-configuration.js';
 import { countNativeCommands } from '../fixtures/native-commands.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
@@ -816,10 +817,10 @@ test('新 Node 进程从持久回读阶段恢复原候选并重新执行一组�
   assert.deepEqual(await take(), oneNativeValidation);
 });
 
-test('正式五集首次交付回读 20 个规则地址，成功基线重复同步的五项预算均为零', { skip: !binary }, async t => {
+test('原有五集首次交付回读 20 个规则地址，成功基线重复同步的五项预算均为零', { skip: !binary }, async t => {
   const { wrapper, take } = await traceNative(t);
   const env = rulesEnvironment(wrapper, 'main');
-  env.configure(parseBuildConfiguration(readOfficialConfiguration()));
+  env.configure(baselineConfiguration());
   const fetcher = env.context.fetch!;
   let gitBodies = 0, voiceBodies = 0;
   env.context.fetch = async (address, init) => {
