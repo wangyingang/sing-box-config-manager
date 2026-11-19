@@ -8,7 +8,7 @@ test('official configuration provides stable subscriptions and reuses files acro
     const configuration = parseBuildConfiguration(JSON.stringify({ ...official, target: { ...official.target, branch } }));
     const subscriptions = configuredSubscriptions(configuration);
     assert.deepEqual(Object.keys(subscriptions), ['openai', 'anthropic', 'google-deepmind', 'china-ip', 'chatgpt-voice',
-      'china-domains', 'global', 'apple', 'microsoft', 'docker', 'github', 'google', 'youtube', 'gfw', 'onedrive']);
+      'china-domains', 'global', 'apple', 'microsoft', 'docker', 'github', 'google', 'youtube', 'gfw', 'onedrive', 'stream']);
     for (const [id, subscription] of Object.entries(subscriptions)) {
       assert.equal(subscription.systemRuleSetId, id);
       const route = subscription.projections.route;

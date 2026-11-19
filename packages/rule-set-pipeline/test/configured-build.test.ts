@@ -183,3 +183,63 @@ test('onedrive 拒绝非法条件和用途，过滤后为空时保留进程过�
     github: { fetch: async () => assert.fail('Invalid usages must fail before source access') },
   }), /onedrive.*OneDrive\.list.*dns-response/);
 });
+
+test('stream 拒绝不支持的 Source Format、规则结构、字段和值，并定位到输入', async () => {
+  const configuration = readOfficialConfiguration();
+  const commit = 'd'.repeat(40);
+  const path = 'sing-box/non_ip/stream.json';
+  const url = `https://raw.githubusercontent.com/SukkaLab/ruleset.skk.moe/${commit}/${path}`;
+  const build = (input: string | Uint8Array<ArrayBuffer> | null) => buildConfiguredCommit({
+    configuration, selectedIds: ['stream'], binary: '/unused',
+    github: { commit, fetch: async address => {
+      if (String(address) === 'https://api.github.com/repos/SukkaLab/ruleset.skk.moe/branches/master') {
+        return Response.json({ name: 'master', commit: { sha: commit } });
+      }
+      assert.equal(String(address), url);
+      return input === null ? new Response(null, { status: 404 }) : new Response(input);
+    } },
+  });
+  const v2 = (...rules: unknown[]) => JSON.stringify({ version: 2, rules });
+  const valid = { domain: ['exact.example'] };
+  const cases = [
+    [Uint8Array.of(0xff), 'INVALID_UTF8', undefined, /UTF-8/],
+    ['{"version":2,}', 'INVALID_JSON', undefined, /position/],
+    ['null', 'INVALID_SOURCE', undefined, /object/],
+    ['{"version":4,"rules":[]}', 'UNSUPPORTED_VERSION', undefined, /version/],
+    ['{"version":"2","rules":[]}', 'UNSUPPORTED_VERSION', undefined, /version/],
+    ['{"version":2.0000000000000001,"rules":[]}', 'UNSUPPORTED_VERSION', undefined, /version/],
+    ['{"version":2,"rules":[{"domain":["exact.example"]}],"rules":[]}', 'INVALID_JSON', undefined, /unique/],
+    [String.raw`{"version":2,"rules":[{"domain":["bad domain"],"\u0064omain":["exact.example"]}]}`,
+      'INVALID_JSON', undefined, /unique/],
+    ['{"version":2,"rules":[],"metadata":{}}', 'INVALID_SOURCE', undefined, /metadata/],
+    ['{"version":2,"rules":null}', 'INVALID_SOURCE', undefined, /rules/],
+    [v2(), 'EMPTY_INPUT', undefined, /rules/],
+    [v2(null), 'INVALID_RULE', 0, /rules\[0\]/],
+    [v2(valid, { type: 'logical', mode: 'or', rules: [valid] }), 'UNSUPPORTED_TYPE', 1, /rules\[1\]\.type/],
+    [v2({ ...valid, invert: false }), 'UNSUPPORTED_TYPE', 0, /rules\[0\]\.invert/],
+    [v2({ ...valid, ip_cidr: ['192.0.2.0/24'] }), 'UNSUPPORTED_TYPE', 0, /rules\[0\]\.ip_cidr/],
+    [v2({ domain: 'exact.example' }), 'INVALID_RULE', 0, /rules\[0\]\.domain/],
+    [v2({ domain: ['exact.example', '192.0.2.1'] }), 'INVALID_RULE', 0, /rules\[0\]\.domain\[1\]/],
+    [v2({ domain_suffix: ['*.example'] }), 'INVALID_RULE', 0, /rules\[0\]\.domain_suffix\[0\]/],
+    [v2({ domain_keyword: ['bad keyword'] }), 'INVALID_RULE', 0, /rules\[0\]\.domain_keyword\[0\]/],
+    [v2({ domain_keyword: [0] }), 'INVALID_RULE', 0, /rules\[0\]\.domain_keyword\[0\]/],
+    [v2({ domain: [] }), 'INVALID_RULE', 0, /rules\[0\]/],
+    [v2(valid, {}), 'INVALID_RULE', 1, /rules\[1\]/],
+  ] as const;
+  for (const [input, code, index, location] of cases) {
+    const { results: [result] } = await build(input);
+    assert.equal(result.id, 'stream');
+    assert.equal(result.status, 'failed');
+    const [first] = result.report.diagnostics;
+    assert.deepEqual([first.code, first.file, first.list, first.index], [code, path, 'all', index]);
+    assert.match(first.message, location);
+  }
+  await assert.rejects(build(null), { code: 'DOWNLOAD_FAILED', message: /stream.*non_ip\/stream\.json/ });
+
+  const parsed = parseBuildConfiguration(configuration);
+  parsed.ruleSets.find(rule => rule.id === 'stream')!.usages['dns-response'] = { artifact: 'domains' };
+  await assert.rejects(buildConfiguredCommit({
+    configuration: JSON.stringify(parsed), selectedIds: ['stream'], binary: '/unused',
+    github: { fetch: async () => assert.fail('Invalid usages must fail before source access') },
+  }), /stream.*non_ip\/stream\.json.*dns-response/);
+});

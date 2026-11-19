@@ -8,9 +8,11 @@
 
 `target.repository` 固定为 `wangyingang/sing-box-rule-artifacts`；分支只能是 `main` 或受限 `acceptance-*`。`ruleSets` 中 ID 唯一，`source` 必须存在，`stablePath` 为互不重叠的 `stable/` 路径。显式空集合表示删除全部；缺少集合、读取失败或解析错误不能解释为删除。
 
-获取机制与解析语义分别声明：GitHub Release 资产使用 `version: latest-release` 和 asset/checksum；固定 Git 分支输入使用 `version: git-branch`、branch/path。两者都接受已有的 `plain-yaml` 规则列表或 `cidr-text` 语义。Git 分支输入还接受 `domain-suffix-text` 和 `typed-domain-text`，使用 `list: all` 选择整个文件并生成域名产物。配置按格式的域名或地址产物校验 Route、DNS query 和 DNS response 的用途声明。来源记录保存真实仓库、Release/commit 身份、输入文件、摘要和字节数。官方 ChatGPT Voice 使用 `version: openai-voice`、`format: openai-voice-json` 和固定 `https://openai.com/chatgpt-voice.json`，读取非空 `prefixes` 列表中的 `ipv4Prefix` 或 `ipv6Prefix`，使用现有 CIDR 规则处理。其来源记录保存 URL、原始字节的 SHA-256 和长度，以及可用的强 ETag。恢复使用登记的固定输入。
+获取机制与解析语义分别声明：GitHub Release 资产使用 `version: latest-release` 和 asset/checksum；固定 Git 分支输入使用 `version: git-branch`、branch/path。两者都接受已有的 `plain-yaml` 规则列表或 `cidr-text` 语义。Git 分支输入还接受 `domain-suffix-text`、`typed-domain-text` 和 `sing-box-domain-json`，使用 `list: all` 选择整个文件并生成域名产物。配置按格式的域名或地址产物校验 Route、DNS query 和 DNS response 的用途声明。来源记录保存真实仓库、Release/commit 身份、输入文件、摘要和字节数。官方 ChatGPT Voice 使用 `version: openai-voice`、`format: openai-voice-json` 和固定 `https://openai.com/chatgpt-voice.json`，读取非空 `prefixes` 列表中的 `ipv4Prefix` 或 `ipv6Prefix`，使用现有 CIDR 规则处理。其来源记录保存 URL、原始字节的 SHA-256 和长度，以及可用的强 ETag。恢复使用登记的固定输入。
 
 `typed-domain-text` 读取 UTF-8 的 `类型,值`，忽略空行和以 `#` 开头的注释行。域名后缀使用裸域名的规范化方式，关键词转为小写，保留子串匹配语义。转换报告的 `filteredRules` 记录按用途过滤的 `PROCESS-NAME` 类型、值和行号。`inputCount` 包含已过滤条目。其他类型、格式错误和没有可用域名的输入使本次构建失败。
+
+`sing-box-domain-json` 读取 UTF-8 的 Source Format v2 JSON。顶层包含 `version` 和 `rules`，规则对象仅接受 `domain`、`domain_suffix` 和 `domain_keyword` 的字符串数组，且须有可用的匹配值。每个值都是独立匹配条件，保留原值，按类型和值去重。重复字段、其他字段、非法结构或非法值使构建失败，诊断标明输入文件和对应规则或字段。生成的候选继续使用 Source Format v4。
 
 ## 共同结果
 

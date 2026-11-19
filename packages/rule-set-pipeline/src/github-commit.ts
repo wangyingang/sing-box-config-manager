@@ -7,7 +7,7 @@ export const CHINA_IP_INPUT = {
   input: { format: 'cidr-text', path: 'china46.txt' },
 } as const;
 
-const commitInputFormats = ['plain-yaml', 'cidr-text', 'domain-suffix-text', 'typed-domain-text'] as const;
+const commitInputFormats = ['plain-yaml', 'cidr-text', 'domain-suffix-text', 'typed-domain-text', 'sing-box-domain-json'] as const;
 type CommitInputFormat = (typeof commitInputFormats)[number];
 
 export function isCommitInputFormat(value: unknown): value is CommitInputFormat {

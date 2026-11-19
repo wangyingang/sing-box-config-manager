@@ -205,6 +205,51 @@ test('正式 onedrive 从固定 Git 文件构建，保留后缀和关键词并�
     ['route', 'xsharepoint.example', true], ['route', 'onedriveupdater.example', false]]);
 });
 
+test('正式 stream 保留同一 v2 规则内三个域名字段的 OR 匹配和精确去重', async () => {
+  const repository = 'SukkaLab/ruleset.skk.moe';
+  const path = 'sing-box/non_ip/stream.json';
+  const commit = 'd'.repeat(40);
+  const url = `https://raw.githubusercontent.com/${repository}/${commit}/${path}`;
+  const input = JSON.stringify({ version: 2, rules: [{
+    domain: ['exact.example', 'exact.example', 'shared.example'],
+    domain_suffix: ['suffix.example', 'shared.example', '.subdomains-only.example'],
+    domain_keyword: ['needle'],
+  }, { domain_keyword: ['needle'] }] }, null, '\t').replace(/\n/g, '\r') + '\r';
+  const built = await buildConfiguredCommit({
+    configuration: readOfficialConfiguration(), selectedIds: ['stream'], binary,
+    github: { commit, fetch: async address => {
+      if (String(address) === `https://api.github.com/repos/${repository}/branches/master`) {
+        return Response.json({ name: 'master', commit: { sha: commit } });
+      }
+      assert.equal(String(address), url);
+      return new Response(input);
+    } },
+  });
+  assert.deepEqual(built.source, {
+    kind: 'github-commit', repository, branch: 'master', commit,
+    file: { path, url }, inputSha256: sha256(input), inputBytes: Buffer.byteLength(input),
+  });
+  const [rule] = built.results;
+  assert.equal(rule.status, 'built-validated', JSON.stringify(rule.report.diagnostics));
+  assert.equal(rule.definition.stablePath, 'stable/stream');
+  assert.equal(rule.report.inputCount, 8);
+  assert.equal(rule.report.duplicateCount, 2);
+  assert.deepEqual(rule.native.usages.route, { artifactFiles: ['domains.json', 'domains.srs'] });
+  assert.deepEqual(rule.native.usages['dns-query'], rule.native.usages.route);
+  assert.deepEqual(rule.native.usages['dns-response'], { status: 'unavailable', reason: 'empty' });
+  assert.deepEqual(JSON.parse(rule.native.artifacts[0].content.toString()), {
+    version: 4, rules: [
+      { domain_suffix: ['.subdomains-only.example', 'shared.example', 'suffix.example'] },
+      { domain: ['exact.example', 'shared.example'] },
+      { domain_keyword: ['needle'] },
+    ],
+  });
+  await matches(rule.native, [['route', 'exact.example', true], ['route', 'sub.suffix.example', true],
+    ['route', 'xneedley.example', true], ['route', 'unrelated.example', false],
+    ['dns-query', 'sub.exact.example', false], ['dns-query', 'notsuffix.example', false],
+    ['route', 'subdomains-only.example', false], ['route', 'sub.subdomains-only.example', true]]);
+});
+
 test('pure IP and mixed synthetic IR use only applicable predicates and deduplicate physical files', async () => {
   const ip: BuildTerm = { type: 'ip_cidr', value: '192.0.2.0/24' };
   const ipv6: BuildTerm = { type: 'ip_cidr', value: '2001:db8::/32' };
