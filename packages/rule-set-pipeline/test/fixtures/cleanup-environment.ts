@@ -7,7 +7,7 @@ import type { PublicationSnapshot } from '../../src/publication-repository.js';
 import { parseRulesJournal, RULE_STATE_PATH } from '../../src/rules-model.js';
 import { syncRules } from '../../src/rules-operations.js';
 import type { RulesRepository } from '../../src/rules-repository.js';
-import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
+import { baselineConfiguration } from './baseline-configuration.js';
 import { checkpointFixture, rulesEnvironment } from './rules-environment.js';
 
 /** The ordinary rules fixture plus immutable roots and atomic, leased ref updates. */
@@ -134,9 +134,8 @@ export function cleanupEnvironment(binary: string, target = 'acceptance-issue-85
 /** Four curated sets, real native builds, deterministic Release and Git/CIDR inputs. */
 export function fourSetCleanupEnvironment(binary: string, target: string) {
   const env = cleanupEnvironment(binary, target);
-  const config = parseBuildConfiguration(readOfficialConfiguration());
+  const config = baselineConfiguration(false);
   config.target.branch = target;
-  config.ruleSets = config.ruleSets.filter(rule => rule.id !== 'chatgpt-voice');
   env.configure(config);
   return env;
 }

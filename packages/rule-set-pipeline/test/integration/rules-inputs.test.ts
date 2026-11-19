@@ -4,16 +4,15 @@ import { syncRules, pinRuleVersion, resumeRuleUpdates } from '../../src/rules-op
 import { getRulesStatus } from '../../src/rules-status.js';
 import { sha256 } from '../../src/release.js';
 import { rulesEnvironment } from '../fixtures/rules-environment.js';
-import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
+import { baselineConfiguration } from '../fixtures/baseline-configuration.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
 if (!binary) throw new Error('Set SING_BOX_TEST_BINARY to an absolute 1.14.4 binary path');
 
 function fourSources() {
   const env = rulesEnvironment(binary!);
-  const config = parseBuildConfiguration(readOfficialConfiguration());
+  const config = baselineConfiguration(false);
   config.target.branch = env.context.targetBranch;
-  config.ruleSets = config.ruleSets.filter(rule => rule.id !== 'chatgpt-voice');
   env.configure(config);
   const releaseFetch = env.context.fetch!;
   let revision = 1, cidr = '192.0.2.0/25\n2001:db8:1::/48\n';

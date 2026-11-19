@@ -10,7 +10,7 @@
 
 | 模块 | 接收什么、完成什么 | 当前边界 |
 | --- | --- | --- |
-| [Rule Set Pipeline](packages/rule-set-pipeline/README.md) | 根据正式配置协调新增、换源和删除，验证候选后交付稳定规则入口 | `pnpm rules` 提供 status、sync、pin、resume、cleanup；正式配置包含三个域名集和双栈 `china-ip`。历史状态转换与生产启用需另行安排 |
+| [Rule Set Pipeline](packages/rule-set-pipeline/README.md) | 根据正式配置协调新增、换源和删除，验证候选后交付稳定规则入口 | `pnpm rules` 提供 status、sync、pin、resume、cleanup；正式配置定义域名与地址规则集。实际交付以产物清单和稳定入口为准 |
 | [Config Compiler](packages/config-compiler/README.md) | 将模板、配置选择、节点修订、规则元数据和客户端能力组合成完整配置，并检查错误 | 已实现纯内存编译、发布快照及 Node 本地发布适配器 |
 | [Configuration Manager Web App](apps/web/README.md) | 计划负责编辑、存储、管理授权、配置交付和订阅服务 | 当前只有工作区骨架及 Compiler 依赖，没有页面、HTTP API 或数据库 |
 
@@ -49,7 +49,7 @@ pnpm install --frozen-lockfile
 pnpm check
 ```
 
-本地完整验证使用 `node scripts/verify.mjs --out <新证据目录> --binary <1.14.4绝对路径>`。入口按根 `package.json` 核对 pnpm 版本，并让嵌套脚本使用同一启动器；版本不符时在执行检查前失败。可用 `--pnpm <启动器绝对路径>` 指定已安装的匹配版本。`--check-only` 只运行常规检查；`--release` 另运行固定官方 Release 的单列表与正式配置中的 V2Fly 三集构建验收，不执行远程写入。
+本地完整验证使用 `node scripts/verify.mjs --out <新证据目录> --binary <1.14.4绝对路径>`。入口按根 `package.json` 核对 pnpm 版本，并让嵌套脚本使用同一启动器；版本不符时在执行检查前失败。可用 `--pnpm <启动器绝对路径>` 指定已安装的匹配版本。`--check-only` 只运行常规检查；`--release` 另运行固定官方 Release 验收，覆盖单列表基线、三个既有 V2Fly 域名集的回归，以及八个新增域名集的构建和匹配。验收只读上游。
 
 每次运行保留工具身份、Git 状态、命令、退出码、测试统计、日志及文件摘要。证据目录必须不存在，已有证据不覆盖；用于阶段收尾的证据应在清理 worktree 前归档。Spec #14 的最终验收证据见 [docs/verification/spec-14-final/](docs/verification/spec-14-final/)。历史测试数量只属于记录中的提交和日期，不能表述为当前提交已经重新执行通过。
 
@@ -108,7 +108,7 @@ CI 的 sing-box 版本读取自 [Schema 构建配置](packages/config-compiler/s
 
 测试在临时目录执行 Compiler 检查和 Pipeline 原生验证。自动更新、回滚及故障恢复测试会启动隔离的 sing-box 实例和本地服务，结束后清理；不修改生产规则入口、系统代理或旧配置仓库。
 
-规则产物的原生策略验证编译和 JSON／SRS 实际加载。五集从空状态初始化的 GitHub 验收使用独立隔离目标，记录子进程计数、固定候选与稳定交付 commit 的 JSON/SRS 正文回读，以及 Git 中的交付事实。运行方式见 [Pipeline 自动化验证](packages/rule-set-pipeline/README.md#自动化验证)。
+规则产物的原生策略验证编译和 JSON／SRS 实际加载。原有五集从空状态初始化的 GitHub 验收使用独立隔离目标，记录子进程计数、固定候选与稳定交付 commit 的 JSON/SRS 正文回读，以及 Git 中的交付事实。运行方式见 [Pipeline 自动化验证](packages/rule-set-pipeline/README.md#自动化验证)。
 
 五份旧配置候选保持生成语义并通过原生 check；旧 Android 配置含不支持的进程规则，正式 compile 和发布会拒绝它。
 

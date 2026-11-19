@@ -65,3 +65,67 @@ ruleSets:
       route: { artifact: route }
       dns-query: { unavailable: empty }
       dns-response: { artifact: route }
+  - id: china-domains
+    source: dlc
+    list: geolocation-cn
+    stablePath: stable/china-domains
+    usages:
+      route: { artifact: domains }
+      dns-query: { artifact: domains }
+      dns-response: { unavailable: empty }
+  - id: global
+    source: dlc
+    list: geolocation-!cn
+    stablePath: stable/global
+    usages:
+      route: { artifact: domains }
+      dns-query: { artifact: domains }
+      dns-response: { unavailable: empty }
+  - id: apple
+    source: dlc
+    list: apple
+    stablePath: stable/apple
+    usages:
+      route: { artifact: domains }
+      dns-query: { artifact: domains }
+      dns-response: { unavailable: empty }
+  - id: microsoft
+    source: dlc
+    list: microsoft
+    stablePath: stable/microsoft
+    usages:
+      route: { artifact: domains }
+      dns-query: { artifact: domains }
+      dns-response: { unavailable: empty }
+  - id: docker
+    source: dlc
+    list: docker
+    stablePath: stable/docker
+    usages:
+      route: { artifact: domains }
+      dns-query: { artifact: domains }
+      dns-response: { unavailable: empty }
+  - id: github
+    source: dlc
+    list: github
+    stablePath: stable/github
+    usages:
+      route: { artifact: domains }
+      dns-query: { artifact: domains }
+      dns-response: { unavailable: empty }
+  - id: google
+    source: dlc
+    list: google
+    stablePath: stable/google
+    usages:
+      route: { artifact: domains }
+      dns-query: { artifact: domains }
+      dns-response: { unavailable: empty }
+  - id: youtube
+    source: dlc
+    list: youtube
+    stablePath: stable/youtube
+    usages:
+      route: { artifact: domains }
+      dns-query: { artifact: domains }
+      dns-response: { unavailable: empty }

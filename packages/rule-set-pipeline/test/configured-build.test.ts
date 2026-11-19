@@ -87,14 +87,21 @@ test('共同摘要错误或 YAML 无法解析时整批失败', async () => {
   }
 });
 
-test('单集缺失只使该集失败，兄弟集继续构建', { skip: !process.env.SING_BOX_TEST_BINARY }, async () => {
-  const missing = JSON.stringify({ lists: [
-    { name: 'openai', length: 1, rules: ['domain:openai.com'] },
-    { name: 'google-deepmind', length: 1, rules: ['domain:deepmind.google'] },
-  ] });
-  const remote = upstream(missing);
-  const built = await buildConfiguredRelease({ configuration, release: { tag, fetch: remote.fetcher },
+test('新增列表缺失或非法时报告列表位置，共用来源的兄弟集继续构建', { skip: !process.env.SING_BOX_TEST_BINARY }, async () => {
+  const remote = upstream(JSON.stringify({ lists: [
+    { name: 'geolocation-cn', length: 1, rules: ['domain:domestic.example'] },
+    { name: 'google', length: 1, rules: ['full:bad..example'] },
+    { name: 'youtube', length: 1, rules: ['domain:youtube.example'] },
+  ] }));
+  const built = await buildConfiguredRelease({ configuration: readOfficialConfiguration(),
+    selectedIds: ['china-domains', 'global', 'google', 'youtube'], release: { tag, fetch: remote.fetcher },
     binary: process.env.SING_BOX_TEST_BINARY! });
-  assert.deepEqual(built.results.map(result => result.status), ['built-validated', 'failed', 'built-validated']);
-  assert.deepEqual(built.results[1].report.diagnostics.map(entry => entry.list), ['anthropic']);
+  assert.deepEqual(built.results.map(({ id, status }) => [id, status]), [
+    ['china-domains', 'built-validated'], ['global', 'failed'], ['google', 'failed'], ['youtube', 'built-validated'],
+  ]);
+  assert.deepEqual(built.results.slice(1, 3).flatMap(result => result.report.diagnostics.map(({ code, file, list, index }) =>
+    [code, file, list, index])), [
+    ['TARGET_LIST_COUNT', 'dlc.dat_plain.yml', 'geolocation-!cn', undefined],
+    ['INVALID_RULE', 'dlc.dat_plain.yml', 'google', 0],
+  ]);
 });

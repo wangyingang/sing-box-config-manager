@@ -7,6 +7,14 @@ const mapping: Record<string, TermType> = {
 export type ConversionResult = { ok: true; terms: RuleTerm[]; report: ConversionReport }
   | { ok: false; report: ConversionReport };
 
+function regexpAttributeSeparator(value: string): number {
+  // An attribute tail contains no colon. Earlier :@ occurrences belong to the expression.
+  const separator = value.lastIndexOf(':@');
+  let beforeEscape = separator;
+  while (value[beforeEscape - 1] === '\\') beforeEscape--;
+  return (separator - beforeEscape) % 2 === 0 ? separator : -1;
+}
+
 export function convertRules(rules: readonly InputRule[]): ConversionResult {
   const report = emptyReport();
   report.inputCount = rules.length;
@@ -29,15 +37,15 @@ export function convertRules(rules: readonly InputRule[]): ConversionResult {
     const type = mapping[sourceType];
     report.typeCounts[type].input++;
     let value = rule.value.slice(colon + 1);
-    const attributes = value.indexOf(':@');
-    if (sourceType === 'regexp' && attributes !== -1) { invalid('regexp 含有歧义的字面 :@'); continue; }
+    const attributes = sourceType === 'regexp' ? regexpAttributeSeparator(value) : value.indexOf(':@');
     if (attributes !== -1) {
       const tail = value.slice(attributes + 1);
-      if (!/^@[A-Za-z0-9!]+(?:,@[A-Za-z0-9!]+)*$/.test(tail)) {
+      if (/^@[A-Za-z0-9!]+(?:,@[A-Za-z0-9!]+)*$/.test(tail)) {
+        value = value.slice(0, attributes);
+        report.attributeRecordCount++;
+      } else if (sourceType !== 'regexp') {
         invalid('属性尾部格式非法'); continue;
       }
-      value = value.slice(0, attributes);
-      report.attributeRecordCount++;
     }
     if (!value || /[\u0000-\u001f\u007f]/u.test(value) || (sourceType !== 'regexp' && /\s/u.test(value))) {
       invalid('匹配值为空或含非法空白／控制字符'); continue;

@@ -102,6 +102,24 @@ test('四种谓词相等去重、固定排序，属性不会触发本地筛选�
   assert.equal(first.report.outputTermCount, 7);
 });
 
+test('只分离正则末尾的属性，保留正文中的同形字符与转义', async () => {
+  const fixtures = [
+    [String.raw`.+\.awsdns-cn-[0-9][0-9]\.(biz|com|net|top)$`, ':@cn'],
+    [String.raw`^r+[0-9]+(---|\.)sn-(2x3|ni5|j5o)\w{5}\.googlevideo\.com$`, ':@cn'],
+    [String.raw`^cdn\d-epicgames-\d+\.file\.myqcloud\.com$`, ':@cn'],
+    ['^a:@b$', ''],
+    ['^a[:@cn]$', ':@cn,@video'],
+    [String.raw`^a\:@cn`, ''],
+    [String.raw`^a\\`, ':@cn'],
+    ['^a:@word', ':@cn'],
+  ];
+  const records = fixtures.map(([pattern, attributes]) => `regexp:${pattern}${attributes}`);
+  const result = await buildRelease({ tag, fetch: upstream(list(records)).fetcher });
+  assert.ok(result.ok, JSON.stringify(result.report));
+  assert.deepEqual(JSON.parse(result.json), { version: 4, rules: [{ domain_regex: fixtures.map(([pattern]) => pattern).sort() }] });
+  assert.equal(result.report.attributeRecordCount, 6);
+});
+
 for (const [name, input, code] of [
   ['坏 YAML', 'lists: [', 'INVALID_YAML'],
   ['非目标区域坏 YAML', yaml + '\nother: [', 'INVALID_YAML'],
@@ -130,8 +148,6 @@ for (const [name, input, code] of [
   ['控制字符', list(['full:a\u0000.com']), 'INVALID_RULE'],
   ['空属性', list(['full:a.com:@']), 'INVALID_RULE'],
   ['属性尾部垃圾', list(['full:a.com:@cn:other']), 'INVALID_RULE'],
-  ['正则属性', list(['regexp:^a.com$:@cn']), 'INVALID_RULE'],
-  ['正则字面歧义', list(['regexp:^a:@b$']), 'INVALID_RULE'],
 ] as const) {
   test(`${name} 明确失败且没有部分产物`, async () => {
     const result = await buildRelease({ tag, fetch: upstream(input).fetcher });

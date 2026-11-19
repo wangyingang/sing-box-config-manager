@@ -5,7 +5,7 @@ import { promisify } from 'node:util';
 import { readFile, writeFile } from 'node:fs/promises';
 import test from 'node:test';
 import { stringify } from 'yaml';
-import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
+import { baselineConfiguration } from '../fixtures/baseline-configuration.js';
 import { createGitCommit } from '../../src/publication-repository.js';
 import { ARTIFACT_REPOSITORY, GitHubHttpError, ghJson } from '../../src/publication.js';
 import { githubRulesRepository } from '../../src/rules-repository.js';
@@ -166,8 +166,7 @@ test('GitHub 四集 cleanup：保留窗口、切换中断、HTTPS 失败恢复�
       }
       return upstream(address.replace(/\/releases\/latest$/, `/releases/tags/${tag}`), init);
     };
-    const config = parseBuildConfiguration(readOfficialConfiguration()); config.target.branch = target;
-    config.ruleSets = config.ruleSets.filter(rule => rule.id !== 'chatgpt-voice');
+    const config = baselineConfiguration(false); config.target.branch = target;
     // The isolated application clock supplies candidate age; upstream bytes,
     // Git history, reference transactions and HTTPS delivery are all real.
     let revision = 1, now = '2026-09-01T00:00:00.000Z';

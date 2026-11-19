@@ -50,7 +50,7 @@ sync/pin/resume 的 `--dry-run` 检查真实输入和必要的原生验证；cle
 
 候选已有的业务版本和首次发布时间保持不变。有效不可变证据已登记这些事实、但 journal 检查点缺失时，先核对原候选、来源、构建和产物，再补回登记；没有可靠历史时间时明确失败，不使用恢复时间补造。status 和四个写入口的 dry-run 只展示实际状态，不推进上述恢复。
 
-首次交付将候选检查点与各阶段文件合并保存。当前五集首次交付执行 20 次产物 Raw GET，分别核对候选和稳定交付 commit 上各 10 个规则文件。候选合格但交付准备失败、恢复后未被选中或其他故障可增加检查点。相同 Git SHA 的内容可在内存复用，但正式配置修订、分支 head 和写入门禁仍重新核对；分支指向继续实时核对。同一次操作可复用已校验的固定 HTTPS 字节，摘要与当前保留树仍按阶段核对。已完成候选的复选和人工 status 通过 Git 核对核心业务事实与规则字节。阶段与恢复边界见[持久事实契约](contracts/rules-operations.md#远端事实与版本身份)，内存容量和固定地址的可用性观察见[证据回读](contracts/rules-operations.md#证据回读)。
+首次交付将候选检查点与各阶段文件合并保存。原有五集的首次交付验收记录了 20 次产物 Raw GET，分别核对候选和稳定交付 commit 上各 10 个规则文件。候选合格但交付准备失败、恢复后未被选中或其他故障可增加检查点。相同 Git SHA 的内容可在内存复用，但正式配置修订、分支 head 和写入门禁仍重新核对；分支指向继续实时核对。同一次操作可复用已校验的固定 HTTPS 字节，摘要与当前保留树仍按阶段核对。已完成候选的复选和人工 status 通过 Git 核对核心业务事实与规则字节。阶段与恢复边界见[持久事实契约](contracts/rules-operations.md#远端事实与版本身份)，内存容量和固定地址的可用性观察见[证据回读](contracts/rules-operations.md#证据回读)。
 
 旧 `update`、`rebuild`、`check-now`、`activate`、`rollback`、`initialize` 及 `maintenance-enter/prepare/switch/resume/abort` 等旧命令和 Node API 已退出公开入口。必要的构建、验证和转换仍是内部能力，不提供旧命令兼容层。
 
@@ -68,7 +68,9 @@ pnpm rules sync --config /path/to/rulesets-draft.yml --dry-run --json
 
 配置使用 `schemaVersion: 3`，必须显式声明正整数 `candidateRetentionDays`。正式配置和样例采用已确定的 30 天策略；`cleanup` 读取正式值，不自行设置默认保留期。`ruleSets` 必须显式存在。`ruleSets: []` 与空 `sources: {}` 可以表达删除全部受管规则；配置缺失、无法读取、未知字段、无效引用、重复 ID 或重叠稳定路径均在写入前拒绝。
 
-当前正式配置有三个域名集 `openai`、`anthropic`、`google-deepmind`，以及两个地址集 `china-ip` 和 `chatgpt-voice`。GitHub 来源可以更换仓库、资产、路径或列表。
+正式配置为域名集 `openai`、`anthropic`、`google-deepmind`、`china-domains`、`global`、`apple`、`microsoft`、`docker`、`github`、`google` 和 `youtube` 定义 Route 与 DNS query 共用的 `domains.json` 和 `domains.srs`。`china-domains` 选择 V2Fly 的 `geolocation-cn`，`global` 选择 `geolocation-!cn`，其余选择与 ID 同名的列表。DNS response 对这些域名集不可用。规则集保留上游重叠，匹配优先级由客户端配置中的规则顺序决定。
+
+`china-ip` 和 `chatgpt-voice` 为地址集，可用于 Route 与 DNS response。各集使用独立的 `stable/<id>`，实际交付以产物清单和稳定入口为准。GitHub 来源可以更换仓库、资产、路径或列表。
 
 | 获取方式 | 必填输入 | 支持的解析语义 |
 | --- | --- | --- |
@@ -218,7 +220,7 @@ Recipe／Template v2 跟随稳定入口，管理者 pin 会影响所有引用该
 
 `domain/full/keyword/regexp` 分别映射为 `domain_suffix/domain/domain_keyword/domain_regex`。每种谓词单独放在一条 Headless Rule 中，规则集合保持 OR 语义。只对同类型、同值去重，按上述类型顺序和字符串代码单元顺序排序。规范化会复制为固定 `{type, value}` 结构，调用方的对象字段顺序不影响验证或构建身份。
 
-非正则值的 `:@attr1,@attr2` 尾部被分离；属性记录仍转换，不在本地筛选。regexp 保留表达式；字面 `:@` 导致失败。保留大小写、Unicode、尾点和正则转义，不执行 IDNA 或表达式改写。空值、非法字符、域名空 label／非法边界／超长 label 均失败。正则不使用 JavaScript 引擎预判，目标 Go 引擎由原生加载步骤检查。1.14.4 在 regexp 匹配前将请求域名转为小写，但不改写表达式；大写字面表达式不会因此变成大小写无关。
+展开列表的 `:@attr1,@attr2` 尾部作为元数据记录。所有条目仍按各自的匹配类型转换。正则只分离字符串末尾符合属性语法且冒号未转义的尾部，保留正文里的 `:@`、大小写、Unicode、尾点和正则转义。空值、非法字符、域名空 label／非法边界／超长 label 均失败。正则不使用 JavaScript 引擎预判，目标 Go 引擎由原生加载步骤检查。1.14.4 在 regexp 匹配前将请求域名转为小写，但不改写表达式；大写字面表达式不会因此变成大小写无关。
 
 CIDR 输入使用固定 `ipaddr.js 2.5.0` 解析 IPv4／IPv6 并规范化地址。生成 JSON 保留去重后的独立 CIDR 条目。原生验证依赖指定的官方 1.14.4 编译器生成 SRS，再分别使用 `rule-set match` 实际加载 JSON 和 SRS。真实集成测试用域名、正则和双栈边界验证匹配表现。
 
@@ -232,7 +234,7 @@ YAML 解析使用固定版本的 [yaml](https://eemeli.org/yaml/)，拒绝语法
 
 [#125](https://github.com/wangyingang/sing-box-config-manager/issues/125) 从空状态启用新策略。`main` 和 `candidates` 的开发期候选、订阅、证据、版本编号、pin 和未完成操作可以一并清除，旧订阅在切换期间可能不可用。切换是独立操作。先停用生产更新和清理门禁，再准备两个没有 `pipeline/`、`candidates/`、`stable/` 内容的受管分支。必要时可重新初始化产物仓库。
 
-新版从正式配置运行首次 `sync`，初始化远端状态并构建当前五集。在更新门禁授权的环境执行后，用 `status --json` 核对每集已交付且有可选候选。按回读记录核对候选和稳定交付 commit 上 JSON/SRS 正文的长度及 SHA-256。新策略建立的候选可继续 pin、恢复和 cleanup。首次建立状态后，在没有回收对象时，cleanup 只评估保留期并返回 `unchanged`。此后删除产生的待回收历史随删除结案登记。清理重写物理证据地址时保留业务版本、构建身份、首次发布时间、来源和稳定订阅字节。
+新版从正式配置运行首次 `sync`，初始化远端状态并构建正式配置声明的规则集。在更新门禁授权的环境执行后，用 `status --json` 核对每集已交付且有可选候选。按回读记录核对候选和稳定交付 commit 上 JSON/SRS 正文的长度及 SHA-256。新策略建立的候选可继续 pin、恢复和 cleanup。首次建立状态后，在没有回收对象时，cleanup 只评估保留期并返回 `unchanged`。此后删除产生的待回收历史随删除结案登记。清理重写物理证据地址时保留业务版本、构建身份、首次发布时间、来源和稳定订阅字节。
 
 ## 自动化验证
 
@@ -260,7 +262,7 @@ SING_BOX_TEST_BINARY=/absolute/path/to/sing-box-1.14.4 \
 pnpm --dir packages/rule-set-pipeline test:acceptance:rules
 ```
 
-设置 `RULE_OPERATIONS_FIRST_ONLY=1` 可验收空状态初始化与当前五集首次交付。探针直连 OpenAI，核实 ChatGPT Voice 候选保存的原始 JSON 与上游响应逐字节一致。它计数实际编译和两种格式的加载，并用 Compiler 读取 HTTPS 回读的 Manifest。
+设置 `RULE_OPERATIONS_FIRST_ONLY=1` 可验收空状态初始化与原有五集首次交付。探针直连 OpenAI，核实 ChatGPT Voice 候选保存的原始 JSON 与上游响应逐字节一致。它计数实际编译和两种格式的加载，并用 Compiler 读取 HTTPS 回读的 Manifest。
 
 完整探针从空的 `acceptance-issue-96-*` 分支执行四集新增、两类来源独立更新、换列表、逐集 pin/resume 和删除。来源发现固定到官方 Release 与 Git commit，字节仍从真实上游获取；候选和稳定规则文件通过真实 HTTPS 回读，辅助记录通过 Git 核对。探针另行观测稳定分支入口及兄弟集。每轮保存受测源码、操作和回读记录、生产 refs/Actions variables 前后对照，以及成功或失败后的隔离目标清理结果。门禁开启时缺少前提会失败，不能将默认跳过视为完成验收；默认 CI 和统一本地检查不运行该远端写入入口。
 
@@ -291,7 +293,7 @@ pnpm --dir packages/rule-set-pipeline test:acceptance:automation
 
 证据目录保存本地探针源码身份、受审查 branch/SHA、每次配置内容与 commit、运行及 attempt、实际工作流/checkout SHA、摘要与业务结果、生产 refs/Actions variables 前后对照及隔离清理结果。门禁未打开时跳过，不能作为验收通过。默认 CI 与完整本地验证不会启用此远端写入入口；本地拒绝测试使用外部 `gh` 故障模拟，不能代替真实 push/dispatch，也不能把手工通过表述为 schedule 已观察或邮件已实收。当前覆盖、旧 suite 退役及实际执行证据见 [#100 记录](../../docs/verification/issue-100.md)。
 
-旧 `test:publication`、`test:activation`、`test:rollback`、`test:rebuild` 命令已在独有断言迁移通过后移除，不保留兼容别名。`test:release` 只运行固定官方 Release 的单列表与正式配置中的 V2Fly 三集构建两项只读验收，范围与统一验证的 `--release` 一致。单独运行时，设置 `SING_BOX_TEST_BINARY` 为 sing-box 1.14.4 的绝对路径，再运行 `pnpm --dir packages/rule-set-pipeline test:release`。规则、清理、自动化和 transport 的远端写入验收均使用上文的独立入口。迁移去向和执行证据见 [#101 记录](../../docs/verification/issue-101.md)。
+旧 `test:publication`、`test:activation`、`test:rollback`、`test:rebuild` 命令已在独有断言迁移通过后移除，不保留兼容别名。`test:release` 运行固定官方 Release 的只读验收，覆盖单列表基线、三个既有 V2Fly 域名集的回归，以及八个新增域名集的构建和匹配。范围与统一验证的 `--release` 一致。单独运行时，设置 `SING_BOX_TEST_BINARY` 为 sing-box 1.14.4 的绝对路径，再运行 `pnpm --dir packages/rule-set-pipeline test:release`。规则、清理、自动化和 transport 的远端写入验收均使用上文的独立入口。迁移去向和执行证据见 [#101 记录](../../docs/verification/issue-101.md)。
 
 #84 的验收范围包含新增、换源、删除、pin、resume、部分失败、查询/预览与一次性转换；真实 GitHub 生命周期在专用 `acceptance-*` 分支验证，不写生产分支。场景与远端证据见 [#84 验收记录](../../docs/verification/issue-84.md)，最终源码和交付状态以 [Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84) 的 PR 交付证据为准。
 
