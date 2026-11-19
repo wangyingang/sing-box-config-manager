@@ -10,6 +10,7 @@ import type { RuleCandidate, RuleSource } from './rules-model.js';
 import type { SourceRecord } from './types.js';
 
 type Network = Pick<ReleaseOptions, 'fetch' | 'token'>;
+type SnapshotReader = Pick<PublicationSnapshot, 'read'>;
 type AcquiredInput = { bytes: Uint8Array; source: RuleSource };
 type InputProbe = {
   read(): Promise<AcquiredInput>;
@@ -25,7 +26,7 @@ type InputSnapshot = {
 interface RuleSourceAdapter {
   file: string;
   probe(network: Network): InputProbe | Promise<InputProbe>;
-  openFixed(network: Network, candidate: CandidateSource, snapshot: PublicationSnapshot): InputProbe | Promise<InputProbe>;
+  openFixed(network: Network, candidate: CandidateSource, snapshot: SnapshotReader): InputProbe | Promise<InputProbe>;
   snapshotRequirement?(candidate: CandidateSource): InputSnapshot;
 }
 
@@ -82,7 +83,7 @@ export function ruleSourceAdapter(input: SourceInput): RuleSourceAdapter {
   };
 }
 
-async function readSnapshot(input: InputSnapshot, snapshot: PublicationSnapshot) {
+async function readSnapshot(input: InputSnapshot, snapshot: SnapshotReader) {
   return input.verify(await snapshot.read(input.path));
 }
 
@@ -90,5 +91,5 @@ async function readSnapshot(input: InputSnapshot, snapshot: PublicationSnapshot)
 export function candidateInputSnapshot(candidate: CandidateSource) {
   const input = ruleSourceAdapter(candidate.sourceInput).snapshotRequirement?.(candidate);
   if (!input) return;
-  return { ...input, read: (snapshot: PublicationSnapshot) => readSnapshot(input, snapshot) };
+  return { ...input, read: (snapshot: SnapshotReader) => readSnapshot(input, snapshot) };
 }

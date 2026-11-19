@@ -174,11 +174,7 @@ export async function prepareRulesBaseline(options: RulesBaselineVerification & 
     assets[prefix + layout.source] = verified.bytesByFormat.source;
     assets[prefix + layout.binary] = verified.bytesByFormat.binary;
     const input = candidateInputSnapshot(candidate);
-    if (input) {
-      const bytes = await required(source, input.path);
-      input.verify(bytes);
-      metadata[input.path] = bytes;
-    }
+    if (input) metadata[input.path] = Buffer.from(await input.read(source));
     metadata[prefix + 'manifest.json'] = encodeRecord(verified.manifest);
     for (const path of [prefix + 'build.json', ...tracePaths(source, id)]) metadata[path] = await required(source, path);
   }
