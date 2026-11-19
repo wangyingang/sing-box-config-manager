@@ -5,13 +5,15 @@ import { isMap, parseDocument, visit } from 'yaml';
 import { USAGES, type Usage } from './projection.js';
 import { ARTIFACT_REPOSITORY } from './publication.js';
 import { CHINA_IP_INPUT, type CommitInput } from './github-commit.js';
+import { OPENAI_VOICE_URL, type OpenAiVoiceInput } from './openai-voice-source.js';
 import { V2FLY_RELEASE_INPUT, type ReleaseInput } from './release.js';
 
-export type SourceInput = ReleaseInput | CommitInput;
+export type SourceInput = ReleaseInput | CommitInput | OpenAiVoiceInput;
+export type SourceFormat = SourceInput['input']['format'];
 type ConfiguredUsage = { artifact: 'domains' | 'route' } | { unavailable: 'empty' };
 
-export function configuredLayout(format: SourceInput['input']['format']) {
-  return format === 'cidr-text'
+export function configuredLayout(format: SourceFormat) {
+  return format !== 'plain-yaml'
     ? { stem: 'route', dns: 'dns-response', unavailable: 'dns-query' } as const
     : { stem: 'domains', dns: 'dns-query', unavailable: 'dns-response' } as const;
 }
@@ -41,11 +43,11 @@ function exact(value: unknown, fields: string[], label: string) {
   return record;
 }
 
-export function parseRuleDefinition(input: unknown, format: SourceInput['input']['format'] = 'plain-yaml'): RuleDefinition {
+export function parseRuleDefinition(input: unknown, format: SourceFormat = 'plain-yaml'): RuleDefinition {
   const { id, source, list, stablePath: path, usages } = exact(input, ['id', 'source', 'list', 'stablePath', 'usages'], 'rule definition');
   if (typeof id !== 'string' || !logicalId.test(id)) throw new Error(`Invalid logical ID: ${String(id)}`);
   if (typeof source !== 'string' || !logicalId.test(source)) throw new Error(`Invalid source ID: ${String(source)}`);
-  if (typeof list !== 'string' || (format === 'cidr-text' ? list !== 'all' : !/^[a-z0-9][a-z0-9!._-]*$/.test(list))) {
+  if (typeof list !== 'string' || (format !== 'plain-yaml' ? list !== 'all' : !/^[a-z0-9][a-z0-9!._-]*$/.test(list))) {
     throw new Error(`Invalid ${format} list: ${String(list)}`);
   }
   if (typeof path !== 'string' || !stablePath.test(path)) {
@@ -67,6 +69,12 @@ export function parseRuleDefinition(input: unknown, format: SourceInput['input']
 
 export function parseSource(input: unknown): SourceInput {
   const raw = mapping(input, 'source');
+  if (raw.version === 'openai-voice') {
+    const source = exact(raw, ['version', 'input'], 'ChatGPT Voice source');
+    const file = exact(source.input, ['format', 'url'], 'ChatGPT Voice input');
+    if (file.format !== 'openai-voice-json' || file.url !== OPENAI_VOICE_URL) throw new Error('Invalid official ChatGPT Voice input');
+    return { version: 'openai-voice', input: { format: 'openai-voice-json', url: OPENAI_VOICE_URL } };
+  }
   const source = exact(raw, raw.version === 'git-branch' ? ['repository', 'version', 'branch', 'input'] : ['repository', 'version', 'input'], 'source');
   if (!validRepository(source.repository)) throw new Error('Invalid GitHub source repository');
   const file = mapping(source.input, 'source input');

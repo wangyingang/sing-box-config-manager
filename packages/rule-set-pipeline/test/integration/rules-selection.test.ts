@@ -112,7 +112,7 @@ test('候选证据边界逐项拒绝损坏；status 只读且 pin 保留当前�
       c.evidenceCommit = 'a'.repeat(40);
       c.evidenceUrl = immutableUrl(c.evidenceCommit, `candidates/${c.id}/readback.json`);
     })],
-    ['source-binding', /source binding mismatch/, d => d.changeCandidate(c => { c.source.repository = 'other/repo'; })],
+    ['source-binding', /source binding mismatch/, d => d.changeCandidate(c => { assert.ok('repository' in c.source); c.source.repository = 'other/repo'; })],
     ['tools', /Build identity mismatch/, d => d.change('build.json', b => { b.tools.yaml = 'wrong'; })],
     ['build-identity', /Configured build identity/, d => d.change('build.json', b => { b.id = 'china-ip'; })],
     ['build-target', /Configured build identity/, d => d.change('build.json', b => { b.target.branch = 'other'; })],

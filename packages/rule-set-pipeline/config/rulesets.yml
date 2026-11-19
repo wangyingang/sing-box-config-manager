@@ -19,6 +19,11 @@ sources:
     input:
       format: cidr-text
       path: china46.txt
+  openai-voice:
+    version: openai-voice
+    input:
+      format: openai-voice-json
+      url: https://openai.com/chatgpt-voice.json
 ruleSets:
   - id: openai
     source: dlc
@@ -48,6 +53,14 @@ ruleSets:
     source: china-operator-ip
     list: all
     stablePath: stable/china-ip
+    usages:
+      route: { artifact: route }
+      dns-query: { unavailable: empty }
+      dns-response: { artifact: route }
+  - id: chatgpt-voice
+    source: openai-voice
+    list: all
+    stablePath: stable/chatgpt-voice
     usages:
       route: { artifact: route }
       dns-query: { unavailable: empty }

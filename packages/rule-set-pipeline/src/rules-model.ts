@@ -4,6 +4,7 @@ import type { BuildConfiguration, RuleDefinition, SourceInput } from './configur
 import { parseRuleDefinition, parseSource } from './configuration.js';
 import { validCommitSource, type CommitSourceRecord } from './github-commit.js';
 import type { SourceRecord } from './types.js';
+import { validOpenAiVoiceSource, type OpenAiVoiceSource } from './openai-voice-source.js';
 import { sha256 } from './release.js';
 import { validReleaseSource } from './release-source-fact.js';
 import type { CleanupCheckpoint, CleanupReport, CleanupRun, LastCleanup } from './rules-cleanup-model.js';
@@ -12,7 +13,7 @@ import { validateCleanupFields } from './rules-cleanup-model.js';
 export const RULE_STATE_PATH = 'pipeline/state.json';
 export const RULE_RECEIPT_PATH = 'pipeline/rule-operation.json';
 export const encodeRecord = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
-export type RuleSource = SourceRecord | CommitSourceRecord;
+export type RuleSource = SourceRecord | CommitSourceRecord | OpenAiVoiceSource;
 export type RuleControl = { mode: 'auto'; revision: string; inputBindingRevision: string }
   | { mode: 'pinned'; revision: string; inputBindingRevision: string; candidateId: string };
 
@@ -168,12 +169,19 @@ function validQualification(value: unknown) {
     && typeof value.validationPolicy === 'string' && Boolean(value.validationPolicy);
 }
 
+export function validRuleSource(value: unknown, input: SourceInput): value is RuleSource {
+  if (!object(value)) return false;
+  if (input.version === 'openai-voice') return validOpenAiVoiceSource(value);
+  if (input.version === 'git-branch') {
+    return value.kind === 'github-commit' && validCommitSource(value as CommitSourceRecord, input) && value.inputBytes > 0;
+  }
+  return validReleaseSource(value, input);
+}
+
 function validSuccessfulInput(value: unknown, source: SourceInput) {
   if (!object(value) || !validQualification(value) || !object(value.source) || !uuid(value.definitionGeneration)
     || !digest(value.inputBindingRevision) || !digest(value.definitionRevision)) return false;
-  const acquired = value.source;
-  if (source.version === 'git-branch') return validCommitSource(acquired as CommitSourceRecord, source) && acquired.inputBytes > 0;
-  return validReleaseSource(acquired, source);
+  return validRuleSource(value.source, source);
 }
 
 export function parseRulesJournal(bytes: Buffer): RulesJournal {
@@ -211,7 +219,8 @@ export function parseRulesJournal(bytes: Buffer): RulesJournal {
       || !object(candidate.source) || !digest(candidate.inputBindingRevision)
       || candidate.operation === 'sync' && !uuid(candidate.controlRevision)) throw new Error('RULE_STATE_CORRUPT: candidate');
     const source = parseSource(candidate.sourceInput), definition = parseRuleDefinition(candidate.definition, source.input.format);
-    if (candidate.logicalId !== definition.id || inputBindingRevision(source, definition) !== candidate.inputBindingRevision) throw new Error('RULE_STATE_CORRUPT: candidate binding');
+    if (candidate.logicalId !== definition.id || inputBindingRevision(source, definition) !== candidate.inputBindingRevision
+      || source.version === 'openai-voice' && !validOpenAiVoiceSource(candidate.source)) throw new Error('RULE_STATE_CORRUPT: candidate binding');
     if (candidate.publishedAt !== undefined || candidate.versionId !== undefined) {
       if (typeof candidate.publishedAt !== 'string' || !Number.isFinite(Date.parse(candidate.publishedAt))
         || new Date(candidate.publishedAt).toISOString() !== candidate.publishedAt || typeof candidate.versionId !== 'string'

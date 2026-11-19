@@ -500,6 +500,7 @@ async function runRulesCheck(options: CheckOptions, resumeId?: string) {
         }) });
       }
 
+      if (input.version !== 'latest-release') throw new Error('Use sync for ChatGPT Voice sources');
       const release = await lookupRelease(input, String(reference?.releaseId ?? 'latest'), options);
       const { id: releaseId, tag_name: tag } = release;
       if (typeof releaseId !== 'number' || !Number.isSafeInteger(releaseId) || releaseId <= 0

@@ -50,7 +50,7 @@ sync/pin/resume 的 `--dry-run` 检查真实输入和必要的原生验证；cle
 
 候选已有的业务版本和首次发布时间保持不变。有效不可变证据已登记这些事实、但 journal 检查点缺失时，先核对原候选、来源、构建和产物，再补回登记；没有可靠历史时间时明确失败，不使用恢复时间补造。status 和四个写入口的 dry-run 只展示实际状态，不推进上述恢复。
 
-首次交付将候选检查点与各阶段文件合并保存。四集首次交付执行 16 次产物 Raw GET，分别核对 8 个候选和 8 个稳定交付 commit 上的规则文件。候选合格但交付准备失败、恢复后未被选中或其他故障可增加检查点。相同 Git SHA 的内容可在内存复用，但正式配置修订、分支 head 和写入门禁仍重新核对；分支指向继续实时核对。同一次操作可复用已校验的固定 HTTPS 字节，摘要与当前保留树仍按阶段核对。已完成候选的复选和人工 status 通过 Git 核对核心业务事实与规则字节。阶段与恢复边界见[持久事实契约](contracts/rules-operations.md#远端事实与版本身份)，内存容量和固定地址的可用性观察见[证据回读](contracts/rules-operations.md#证据回读)。
+首次交付将候选检查点与各阶段文件合并保存。当前五集首次交付执行 20 次产物 Raw GET，分别核对候选和稳定交付 commit 上各 10 个规则文件。候选合格但交付准备失败、恢复后未被选中或其他故障可增加检查点。相同 Git SHA 的内容可在内存复用，但正式配置修订、分支 head 和写入门禁仍重新核对；分支指向继续实时核对。同一次操作可复用已校验的固定 HTTPS 字节，摘要与当前保留树仍按阶段核对。已完成候选的复选和人工 status 通过 Git 核对核心业务事实与规则字节。阶段与恢复边界见[持久事实契约](contracts/rules-operations.md#远端事实与版本身份)，内存容量和固定地址的可用性观察见[证据回读](contracts/rules-operations.md#证据回读)。
 
 旧 `update`、`rebuild`、`check-now`、`activate`、`rollback`、`initialize` 及 `maintenance-enter/prepare/switch/resume/abort` 等旧命令和 Node API 已退出公开入口。必要的构建、验证和转换仍是内部能力，不提供旧命令兼容层。
 
@@ -68,16 +68,19 @@ pnpm rules sync --config /path/to/rulesets-draft.yml --dry-run --json
 
 配置使用 `schemaVersion: 3`，必须显式声明正整数 `candidateRetentionDays`。正式配置和样例采用已确定的 30 天策略；`cleanup` 读取正式值，不自行设置默认保留期。`ruleSets` 必须显式存在。`ruleSets: []` 与空 `sources: {}` 可以表达删除全部受管规则；配置缺失、无法读取、未知字段、无效引用、重复 ID 或重叠稳定路径均在写入前拒绝。
 
-当前正式配置有三个域名集 `openai`、`anthropic`、`google-deepmind`，以及双栈 `china-ip`。同类来源可以更换仓库、资产、路径或列表，无需修改代码：
+当前正式配置有三个域名集 `openai`、`anthropic`、`google-deepmind`，以及两个地址集 `china-ip` 和 `chatgpt-voice`。GitHub 来源可以更换仓库、资产、路径或列表。
 
 | 获取方式 | 必填输入 | 支持的解析语义 |
 | --- | --- | --- |
 | `latest-release` | GitHub `repository`、`input.asset`、`input.checksum` | `plain-yaml` 或 `cidr-text` |
 | `git-branch` | GitHub `repository`、`branch`、`input.path` | `plain-yaml` 或 `cidr-text` |
+| `openai-voice` | `input.url: https://openai.com/chatgpt-voice.json` | `openai-voice-json` |
 
 `plain-yaml` 专指现有规则列表语义，不接受任意 YAML；`cidr-text` 为逐行 IPv4/IPv6 CIDR，`list` 固定为 `all`。未知获取方式和格式拒绝，新增能力须经开发接入。来源内容的分类和覆盖范围由上游维护，本模块不做多源合并、质量评分或 IP 地理归属验证。
 
-输入绑定由实际仓库、获取方式、branch、路径/资产、摘要声明、格式和所选列表决定。实质变化表示换源，接受新定义时撤销旧 pin。source 别名、注释、排列和保留期调整不会解除固定；上游新 Release/commit 是正常更新。稳定路径与用途变化另做订阅兼容检查，不能借换源更改已交付契约。
+`chatgpt-voice` 使用 `list: all`，发布到 `stable/chatgpt-voice`。流水线直接读取 [OpenAI 官方 JSON](https://openai.com/chatgpt-voice.json) 的 IPv4/IPv6 CIDR。规则集匹配地址，客户端策略可另按 [OpenAI 的网络说明](https://help.openai.com/en/articles/9247338-network-recommendations-for-chatgpt-errors-on-web-and-apps#chatgpt-voice-firewall-settings) 约束 UDP 3478 或 TCP 443。适用的强 ETag 可用条件 GET 取得 304；否则读取正文并比较 SHA-256。同一候选的原始 JSON 与登记原子保存，恢复按登记的字节数和 SHA-256 读回原始输入，历史清理保留仍被保留候选引用的快照。
+
+输入绑定由来源位置、获取方式、格式和所选列表决定。实质变化表示换源，接受新定义时撤销旧 pin。source 别名、注释、排列和保留期调整不会解除固定；上游新 Release/commit 是正常更新。稳定路径与用途变化另做订阅兼容检查，不能借换源更改已交付契约。
 
 ## 环境与远端状态
 
@@ -229,7 +232,7 @@ YAML 解析使用固定版本的 [yaml](https://eemeli.org/yaml/)，拒绝语法
 
 [#125](https://github.com/wangyingang/sing-box-config-manager/issues/125) 从空状态启用新策略。`main` 和 `candidates` 的开发期候选、订阅、证据、版本编号、pin 和未完成操作可以一并清除，旧订阅在切换期间可能不可用。切换是独立操作。先停用生产更新和清理门禁，再准备两个没有 `pipeline/`、`candidates/`、`stable/` 内容的受管分支。必要时可重新初始化产物仓库。
 
-新版从正式配置运行首次 `sync`，初始化远端状态并构建四集。在更新门禁授权的环境执行后，用 `status --json` 核对每集已交付且有可选候选。按回读记录核对候选和稳定交付 commit 上 JSON/SRS 正文的长度及 SHA-256。新策略建立的候选可继续 pin、恢复和 cleanup。首次建立状态后，在没有回收对象时，cleanup 只评估保留期并返回 `unchanged`。此后删除产生的待回收历史随删除结案登记。清理重写物理证据地址时保留业务版本、构建身份、首次发布时间、来源和稳定订阅字节。
+新版从正式配置运行首次 `sync`，初始化远端状态并构建当前五集。在更新门禁授权的环境执行后，用 `status --json` 核对每集已交付且有可选候选。按回读记录核对候选和稳定交付 commit 上 JSON/SRS 正文的长度及 SHA-256。新策略建立的候选可继续 pin、恢复和 cleanup。首次建立状态后，在没有回收对象时，cleanup 只评估保留期并返回 `unchanged`。此后删除产生的待回收历史随删除结案登记。清理重写物理证据地址时保留业务版本、构建身份、首次发布时间、来源和稳定订阅字节。
 
 ## 自动化验证
 
@@ -257,7 +260,7 @@ SING_BOX_TEST_BINARY=/absolute/path/to/sing-box-1.14.4 \
 pnpm --dir packages/rule-set-pipeline test:acceptance:rules
 ```
 
-设置 `RULE_OPERATIONS_FIRST_ONLY=1` 可只验收空状态初始化与四集首次交付。探针直接计数实际原生子进程，确认没有反编译，仍执行编译和两种格式的加载，并用 Compiler 读取 HTTPS 回读的 Manifest。
+设置 `RULE_OPERATIONS_FIRST_ONLY=1` 可验收空状态初始化与当前五集首次交付。探针直连 OpenAI，核实 ChatGPT Voice 候选保存的原始 JSON 与上游响应逐字节一致。它计数实际编译和两种格式的加载，并用 Compiler 读取 HTTPS 回读的 Manifest。
 
 完整探针从空的 `acceptance-issue-96-*` 分支执行四集新增、两类来源独立更新、换列表、逐集 pin/resume 和删除。来源发现固定到官方 Release 与 Git commit，字节仍从真实上游获取；候选和稳定规则文件通过真实 HTTPS 回读，辅助记录通过 Git 核对。探针另行观测稳定分支入口及兄弟集。每轮保存受测源码、操作和回读记录、生产 refs/Actions variables 前后对照，以及成功或失败后的隔离目标清理结果。门禁开启时缺少前提会失败，不能将默认跳过视为完成验收；默认 CI 和统一本地检查不运行该远端写入入口。
 

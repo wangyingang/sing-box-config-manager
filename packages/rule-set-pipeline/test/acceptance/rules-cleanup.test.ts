@@ -167,6 +167,7 @@ test('GitHub 四集 cleanup：保留窗口、切换中断、HTTPS 失败恢复�
       return upstream(address.replace(/\/releases\/latest$/, `/releases/tags/${tag}`), init);
     };
     const config = parseBuildConfiguration(readOfficialConfiguration()); config.target.branch = target;
+    config.ruleSets = config.ruleSets.filter(rule => rule.id !== 'chatgpt-voice');
     // The isolated application clock supplies candidate age; upstream bytes,
     // Git history, reference transactions and HTTPS delivery are all real.
     let revision = 1, now = '2026-09-01T00:00:00.000Z';
@@ -313,7 +314,8 @@ test('GitHub 四集 cleanup：保留窗口、切换中断、HTTPS 失败恢复�
     assert.equal(parseRulesJournal((await second.read(RULE_STATE_PATH))!).candidates[recent.candidateId], undefined);
     for (const [path, bytes] of secondBytes) await readBytes(`https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${second.head}/${path}`, bytes!);
     const chosenCidr = await check('pin-retained-cidr', () => pinRuleVersion({ ...input, id: 'china-ip', version: cidr.versionId! }));
-    assert.equal(currentOf(chosenCidr, 'china-ip').source.commit, updatedCommit);
+    const cidrSource = currentOf(chosenCidr, 'china-ip').source;
+    assert.ok('commit' in cidrSource); assert.equal(cidrSource.commit, updatedCommit);
     assert.equal(requests.length, sourceCount);
     observations.push({ label: 'history', before: beforeCleanup.head, after: afterCleanup.head,
       oldReachableCommits: [...oldHistory], newReachableCommits: [...newHistory], sourceCalls: requests.length });

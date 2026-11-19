@@ -43,11 +43,12 @@ function historicalTime(bytes: Buffer, candidateId: string) {
 
 function historicalSource(source: RuleCandidate['source'], definition: RuleCandidate['definition']): SourceInput {
   const format = definition.usages.route && 'artifact' in definition.usages.route && definition.usages.route.artifact === 'route' ? 'cidr-text' : 'plain-yaml';
-  return parseSource('kind' in source && source.kind === 'github-commit'
-    ? { repository: source.repository, version: 'git-branch', branch: source.branch, input: { format, path: source.file.path } }
-    : { repository: source.repository, version: 'latest-release', input: { format,
-      asset: (source as Exclude<RuleCandidate['source'], { kind: 'github-commit' }>).yaml.name,
-      checksum: (source as Exclude<RuleCandidate['source'], { kind: 'github-commit' }>).checksum.name } });
+  if ('kind' in source) {
+    if (source.kind !== 'github-commit') throw new Error('RULE_MIGRATION_BLOCKED: unsupported historical source');
+    return parseSource({ repository: source.repository, version: 'git-branch', branch: source.branch, input: { format, path: source.file.path } });
+  }
+  return parseSource({ repository: source.repository, version: 'latest-release', input: { format,
+    asset: source.yaml.name, checksum: source.checksum.name } });
 }
 
 function readOnlyLegacyRepository(loaded: LoadedRules, snapshot?: PublicationSnapshot): PublicationRepository {

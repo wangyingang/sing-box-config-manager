@@ -6,7 +6,8 @@ import { buildNative, type NativeBuild, type NativeBuildOptions } from './native
 import { readReleaseInput, sha256, type ReleaseOptions } from './release.js';
 import { diagnostic, type ConversionReport, type SourceRecord } from './types.js';
 import { readCommitInput, type CommitOptions, type CommitSourceRecord } from './github-commit.js';
-import { configuredInput, configuredReleaseInput, parseBuildConfiguration, type BuildConfiguration, type RuleDefinition } from './configuration.js';
+import { configuredInput, configuredReleaseInput, parseBuildConfiguration, type BuildConfiguration, type RuleDefinition, type SourceFormat } from './configuration.js';
+import { convertOpenAiVoice, type OpenAiVoiceSource } from './openai-voice-source.js';
 import { convertPlainYaml } from './plain-yaml-adapter.js';
 import { convertCidrText } from './cidr-text-adapter.js';
 import { USAGES, type BuildTerm } from './projection.js';
@@ -25,15 +26,16 @@ export function configuredBuildIdentity(identity: object) {
 export type ConfiguredResult = { id: string; definition: RuleDefinition; status: 'failed'; report: ConversionReport; error: string }
   | { id: string; definition: RuleDefinition; status: 'built-validated'; report: ConversionReport; native: NativeBuild; buildId: string };
 
-export async function configuredBuildTools(format: 'plain-yaml' | 'cidr-text' = 'plain-yaml') {
+export async function configuredBuildTools(format: SourceFormat = 'plain-yaml') {
   const files = ['source-input', 'configuration', 'configured-build', 'release', 'plain-yaml-adapter', 'yaml-input', 'convert',
     'types', 'projection', 'native'];
   if (format === 'cidr-text') files.push('github-commit', 'cidr-text-adapter');
+  if (format === 'openai-voice-json') files.push('openai-voice-source', 'cidr-text-adapter');
   const implementationSha256 = sha256(Buffer.concat(await Promise.all(
     files.map(name =>
       readFile(new URL(`./${name}.${import.meta.url.endsWith('.ts') ? 'ts' : 'js'}`, import.meta.url))),
   )));
-  return { pipeline: packageInfo.version, implementationSha256, conversionPolicy: format === 'cidr-text' ? 'cidr-text-v1' : 'v2fly-domain-v1',
+  return { pipeline: packageInfo.version, implementationSha256, conversionPolicy: format === 'plain-yaml' ? 'v2fly-domain-v1' : `${format}-v1`,
     node: process.versions.node, yaml: yamlPackage.version, sourceFormat: 4,
     ...(format === 'cidr-text' ? { ipaddr: ipaddrPackage.version } : {}) };
 }
@@ -71,14 +73,15 @@ export async function buildConfiguredCommit(options: BuildOptions & { github: Co
 }
 
 
-export function convertInput(bytes: Uint8Array, definitions: RuleDefinition[], format: 'plain-yaml' | 'cidr-text', file: string) {
-  return format === 'plain-yaml' ? convertPlainYaml(bytes, definitions.map(rule => rule.list))
-    : new Map(definitions.map(rule => [rule.list, convertCidrText(bytes, file, rule.list)]));
+export function convertInput(bytes: Uint8Array, definitions: RuleDefinition[], format: SourceFormat, file: string) {
+  if (format === 'plain-yaml') return convertPlainYaml(bytes, definitions.map(rule => rule.list));
+  const convert = format === 'openai-voice-json' ? convertOpenAiVoice : convertCidrText;
+  return new Map([...new Set(definitions.map(rule => rule.list))].map(list => [list, convert(bytes, file, list)]));
 }
 
-export async function buildConfigured<Source extends SourceRecord | CommitSourceRecord>(
+export async function buildConfigured<Source extends SourceRecord | CommitSourceRecord | OpenAiVoiceSource>(
   configuration: BuildConfiguration, definitions: RuleDefinition[], { binary, nativeBuild = buildNative }: NativeBuildOptions,
-  source: Source, lists: ReadonlyMap<string, Converted>, format: 'plain-yaml' | 'cidr-text', file: string,
+  source: Source, lists: ReadonlyMap<string, Converted>, format: SourceFormat, file: string,
 ) {
   const tools = await configuredBuildTools(format);
   const results: ConfiguredResult[] = [];

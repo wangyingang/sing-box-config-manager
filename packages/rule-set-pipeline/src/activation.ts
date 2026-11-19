@@ -17,7 +17,7 @@ import { retainedCandidateDownload, type PublicationSnapshot } from './publicati
 import { activationDigest, effectiveControl, manualControl, openManualActivation, registerManualActivation, type ActivationWriteReservation, type ObservedActivation } from './manual-activation.js';
 import { BASELINE_PATH, guardResultGeneration, type ActivationOperation } from './remote-state.js';
 import type { RulesRepository } from './rules-repository.js';
-import type { RuleCandidate } from './rules-model.js';
+import { validRuleSource, type RuleCandidate } from './rules-model.js';
 import { activationRecord } from './remote-status.js';
 import { ActivationWriteError, githubActivation, type ActivationTransport } from './activation-transport.js';
 
@@ -110,10 +110,7 @@ export async function verifyCandidateEvidence(options: Partial<NativeBuildOption
   const isCidr = build.definition?.usages?.route?.artifact === 'route';
   const layout = configuredLayout(isCidr ? 'cidr-text' : 'plain-yaml');
   if (candidate) {
-    const input = candidate.sourceInput;
-    requireThat(input.version === 'git-branch'
-      ? 'kind' in candidate.source && validCommitSource(candidate.source, input) && candidate.source.inputBytes > 0
-      : validReleaseSource(candidate.source as unknown as Record<string, unknown>, input), 'Candidate source binding mismatch');
+    requireThat(validRuleSource(candidate.source, candidate.sourceInput), 'Candidate source binding mismatch');
   } else if (source.kind === 'github-commit') {
     requireThat(definition && validCommitSource(source) && source.inputBytes > 0, 'Incomplete official Git source');
   } else if (source.kind === 'synthetic') {

@@ -7,7 +7,7 @@ test('official configuration provides four stable subscriptions and reuses files
     const official = parseBuildConfiguration(readOfficialConfiguration());
     const configuration = parseBuildConfiguration(JSON.stringify({ ...official, target: { ...official.target, branch } }));
     const subscriptions = configuredSubscriptions(configuration);
-    assert.deepEqual(Object.keys(subscriptions), ['openai', 'anthropic', 'google-deepmind', 'china-ip']);
+    assert.deepEqual(Object.keys(subscriptions), ['openai', 'anthropic', 'google-deepmind', 'china-ip', 'chatgpt-voice']);
     for (const [id, subscription] of Object.entries(subscriptions)) {
       assert.equal(subscription.systemRuleSetId, id);
       const route = subscription.projections.route;

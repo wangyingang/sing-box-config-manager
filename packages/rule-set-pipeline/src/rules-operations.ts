@@ -108,7 +108,7 @@ async function updateSelectedRules(session: RulesSession, definitions: RuleDefin
           const published = await recoverPublishedRuleCandidate(session, fixed);
           let candidate = published;
           if (!candidate) {
-            const built = await buildRulesInput(session.loaded, [fixed.definition], fixed);
+            const built = await buildRulesInput(session.loaded, [fixed.definition], { candidate: fixed, snapshot: session.snapshot });
             const result = built.results[0];
             if (result.status === 'failed') throw new Error(result.error);
             candidate = await publishRuleBuild(session, built, result, rule, fixed);

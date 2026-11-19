@@ -13,6 +13,7 @@ function fourSources() {
   const env = rulesEnvironment(binary!);
   const config = parseBuildConfiguration(readOfficialConfiguration());
   config.target.branch = env.context.targetBranch;
+  config.ruleSets = config.ruleSets.filter(rule => rule.id !== 'chatgpt-voice');
   env.configure(config);
   const releaseFetch = env.context.fetch!;
   let revision = 1, cidr = '192.0.2.0/25\n2001:db8:1::/48\n';
@@ -43,7 +44,8 @@ test('四集共享各自来源；仅 CIDR 变化只交付 CIDR，新 commit 同�
   assert.equal(next.status, 'success', JSON.stringify(next));
   assert.deepEqual(next.results.map(x => x.status), ['unchanged', 'unchanged', 'unchanged', 'delivered']);
   for (let i = 0; i < 3; i++) assert.deepEqual(next.results[i].current, first.results[i].current);
-  assert.equal(next.results[3].current?.source.commit, '2'.repeat(40));
+  const cidrSource = next.results[3].current?.source;
+  assert.ok(cidrSource && 'commit' in cidrSource); assert.equal(cidrSource.commit, '2'.repeat(40));
   assert.notEqual(next.results[3].current?.versionId, first.results[3].current?.versionId);
   const before = await getRulesStatus(request), writes = env.writes.length;
   env.upstream({}); env.changeCidr('# same ranges\n2001:db8:2::/48\n192.0.2.128/25\n');
@@ -99,7 +101,7 @@ for (const fault of ['release-offline', 'checksum', 'yaml', 'missing-list', 'inv
       if (entry.status === 'failed' || entry.status === 'pending') {
         assert.deepEqual(entry.successfulInput, first.results[i].successfulInput);
       } else if (entry.id === 'china-ip') {
-        assert.equal(successful?.commit, '2'.repeat(40));
+        assert.ok(successful && 'commit' in successful); assert.equal(successful.commit, '2'.repeat(40));
       } else {
         assert.equal(successful && 'releaseId' in successful && successful.releaseId, 2);
       }
@@ -203,7 +205,8 @@ for (const mechanism of ['latest-release', 'git-branch'] as const) for (const fo
       throw new Error(`Unexpected request ${url}`);
     };
     const first = await syncRules({ context: env.context }); assert.equal(first.status, 'success', JSON.stringify(first));
-    assert.equal(first.results[0].current?.source.repository, repo);
+    const acquired = first.results[0].current?.source;
+    assert.ok(acquired && 'repository' in acquired); assert.equal(acquired.repository, repo);
     const status = await getRulesStatus({ context: env.context }); assert.equal(status.rules?.[0].candidateCount, 1);
     const before = requests.length;
     const pinned = await pinRuleVersion({ context: env.context, id: 'custom', version: first.results[0].current!.versionId! });

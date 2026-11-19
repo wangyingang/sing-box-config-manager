@@ -136,6 +136,7 @@ export function fourSetCleanupEnvironment(binary: string, target: string) {
   const env = cleanupEnvironment(binary, target);
   const config = parseBuildConfiguration(readOfficialConfiguration());
   config.target.branch = target;
+  config.ruleSets = config.ruleSets.filter(rule => rule.id !== 'chatgpt-voice');
   env.configure(config);
   return env;
 }
