@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { configuredBuildTools } from '../../src/configured-build.js';
 import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
-import { OPENAI_VOICE_URL, openAiVoiceSnapshotPath } from '../../src/openai-voice-source.js';
+import { OPENAI_VOICE_URL, openAiVoiceSnapshotPath, probeOpenAiVoiceInput } from '../../src/openai-voice-source.js';
 import { sha256 } from '../../src/release.js';
 import { cleanupRuleHistory } from '../../src/rules-cleanup.js';
 import { RULE_STATE_PATH } from '../../src/rules-model.js';
@@ -128,4 +129,30 @@ test('ChatGPT Voice 输入校验、无验证器重读及历史清理保留原始
   assert.equal(pinned.status, 'success', JSON.stringify(pinned));
   assert.equal(pinned.results[0].current?.source.inputSha256, sha256(second));
   assert.equal(validators.length, fetches, 'pin and cleanup never probe the fixed HTTPS input');
+});
+
+test('ChatGPT Voice 共享可信 304，验证器冲突时读取完整输入', async () => {
+  const source = { kind: 'openai-voice' as const, url: OPENAI_VOICE_URL, etag: '"voice-a"',
+    inputSha256: sha256(first), inputBytes: Buffer.byteLength(first) };
+  const validators: (string | null)[] = [];
+  let returnedEtag = source.etag;
+  const fetcher: typeof fetch = async (_url, init) => {
+    const condition = new Headers(init?.headers).get('If-None-Match');
+    validators.push(condition);
+    if (condition) return new Response(null, { status: 304, headers: { etag: returnedEtag } });
+    return new Response(second);
+  };
+  const shared = probeOpenAiVoiceInput(fetcher);
+  assert.deepEqual(await shared.unchanged(source), source);
+  assert.deepEqual(await shared.unchanged(source), source);
+  assert.deepEqual(validators, [source.etag]);
+
+  validators.length = 0;
+  returnedEtag = 'W/"voice-a"';
+  const fallback = probeOpenAiVoiceInput(fetcher);
+  assert.equal(await fallback.unchanged(source), undefined);
+  assert.deepEqual((await fallback.read()).bytes, Buffer.from(second));
+  assert.deepEqual(validators, [source.etag, null]);
+  assert.ok((await configuredBuildTools('cidr-text')).ipaddr);
+  assert.equal((await configuredBuildTools('openai-voice-json')).ipaddr, (await configuredBuildTools('cidr-text')).ipaddr);
 });

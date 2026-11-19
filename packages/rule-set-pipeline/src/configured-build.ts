@@ -37,7 +37,7 @@ export async function configuredBuildTools(format: SourceFormat = 'plain-yaml') 
   )));
   return { pipeline: packageInfo.version, implementationSha256, conversionPolicy: format === 'plain-yaml' ? 'v2fly-domain-v1' : `${format}-v1`,
     node: process.versions.node, yaml: yamlPackage.version, sourceFormat: 4,
-    ...(format === 'cidr-text' ? { ipaddr: ipaddrPackage.version } : {}) };
+    ...(format !== 'plain-yaml' ? { ipaddr: ipaddrPackage.version } : {}) };
 }
 
 interface BuildOptions { configuration: string; binary: string; selectedIds?: string[] }

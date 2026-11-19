@@ -69,18 +69,28 @@ async function readBounded(response: Response) {
 export function probeOpenAiVoiceInput(fetcher: typeof fetch = fetch) {
   type AcquiredInput = { bytes: Uint8Array; source: OpenAiVoiceSource };
   let acquired: AcquiredInput | undefined;
+  let confirmedEtag: string | undefined;
+  const request = (etag?: string) => fetcher(OPENAI_VOICE_URL, {
+    headers: { Accept: 'application/json', ...(etag && { 'If-None-Match': etag }) },
+    redirect: 'error', signal: AbortSignal.timeout(30_000),
+  });
   async function download(previous?: OpenAiVoiceSource) {
     if (acquired) return acquired;
     const etag = previous?.etag;
-    const response = await fetcher(OPENAI_VOICE_URL, {
-      headers: { Accept: 'application/json', ...(etag && { 'If-None-Match': etag }) },
-      redirect: 'error', signal: AbortSignal.timeout(30_000),
-    });
-    const returnedEtag = response.headers.get('etag');
-    if (response.status === 304 && etag && (!returnedEtag || returnedEtag === etag)) return;
+    if (etag && etag === confirmedEtag) return;
+    let response = await request(etag);
+    if (response.status === 304 && etag) {
+      const returnedEtag = response.headers.get('etag');
+      if (returnedEtag === etag) {
+        confirmedEtag = etag;
+        return;
+      }
+      response = await request();
+    }
     if (response.status !== 200) {
       throw new SourceError('VOICE_DOWNLOAD_FAILED', `ChatGPT Voice input HTTP ${response.status}`);
     }
+    const returnedEtag = response.headers.get('etag');
     const bytes = await readBounded(response);
     acquired = { bytes, source: { kind: 'openai-voice', url: OPENAI_VOICE_URL,
       inputSha256: sha256(bytes), inputBytes: bytes.length, ...(strongEtag(returnedEtag) && { etag: returnedEtag }) } };

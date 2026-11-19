@@ -11,6 +11,7 @@ import { NATIVE_VALIDATION_POLICY } from '../../src/native.js';
 import test from 'node:test';
 import { stringify } from 'yaml';
 import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
+import { convertCidrText } from '../../src/cidr-text-adapter.js';
 import { createGitCommit } from '../../src/publication-repository.js';
 import { ARTIFACT_REPOSITORY, GitHubHttpError, ghJson } from '../../src/publication.js';
 import { githubRulesRepository } from '../../src/rules-repository.js';
@@ -249,6 +250,13 @@ exec ${shellQuote(binary)} "$@"
       assert.equal(input.byteLength, current.source.inputBytes);
       assert.equal(sha256(input), current.source.inputSha256);
       assert.deepEqual(new Uint8Array(input), downloaded);
+      const { prefixes } = JSON.parse(input.toString());
+      const addresses = prefixes.map((entry: { ipv4Prefix?: string; ipv6Prefix?: string }) => entry.ipv4Prefix ?? entry.ipv6Prefix);
+      const expected = convertCidrText(Buffer.from(addresses.join('\n')), OPENAI_VOICE_FILE, 'all');
+      assert.ok(expected.ok);
+      const route = JSON.parse((await readGit('route.json')).toString());
+      assert.deepEqual(route.rules, [{ ip_cidr: expected.terms.map(term => term.value) }]);
+      expectedCount = addresses.length;
       retainedFiles.push(OPENAI_VOICE_FILE);
     }
     for (const file of retainedFiles) {
@@ -275,7 +283,7 @@ exec ${shellQuote(binary)} "$@"
       await readBytes(artifact.url, artifact);
       if (artifact.format === 'source') {
         assert.equal(artifact.termCount, report.outputTermCount);
-        if (expectedCount !== undefined) assert.equal(artifact.termCount, expectedCount);
+        if (expectedCount !== undefined && !validOpenAiVoiceSource(current.source)) assert.equal(artifact.termCount, expectedCount);
       } else assert.ok(!Object.hasOwn(artifact, 'termCount'));
       assert.deepEqual(artifact.requiredCapabilities, []);
     }
