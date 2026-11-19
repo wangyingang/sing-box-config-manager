@@ -1,0 +1,1448 @@
+{
+  "source": "controlled CIDR inputs and in-memory Git; real sing-box and loopback HTTPS",
+  "operations": {
+    "first": {
+      "operation": "sync",
+      "dryRun": false,
+      "configurationRevision": "0000000000000000000000000000000000000002",
+      "configurationOrigin": "isolated-fixture",
+      "target": {
+        "repository": "wangyingang/sing-box-rule-artifacts",
+        "branch": "acceptance-issue-97-cidr"
+      },
+      "status": "success",
+      "exitCode": 0,
+      "results": [
+        {
+          "id": "china-ip",
+          "status": "delivered",
+          "changes": [
+            "add",
+            "first-delivery"
+          ],
+          "candidate": {
+            "versionId": "2026-11-16T08:15:30.123Z~0e5d10de",
+            "publishedAt": "2026-11-16T08:15:30.123Z"
+          },
+          "verified": [
+            "source",
+            "native",
+            "candidate-git",
+            "subscription",
+            "stable-git",
+            "stable-HTTPS",
+            "candidate-HTTPS"
+          ],
+          "current": {
+            "schemaVersion": 2,
+            "id": "407855fb-8664-4f51-b80d-c7bbc1c57148",
+            "logicalId": "china-ip",
+            "candidateId": "0e5d10de-4dc9-42e4-9f6f-b4b1f19c81c5",
+            "versionId": "2026-11-16T08:15:30.123Z~0e5d10de",
+            "publishedAt": "2026-11-16T08:15:30.123Z",
+            "candidateEvidenceUrl": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/0000000000000000000000000000000000000007/candidates/0e5d10de-4dc9-42e4-9f6f-b4b1f19c81c5/readback.json",
+            "source": {
+              "kind": "github-commit",
+              "repository": "gaoyifan/china-operator-ip",
+              "branch": "ip-lists",
+              "commit": "1111111111111111111111111111111111111111",
+              "file": {
+                "path": "china46.txt",
+                "url": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/1111111111111111111111111111111111111111/china46.txt"
+              },
+              "inputSha256": "c4231cc51566770b999e9e15acfe43ecdce802690e74958ec8677ffc331f885f",
+              "inputBytes": 29
+            },
+            "subscription": {
+              "schemaVersion": 2,
+              "systemRuleSetId": "china-ip",
+              "targetVersion": "1.14.4",
+              "sourceFormatVersion": 4,
+              "projections": {
+                "route": {
+                  "formats": {
+                    "binary": {
+                      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.srs",
+                      "requiredCapabilities": []
+                    },
+                    "source": {
+                      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.json",
+                      "requiredCapabilities": []
+                    }
+                  }
+                },
+                "dns-query": {
+                  "unavailable": "empty"
+                },
+                "dns-response": {
+                  "formats": {
+                    "binary": {
+                      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.srs",
+                      "requiredCapabilities": []
+                    },
+                    "source": {
+                      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.json",
+                      "requiredCapabilities": []
+                    }
+                  }
+                }
+              }
+            },
+            "files": {
+              "stable/china-ip/route.srs": {
+                "sha256": "513fe429a4a521ecd0e3489a694dbc369d34da88564f8638e2f51fdebcc78ba5",
+                "byteLength": 48
+              },
+              "stable/china-ip/route.json": {
+                "sha256": "188c9e92e0bafa839435ab75f4d7e3f95974b91acde2c4a512b62d7635960e32",
+                "byteLength": 126
+              }
+            }
+          },
+          "control": {
+            "mode": "auto",
+            "revision": "af45174c-5cb9-436f-96fb-bab31fe70f33",
+            "inputBindingRevision": "6c92bb658b731fe207ad19f0cefda870f36506e3dee85d4f40809e8cec873045"
+          },
+          "successfulInput": {
+            "toolSha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2",
+            "buildToolsSha256": "c7e565c04d2fbfef434482c09667cd8fa3cdd47c9c11ed6a41992f96d9bd5fb9",
+            "validationPolicy": "native-compile-load-v1",
+            "nativeBuildId": "ee3d92fba649ad17ac69ef4e5a3251dee2069e00d390e038cc66b78f0621b841",
+            "candidateId": "0e5d10de-4dc9-42e4-9f6f-b4b1f19c81c5",
+            "buildId": "6c799bf6c5d644b09ccee08e08a1c84dbf4471aa81b9ad28fa3e53950ee9a938",
+            "source": {
+              "kind": "github-commit",
+              "repository": "gaoyifan/china-operator-ip",
+              "branch": "ip-lists",
+              "commit": "1111111111111111111111111111111111111111",
+              "file": {
+                "path": "china46.txt",
+                "url": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/1111111111111111111111111111111111111111/china46.txt"
+              },
+              "inputSha256": "c4231cc51566770b999e9e15acfe43ecdce802690e74958ec8677ffc331f885f",
+              "inputBytes": 29
+            },
+            "inputBindingRevision": "6c92bb658b731fe207ad19f0cefda870f36506e3dee85d4f40809e8cec873045",
+            "definitionRevision": "19f0513a2220c023a5b1dff2753caef21057b84c0e4504c1872f00670f879132",
+            "definitionGeneration": "eaa9b5ce-134e-4b97-8f67-2e602e818f0b"
+          },
+          "expectedSource": {
+            "repository": "gaoyifan/china-operator-ip",
+            "version": "git-branch",
+            "branch": "ip-lists",
+            "input": {
+              "format": "cidr-text",
+              "path": "china46.txt"
+            }
+          }
+        }
+      ],
+      "readbackRequests": [
+        "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/0000000000000000000000000000000000000005/candidates/0e5d10de-4dc9-42e4-9f6f-b4b1f19c81c5/route.json",
+        "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/0000000000000000000000000000000000000005/candidates/0e5d10de-4dc9-42e4-9f6f-b4b1f19c81c5/route.srs",
+        "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/0000000000000000000000000000000000000009/stable/china-ip/route.srs",
+        "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/0000000000000000000000000000000000000009/stable/china-ip/route.json"
+      ],
+      "observedHeads": {
+        "journal": "000000000000000000000000000000000000000a",
+        "stable": "000000000000000000000000000000000000000a"
+      }
+    },
+    "automatic": {
+      "operation": "sync",
+      "dryRun": false,
+      "configurationRevision": "0000000000000000000000000000000000000002",
+      "configurationOrigin": "isolated-fixture",
+      "target": {
+        "repository": "wangyingang/sing-box-rule-artifacts",
+        "branch": "acceptance-issue-97-cidr"
+      },
+      "status": "success",
+      "exitCode": 0,
+      "results": [
+        {
+          "id": "china-ip",
+          "status": "delivered",
+          "changes": [
+            "replace-current-version"
+          ],
+          "candidate": {
+            "versionId": "2026-11-16T08:15:30.123Z~cb053395",
+            "publishedAt": "2026-11-16T08:15:30.123Z"
+          },
+          "verified": [
+            "source",
+            "native",
+            "candidate-git",
+            "subscription",
+            "stable-git",
+            "stable-HTTPS",
+            "candidate-HTTPS"
+          ],
+          "current": {
+            "schemaVersion": 2,
+            "id": "32c5b78a-0a1a-4fca-81fd-feee5af984f5",
+            "logicalId": "china-ip",
+            "candidateId": "cb053395-6b2d-47ef-a096-b5f2e23fd26b",
+            "versionId": "2026-11-16T08:15:30.123Z~cb053395",
+            "publishedAt": "2026-11-16T08:15:30.123Z",
+            "candidateEvidenceUrl": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/000000000000000000000000000000000000000e/candidates/cb053395-6b2d-47ef-a096-b5f2e23fd26b/readback.json",
+            "source": {
+              "kind": "github-commit",
+              "repository": "gaoyifan/china-operator-ip",
+              "branch": "ip-lists",
+              "commit": "2222222222222222222222222222222222222222",
+              "file": {
+                "path": "china46.txt",
+                "url": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/2222222222222222222222222222222222222222/china46.txt"
+              },
+              "inputSha256": "cf012ef2e8514dee460f88ef705f5464af9e6658af524689ed54326939bff6bb",
+              "inputBytes": 31
+            },
+            "subscription": {
+              "schemaVersion": 2,
+              "systemRuleSetId": "china-ip",
+              "targetVersion": "1.14.4",
+              "sourceFormatVersion": 4,
+              "projections": {
+                "route": {
+                  "formats": {
+                    "binary": {
+                      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.srs",
+                      "requiredCapabilities": []
+                    },
+                    "source": {
+                      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.json",
+                      "requiredCapabilities": []
+                    }
+                  }
+                },
+                "dns-query": {
+                  "unavailable": "empty"
+                },
+                "dns-response": {
+                  "formats": {
+                    "binary": {
+                      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.srs",
+                      "requiredCapabilities": []
+                    },
+                    "source": {
+                      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.json",
+                      "requiredCapabilities": []
+                    }
+                  }
+                }
+              }
+            },
+            "files": {
+              "stable/china-ip/route.srs": {
+                "sha256": "81cfe2c96342b2380ebb877d3f6c1816290e4d61c2875f3003cbd6ca439265c6",
+                "byteLength": 47
+              },
+              "stable/china-ip/route.json": {
+                "sha256": "e964c941b701d6f5455a99e5dffbae854691e6208dae25f14d8fa2f7e234a978",
+                "byteLength": 128
+              }
+            }
+          },
+          "control": {
+            "mode": "auto",
+            "revision": "af45174c-5cb9-436f-96fb-bab31fe70f33",
+            "inputBindingRevision": "6c92bb658b731fe207ad19f0cefda870f36506e3dee85d4f40809e8cec873045"
+          },
+          "successfulInput": {
+            "toolSha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2",
+            "buildToolsSha256": "c7e565c04d2fbfef434482c09667cd8fa3cdd47c9c11ed6a41992f96d9bd5fb9",
+            "validationPolicy": "native-compile-load-v1",
+            "nativeBuildId": "cba01c34eb018490fc8fb2df3cc99273091873a687a692b56c622110105cb656",
+            "candidateId": "cb053395-6b2d-47ef-a096-b5f2e23fd26b",
+            "buildId": "7f3bbfecc8892538af042a3b99de309a34046109cf95130d569e1751c4852ccc",
+            "source": {
+              "kind": "github-commit",
+              "repository": "gaoyifan/china-operator-ip",
+              "branch": "ip-lists",
+              "commit": "2222222222222222222222222222222222222222",
+              "file": {
+                "path": "china46.txt",
+                "url": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/2222222222222222222222222222222222222222/china46.txt"
+              },
+              "inputSha256": "cf012ef2e8514dee460f88ef705f5464af9e6658af524689ed54326939bff6bb",
+              "inputBytes": 31
+            },
+            "inputBindingRevision": "6c92bb658b731fe207ad19f0cefda870f36506e3dee85d4f40809e8cec873045",
+            "definitionRevision": "19f0513a2220c023a5b1dff2753caef21057b84c0e4504c1872f00670f879132",
+            "definitionGeneration": "eaa9b5ce-134e-4b97-8f67-2e602e818f0b"
+          },
+          "expectedSource": {
+            "repository": "gaoyifan/china-operator-ip",
+            "version": "git-branch",
+            "branch": "ip-lists",
+            "input": {
+              "format": "cidr-text",
+              "path": "china46.txt"
+            }
+          }
+        }
+      ],
+      "readbackRequests": [
+        "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/000000000000000000000000000000000000000c/candidates/cb053395-6b2d-47ef-a096-b5f2e23fd26b/route.json",
+        "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/000000000000000000000000000000000000000c/candidates/cb053395-6b2d-47ef-a096-b5f2e23fd26b/route.srs",
+        "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/0000000000000000000000000000000000000010/stable/china-ip/route.srs",
+        "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/0000000000000000000000000000000000000010/stable/china-ip/route.json"
+      ],
+      "observedHeads": {
+        "journal": "0000000000000000000000000000000000000011",
+        "stable": "0000000000000000000000000000000000000011"
+      }
+    },
+    "fixed": {
+      "operation": "pin",
+      "dryRun": false,
+      "configurationRevision": "0000000000000000000000000000000000000002",
+      "configurationOrigin": "isolated-fixture",
+      "target": {
+        "repository": "wangyingang/sing-box-rule-artifacts",
+        "branch": "acceptance-issue-97-cidr"
+      },
+      "status": "success",
+      "exitCode": 0,
+      "results": [
+        {
+          "id": "china-ip",
+          "status": "pinned",
+          "changes": [
+            "deliver-selected-version",
+            "stop-automatic-updates"
+          ],
+          "verified": [
+            "candidate-git",
+            "native",
+            "subscription",
+            "stable-git",
+            "stable-HTTPS"
+          ],
+          "reliedOn": [
+            "historical-candidate-publication"
+          ],
+          "current": {
+            "schemaVersion": 2,
+            "id": "a67ab5db-135b-4b0f-b0bc-e2e0da007e4f",
+            "logicalId": "china-ip",
+            "candidateId": "cb053395-6b2d-47ef-a096-b5f2e23fd26b",
+            "versionId": "2026-11-16T08:15:30.123Z~cb053395",
+            "publishedAt": "2026-11-16T08:15:30.123Z",
+            "candidateEvidenceUrl": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/000000000000000000000000000000000000000e/candidates/cb053395-6b2d-47ef-a096-b5f2e23fd26b/readback.json",
+            "source": {
+              "kind": "github-commit",
+              "repository": "gaoyifan/china-operator-ip",
+              "branch": "ip-lists",
+              "commit": "2222222222222222222222222222222222222222",
+              "file": {
+                "path": "china46.txt",
+                "url": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/2222222222222222222222222222222222222222/china46.txt"
+              },
+              "inputSha256": "cf012ef2e8514dee460f88ef705f5464af9e6658af524689ed54326939bff6bb",
+              "inputBytes": 31
+            },
+            "subscription": {
+              "schemaVersion": 2,
+              "systemRuleSetId": "china-ip",
+              "targetVersion": "1.14.4",
+              "sourceFormatVersion": 4,
+              "projections": {
+                "route": {
+                  "formats": {
+                    "binary": {
+                      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.srs",
+                      "requiredCapabilities": []
+                    },
+                    "source": {
+                      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.json",
+                      "requiredCapabilities": []
+                    }
+                  }
+                },
+                "dns-query": {
+                  "unavailable": "empty"
+                },
+                "dns-response": {
+                  "formats": {
+                    "binary": {
+                      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.srs",
+                      "requiredCapabilities": []
+                    },
+                    "source": {
+                      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.json",
+                      "requiredCapabilities": []
+                    }
+                  }
+                }
+              }
+            },
+            "files": {
+              "stable/china-ip/route.srs": {
+                "sha256": "81cfe2c96342b2380ebb877d3f6c1816290e4d61c2875f3003cbd6ca439265c6",
+                "byteLength": 47
+              },
+              "stable/china-ip/route.json": {
+                "sha256": "e964c941b701d6f5455a99e5dffbae854691e6208dae25f14d8fa2f7e234a978",
+                "byteLength": 128
+              }
+            }
+          },
+          "control": {
+            "mode": "pinned",
+            "revision": "143e77a1-8d4c-4e76-b71d-4fbda73125ec",
+            "inputBindingRevision": "6c92bb658b731fe207ad19f0cefda870f36506e3dee85d4f40809e8cec873045",
+            "candidateId": "cb053395-6b2d-47ef-a096-b5f2e23fd26b"
+          },
+          "successfulInput": {
+            "toolSha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2",
+            "buildToolsSha256": "c7e565c04d2fbfef434482c09667cd8fa3cdd47c9c11ed6a41992f96d9bd5fb9",
+            "validationPolicy": "native-compile-load-v1",
+            "nativeBuildId": "cba01c34eb018490fc8fb2df3cc99273091873a687a692b56c622110105cb656",
+            "candidateId": "cb053395-6b2d-47ef-a096-b5f2e23fd26b",
+            "buildId": "7f3bbfecc8892538af042a3b99de309a34046109cf95130d569e1751c4852ccc",
+            "source": {
+              "kind": "github-commit",
+              "repository": "gaoyifan/china-operator-ip",
+              "branch": "ip-lists",
+              "commit": "2222222222222222222222222222222222222222",
+              "file": {
+                "path": "china46.txt",
+                "url": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/2222222222222222222222222222222222222222/china46.txt"
+              },
+              "inputSha256": "cf012ef2e8514dee460f88ef705f5464af9e6658af524689ed54326939bff6bb",
+              "inputBytes": 31
+            },
+            "inputBindingRevision": "6c92bb658b731fe207ad19f0cefda870f36506e3dee85d4f40809e8cec873045",
+            "definitionRevision": "19f0513a2220c023a5b1dff2753caef21057b84c0e4504c1872f00670f879132",
+            "definitionGeneration": "eaa9b5ce-134e-4b97-8f67-2e602e818f0b"
+          },
+          "expectedSource": {
+            "repository": "gaoyifan/china-operator-ip",
+            "version": "git-branch",
+            "branch": "ip-lists",
+            "input": {
+              "format": "cidr-text",
+              "path": "china46.txt"
+            }
+          }
+        }
+      ],
+      "readbackRequests": [
+        "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/0000000000000000000000000000000000000013/stable/china-ip/route.srs",
+        "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/0000000000000000000000000000000000000013/stable/china-ip/route.json"
+      ],
+      "observedHeads": {
+        "journal": "0000000000000000000000000000000000000014",
+        "stable": "0000000000000000000000000000000000000014"
+      }
+    },
+    "paused": {
+      "operation": "sync",
+      "dryRun": false,
+      "configurationRevision": "0000000000000000000000000000000000000002",
+      "configurationOrigin": "isolated-fixture",
+      "target": {
+        "repository": "wangyingang/sing-box-rule-artifacts",
+        "branch": "acceptance-issue-97-cidr"
+      },
+      "status": "success",
+      "exitCode": 0,
+      "results": [
+        {
+          "id": "china-ip",
+          "status": "pinned-skipped",
+          "changes": [],
+          "current": {
+            "schemaVersion": 2,
+            "id": "a67ab5db-135b-4b0f-b0bc-e2e0da007e4f",
+            "logicalId": "china-ip",
+            "candidateId": "cb053395-6b2d-47ef-a096-b5f2e23fd26b",
+            "versionId": "2026-11-16T08:15:30.123Z~cb053395",
+            "publishedAt": "2026-11-16T08:15:30.123Z",
+            "candidateEvidenceUrl": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/000000000000000000000000000000000000000e/candidates/cb053395-6b2d-47ef-a096-b5f2e23fd26b/readback.json",
+            "source": {
+              "kind": "github-commit",
+              "repository": "gaoyifan/china-operator-ip",
+              "branch": "ip-lists",
+              "commit": "2222222222222222222222222222222222222222",
+              "file": {
+                "path": "china46.txt",
+                "url": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/2222222222222222222222222222222222222222/china46.txt"
+              },
+              "inputSha256": "cf012ef2e8514dee460f88ef705f5464af9e6658af524689ed54326939bff6bb",
+              "inputBytes": 31
+            },
+            "subscription": {
+              "schemaVersion": 2,
+              "systemRuleSetId": "china-ip",
+              "targetVersion": "1.14.4",
+              "sourceFormatVersion": 4,
+              "projections": {
+                "route": {
+                  "formats": {
+                    "binary": {
+                      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.srs",
+                      "requiredCapabilities": []
+                    },
+                    "source": {
+                      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.json",
+                      "requiredCapabilities": []
+                    }
+                  }
+                },
+                "dns-query": {
+                  "unavailable": "empty"
+                },
+                "dns-response": {
+                  "formats": {
+                    "binary": {
+                      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.srs",
+                      "requiredCapabilities": []
+                    },
+                    "source": {
+                      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.json",
+                      "requiredCapabilities": []
+                    }
+                  }
+                }
+              }
+            },
+            "files": {
+              "stable/china-ip/route.srs": {
+                "sha256": "81cfe2c96342b2380ebb877d3f6c1816290e4d61c2875f3003cbd6ca439265c6",
+                "byteLength": 47
+              },
+              "stable/china-ip/route.json": {
+                "sha256": "e964c941b701d6f5455a99e5dffbae854691e6208dae25f14d8fa2f7e234a978",
+                "byteLength": 128
+              }
+            }
+          },
+          "control": {
+            "mode": "pinned",
+            "revision": "143e77a1-8d4c-4e76-b71d-4fbda73125ec",
+            "inputBindingRevision": "6c92bb658b731fe207ad19f0cefda870f36506e3dee85d4f40809e8cec873045",
+            "candidateId": "cb053395-6b2d-47ef-a096-b5f2e23fd26b"
+          },
+          "successfulInput": {
+            "toolSha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2",
+            "buildToolsSha256": "c7e565c04d2fbfef434482c09667cd8fa3cdd47c9c11ed6a41992f96d9bd5fb9",
+            "validationPolicy": "native-compile-load-v1",
+            "nativeBuildId": "cba01c34eb018490fc8fb2df3cc99273091873a687a692b56c622110105cb656",
+            "candidateId": "cb053395-6b2d-47ef-a096-b5f2e23fd26b",
+            "buildId": "7f3bbfecc8892538af042a3b99de309a34046109cf95130d569e1751c4852ccc",
+            "source": {
+              "kind": "github-commit",
+              "repository": "gaoyifan/china-operator-ip",
+              "branch": "ip-lists",
+              "commit": "2222222222222222222222222222222222222222",
+              "file": {
+                "path": "china46.txt",
+                "url": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/2222222222222222222222222222222222222222/china46.txt"
+              },
+              "inputSha256": "cf012ef2e8514dee460f88ef705f5464af9e6658af524689ed54326939bff6bb",
+              "inputBytes": 31
+            },
+            "inputBindingRevision": "6c92bb658b731fe207ad19f0cefda870f36506e3dee85d4f40809e8cec873045",
+            "definitionRevision": "19f0513a2220c023a5b1dff2753caef21057b84c0e4504c1872f00670f879132",
+            "definitionGeneration": "eaa9b5ce-134e-4b97-8f67-2e602e818f0b"
+          },
+          "expectedSource": {
+            "repository": "gaoyifan/china-operator-ip",
+            "version": "git-branch",
+            "branch": "ip-lists",
+            "input": {
+              "format": "cidr-text",
+              "path": "china46.txt"
+            }
+          }
+        }
+      ],
+      "readbackRequests": [],
+      "observedHeads": {
+        "journal": "0000000000000000000000000000000000000014",
+        "stable": "0000000000000000000000000000000000000014"
+      }
+    },
+    "pinnedA": {
+      "operation": "pin",
+      "dryRun": false,
+      "configurationRevision": "0000000000000000000000000000000000000002",
+      "configurationOrigin": "isolated-fixture",
+      "target": {
+        "repository": "wangyingang/sing-box-rule-artifacts",
+        "branch": "acceptance-issue-97-cidr"
+      },
+      "status": "success",
+      "exitCode": 0,
+      "results": [
+        {
+          "id": "china-ip",
+          "status": "pinned",
+          "changes": [
+            "deliver-selected-version",
+            "stop-automatic-updates"
+          ],
+          "verified": [
+            "candidate-git",
+            "native",
+            "subscription",
+            "stable-git",
+            "stable-HTTPS"
+          ],
+          "reliedOn": [
+            "historical-candidate-publication"
+          ],
+          "current": {
+            "schemaVersion": 2,
+            "id": "103ae4f6-4b39-455c-aadc-2d66fcbe93b4",
+            "logicalId": "china-ip",
+            "candidateId": "0e5d10de-4dc9-42e4-9f6f-b4b1f19c81c5",
+            "versionId": "2026-11-16T08:15:30.123Z~0e5d10de",
+            "publishedAt": "2026-11-16T08:15:30.123Z",
+            "candidateEvidenceUrl": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/0000000000000000000000000000000000000007/candidates/0e5d10de-4dc9-42e4-9f6f-b4b1f19c81c5/readback.json",
+            "source": {
+              "kind": "github-commit",
+              "repository": "gaoyifan/china-operator-ip",
+              "branch": "ip-lists",
+              "commit": "1111111111111111111111111111111111111111",
+              "file": {
+                "path": "china46.txt",
+                "url": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/1111111111111111111111111111111111111111/china46.txt"
+              },
+              "inputSha256": "c4231cc51566770b999e9e15acfe43ecdce802690e74958ec8677ffc331f885f",
+              "inputBytes": 29
+            },
+            "subscription": {
+              "schemaVersion": 2,
+              "systemRuleSetId": "china-ip",
+              "targetVersion": "1.14.4",
+              "sourceFormatVersion": 4,
+              "projections": {
+                "route": {
+                  "formats": {
+                    "binary": {
+                      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.srs",
+                      "requiredCapabilities": []
+                    },
+                    "source": {
+                      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.json",
+                      "requiredCapabilities": []
+                    }
+                  }
+                },
+                "dns-query": {
+                  "unavailable": "empty"
+                },
+                "dns-response": {
+                  "formats": {
+                    "binary": {
+                      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.srs",
+                      "requiredCapabilities": []
+                    },
+                    "source": {
+                      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.json",
+                      "requiredCapabilities": []
+                    }
+                  }
+                }
+              }
+            },
+            "files": {
+              "stable/china-ip/route.srs": {
+                "sha256": "513fe429a4a521ecd0e3489a694dbc369d34da88564f8638e2f51fdebcc78ba5",
+                "byteLength": 48
+              },
+              "stable/china-ip/route.json": {
+                "sha256": "188c9e92e0bafa839435ab75f4d7e3f95974b91acde2c4a512b62d7635960e32",
+                "byteLength": 126
+              }
+            }
+          },
+          "control": {
+            "mode": "pinned",
+            "revision": "290b864e-af62-4fbd-9c73-994d873685ca",
+            "inputBindingRevision": "6c92bb658b731fe207ad19f0cefda870f36506e3dee85d4f40809e8cec873045",
+            "candidateId": "0e5d10de-4dc9-42e4-9f6f-b4b1f19c81c5"
+          },
+          "successfulInput": {
+            "toolSha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2",
+            "buildToolsSha256": "c7e565c04d2fbfef434482c09667cd8fa3cdd47c9c11ed6a41992f96d9bd5fb9",
+            "validationPolicy": "native-compile-load-v1",
+            "nativeBuildId": "cba01c34eb018490fc8fb2df3cc99273091873a687a692b56c622110105cb656",
+            "candidateId": "cb053395-6b2d-47ef-a096-b5f2e23fd26b",
+            "buildId": "7f3bbfecc8892538af042a3b99de309a34046109cf95130d569e1751c4852ccc",
+            "source": {
+              "kind": "github-commit",
+              "repository": "gaoyifan/china-operator-ip",
+              "branch": "ip-lists",
+              "commit": "2222222222222222222222222222222222222222",
+              "file": {
+                "path": "china46.txt",
+                "url": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/2222222222222222222222222222222222222222/china46.txt"
+              },
+              "inputSha256": "cf012ef2e8514dee460f88ef705f5464af9e6658af524689ed54326939bff6bb",
+              "inputBytes": 31
+            },
+            "inputBindingRevision": "6c92bb658b731fe207ad19f0cefda870f36506e3dee85d4f40809e8cec873045",
+            "definitionRevision": "19f0513a2220c023a5b1dff2753caef21057b84c0e4504c1872f00670f879132",
+            "definitionGeneration": "eaa9b5ce-134e-4b97-8f67-2e602e818f0b"
+          },
+          "expectedSource": {
+            "repository": "gaoyifan/china-operator-ip",
+            "version": "git-branch",
+            "branch": "ip-lists",
+            "input": {
+              "format": "cidr-text",
+              "path": "china46.txt"
+            }
+          }
+        }
+      ],
+      "readbackRequests": [
+        "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/0000000000000000000000000000000000000016/stable/china-ip/route.srs",
+        "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/0000000000000000000000000000000000000016/stable/china-ip/route.json"
+      ],
+      "observedHeads": {
+        "journal": "0000000000000000000000000000000000000017",
+        "stable": "0000000000000000000000000000000000000017"
+      }
+    },
+    "rolledBack": {
+      "operation": "sync",
+      "dryRun": false,
+      "configurationRevision": "0000000000000000000000000000000000000002",
+      "configurationOrigin": "isolated-fixture",
+      "target": {
+        "repository": "wangyingang/sing-box-rule-artifacts",
+        "branch": "acceptance-issue-97-cidr"
+      },
+      "status": "success",
+      "exitCode": 0,
+      "results": [
+        {
+          "id": "china-ip",
+          "status": "pinned-skipped",
+          "changes": [],
+          "current": {
+            "schemaVersion": 2,
+            "id": "103ae4f6-4b39-455c-aadc-2d66fcbe93b4",
+            "logicalId": "china-ip",
+            "candidateId": "0e5d10de-4dc9-42e4-9f6f-b4b1f19c81c5",
+            "versionId": "2026-11-16T08:15:30.123Z~0e5d10de",
+            "publishedAt": "2026-11-16T08:15:30.123Z",
+            "candidateEvidenceUrl": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/0000000000000000000000000000000000000007/candidates/0e5d10de-4dc9-42e4-9f6f-b4b1f19c81c5/readback.json",
+            "source": {
+              "kind": "github-commit",
+              "repository": "gaoyifan/china-operator-ip",
+              "branch": "ip-lists",
+              "commit": "1111111111111111111111111111111111111111",
+              "file": {
+                "path": "china46.txt",
+                "url": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/1111111111111111111111111111111111111111/china46.txt"
+              },
+              "inputSha256": "c4231cc51566770b999e9e15acfe43ecdce802690e74958ec8677ffc331f885f",
+              "inputBytes": 29
+            },
+            "subscription": {
+              "schemaVersion": 2,
+              "systemRuleSetId": "china-ip",
+              "targetVersion": "1.14.4",
+              "sourceFormatVersion": 4,
+              "projections": {
+                "route": {
+                  "formats": {
+                    "binary": {
+                      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.srs",
+                      "requiredCapabilities": []
+                    },
+                    "source": {
+                      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.json",
+                      "requiredCapabilities": []
+                    }
+                  }
+                },
+                "dns-query": {
+                  "unavailable": "empty"
+                },
+                "dns-response": {
+                  "formats": {
+                    "binary": {
+                      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.srs",
+                      "requiredCapabilities": []
+                    },
+                    "source": {
+                      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.json",
+                      "requiredCapabilities": []
+                    }
+                  }
+                }
+              }
+            },
+            "files": {
+              "stable/china-ip/route.srs": {
+                "sha256": "513fe429a4a521ecd0e3489a694dbc369d34da88564f8638e2f51fdebcc78ba5",
+                "byteLength": 48
+              },
+              "stable/china-ip/route.json": {
+                "sha256": "188c9e92e0bafa839435ab75f4d7e3f95974b91acde2c4a512b62d7635960e32",
+                "byteLength": 126
+              }
+            }
+          },
+          "control": {
+            "mode": "pinned",
+            "revision": "290b864e-af62-4fbd-9c73-994d873685ca",
+            "inputBindingRevision": "6c92bb658b731fe207ad19f0cefda870f36506e3dee85d4f40809e8cec873045",
+            "candidateId": "0e5d10de-4dc9-42e4-9f6f-b4b1f19c81c5"
+          },
+          "successfulInput": {
+            "toolSha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2",
+            "buildToolsSha256": "c7e565c04d2fbfef434482c09667cd8fa3cdd47c9c11ed6a41992f96d9bd5fb9",
+            "validationPolicy": "native-compile-load-v1",
+            "nativeBuildId": "cba01c34eb018490fc8fb2df3cc99273091873a687a692b56c622110105cb656",
+            "candidateId": "cb053395-6b2d-47ef-a096-b5f2e23fd26b",
+            "buildId": "7f3bbfecc8892538af042a3b99de309a34046109cf95130d569e1751c4852ccc",
+            "source": {
+              "kind": "github-commit",
+              "repository": "gaoyifan/china-operator-ip",
+              "branch": "ip-lists",
+              "commit": "2222222222222222222222222222222222222222",
+              "file": {
+                "path": "china46.txt",
+                "url": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/2222222222222222222222222222222222222222/china46.txt"
+              },
+              "inputSha256": "cf012ef2e8514dee460f88ef705f5464af9e6658af524689ed54326939bff6bb",
+              "inputBytes": 31
+            },
+            "inputBindingRevision": "6c92bb658b731fe207ad19f0cefda870f36506e3dee85d4f40809e8cec873045",
+            "definitionRevision": "19f0513a2220c023a5b1dff2753caef21057b84c0e4504c1872f00670f879132",
+            "definitionGeneration": "eaa9b5ce-134e-4b97-8f67-2e602e818f0b"
+          },
+          "expectedSource": {
+            "repository": "gaoyifan/china-operator-ip",
+            "version": "git-branch",
+            "branch": "ip-lists",
+            "input": {
+              "format": "cidr-text",
+              "path": "china46.txt"
+            }
+          }
+        }
+      ],
+      "readbackRequests": [],
+      "observedHeads": {
+        "journal": "0000000000000000000000000000000000000017",
+        "stable": "0000000000000000000000000000000000000017"
+      }
+    },
+    "resumed": {
+      "operation": "resume",
+      "dryRun": false,
+      "configurationRevision": "0000000000000000000000000000000000000002",
+      "configurationOrigin": "isolated-fixture",
+      "target": {
+        "repository": "wangyingang/sing-box-rule-artifacts",
+        "branch": "acceptance-issue-97-cidr"
+      },
+      "status": "success",
+      "exitCode": 0,
+      "results": [
+        {
+          "id": "china-ip",
+          "status": "resumed",
+          "changes": [
+            "automatic-updates-restored",
+            "replace-current-version"
+          ],
+          "candidate": {
+            "versionId": "2026-11-16T08:15:30.123Z~cb053395",
+            "publishedAt": "2026-11-16T08:15:30.123Z"
+          },
+          "verified": [
+            "source",
+            "native",
+            "candidate-git",
+            "subscription",
+            "stable-git",
+            "stable-HTTPS"
+          ],
+          "reliedOn": [
+            "historical-candidate-publication"
+          ],
+          "current": {
+            "schemaVersion": 2,
+            "id": "d6875627-aa06-47c5-80c9-96ffa7483f0b",
+            "logicalId": "china-ip",
+            "candidateId": "cb053395-6b2d-47ef-a096-b5f2e23fd26b",
+            "versionId": "2026-11-16T08:15:30.123Z~cb053395",
+            "publishedAt": "2026-11-16T08:15:30.123Z",
+            "candidateEvidenceUrl": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/000000000000000000000000000000000000000e/candidates/cb053395-6b2d-47ef-a096-b5f2e23fd26b/readback.json",
+            "source": {
+              "kind": "github-commit",
+              "repository": "gaoyifan/china-operator-ip",
+              "branch": "ip-lists",
+              "commit": "2222222222222222222222222222222222222222",
+              "file": {
+                "path": "china46.txt",
+                "url": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/2222222222222222222222222222222222222222/china46.txt"
+              },
+              "inputSha256": "cf012ef2e8514dee460f88ef705f5464af9e6658af524689ed54326939bff6bb",
+              "inputBytes": 31
+            },
+            "subscription": {
+              "schemaVersion": 2,
+              "systemRuleSetId": "china-ip",
+              "targetVersion": "1.14.4",
+              "sourceFormatVersion": 4,
+              "projections": {
+                "route": {
+                  "formats": {
+                    "binary": {
+                      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.srs",
+                      "requiredCapabilities": []
+                    },
+                    "source": {
+                      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.json",
+                      "requiredCapabilities": []
+                    }
+                  }
+                },
+                "dns-query": {
+                  "unavailable": "empty"
+                },
+                "dns-response": {
+                  "formats": {
+                    "binary": {
+                      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.srs",
+                      "requiredCapabilities": []
+                    },
+                    "source": {
+                      "url": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.json",
+                      "requiredCapabilities": []
+                    }
+                  }
+                }
+              }
+            },
+            "files": {
+              "stable/china-ip/route.srs": {
+                "sha256": "81cfe2c96342b2380ebb877d3f6c1816290e4d61c2875f3003cbd6ca439265c6",
+                "byteLength": 47
+              },
+              "stable/china-ip/route.json": {
+                "sha256": "e964c941b701d6f5455a99e5dffbae854691e6208dae25f14d8fa2f7e234a978",
+                "byteLength": 128
+              }
+            }
+          },
+          "control": {
+            "mode": "auto",
+            "revision": "1437edf6-11cb-4ae9-a0b9-4ff5395f9090",
+            "inputBindingRevision": "6c92bb658b731fe207ad19f0cefda870f36506e3dee85d4f40809e8cec873045"
+          },
+          "successfulInput": {
+            "toolSha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2",
+            "buildToolsSha256": "c7e565c04d2fbfef434482c09667cd8fa3cdd47c9c11ed6a41992f96d9bd5fb9",
+            "validationPolicy": "native-compile-load-v1",
+            "nativeBuildId": "cba01c34eb018490fc8fb2df3cc99273091873a687a692b56c622110105cb656",
+            "candidateId": "cb053395-6b2d-47ef-a096-b5f2e23fd26b",
+            "buildId": "7f3bbfecc8892538af042a3b99de309a34046109cf95130d569e1751c4852ccc",
+            "source": {
+              "kind": "github-commit",
+              "repository": "gaoyifan/china-operator-ip",
+              "branch": "ip-lists",
+              "commit": "2222222222222222222222222222222222222222",
+              "file": {
+                "path": "china46.txt",
+                "url": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/2222222222222222222222222222222222222222/china46.txt"
+              },
+              "inputSha256": "cf012ef2e8514dee460f88ef705f5464af9e6658af524689ed54326939bff6bb",
+              "inputBytes": 31
+            },
+            "inputBindingRevision": "6c92bb658b731fe207ad19f0cefda870f36506e3dee85d4f40809e8cec873045",
+            "definitionRevision": "19f0513a2220c023a5b1dff2753caef21057b84c0e4504c1872f00670f879132",
+            "definitionGeneration": "eaa9b5ce-134e-4b97-8f67-2e602e818f0b"
+          },
+          "expectedSource": {
+            "repository": "gaoyifan/china-operator-ip",
+            "version": "git-branch",
+            "branch": "ip-lists",
+            "input": {
+              "format": "cidr-text",
+              "path": "china46.txt"
+            }
+          }
+        }
+      ],
+      "readbackRequests": [
+        "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/000000000000000000000000000000000000001a/stable/china-ip/route.srs",
+        "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/000000000000000000000000000000000000001a/stable/china-ip/route.json"
+      ],
+      "observedHeads": {
+        "journal": "000000000000000000000000000000000000001b",
+        "stable": "000000000000000000000000000000000000001b"
+      }
+    }
+  },
+  "stableUrl": "https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.srs",
+  "configSha256": "1f7636735b3fb4e5bf6d881c0b4b9519a83ae8320b90f4aea77b426ed212072e",
+  "recipeSha256": "352bff94a5b2f08c02a22582aa62f935da5e16dc284a9b9af92c3e091ba846a9",
+  "publicationId": "1a5e062e6274fde38ddd1de0560ec555a1baa96b0530638ae944caffa96c6465",
+  "publicationSha256": "a4a80ff63f0bac76be328f71bb1610742797fba33fe5b59c823dbaa1d51e6804",
+  "client": {
+    "pid": 85186,
+    "restartedPid": 85893,
+    "binary": "/Users/wangyg/.sbvm/versions/v1.14.4/sing-box-1.14.4-darwin-arm64/sing-box",
+    "sameProcessUntilCacheRestart": true
+  },
+  "srs": [
+    {
+      "commit": "1111111111111111111111111111111111111111",
+      "inputSha256": "c4231cc51566770b999e9e15acfe43ecdce802690e74958ec8677ffc331f885f",
+      "artifact": {
+        "sha256": "513fe429a4a521ecd0e3489a694dbc369d34da88564f8638e2f51fdebcc78ba5",
+        "byteLength": 48
+      }
+    },
+    {
+      "commit": "2222222222222222222222222222222222222222",
+      "inputSha256": "cf012ef2e8514dee460f88ef705f5464af9e6658af524689ed54326939bff6bb",
+      "artifact": {
+        "sha256": "81cfe2c96342b2380ebb877d3f6c1816290e4d61c2875f3003cbd6ca439265c6",
+        "byteLength": 47
+      }
+    }
+  ],
+  "probes": [
+    "192.0.2.10",
+    "192.0.2.138",
+    "[2001:db8:1::a]",
+    "[2001:db8:2::a]"
+  ],
+  "observed": [
+    "A",
+    "sync-B",
+    "pin-B",
+    "pinned-sync-B",
+    "pin-A",
+    "pinned-sync-A",
+    "resume-B",
+    "HTTP-503-retains-B",
+    "invalid-SRS-retains-B",
+    "offline-cache-restores-B"
+  ],
+  "observations": [
+    {
+      "version": 0,
+      "pid": 85186,
+      "results": [
+        {
+          "literal": "192.0.2.10",
+          "route": "matched",
+          "dns": {
+            "rcode": 3,
+            "count": 0,
+            "answer": ""
+          }
+        },
+        {
+          "literal": "192.0.2.138",
+          "route": "fallback",
+          "dns": {
+            "rcode": 0,
+            "count": 1,
+            "answer": "c000028a"
+          }
+        },
+        {
+          "literal": "[2001:db8:1::a]",
+          "route": "matched",
+          "dns": {
+            "rcode": 3,
+            "count": 0,
+            "answer": ""
+          }
+        },
+        {
+          "literal": "[2001:db8:2::a]",
+          "route": "fallback",
+          "dns": {
+            "rcode": 0,
+            "count": 1,
+            "answer": "20010db800020000000000000000000a"
+          }
+        }
+      ],
+      "observedAt": "2026-11-19T17:45:30.289Z"
+    },
+    {
+      "version": 1,
+      "pid": 85186,
+      "results": [
+        {
+          "literal": "192.0.2.10",
+          "route": "fallback",
+          "dns": {
+            "rcode": 0,
+            "count": 1,
+            "answer": "c000020a"
+          }
+        },
+        {
+          "literal": "192.0.2.138",
+          "route": "matched",
+          "dns": {
+            "rcode": 3,
+            "count": 0,
+            "answer": ""
+          }
+        },
+        {
+          "literal": "[2001:db8:1::a]",
+          "route": "fallback",
+          "dns": {
+            "rcode": 0,
+            "count": 1,
+            "answer": "20010db800010000000000000000000a"
+          }
+        },
+        {
+          "literal": "[2001:db8:2::a]",
+          "route": "matched",
+          "dns": {
+            "rcode": 3,
+            "count": 0,
+            "answer": ""
+          }
+        }
+      ],
+      "observedAt": "2026-11-19T17:45:31.264Z"
+    },
+    {
+      "version": 1,
+      "pid": 85186,
+      "results": [
+        {
+          "literal": "192.0.2.10",
+          "route": "fallback",
+          "dns": {
+            "rcode": 0,
+            "count": 1,
+            "answer": "c000020a"
+          }
+        },
+        {
+          "literal": "192.0.2.138",
+          "route": "matched",
+          "dns": {
+            "rcode": 3,
+            "count": 0,
+            "answer": ""
+          }
+        },
+        {
+          "literal": "[2001:db8:1::a]",
+          "route": "fallback",
+          "dns": {
+            "rcode": 0,
+            "count": 1,
+            "answer": "20010db800010000000000000000000a"
+          }
+        },
+        {
+          "literal": "[2001:db8:2::a]",
+          "route": "matched",
+          "dns": {
+            "rcode": 3,
+            "count": 0,
+            "answer": ""
+          }
+        }
+      ],
+      "observedAt": "2026-11-19T17:45:32.230Z"
+    },
+    {
+      "version": 0,
+      "pid": 85186,
+      "results": [
+        {
+          "literal": "192.0.2.10",
+          "route": "matched",
+          "dns": {
+            "rcode": 3,
+            "count": 0,
+            "answer": ""
+          }
+        },
+        {
+          "literal": "192.0.2.138",
+          "route": "fallback",
+          "dns": {
+            "rcode": 0,
+            "count": 1,
+            "answer": "c000028a"
+          }
+        },
+        {
+          "literal": "[2001:db8:1::a]",
+          "route": "matched",
+          "dns": {
+            "rcode": 3,
+            "count": 0,
+            "answer": ""
+          }
+        },
+        {
+          "literal": "[2001:db8:2::a]",
+          "route": "fallback",
+          "dns": {
+            "rcode": 0,
+            "count": 1,
+            "answer": "20010db800020000000000000000000a"
+          }
+        }
+      ],
+      "observedAt": "2026-11-19T17:45:33.349Z"
+    },
+    {
+      "version": 1,
+      "pid": 85186,
+      "results": [
+        {
+          "literal": "192.0.2.10",
+          "route": "fallback",
+          "dns": {
+            "rcode": 0,
+            "count": 1,
+            "answer": "c000020a"
+          }
+        },
+        {
+          "literal": "192.0.2.138",
+          "route": "matched",
+          "dns": {
+            "rcode": 3,
+            "count": 0,
+            "answer": ""
+          }
+        },
+        {
+          "literal": "[2001:db8:1::a]",
+          "route": "fallback",
+          "dns": {
+            "rcode": 0,
+            "count": 1,
+            "answer": "20010db800010000000000000000000a"
+          }
+        },
+        {
+          "literal": "[2001:db8:2::a]",
+          "route": "matched",
+          "dns": {
+            "rcode": 3,
+            "count": 0,
+            "answer": ""
+          }
+        }
+      ],
+      "observedAt": "2026-11-19T17:45:34.263Z"
+    },
+    {
+      "version": 1,
+      "pid": 85186,
+      "results": [
+        {
+          "literal": "192.0.2.10",
+          "route": "fallback",
+          "dns": {
+            "rcode": 0,
+            "count": 1,
+            "answer": "c000020a"
+          }
+        },
+        {
+          "literal": "192.0.2.138",
+          "route": "matched",
+          "dns": {
+            "rcode": 3,
+            "count": 0,
+            "answer": ""
+          }
+        },
+        {
+          "literal": "[2001:db8:1::a]",
+          "route": "fallback",
+          "dns": {
+            "rcode": 0,
+            "count": 1,
+            "answer": "20010db800010000000000000000000a"
+          }
+        },
+        {
+          "literal": "[2001:db8:2::a]",
+          "route": "matched",
+          "dns": {
+            "rcode": 3,
+            "count": 0,
+            "answer": ""
+          }
+        }
+      ],
+      "observedAt": "2026-11-19T17:45:35.327Z"
+    },
+    {
+      "version": 1,
+      "pid": 85186,
+      "results": [
+        {
+          "literal": "192.0.2.10",
+          "route": "fallback",
+          "dns": {
+            "rcode": 0,
+            "count": 1,
+            "answer": "c000020a"
+          }
+        },
+        {
+          "literal": "192.0.2.138",
+          "route": "matched",
+          "dns": {
+            "rcode": 3,
+            "count": 0,
+            "answer": ""
+          }
+        },
+        {
+          "literal": "[2001:db8:1::a]",
+          "route": "fallback",
+          "dns": {
+            "rcode": 0,
+            "count": 1,
+            "answer": "20010db800010000000000000000000a"
+          }
+        },
+        {
+          "literal": "[2001:db8:2::a]",
+          "route": "matched",
+          "dns": {
+            "rcode": 3,
+            "count": 0,
+            "answer": ""
+          }
+        }
+      ],
+      "observedAt": "2026-11-19T17:45:36.234Z"
+    },
+    {
+      "version": 1,
+      "pid": 85893,
+      "results": [
+        {
+          "literal": "192.0.2.10",
+          "route": "fallback",
+          "dns": {
+            "rcode": 0,
+            "count": 1,
+            "answer": "c000020a"
+          }
+        },
+        {
+          "literal": "192.0.2.138",
+          "route": "matched",
+          "dns": {
+            "rcode": 3,
+            "count": 0,
+            "answer": ""
+          }
+        },
+        {
+          "literal": "[2001:db8:1::a]",
+          "route": "fallback",
+          "dns": {
+            "rcode": 0,
+            "count": 1,
+            "answer": "20010db800010000000000000000000a"
+          }
+        },
+        {
+          "literal": "[2001:db8:2::a]",
+          "route": "matched",
+          "dns": {
+            "rcode": 3,
+            "count": 0,
+            "answer": ""
+          }
+        }
+      ],
+      "observedAt": "2026-11-19T17:45:36.394Z"
+    },
+    {
+      "version": 1,
+      "pid": 85893,
+      "results": [
+        {
+          "literal": "192.0.2.10",
+          "route": "fallback",
+          "dns": {
+            "rcode": 0,
+            "count": 1,
+            "answer": "c000020a"
+          }
+        },
+        {
+          "literal": "192.0.2.138",
+          "route": "matched",
+          "dns": {
+            "rcode": 3,
+            "count": 0,
+            "answer": ""
+          }
+        },
+        {
+          "literal": "[2001:db8:1::a]",
+          "route": "fallback",
+          "dns": {
+            "rcode": 0,
+            "count": 1,
+            "answer": "20010db800010000000000000000000a"
+          }
+        },
+        {
+          "literal": "[2001:db8:2::a]",
+          "route": "matched",
+          "dns": {
+            "rcode": 3,
+            "count": 0,
+            "answer": ""
+          }
+        }
+      ],
+      "observedAt": "2026-11-19T17:45:36.399Z"
+    }
+  ],
+  "faults": [
+    {
+      "fault": "download-failure",
+      "log": "\u001b[37mDEBUG\u001b[0m[0004] [\u001b[38;5;72m2321542968\u001b[0m 1ms] inbound/mixed[route-probe]: connection closed: read http request: read tcp 127.0.0.1:53329->127.0.0.1:53666: use of closed network connection\n\u001b[37mDEBUG\u001b[0m[0005] router: updating rule-set china-ip from URL: https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.srs\n\u001b[36mINFO\u001b[0m[0005] outbound/http[loopback-tunnel]: outbound connection to raw.githubusercontent.com:443\n\u001b[31mERROR\u001b[0m[0005] router: fetch rule-set china-ip: unexpected status: 503 Service Unavailable\n\u001b[36mINFO\u001b[0m[0005] [\u001b[38;5;138m3291657594\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53723\n\u001b[36mINFO\u001b[0m[0005] [\u001b[38;5;32m2428467175\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53724\n\u001b[36mINFO\u001b[0m[0005] [\u001b[38;5;158m2553626510\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53725\n\u001b[36mINFO\u001b[0m[0005] [\u001b[38;5;51m2032707619\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53726\n\u001b[36mINFO\u001b[0m[0005] [\u001b[38;5;173m1071698077\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53727\n\u001b[36mINFO\u001b[0m[0005] [\u001b[38;5;137m4293980025\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53728\n\u001b[36mINFO\u001b[0m[0005] [\u001b[38;5;32m2428467175\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to 192.0.2.1:53\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;32m2428467175\u001b[0m 0ms] router: match[0] port=53 => hijack-dns\n\u001b[36mINFO\u001b[0m[0005] [\u001b[38;5;155m1042400907\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53729\n\u001b[36mINFO\u001b[0m[0005] [\u001b[38;5;32m1951629543\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53730\n\u001b[36mINFO\u001b[0m[0005] [\u001b[38;5;137m4293980025\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to 192.0.2.1:53\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;137m4293980025\u001b[0m 0ms] router: match[0] port=53 => hijack-dns\n\u001b[36mINFO\u001b[0m[0005] [\u001b[38;5;158m2553626510\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to 192.0.2.138:80\n\u001b[36mINFO\u001b[0m[0005] [\u001b[38;5;51m2032707619\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to 192.0.2.1:53\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;51m2032707619\u001b[0m 0ms] router: match[0] port=53 => hijack-dns\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;158m2553626510\u001b[0m 0ms] router: match[1] rule_set=china-ip => route(matched,override-address=127.0.0.1,override-port=53327)\n\u001b[36mINFO\u001b[0m[0005] [\u001b[38;5;158m2553626510\u001b[0m 0ms] outbound/direct[matched]: outbound connection to 127.0.0.1:53327\n\u001b[36mINFO\u001b[0m[0005] [\u001b[38;5;173m1071698077\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to [2001:db8:1::a]:80\n\u001b[36mINFO\u001b[0m[0005] [\u001b[38;5;32m1951629543\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to 192.0.2.1:53\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;32m1951629543\u001b[0m 0ms] router: match[0] port=53 => hijack-dns\n\u001b[36mINFO\u001b[0m[0005] [\u001b[38;5;155m1042400907\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to [2001:db8:2::a]:80\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;173m1071698077\u001b[0m 0ms] router: match[2] inbound=route-probe => route(fallback,override-address=127.0.0.1,override-port=53328)\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;155m1042400907\u001b[0m 0ms] router: match[1] rule_set=china-ip => route(matched,override-address=127.0.0.1,override-port=53327)\n\u001b[36mINFO\u001b[0m[0005] [\u001b[38;5;173m1071698077\u001b[0m 0ms] outbound/direct[fallback]: outbound connection to 127.0.0.1:53328\n\u001b[36mINFO\u001b[0m[0005] [\u001b[38;5;155m1042400907\u001b[0m 0ms] outbound/direct[matched]: outbound connection to 127.0.0.1:53327\n\u001b[36mINFO\u001b[0m[0005] [\u001b[38;5;138m3291657594\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to 192.0.2.10:80\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;137m4293980025\u001b[0m 0ms] dns: exchange 2.test. IN AAAA\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;138m3291657594\u001b[0m 0ms] router: match[2] inbound=route-probe => route(fallback,override-address=127.0.0.1,override-port=53328)\n\u001b[36mINFO\u001b[0m[0005] [\u001b[38;5;138m3291657594\u001b[0m 0ms] outbound/direct[fallback]: outbound connection to 127.0.0.1:53328\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;137m4293980025\u001b[0m 0ms] dns: match[0] => evaluate(loopback)\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;32m2428467175\u001b[0m 0ms] dns: exchange 0.test. IN A\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;32m1951629543\u001b[0m 0ms] dns: exchange 3.test. IN AAAA\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;51m2032707619\u001b[0m 0ms] dns: exchange 1.test. IN A\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;32m1951629543\u001b[0m 0ms] dns: match[0] => evaluate(loopback)\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;51m2032707619\u001b[0m 0ms] dns: match[0] => evaluate(loopback)\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;32m2428467175\u001b[0m 0ms] dns: match[0] => evaluate(loopback)\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;158m2553626510\u001b[0m 0ms] connection: connection download finished\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;137m4293980025\u001b[0m 0ms] dns: exchanged 2.test NOERROR 0\n\u001b[36mINFO\u001b[0m[0005] [\u001b[38;5;137m4293980025\u001b[0m 0ms] dns: exchanged AAAA 2.test. 0 IN AAAA 2001:db8:1::a\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;137m4293980025\u001b[0m 0ms] dns: match[2] => respond\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;158m2553626510\u001b[0m 0ms] inbound/mixed[route-probe]: connection closed: read http request: read tcp 127.0.0.1:53329->127.0.0.1:53725: use of closed network connection\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;32m1951629543\u001b[0m 0ms] dns: exchanged 3.test NOERROR 0\n\u001b[36mINFO\u001b[0m[0005] [\u001b[38;5;32m1951629543\u001b[0m 0ms] dns: exchanged AAAA 3.test. 0 IN AAAA 2001:db8:2::a\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;51m2032707619\u001b[0m 0ms] dns: exchanged 1.test NOERROR 0\n\u001b[36mINFO\u001b[0m[0005] [\u001b[38;5;51m2032707619\u001b[0m 0ms] dns: exchanged A 1.test. 0 IN A 192.0.2.138\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;32m2428467175\u001b[0m 0ms] dns: exchanged 0.test NOERROR 0\n\u001b[36mINFO\u001b[0m[0005] [\u001b[38;5;32m2428467175\u001b[0m 0ms] dns: exchanged A 0.test. 0 IN A 192.0.2.10\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;32m2428467175\u001b[0m 0ms] dns: match[2] => respond\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;32m1951629543\u001b[0m 0ms] dns: match[1] rule_set=china-ip => predefined(NXDOMAIN)\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;51m2032707619\u001b[0m 0ms] dns: match[1] rule_set=china-ip => predefined(NXDOMAIN)\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;155m1042400907\u001b[0m 0ms] connection: connection download finished\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;173m1071698077\u001b[0m 0ms] connection: connection download finished\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;155m1042400907\u001b[0m 0ms] inbound/mixed[route-probe]: connection closed: read http request: read tcp 127.0.0.1:53329->127.0.0.1:53729: use of closed network connection\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;173m1071698077\u001b[0m 0ms] connection: connection upload finished\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;173m1071698077\u001b[0m 0ms] inbound/mixed[route-probe]: connection closed: read http request: read tcp 127.0.0.1:53329->127.0.0.1:53727: use of closed network connection\n",
+      "retainedVersion": 1,
+      "sameProcess": true
+    },
+    {
+      "fault": "load-failure",
+      "log": "\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;138m3291657594\u001b[0m 1ms] connection: connection download finished\n\u001b[37mDEBUG\u001b[0m[0005] [\u001b[38;5;138m3291657594\u001b[0m 1ms] inbound/mixed[route-probe]: connection closed: read http request: read tcp 127.0.0.1:53329->127.0.0.1:53723: use of closed network connection\n\u001b[37mDEBUG\u001b[0m[0006] router: updating rule-set china-ip from URL: https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.srs\n\u001b[36mINFO\u001b[0m[0006] outbound/http[loopback-tunnel]: outbound connection to raw.githubusercontent.com:443\n\u001b[31mERROR\u001b[0m[0006] router: fetch rule-set china-ip: invalid sing-box rule-set file\n\u001b[36mINFO\u001b[0m[0006] [\u001b[38;5;231m1740564439\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53757\n\u001b[36mINFO\u001b[0m[0006] [\u001b[38;5;95m258215247\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53758\n\u001b[36mINFO\u001b[0m[0006] [\u001b[38;5;153m1332300681\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53759\n\u001b[36mINFO\u001b[0m[0006] [\u001b[38;5;96m4257172048\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53760\n\u001b[36mINFO\u001b[0m[0006] [\u001b[38;5;218m3013557450\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53761\n\u001b[36mINFO\u001b[0m[0006] [\u001b[38;5;118m3624453489\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53762\n\u001b[36mINFO\u001b[0m[0006] [\u001b[38;5;144m4142493056\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53763\n\u001b[36mINFO\u001b[0m[0006] [\u001b[38;5;35m615183123\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53764\n\u001b[36mINFO\u001b[0m[0006] [\u001b[38;5;96m4257172048\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to 192.0.2.1:53\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;96m4257172048\u001b[0m 0ms] router: match[0] port=53 => hijack-dns\n\u001b[36mINFO\u001b[0m[0006] [\u001b[38;5;118m3624453489\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to 192.0.2.1:53\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;118m3624453489\u001b[0m 0ms] router: match[0] port=53 => hijack-dns\n\u001b[36mINFO\u001b[0m[0006] [\u001b[38;5;95m258215247\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to 192.0.2.1:53\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;95m258215247\u001b[0m 0ms] router: match[0] port=53 => hijack-dns\n\u001b[36mINFO\u001b[0m[0006] [\u001b[38;5;153m1332300681\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to 192.0.2.138:80\n\u001b[36mINFO\u001b[0m[0006] [\u001b[38;5;218m3013557450\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to [2001:db8:1::a]:80\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;153m1332300681\u001b[0m 0ms] router: match[1] rule_set=china-ip => route(matched,override-address=127.0.0.1,override-port=53327)\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;218m3013557450\u001b[0m 0ms] router: match[2] inbound=route-probe => route(fallback,override-address=127.0.0.1,override-port=53328)\n\u001b[36mINFO\u001b[0m[0006] [\u001b[38;5;218m3013557450\u001b[0m 0ms] outbound/direct[fallback]: outbound connection to 127.0.0.1:53328\n\u001b[36mINFO\u001b[0m[0006] [\u001b[38;5;35m615183123\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to 192.0.2.1:53\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;35m615183123\u001b[0m 0ms] router: match[0] port=53 => hijack-dns\n\u001b[36mINFO\u001b[0m[0006] [\u001b[38;5;144m4142493056\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to [2001:db8:2::a]:80\n\u001b[36mINFO\u001b[0m[0006] [\u001b[38;5;153m1332300681\u001b[0m 0ms] outbound/direct[matched]: outbound connection to 127.0.0.1:53327\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;144m4142493056\u001b[0m 0ms] router: match[1] rule_set=china-ip => route(matched,override-address=127.0.0.1,override-port=53327)\n\u001b[36mINFO\u001b[0m[0006] [\u001b[38;5;144m4142493056\u001b[0m 0ms] outbound/direct[matched]: outbound connection to 127.0.0.1:53327\n\u001b[36mINFO\u001b[0m[0006] [\u001b[38;5;231m1740564439\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to 192.0.2.10:80\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;231m1740564439\u001b[0m 0ms] router: match[2] inbound=route-probe => route(fallback,override-address=127.0.0.1,override-port=53328)\n\u001b[36mINFO\u001b[0m[0006] [\u001b[38;5;231m1740564439\u001b[0m 0ms] outbound/direct[fallback]: outbound connection to 127.0.0.1:53328\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;118m3624453489\u001b[0m 0ms] dns: exchange 2.test. IN AAAA\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;118m3624453489\u001b[0m 0ms] dns: match[0] => evaluate(loopback)\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;95m258215247\u001b[0m 0ms] dns: exchange 0.test. IN A\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;95m258215247\u001b[0m 0ms] dns: match[0] => evaluate(loopback)\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;96m4257172048\u001b[0m 0ms] dns: exchange 1.test. IN A\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;35m615183123\u001b[0m 0ms] dns: exchange 3.test. IN AAAA\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;35m615183123\u001b[0m 0ms] dns: match[0] => evaluate(loopback)\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;96m4257172048\u001b[0m 0ms] dns: match[0] => evaluate(loopback)\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;118m3624453489\u001b[0m 0ms] dns: exchanged 2.test NOERROR 0\n\u001b[36mINFO\u001b[0m[0006] [\u001b[38;5;118m3624453489\u001b[0m 0ms] dns: exchanged AAAA 2.test. 0 IN AAAA 2001:db8:1::a\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;95m258215247\u001b[0m 0ms] dns: exchanged 0.test NOERROR 0\n\u001b[36mINFO\u001b[0m[0006] [\u001b[38;5;95m258215247\u001b[0m 0ms] dns: exchanged A 0.test. 0 IN A 192.0.2.10\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;35m615183123\u001b[0m 0ms] dns: exchanged 3.test NOERROR 0\n\u001b[36mINFO\u001b[0m[0006] [\u001b[38;5;35m615183123\u001b[0m 0ms] dns: exchanged AAAA 3.test. 0 IN AAAA 2001:db8:2::a\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;35m615183123\u001b[0m 0ms] dns: match[1] rule_set=china-ip => predefined(NXDOMAIN)\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;95m258215247\u001b[0m 1ms] dns: match[2] => respond\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;118m3624453489\u001b[0m 1ms] dns: match[2] => respond\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;96m4257172048\u001b[0m 1ms] dns: exchanged 1.test NOERROR 0\n\u001b[36mINFO\u001b[0m[0006] [\u001b[38;5;96m4257172048\u001b[0m 1ms] dns: exchanged A 1.test. 0 IN A 192.0.2.138\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;96m4257172048\u001b[0m 1ms] dns: match[1] rule_set=china-ip => predefined(NXDOMAIN)\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;153m1332300681\u001b[0m 1ms] inbound/mixed[route-probe]: connection closed: read http request: read tcp 127.0.0.1:53329->127.0.0.1:53759: use of closed network connection\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;153m1332300681\u001b[0m 1ms] connection: connection upload finished\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;218m3013557450\u001b[0m 1ms] inbound/mixed[route-probe]: connection closed: read http request: read tcp 127.0.0.1:53329->127.0.0.1:53761: use of closed network connection\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;218m3013557450\u001b[0m 1ms] connection: connection upload finished\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;231m1740564439\u001b[0m 1ms] inbound/mixed[route-probe]: connection closed: read http request: read tcp 127.0.0.1:53329->127.0.0.1:53757: use of closed network connection\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;231m1740564439\u001b[0m 1ms] connection: connection upload finished\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;144m4142493056\u001b[0m 1ms] inbound/mixed[route-probe]: connection closed: read http request: read tcp 127.0.0.1:53329->127.0.0.1:53763: use of closed network connection\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;144m4142493056\u001b[0m 1ms] connection: connection upload finished\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;218m3013557450\u001b[0m 1ms] connection: connection download finished\n\u001b[37mDEBUG\u001b[0m[0006] [\u001b[38;5;153m1332300681\u001b[0m 1ms] connection: connection download finished\n",
+      "retainedVersion": 1,
+      "sameProcess": true
+    }
+  ],
+  "offlineFailureLog": "\u001b[36mINFO\u001b[0m[0000] inbound/mixed[route-probe]: tcp server started at 127.0.0.1:53329\n\u001b[37mDEBUG\u001b[0m[0000] router: updating rule-set china-ip from URL: https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.srs\n\u001b[36mINFO\u001b[0m[0000] outbound/http[loopback-tunnel]: outbound connection to raw.githubusercontent.com:443\n\u001b[36mINFO\u001b[0m[0000] network: updated default interface en0, index 14\n\u001b[36mINFO\u001b[0m[0000] network: updated network environment: gateway [192.168.0.1 fe80::2a70:4eff:fe3b:86ad], gateway_mac [28:70:4e:3b:86:ad 28:70:4e:3b:86:ad]\n\u001b[31mERROR\u001b[0m[0000] router: fetch rule-set china-ip: Get \"https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-issue-97-cidr/stable/china-ip/route.srs\": unexpected EOF\n\u001b[36mINFO\u001b[0m[0000] sing-box started (0.02s)\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;230m2130612993\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53779\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;177m3486911393\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53780\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;169m2064206489\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53781\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;120m1883360879\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53782\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;153m1468512334\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53783\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;136m2114639736\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53784\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;223m3973225679\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53785\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;138m3950872186\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53786\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;230m2130612993\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to 192.0.2.10:80\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;138m3950872186\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to 192.0.2.1:53\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;230m2130612993\u001b[0m 0ms] router: match[2] inbound=route-probe => route(fallback,override-address=127.0.0.1,override-port=53328)\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;230m2130612993\u001b[0m 0ms] outbound/direct[fallback]: outbound connection to 127.0.0.1:53328\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;153m1468512334\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to [2001:db8:1::a]:80\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;223m3973225679\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to [2001:db8:2::a]:80\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;153m1468512334\u001b[0m 0ms] router: match[2] inbound=route-probe => route(fallback,override-address=127.0.0.1,override-port=53328)\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;153m1468512334\u001b[0m 0ms] outbound/direct[fallback]: outbound connection to 127.0.0.1:53328\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;223m3973225679\u001b[0m 0ms] router: match[1] rule_set=china-ip => route(matched,override-address=127.0.0.1,override-port=53327)\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;223m3973225679\u001b[0m 0ms] outbound/direct[matched]: outbound connection to 127.0.0.1:53327\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;138m3950872186\u001b[0m 0ms] router: match[0] port=53 => hijack-dns\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;136m2114639736\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to 192.0.2.1:53\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;136m2114639736\u001b[0m 0ms] router: match[0] port=53 => hijack-dns\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;177m3486911393\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to 192.0.2.1:53\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;177m3486911393\u001b[0m 0ms] router: match[0] port=53 => hijack-dns\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;138m3950872186\u001b[0m 0ms] dns: exchange 3.test. IN AAAA\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;169m2064206489\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to 192.0.2.138:80\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;169m2064206489\u001b[0m 0ms] router: match[1] rule_set=china-ip => route(matched,override-address=127.0.0.1,override-port=53327)\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;138m3950872186\u001b[0m 0ms] dns: match[0] => evaluate(loopback)\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;169m2064206489\u001b[0m 0ms] outbound/direct[matched]: outbound connection to 127.0.0.1:53327\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;120m1883360879\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to 192.0.2.1:53\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;120m1883360879\u001b[0m 0ms] router: match[0] port=53 => hijack-dns\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;120m1883360879\u001b[0m 0ms] dns: exchange 1.test. IN A\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;120m1883360879\u001b[0m 1ms] dns: match[0] => evaluate(loopback)\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;136m2114639736\u001b[0m 0ms] dns: exchange 2.test. IN AAAA\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;136m2114639736\u001b[0m 1ms] dns: match[0] => evaluate(loopback)\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;177m3486911393\u001b[0m 1ms] dns: exchange 0.test. IN A\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;177m3486911393\u001b[0m 1ms] dns: match[0] => evaluate(loopback)\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;169m2064206489\u001b[0m 1ms] connection: connection download finished\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;169m2064206489\u001b[0m 1ms] connection: connection upload finished\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;138m3950872186\u001b[0m 1ms] dns: exchanged 3.test NOERROR 0\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;138m3950872186\u001b[0m 1ms] dns: exchanged AAAA 3.test. 0 IN AAAA 2001:db8:2::a\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;120m1883360879\u001b[0m 1ms] dns: exchanged 1.test NOERROR 0\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;120m1883360879\u001b[0m 1ms] dns: exchanged A 1.test. 0 IN A 192.0.2.138\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;120m1883360879\u001b[0m 1ms] dns: match[1] rule_set=china-ip => predefined(NXDOMAIN)\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;136m2114639736\u001b[0m 1ms] dns: exchanged 2.test NOERROR 0\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;136m2114639736\u001b[0m 1ms] dns: exchanged AAAA 2.test. 0 IN AAAA 2001:db8:1::a\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;177m3486911393\u001b[0m 1ms] dns: exchanged 0.test NOERROR 0\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;177m3486911393\u001b[0m 1ms] dns: exchanged A 0.test. 0 IN A 192.0.2.10\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;138m3950872186\u001b[0m 1ms] dns: match[1] rule_set=china-ip => predefined(NXDOMAIN)\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;177m3486911393\u001b[0m 1ms] dns: match[2] => respond\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;136m2114639736\u001b[0m 1ms] dns: match[2] => respond\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;223m3973225679\u001b[0m 1ms] inbound/mixed[route-probe]: connection closed: read http request: read tcp 127.0.0.1:53329->127.0.0.1:53785: use of closed network connection\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;223m3973225679\u001b[0m 1ms] connection: connection upload finished\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;230m2130612993\u001b[0m 2ms] inbound/mixed[route-probe]: connection closed: read http request: read tcp 127.0.0.1:53329->127.0.0.1:53779: use of closed network connection\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;230m2130612993\u001b[0m 2ms] connection: connection upload finished\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;153m1468512334\u001b[0m 2ms] inbound/mixed[route-probe]: connection closed: read http request: read tcp 127.0.0.1:53329->127.0.0.1:53783: use of closed network connection\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;223m3973225679\u001b[0m 2ms] connection: connection download finished\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;153m1468512334\u001b[0m 2ms] connection: connection upload finished\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;153m1468512334\u001b[0m 2ms] connection: connection download finished\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;230m2130612993\u001b[0m 2ms] connection: connection download finished\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;169m2064206489\u001b[0m 4ms] inbound/mixed[route-probe]: connection closed: read http request: read tcp 127.0.0.1:53329->127.0.0.1:53781: use of closed network connection\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;157m1450025869\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53791\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;65m849267249\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53792\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;195m673364260\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53793\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;36m2211683604\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53794\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;33m2173468648\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53795\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;230m770950145\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53796\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;148m1002324868\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53797\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;108m3663133276\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection from 127.0.0.1:53798\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;108m3663133276\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to 192.0.2.1:53\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;108m3663133276\u001b[0m 0ms] router: match[0] port=53 => hijack-dns\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;65m849267249\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to 192.0.2.1:53\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;65m849267249\u001b[0m 0ms] router: match[0] port=53 => hijack-dns\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;36m2211683604\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to 192.0.2.1:53\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;36m2211683604\u001b[0m 0ms] router: match[0] port=53 => hijack-dns\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;230m770950145\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to 192.0.2.1:53\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;230m770950145\u001b[0m 0ms] router: match[0] port=53 => hijack-dns\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;157m1450025869\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to 192.0.2.10:80\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;157m1450025869\u001b[0m 0ms] router: match[2] inbound=route-probe => route(fallback,override-address=127.0.0.1,override-port=53328)\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;157m1450025869\u001b[0m 0ms] outbound/direct[fallback]: outbound connection to 127.0.0.1:53328\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;195m673364260\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to 192.0.2.138:80\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;195m673364260\u001b[0m 0ms] router: match[1] rule_set=china-ip => route(matched,override-address=127.0.0.1,override-port=53327)\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;195m673364260\u001b[0m 0ms] outbound/direct[matched]: outbound connection to 127.0.0.1:53327\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;33m2173468648\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to [2001:db8:1::a]:80\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;33m2173468648\u001b[0m 0ms] router: match[2] inbound=route-probe => route(fallback,override-address=127.0.0.1,override-port=53328)\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;33m2173468648\u001b[0m 0ms] outbound/direct[fallback]: outbound connection to 127.0.0.1:53328\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;148m1002324868\u001b[0m 0ms] inbound/mixed[route-probe]: inbound connection to [2001:db8:2::a]:80\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;148m1002324868\u001b[0m 0ms] router: match[1] rule_set=china-ip => route(matched,override-address=127.0.0.1,override-port=53327)\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;148m1002324868\u001b[0m 0ms] outbound/direct[matched]: outbound connection to 127.0.0.1:53327\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;148m1002324868\u001b[0m 2ms] connection: connection download finished\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;148m1002324868\u001b[0m 2ms] inbound/mixed[route-probe]: connection closed: read http request: read tcp 127.0.0.1:53329->127.0.0.1:53797: use of closed network connection\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;33m2173468648\u001b[0m 2ms] connection: connection download finished\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;148m1002324868\u001b[0m 2ms] connection: connection upload finished\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;36m2211683604\u001b[0m 2ms] dns: exchange 1.test. IN A\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;230m770950145\u001b[0m 2ms] dns: exchange 2.test. IN AAAA\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;195m673364260\u001b[0m 2ms] connection: connection download finished\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;33m2173468648\u001b[0m 2ms] inbound/mixed[route-probe]: connection closed: read http request: read tcp 127.0.0.1:53329->127.0.0.1:53795: use of closed network connection\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;230m770950145\u001b[0m 2ms] dns: match[0] => evaluate(loopback)\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;36m2211683604\u001b[0m 2ms] dns: match[0] => evaluate(loopback)\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;65m849267249\u001b[0m 2ms] dns: exchange 0.test. IN A\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;195m673364260\u001b[0m 2ms] inbound/mixed[route-probe]: connection closed: read http request: read tcp 127.0.0.1:53329->127.0.0.1:53793: use of closed network connection\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;157m1450025869\u001b[0m 3ms] connection: connection download finished\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;195m673364260\u001b[0m 3ms] connection: connection upload finished\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;33m2173468648\u001b[0m 2ms] connection: connection upload finished\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;108m3663133276\u001b[0m 2ms] dns: exchange 3.test. IN AAAA\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;157m1450025869\u001b[0m 3ms] inbound/mixed[route-probe]: connection closed: read http request: read tcp 127.0.0.1:53329->127.0.0.1:53791: use of closed network connection\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;108m3663133276\u001b[0m 2ms] dns: match[0] => evaluate(loopback)\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;157m1450025869\u001b[0m 3ms] connection: connection upload finished\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;65m849267249\u001b[0m 3ms] dns: match[0] => evaluate(loopback)\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;230m770950145\u001b[0m 3ms] dns: exchanged 2.test NOERROR 0\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;230m770950145\u001b[0m 3ms] dns: exchanged AAAA 2.test. 0 IN AAAA 2001:db8:1::a\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;36m2211683604\u001b[0m 3ms] dns: exchanged 1.test NOERROR 0\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;36m2211683604\u001b[0m 3ms] dns: exchanged A 1.test. 0 IN A 192.0.2.138\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;36m2211683604\u001b[0m 3ms] dns: match[1] rule_set=china-ip => predefined(NXDOMAIN)\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;230m770950145\u001b[0m 3ms] dns: match[2] => respond\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;108m3663133276\u001b[0m 3ms] dns: exchanged 3.test NOERROR 0\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;108m3663133276\u001b[0m 3ms] dns: exchanged AAAA 3.test. 0 IN AAAA 2001:db8:2::a\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;65m849267249\u001b[0m 3ms] dns: exchanged 0.test NOERROR 0\n\u001b[36mINFO\u001b[0m[0000] [\u001b[38;5;65m849267249\u001b[0m 3ms] dns: exchanged A 0.test. 0 IN A 192.0.2.10\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;65m849267249\u001b[0m 3ms] dns: match[2] => respond\n\u001b[37mDEBUG\u001b[0m[0000] [\u001b[38;5;108m3663133276\u001b[0m 3ms] dns: match[1] rule_set=china-ip => predefined(NXDOMAIN)\n",
+  "cache": {
+    "sha256": "84bc8209c03709d51fa5eed3509b2d1917dfffe012a3b24922d1db6d3eb9598d",
+    "bytes": 131072,
+    "noRuleBytesDelivered": true
+  }
+}
