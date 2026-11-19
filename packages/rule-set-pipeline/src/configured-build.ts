@@ -3,12 +3,13 @@ import ipaddrPackage from 'ipaddr.js/package.json' with { type: 'json' };
 import yamlPackage from 'yaml/package.json' with { type: 'json' };
 import packageInfo from '../package.json' with { type: 'json' };
 import { buildNative, type NativeBuild, type NativeBuildOptions } from './native.js';
-import { readReleaseInput, sha256, type ReleaseOptions } from './release.js';
+import { readReleaseInput, sha256, SourceError, type ReleaseOptions } from './release.js';
 import { diagnostic, type ConversionReport, type SourceRecord } from './types.js';
 import { readCommitInput, type CommitOptions, type CommitSourceRecord } from './github-commit.js';
 import { configuredInput, configuredReleaseInput, parseBuildConfiguration, type BuildConfiguration, type RuleDefinition, type SourceFormat } from './configuration.js';
 import { convertOpenAiVoice, type OpenAiVoiceSource } from './openai-voice-source.js';
 import { convertPlainYaml } from './plain-yaml-adapter.js';
+import { convertDomainSuffixText } from './domain-suffix-text-adapter.js';
 import { convertCidrText } from './cidr-text-adapter.js';
 import { USAGES, type BuildTerm } from './projection.js';
 
@@ -30,6 +31,7 @@ export async function configuredBuildTools(format: SourceFormat = 'plain-yaml') 
   const files = ['source-input', 'configuration', 'configured-build', 'release', 'plain-yaml-adapter', 'yaml-input', 'convert',
     'types', 'projection', 'native'];
   if (format === 'cidr-text') files.push('github-commit', 'cidr-text-adapter');
+  if (format === 'domain-suffix-text') files.push('github-commit', 'domain-suffix-text-adapter');
   if (format === 'openai-voice-json') files.push('openai-voice-source', 'cidr-text-adapter');
   const implementationSha256 = sha256(Buffer.concat(await Promise.all(
     files.map(name =>
@@ -37,7 +39,7 @@ export async function configuredBuildTools(format: SourceFormat = 'plain-yaml') 
   )));
   return { pipeline: packageInfo.version, implementationSha256, conversionPolicy: format === 'plain-yaml' ? 'v2fly-domain-v1' : `${format}-v1`,
     node: process.versions.node, yaml: yamlPackage.version, sourceFormat: 4,
-    ...(format !== 'plain-yaml' ? { ipaddr: ipaddrPackage.version } : {}) };
+    ...(format === 'cidr-text' || format === 'openai-voice-json' ? { ipaddr: ipaddrPackage.version } : {}) };
 }
 
 interface BuildOptions { configuration: string; binary: string; selectedIds?: string[] }
@@ -67,15 +69,24 @@ export async function buildConfiguredCommit(options: BuildOptions & { github: Co
   const definitions = selectDefinitions(configuration, options.selectedIds);
   const input = configuredInput(configuration, definitions);
   if (input.version !== 'git-branch') throw new Error('Git commit build requires a configured Git source; use --release for Release sources');
-  const { bytes, source } = await readCommitInput(input, options.github);
+  const { bytes, source } = await readCommitInput(input, options.github).catch((error: unknown) => {
+    if (!(error instanceof SourceError)) throw error;
+    const ids = definitions.map(rule => rule.id).join(', ');
+    throw new SourceError(error.code, `Rule set(s) ${ids}, Git input ${input.input.path}: ${error.message}`);
+  });
   const lists = convertInput(bytes, definitions, input.input.format, input.input.path);
   return buildConfigured(configuration, definitions, { binary: options.binary }, source, lists, input.input.format, input.input.path);
 }
 
+const wholeFileConverters = {
+  'cidr-text': convertCidrText,
+  'domain-suffix-text': convertDomainSuffixText,
+  'openai-voice-json': convertOpenAiVoice,
+};
 
 export function convertInput(bytes: Uint8Array, definitions: RuleDefinition[], format: SourceFormat, file: string) {
   if (format === 'plain-yaml') return convertPlainYaml(bytes, definitions.map(rule => rule.list));
-  const convert = format === 'openai-voice-json' ? convertOpenAiVoice : convertCidrText;
+  const convert = wholeFileConverters[format];
   return new Map([...new Set(definitions.map(rule => rule.list))].map(list => [list, convert(bytes, file, list)]));
 }
 

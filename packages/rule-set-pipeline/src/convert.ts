@@ -7,6 +7,12 @@ const mapping: Record<string, TermType> = {
 export type ConversionResult = { ok: true; terms: RuleTerm[]; report: ConversionReport }
   | { ok: false; report: ConversionReport };
 
+export function isDomainName(value: string): boolean {
+  return value.length <= 254
+    && /^[\p{L}\p{N}](?:[\p{L}\p{N}-]*[\p{L}\p{N}])?(?:\.[\p{L}\p{N}](?:[\p{L}\p{N}-]*[\p{L}\p{N}])?)*\.?$/u.test(value)
+    && value.replace(/\.$/, '').split('.').every(label => label.length <= 63);
+}
+
 function regexpAttributeSeparator(value: string): number {
   // An attribute tail contains no colon. Earlier :@ occurrences belong to the expression.
   const separator = value.lastIndexOf(':@');
@@ -53,9 +59,7 @@ export function convertRules(rules: readonly InputRule[]): ConversionResult {
     if (!value || /[\u0000-\u001f\u007f]/u.test(value) || (sourceType !== 'regexp' && /\s/u.test(value))) {
       invalid('匹配值为空或含非法空白／控制字符'); continue;
     }
-    if ((sourceType === 'domain' || sourceType === 'full') &&
-        (!/^[\p{L}\p{N}](?:[\p{L}\p{N}-]*[\p{L}\p{N}])?(?:\.[\p{L}\p{N}](?:[\p{L}\p{N}-]*[\p{L}\p{N}])?)*\.?$/u.test(value) ||
-         value.length > 254 || value.replace(/\.$/, '').split('.').some((label) => label.length > 63))) {
+    if ((sourceType === 'domain' || sourceType === 'full') && !isDomainName(value)) {
       invalid('域名匹配值非法'); continue;
     }
     if (sourceType === 'keyword' && !/^[\p{L}\p{N}.-]+$/u.test(value)) {

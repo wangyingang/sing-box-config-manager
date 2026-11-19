@@ -11,7 +11,7 @@ export interface CommitInput {
   repository: string;
   version: 'git-branch';
   branch: string;
-  input: { format: 'plain-yaml' | 'cidr-text'; path: string };
+  input: { format: 'plain-yaml' | 'cidr-text' | 'domain-suffix-text'; path: string };
 }
 
 export interface CommitIdentity {

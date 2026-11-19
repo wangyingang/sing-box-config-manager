@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import test from 'node:test';
+import { readOfficialConfiguration } from '../../src/configuration.js';
 import { buildConfiguredCommit } from '../../src/configured-build.js';
 import { buildNative, NATIVE_VALIDATION_POLICY, type NativeBuild } from '../../src/native.js';
 import { convertRules } from '../../src/convert.js';
@@ -127,6 +128,39 @@ test('固定 china46.txt 构建可重复的双栈规则，Route 与 DNS Response
   await matches(a.native, [['route', '192.0.2.1', true], ['route', '192.0.3.1', false],
     ['dns-response', '2001:db8::1', true], ['dns-response', '2001:db9::1', false],
     ['route', '::cb00:7107', true], ['route', '203.0.113.7', false]]);
+});
+
+test('正式 gfw 从固定 Git 文件构建，JSON/SRS 后缀匹配保留标签边界', async () => {
+  const commit = 'b'.repeat(40);
+  const input = 'Example.TEST\r\nother.example.\r\nexample.test\r\nbücher.example\r\n';
+  const url = `https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/${commit}/gfw.txt`;
+  const built = await buildConfiguredCommit({
+    configuration: readOfficialConfiguration(), selectedIds: ['gfw'], binary,
+    github: { commit, fetch: async address => {
+      if (String(address) === 'https://api.github.com/repos/Loyalsoldier/v2ray-rules-dat/branches/release') {
+        return Response.json({ name: 'release', commit: { sha: commit } });
+      }
+      assert.equal(String(address), url);
+      return new Response(input);
+    } },
+  });
+  assert.deepEqual(built.source, {
+    kind: 'github-commit', repository: 'Loyalsoldier/v2ray-rules-dat', branch: 'release', commit,
+    file: { path: 'gfw.txt', url }, inputSha256: sha256(input), inputBytes: Buffer.byteLength(input),
+  });
+  const [rule] = built.results;
+  assert.equal(rule.status, 'built-validated', JSON.stringify(rule.report.diagnostics));
+  assert.equal(rule.definition.stablePath, 'stable/gfw');
+  assert.equal(rule.report.duplicateCount, 1);
+  assert.deepEqual(rule.native.usages.route, { artifactFiles: ['domains.json', 'domains.srs'] });
+  assert.deepEqual(rule.native.usages['dns-query'], rule.native.usages.route);
+  assert.deepEqual(rule.native.usages['dns-response'], { status: 'unavailable', reason: 'empty' });
+  assert.deepEqual(JSON.parse(rule.native.artifacts[0].content.toString()), {
+    version: 4, rules: [{ domain_suffix: ['example.test', 'other.example', 'xn--bcher-kva.example'] }],
+  });
+  await matches(rule.native, [['route', 'example.test', true], ['dns-query', 'sub.example.test', true],
+    ['route', 'notexample.test', false], ['dns-query', 'example.test.other', false],
+    ['route', 'other.example', true], ['dns-query', 'sub.xn--bcher-kva.example', true]]);
 });
 
 test('pure IP and mixed synthetic IR use only applicable predicates and deduplicate physical files', async () => {

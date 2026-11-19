@@ -24,6 +24,13 @@ sources:
     input:
       format: openai-voice-json
       url: https://openai.com/chatgpt-voice.json
+  loyalsoldier:
+    repository: Loyalsoldier/v2ray-rules-dat
+    version: git-branch
+    branch: release
+    input:
+      format: domain-suffix-text
+      path: gfw.txt
 ruleSets:
   - id: openai
     source: dlc
@@ -125,6 +132,14 @@ ruleSets:
     source: dlc
     list: youtube
     stablePath: stable/youtube
+    usages:
+      route: { artifact: domains }
+      dns-query: { artifact: domains }
+      dns-response: { unavailable: empty }
+  - id: gfw
+    source: loyalsoldier
+    list: all
+    stablePath: stable/gfw
     usages:
       route: { artifact: domains }
       dns-query: { artifact: domains }
