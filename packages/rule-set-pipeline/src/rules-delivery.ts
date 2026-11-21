@@ -8,13 +8,12 @@ import { sha256 } from './release.js';
 import { encodeRecord, RULE_RECEIPT_PATH, type FileEvidence, type ManagedRule, type PendingDelivery, type RuleCandidate, type RuleDelivery } from './rules-model.js';
 import type { RulesSession } from './rules-session.js';
 import type { RuleWrites } from './rules-repository.js';
-import { verifyStableDeliveries } from './stable-deliveries.js';
 import { rulesBinary } from './rules-context.js';
 import { verifyRuleCandidate } from './rules-build.js';
 import { qualifiedRuleCandidate, successfulRuleInput, verifiedDeliveryInput } from './rules-success.js';
 
-export async function readRuleDeliveries(snapshot: PublicationSnapshot, readStable = verifyStableDeliveries) {
-  return (await readStable(snapshot)).records;
+export async function readRuleDeliveries(session: RulesSession, snapshot: PublicationSnapshot) {
+  return (await session.loaded.readStableDeliveries(snapshot)).records;
 }
 
 export function ruleSubscription(session: RulesSession, rule: Pick<ManagedRule, 'definition'>, current?: RuleDelivery) {
@@ -25,11 +24,14 @@ export function ruleSubscription(session: RulesSession, rule: Pick<ManagedRule, 
 }
 
 /** Desired paths cannot overwrite a different rule's still-current contract. */
-export async function ensureRulePathAvailable(session: RulesSession, definition: RuleDefinition, observed?: PublicationSnapshot) {
+export async function ensureRulePathAvailable(session: RulesSession, definition: Pick<RuleDefinition, 'id' | 'stablePath'>, observed?: PublicationSnapshot) {
   const stable = observed ?? await session.stable();
   const { records, recordPaths } = await session.loaded.readStableDeliveries(stable);
   const current = records.get(definition.id);
   const ownRecord = recordPaths.get(definition.id);
+  if (ownRecord && ownRecord !== `${definition.stablePath}/activation.json`) {
+    throw new Error(`SUBSCRIPTION_PATH_CONFLICT: current delivery ${definition.id} is registered at ${ownRecord}`);
+  }
   for (const [id, path] of recordPaths) {
     if (id === definition.id) continue;
     const root = path.slice(0, -'/activation.json'.length);
@@ -105,8 +107,15 @@ async function finishDelivery(session: RulesSession, pending: PendingDelivery, s
   await session.save(files);
 }
 
+function matchesRegisteredHead(shared: boolean, stable: PublicationSnapshot, verifiedHead: string, registrationCommit?: string) {
+  if (!shared) return stable.head === verifiedHead;
+  // On a shared branch the journal registration is itself the single child of the verified head.
+  if (registrationCommit) return stable.head === registrationCommit;
+  return stable.parents ? stable.parents.length === 1 && stable.parents[0] === verifiedHead : stable.parent === verifiedHead;
+}
+
 /** Resume exactly the registered write, including across machines or a lost response. */
-export async function recoverRuleDelivery(session: RulesSession) {
+export async function recoverRuleDelivery(session: RulesSession, registrationCommit?: string) {
   const pending = session.journal.pendingDelivery;
   if (!pending) return;
   if (session.loaded.dryRun) throw new Error('RULE_WRITE_PENDING: preview does not resume a pending delivery');
@@ -127,10 +136,9 @@ export async function recoverRuleDelivery(session: RulesSession) {
   }
   if (!applied) {
     session.loaded.progress('stable-write', pending.logicalId);
-    // On a shared branch the journal registration is itself the single child
-    // of the verified head. A later commit cannot inherit that authorization.
-    const registeredParent = session.shared ? stable.parent : stable.head;
-    if (registeredParent !== pending.stableHead) throw new Error('RULE_WRITE_PENDING: stable head differs from registered write');
+    if (!matchesRegisteredHead(session.shared, stable, pending.stableHead, registrationCommit)) {
+      throw new Error('RULE_WRITE_PENDING: stable head differs from registered write');
+    }
     const files = await plannedDeliveryFiles(session, pending);
     if (!isDeepStrictEqual(evidenceFor(files), pending.changes)) throw new Error('RULE_WRITE_PENDING: registered content changed');
     files[RULE_RECEIPT_PATH] = encodeRecord({ schemaVersion: 2, id: pending.id });
@@ -182,8 +190,8 @@ export async function deliverRuleVersion(session: RulesSession, rule: ManagedRul
   session.journal.pendingDelivery = { id, kind, logicalId: rule.definition.id, configurationRevision: session.loaded.observed.revision,
     stableHead: stable.head, afterRule: rule, record, changes: evidenceFor(files), removeCandidates: [],
     ...(qualification && { qualifiedCandidate: qualification }) };
-  await session.save();
-  await recoverRuleDelivery(session);
+  const registrationCommit = await session.save();
+  await recoverRuleDelivery(session, registrationCommit);
   return record;
 }
 
@@ -197,7 +205,9 @@ export async function deleteRuleDelivery(session: RulesSession, rule: ManagedRul
   if (!isDeepStrictEqual(records.get(id), current)) throw new Error('RULE_WRITE_CONFLICT: current delivery changed before deletion');
   if (current) {
     // An accepted definition may have moved. Delete the observed delivery at its actual path.
-    for (const path of [recordPaths.get(id)!, ...Object.keys(current.files)]) files[path] = null;
+    const recordPath = recordPaths.get(id)!;
+    await ensureRulePathAvailable(session, { id, stablePath: recordPath.slice(0, -'/activation.json'.length) }, stable);
+    for (const path of [recordPath, ...Object.keys(current.files)]) files[path] = null;
   }
   const removeCandidates = [...Object.values(session.journal.candidates), ...quarantined].filter(candidate => candidate.logicalId === id).map(candidate => candidate.id);
   const afterRule: ManagedRule = { ...rule, lifecycle: 'deleted', control: { mode: 'auto', revision: randomUUID(), inputBindingRevision: rule.inputBindingRevision } };
@@ -206,8 +216,8 @@ export async function deleteRuleDelivery(session: RulesSession, rule: ManagedRul
   session.journal.pendingDelivery = { id: randomUUID(), kind: 'delete', logicalId: id,
     configurationRevision: session.loaded.observed.revision, stableHead: stable.head, afterRule,
     changes: evidenceFor(files), removeCandidates };
-  await session.save();
-  await recoverRuleDelivery(session);
+  const registrationCommit = await session.save();
+  await recoverRuleDelivery(session, registrationCommit);
 }
 
 /** Read-only interpretation of a committed write whose final checkpoint is pending. */

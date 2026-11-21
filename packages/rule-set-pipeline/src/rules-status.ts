@@ -57,7 +57,7 @@ export function rulesFailure<Operation extends ReportOperation>(operation: Opera
 
 export async function addCurrentFacts(session: RulesSession, results: RuleResult[]) {
   const stable = await session.stable();
-  const deliveries = await readRuleDeliveries(stable, session.loaded.readStableDeliveries);
+  const deliveries = await readRuleDeliveries(session, stable);
   for (const result of results) {
     const actual = await observedRule(session, result.id, stable);
     result.current = deliveries.get(result.id);
@@ -72,7 +72,7 @@ export async function addCurrentFacts(session: RulesSession, results: RuleResult
 async function observeRules(loaded: LoadedRules) {
   const session = await openRulesSession(loaded);
   const stable = await session.stable();
-  const deliveries = await readRuleDeliveries(stable, session.loaded.readStableDeliveries);
+  const deliveries = await readRuleDeliveries(session, stable);
   const definitions = new Map(loaded.configuration.ruleSets.map(rule => [rule.id, rule]));
   const ids = [...new Set([...definitions.keys(), ...Object.entries(session.journal.rules)
     .filter(([, rule]) => rule.lifecycle !== 'deleted').map(([id]) => id), ...deliveries.keys()])];

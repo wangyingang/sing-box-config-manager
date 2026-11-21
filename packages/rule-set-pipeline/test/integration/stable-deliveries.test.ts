@@ -6,10 +6,11 @@ import { encodeRecord, RULE_RECEIPT_PATH, RULE_STATE_PATH } from '../../src/rule
 import { rulesEnvironment } from '../fixtures/rules-environment.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
+assert.ok(binary, 'Set SING_BOX_TEST_BINARY to the sing-box 1.14.4 executable');
 
 for (const target of ['acceptance-stable-check', 'main']) {
-  test(`一次 sync 只在同一稳定提交上核验一次已固定规则的产物，下一次重新核验（${target}）`, { skip: !binary }, async () => {
-    const { context } = rulesEnvironment(binary!, target);
+  test(`一次 sync 只在同一稳定提交上核验一次已固定规则的产物，下一次重新核验（${target}）`, async () => {
+    const { context } = rulesEnvironment(binary, target);
     const first = await syncRules({ context });
     assert.equal(first.exitCode, 0);
     const version = first.results.find(row => row.id === 'anthropic')!.current!.versionId;
@@ -36,8 +37,8 @@ for (const target of ['acceptance-stable-check', 'main']) {
   });
 }
 
-test('双分支交付只对通过路径检查的稳定提交登记写入', { skip: !binary }, async () => {
-  const env = rulesEnvironment(binary!, 'main');
+test('双分支交付只对通过路径检查的稳定提交登记写入', async () => {
+  const env = rulesEnvironment(binary, 'main');
   const { context } = env;
   assert.equal((await syncRules({ context })).exitCode, 0);
   env.upstream({ openai: 'domain:changed.example' });
@@ -65,8 +66,8 @@ test('双分支交付只对通过路径检查的稳定提交登记写入', { ski
   assert.deepEqual(await final.read(RULE_RECEIPT_PATH), receipt);
 });
 
-test('完整校验失败后在同一提交上重读文件并报告持久化状态', { skip: !binary }, async () => {
-  const { context, writes } = rulesEnvironment(binary!, 'main');
+test('完整校验失败后在同一提交上重读文件并报告持久化状态', async () => {
+  const { context, writes } = rulesEnvironment(binary, 'main');
   assert.equal((await syncRules({ context })).exitCode, 0);
   const before = writes.length;
   const original = context.repository.snapshot;
@@ -87,8 +88,8 @@ test('完整校验失败后在同一提交上重读文件并报告持久化状�
   assert.equal((await syncRules({ context })).exitCode, 0);
 });
 
-test('交付前重新观察到新提交时检查全部文件、路径归属及当前交付', { skip: !binary }, async t => {
-  const seed = rulesEnvironment(binary!, 'main');
+test('交付前重新观察到新提交时检查全部文件、路径归属及当前交付', async t => {
+  const seed = rulesEnvironment(binary, 'main');
   const config = seed.config();
   config.ruleSets = config.ruleSets.filter(rule => rule.id === 'openai');
   seed.configure(config);
@@ -96,8 +97,8 @@ test('交付前重新观察到新提交时检查全部文件、路径归属及�
   assert.equal(first.exitCode, 0);
   const record = first.results[0].current!;
   const checkpoint = seed.checkpoint();
-  for (const fault of ['invalid-bytes', 'unmanaged-file', 'overlapping-root', 'replaced-delivery']) await t.test(fault, async () => {
-    const env = rulesEnvironment(binary!, 'main', checkpoint());
+  for (const fault of ['invalid-bytes', 'unmanaged-file', 'overlapping-root', 'moved-record', 'replaced-delivery']) await t.test(fault, async () => {
+    const env = rulesEnvironment(binary, 'main', checkpoint());
     env.upstream({ openai: 'domain:changed.example' });
     const repo = env.context.repository;
     const original = repo.snapshot;
@@ -112,6 +113,10 @@ test('交付前重新观察到新提交时检查全部文件、路径归属及�
       files[child + '/domains.srs'] = (await stable.read(path))!;
       files[child + '/activation.json'] = encodeRecord({ ...record, logicalId: 'another',
         files: { [child + '/domains.srs']: record.files[path] } });
+    }
+    if (fault === 'moved-record') {
+      files[recordPath] = null;
+      files['stable/activation.json'] = encodeRecord(record);
     }
     if (fault === 'replaced-delivery') files[recordPath] = encodeRecord({ ...record, id: 'external-delivery' });
     let prepare = false;
@@ -130,11 +135,19 @@ test('交付前重新观察到新提交时检查全部文件、路径归属及�
   });
 });
 
-test('删除已下线的规则前核验新稳定提交上的文件', { skip: !binary }, async () => {
-  const env = rulesEnvironment(binary!, 'main');
+for (const fault of ['invalid-bytes', 'shared-file']) test(`删除已下线的规则前核验新稳定提交上的文件及归属（${fault}）`, async () => {
+  const env = rulesEnvironment(binary, 'main');
   const { context } = env;
-  assert.equal((await syncRules({ context })).exitCode, 0);
   const config = env.config();
+  const openai = config.ruleSets.find(rule => rule.id === 'openai')!;
+  openai.stablePath = 'stable/team/openai';
+  env.configure(config);
+  const first = await syncRules({ context });
+  assert.equal(first.exitCode, 0);
+  const record = first.results.find(row => row.id === 'openai')!.current!;
+  const file = 'stable/team/openai/domains.srs';
+  const changes: RuleWrites = fault === 'invalid-bytes' ? { [file]: Buffer.from('external change') }
+    : { 'stable/team/activation.json': encodeRecord({ ...record, logicalId: 'other', files: { [file]: record.files[file] } }) };
   config.ruleSets = config.ruleSets.filter(rule => rule.id !== 'openai');
   env.configure(config);
   let deleting = false;
@@ -148,7 +161,7 @@ test('删除已下线的规则前核验新稳定提交上的文件', { skip: !bi
   repo.snapshot = async (...args) => {
     const stable = await original(...args);
     if (deleting && !external && args[0] === 'main') {
-      external = await repo.commit('main', stable.head, { 'stable/openai/domains.srs': Buffer.from('external change') },
+      external = await repo.commit('main', stable.head, changes,
         '模拟删除前的稳定提交变化', async () => {});
     }
     return stable;
@@ -157,11 +170,13 @@ test('删除已下线的规则前核验新稳定提交上的文件', { skip: !bi
   assert.ok(external);
   assert.equal(result.exitCode, 1);
   assert.equal((await original('main')).head, external);
-  assert.ok(await (await original('main')).read('stable/openai/activation.json'));
+  const after = await original('main');
+  assert.ok(await after.read('stable/team/openai/activation.json'));
+  assert.ok(await after.read(file));
 });
 
-test('单分支从已登记的交付恢复时保留后来写入的稳定文件', { skip: !binary }, async () => {
-  const env = rulesEnvironment(binary!);
+test('单分支从已登记的交付恢复时保留后来写入的稳定文件', async () => {
+  const env = rulesEnvironment(binary);
   const { context } = env;
   const repo = context.repository;
   env.beforeWrite(async files => {
@@ -178,4 +193,48 @@ test('单分支从已登记的交付恢复时保留后来写入的稳定文件',
   const observed = await repo.snapshot();
   assert.equal(observed.head, external);
   assert.equal((await observed.read(file))!.toString(), 'external');
+});
+
+test('单分支支持本次登记的 CAS 提交，跨操作从唯一父提交恢复', async () => {
+  const env = rulesEnvironment(binary);
+  const { context } = env;
+  const original = context.repository.snapshot;
+  let exposeParents = false;
+  context.repository.snapshot = async (...args) => {
+    const { parent, ...view } = await original(...args);
+    return { ...view, ...(exposeParents && parent && { parents: [parent] }) };
+  };
+  assert.equal((await syncRules({ context })).exitCode, 0);
+  env.upstream({ openai: 'domain:later.example' });
+  env.beforeWrite(async files => {
+    if (files['stable/openai/activation.json']) throw new Error('模拟暂停');
+  });
+  assert.equal((await syncRules({ context })).status, 'pending');
+  env.beforeWrite();
+  const before = env.writes.length;
+  assert.equal((await syncRules({ context })).status, 'pending');
+  assert.equal(env.writes.length, before);
+  exposeParents = true;
+  assert.equal((await syncRules({ context })).exitCode, 0);
+});
+
+test('登记后重读到更新的共享 head 时只信任实际 CAS 提交', async () => {
+  const { context } = rulesEnvironment(binary);
+  const repo = context.repository;
+  const commit = repo.commit;
+  let external: string | undefined;
+  repo.commit = async (...args) => {
+    const sha = await commit(...args);
+    const journal = args[2][RULE_STATE_PATH];
+    if (!external && journal && JSON.parse(journal.toString()).pendingDelivery) {
+      external = await commit(repo.branch, sha, { 'stable/openai/note': Buffer.from('external') },
+        '模拟登记后 ref 前进', async () => {});
+    }
+    return sha;
+  };
+  const result = await syncRules({ context });
+  assert.ok(external);
+  assert.equal(result.status, 'pending');
+  assert.equal((await repo.snapshot()).head, external);
+  assert.equal(await (await repo.snapshot()).read('stable/openai/activation.json'), undefined);
 });

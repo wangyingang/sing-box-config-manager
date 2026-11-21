@@ -3,7 +3,7 @@ import { filePaths } from './maintenance-baseline-transport.js';
 import { branchRef, type Ref } from './maintenance-refs.js';
 import { candidateCoreFiles } from './candidate-publication.js';
 import { verifyRuleCandidateInSnapshot } from './rules-build.js';
-import { readRuleDeliveries } from './rules-delivery.js';
+import { verifyStableDeliveries } from './stable-deliveries.js';
 import type { CleanupPlan } from './rules-cleanup-model.js';
 import type { RulesSession } from './rules-session.js';
 import { definitionRevision } from './rules-model.js';
@@ -12,7 +12,7 @@ import { candidateInputSnapshot } from './rule-source-adapters.js';
 export async function planRulesCleanup(session: RulesSession, refs: Ref[], frozen?: CleanupPlan): Promise<CleanupPlan> {
   const { journal, snapshot, loaded } = session;
   const stable = await session.stable();
-  const deliveries = await readRuleDeliveries(stable);
+  const { records: deliveries } = await verifyStableDeliveries(stable);
   const candidateRetentionDays = frozen?.candidateRetentionDays ?? loaded.configuration.candidateRetentionDays;
   const observed = frozen?.cleanupObservedAt ?? (loaded.context.now?.() ?? new Date()).toISOString();
   const cutoff = new Date(Date.parse(observed) - candidateRetentionDays * 86_400_000).toISOString();
