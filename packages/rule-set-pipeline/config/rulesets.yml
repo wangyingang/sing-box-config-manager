@@ -75,17 +75,17 @@ ruleSets:
     list: all
     stablePath: stable/china-ip
     usages:
-      route: { artifact: route }
+      route: { artifact: ips }
       dns-query: { unavailable: empty }
-      dns-response: { artifact: route }
+      dns-response: { artifact: ips }
   - id: chatgpt-voice
     source: openai-voice
     list: all
     stablePath: stable/chatgpt-voice
     usages:
-      route: { artifact: route }
+      route: { artifact: ips }
       dns-query: { unavailable: empty }
-      dns-response: { artifact: route }
+      dns-response: { artifact: ips }
   - id: china-domains
     source: dlc
     list: geolocation-cn
