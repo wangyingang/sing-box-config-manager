@@ -238,3 +238,55 @@ test('登记后重读到更新的共享 head 时只信任实际 CAS 提交', asy
   assert.equal((await repo.snapshot()).head, external);
   assert.equal(await (await repo.snapshot()).read('stable/openai/activation.json'), undefined);
 });
+
+for (const kind of ['sync', 'delete']) test(`恢复旧版已登记的 ${kind} 前重新核验登记提交上的路径归属`, async () => {
+  const env = rulesEnvironment(binary, 'main');
+  const { context } = env;
+  const repo = context.repository;
+  const config = env.config();
+  const rule = config.ruleSets.find(r => r.id === 'openai')!;
+  rule.stablePath = 'stable/team/openai';
+  config.ruleSets = [rule];
+  env.configure(config);
+  const file = rule.stablePath + '/domains.srs';
+  let changes: RuleWrites = { [file]: Buffer.from('external') };
+  if (kind === 'delete') {
+    const first = await syncRules({ context });
+    assert.equal(first.exitCode, 0);
+    const current = first.results[0].current!;
+    changes = { 'stable/team/activation.json': encodeRecord({ ...current, logicalId: 'other', files: { [file]: current.files[file] } }) };
+    config.ruleSets = [];
+    env.configure(config);
+  }
+  env.beforeWrite(async files => {
+    if (Object.hasOwn(files, RULE_RECEIPT_PATH)) throw new Error('模拟登记完成后中断');
+  });
+  assert.equal((await syncRules({ context })).status, 'pending');
+  env.beforeWrite();
+  const old = await repo.snapshot('main');
+  const external = await repo.commit('main', old.head, changes, '模拟旧版检查与登记之间的稳定写入', async () => {});
+  const journal = await repo.snapshot();
+  const state = JSON.parse((await journal.read(RULE_STATE_PATH))!.toString());
+  state.pendingDelivery.stableHead = external;
+  await repo.commit(repo.branch, journal.head, { [RULE_STATE_PATH]: encodeRecord(state) }, '重放旧版登记的稳定提交', async () => {});
+  const result = await syncRules({ context });
+  assert.equal(result.status, 'pending');
+  assert.match(result.error ?? '', /SUBSCRIPTION_PATH_CONFLICT/);
+  assert.equal((await repo.snapshot('main')).head, external);
+});
+
+test('删除规则只移除受管文件并保留同目录的外部文件', async () => {
+  const env = rulesEnvironment(binary, 'main');
+  const { context } = env;
+  assert.equal((await syncRules({ context })).exitCode, 0);
+  const stable = await context.repository.snapshot('main');
+  const note = 'stable/openai/notes.txt';
+  await context.repository.commit('main', stable.head, { [note]: Buffer.from('keep') }, '写入独立文件', async () => {});
+  const config = env.config();
+  config.ruleSets = config.ruleSets.filter(rule => rule.id !== 'openai');
+  env.configure(config);
+  assert.equal((await syncRules({ context })).exitCode, 0);
+  const after = await context.repository.snapshot('main');
+  assert.equal((await after.read(note))!.toString(), 'keep');
+  assert.equal(await after.read('stable/openai/activation.json'), undefined);
+});

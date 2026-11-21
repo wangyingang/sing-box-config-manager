@@ -23,6 +23,16 @@ export function ruleSubscription(session: RulesSession, rule: Pick<ManagedRule, 
   return subscription;
 }
 
+function checkOtherDeliveryRoots(logicalId: string, stablePath: string, recordPaths: ReadonlyMap<string, string>) {
+  for (const [id, path] of recordPaths) {
+    if (id === logicalId) continue;
+    const root = path.slice(0, -'/activation.json'.length);
+    if (root === stablePath || root.startsWith(`${stablePath}/`) || stablePath.startsWith(`${root}/`)) {
+      throw new Error(`SUBSCRIPTION_PATH_CONFLICT: ${stablePath} overlaps current delivery ${id}`);
+    }
+  }
+}
+
 /** Desired paths cannot overwrite a different rule's still-current contract. */
 export async function ensureRulePathAvailable(session: RulesSession, definition: Pick<RuleDefinition, 'id' | 'stablePath'>, observed?: PublicationSnapshot) {
   const stable = observed ?? await session.stable();
@@ -32,17 +42,33 @@ export async function ensureRulePathAvailable(session: RulesSession, definition:
   if (ownRecord && ownRecord !== `${definition.stablePath}/activation.json`) {
     throw new Error(`SUBSCRIPTION_PATH_CONFLICT: current delivery ${definition.id} is registered at ${ownRecord}`);
   }
-  for (const [id, path] of recordPaths) {
-    if (id === definition.id) continue;
-    const root = path.slice(0, -'/activation.json'.length);
-    if (root === definition.stablePath || root.startsWith(`${definition.stablePath}/`) || definition.stablePath.startsWith(`${root}/`)) {
-      throw new Error(`SUBSCRIPTION_PATH_CONFLICT: ${definition.stablePath} overlaps current delivery ${id}`);
-    }
-  }
+  checkOtherDeliveryRoots(definition.id, definition.stablePath, recordPaths);
   if (stable.paths.some(path => path.startsWith(`${definition.stablePath}/`) && path !== ownRecord && !(current && Object.hasOwn(current.files, path)))) {
     throw new Error(`SUBSCRIPTION_PATH_CONFLICT: ${definition.stablePath} contains unmanaged files`);
   }
   return current;
+}
+
+async function observedDeletion(session: RulesSession, id: string, stable: PublicationSnapshot) {
+  const { records, recordPaths } = await session.loaded.readStableDeliveries(stable);
+  const record = records.get(id);
+  if (!record) return { record, paths: [] };
+  // A rejected definition may name a different root. Unmanaged siblings are left in place.
+  const recordPath = recordPaths.get(id)!;
+  checkOtherDeliveryRoots(id, recordPath.slice(0, -'/activation.json'.length), recordPaths);
+  return { record, paths: [recordPath, ...Object.keys(record.files)] };
+}
+
+async function verifyPendingOwnership(session: RulesSession, pending: PendingDelivery, stable: PublicationSnapshot) {
+  if (pending.kind === 'delete') {
+    const deletion = await observedDeletion(session, pending.logicalId, stable);
+    if (!isDeepStrictEqual(new Set(deletion.paths), new Set(Object.keys(pending.changes)))) {
+      throw new Error('RULE_WRITE_PENDING: registered deletion differs from current owned paths');
+    }
+  } else {
+    const current = await ensureRulePathAvailable(session, pending.afterRule.definition, stable);
+    ruleSubscription(session, pending.afterRule, current);
+  }
 }
 
 async function plannedDeliveryFiles(session: RulesSession, pending: PendingDelivery): Promise<RuleWrites> {
@@ -139,6 +165,8 @@ export async function recoverRuleDelivery(session: RulesSession, registrationCom
     if (!matchesRegisteredHead(session.shared, stable, pending.stableHead, registrationCommit)) {
       throw new Error('RULE_WRITE_PENDING: stable head differs from registered write');
     }
+    // An older registration may have captured its head after the original ownership check.
+    if (!registrationCommit) await verifyPendingOwnership(session, pending, stable);
     const files = await plannedDeliveryFiles(session, pending);
     if (!isDeepStrictEqual(evidenceFor(files), pending.changes)) throw new Error('RULE_WRITE_PENDING: registered content changed');
     files[RULE_RECEIPT_PATH] = encodeRecord({ schemaVersion: 2, id: pending.id });
@@ -200,15 +228,9 @@ export async function deleteRuleDelivery(session: RulesSession, rule: ManagedRul
   const quarantined = Object.values(session.journal.quarantinedCandidates ?? {});
   if (quarantined.some(candidate => !candidate.logicalId)) throw new Error('RULE_MIGRATION_PENDING: candidate ownership must be established before deletion');
   const stable = await session.stable();
-  const files: RuleWrites = {};
-  const { records, recordPaths } = await session.loaded.readStableDeliveries(stable);
-  if (!isDeepStrictEqual(records.get(id), current)) throw new Error('RULE_WRITE_CONFLICT: current delivery changed before deletion');
-  if (current) {
-    // An accepted definition may have moved. Delete the observed delivery at its actual path.
-    const recordPath = recordPaths.get(id)!;
-    await ensureRulePathAvailable(session, { id, stablePath: recordPath.slice(0, -'/activation.json'.length) }, stable);
-    for (const path of [recordPath, ...Object.keys(current.files)]) files[path] = null;
-  }
+  const deletion = await observedDeletion(session, id, stable);
+  if (!isDeepStrictEqual(deletion.record, current)) throw new Error('RULE_WRITE_CONFLICT: current delivery changed before deletion');
+  const files: RuleWrites = Object.fromEntries(deletion.paths.map(path => [path, null]));
   const removeCandidates = [...Object.values(session.journal.candidates), ...quarantined].filter(candidate => candidate.logicalId === id).map(candidate => candidate.id);
   const afterRule: ManagedRule = { ...rule, lifecycle: 'deleted', control: { mode: 'auto', revision: randomUUID(), inputBindingRevision: rule.inputBindingRevision } };
   delete afterRule.lastFailure;
