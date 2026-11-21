@@ -1,3 +1,4 @@
+import { validArtifactFilename } from './artifact-path.js';
 import { githubPublicationRepository, type PublicationRepository } from './publication-repository.js';
 import { authorizeActivationWrite, type ActivationWriteReservation } from './manual-activation.js';
 import { ARTIFACT_REPOSITORY, ghJson, GitHubHttpError, githubPublication, immutableUrl } from './publication.js';
@@ -16,7 +17,6 @@ export interface ActivationTransport {
 }
 
 const configuredRecord = /^stable\/(?:[a-z0-9][a-z0-9._-]*\/)+activation\.json$/;
-const configuredFilename = /^(?:domains|route)\.(?:srs|json)$/;
 const recordDirectory = (path: string) => path.slice(0, -'activation.json'.length);
 
 /** Branch must already exist. Creating a production or acceptance environment is separate. */
@@ -81,7 +81,7 @@ export function githubActivation(branch = 'main', request: typeof ghJson = ghJso
       }
       for (const recordPath of otherRecords) {
         const directory = recordDirectory(recordPath);
-        const overlaps = paths.filter(path => path.startsWith(directory) && configuredFilename.test(path.slice(directory.length)));
+        const overlaps = paths.filter(path => path.startsWith(directory) && validArtifactFilename(path.slice(directory.length)));
         if (!overlaps.length) continue;
         const record = JSON.parse((await this.download(immutableUrl(expectedHead, recordPath))).toString());
         if (!record?.files || typeof record.files !== 'object' || Array.isArray(record.files) || !Object.keys(record.files).length) {

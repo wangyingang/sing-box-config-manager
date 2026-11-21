@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { syncRules, pinRuleVersion, resumeRuleUpdates } from '../../src/rules-operations.js';
-import { getRulesStatus } from '../../src/rules-status.js';
+import { getRulesStatus, type RuleStatus } from '../../src/rules-status.js';
 import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
 import { sha256 } from '../../src/release.js';
 import { rulesEnvironment } from '../fixtures/rules-environment.js';
@@ -119,6 +119,80 @@ for (const fault of ['release-offline', 'checksum', 'yaml', 'missing-list', 'inv
     for (let i = 0; i < 4; i++) if (expected[i] === 'delivered') assert.deepEqual(retried.results[i].current, result.results[i].current);
   });
 }
+
+test('YAML 自定义名称随两类规则交付，内容复用与稳定订阅各自保留名称', async () => {
+  const env = rulesEnvironment(binary!, 'acceptance-artifact-names');
+  const config = env.config();
+  config.sources.cidr = parseBuildConfiguration(readOfficialConfiguration()).sources['china-operator-ip'];
+  const domain = config.ruleSets[0];
+  domain.usages.route = { artifact: 'ips' };
+  domain.usages['dns-query'] = { artifact: 'ips' };
+  const ip = (id: string, artifact: string) => ({
+    id, source: 'cidr', list: 'all', stablePath: `stable/${id}`,
+    usages: { route: { artifact }, 'dns-query': { unavailable: 'empty' as const }, 'dns-response': { artifact } },
+  });
+  config.ruleSets = [domain, ip('china-ip', 'office-networks'), ip('ip-copy', 'branch-networks')];
+  env.configure(config);
+  const request = { context: env.context };
+  const synced = await syncRules(request);
+  assert.equal(synced.status, 'success', JSON.stringify(synced));
+  assert.deepEqual(synced.results.map(row => row.status), ['delivered', 'delivered', 'delivered']);
+
+  const status = await getRulesStatus(request);
+  assert.equal(status.status, 'success', JSON.stringify(status));
+  assert.equal(status.rules?.length, 3);
+  const snapshot = await env.context.repository.snapshot();
+  for (const rule of config.ruleSets) {
+    const { artifact } = rule.usages.route;
+    const item: RuleStatus = status.rules!.find(row => row.id === rule.id)!;
+    const current = item.current!;
+    assert.equal(item.deliveryState, 'delivered');
+    assert.equal(item.candidateCount, 1);
+    assert.ok(item.candidates.some(candidate => candidate.id === current.candidateId && candidate.current && candidate.selectable));
+    const candidatePath = `candidates/${current.candidateId}/`;
+    const manifest = JSON.parse((await snapshot.read(candidatePath + 'manifest.json'))!.toString());
+    const evidence = JSON.parse((await snapshot.read(candidatePath + 'readback.json'))!.toString());
+    const dns = rule.id === domain.id ? 'dns-query' : 'dns-response';
+    const unavailable = dns === 'dns-query' ? 'dns-response' : 'dns-query';
+    assert.deepEqual(manifest.projections[dns], manifest.projections.route);
+    assert.deepEqual(manifest.projections[unavailable], { unavailable: 'empty' });
+    assert.deepEqual(item.stableUrls.map(url => url.split('/').at(-1)).sort(), [artifact + '.json', artifact + '.srs']);
+    assert.equal(manifest.artifacts.length, 2);
+    for (const entry of manifest.artifacts) {
+      const file = artifact + (entry.format === 'source' ? '.json' : '.srs');
+      assert.ok(entry.url.endsWith('/' + candidatePath + file));
+      const stableUrl = item.stableUrls.find(url => url.endsWith('/' + file))!;
+      const stable = await env.context.repository.download(stableUrl);
+      const candidate = await env.context.repository.download(entry.url);
+      assert.ok(stable.length > 0);
+      assert.deepEqual(stable, candidate);
+      assert.equal(entry.sha256, sha256(stable));
+      assert.ok(evidence.readback.some((row: { url: string; sha256: string }) => row.url === entry.url && row.sha256 === entry.sha256));
+    }
+  }
+
+  const original = status.rules!.find(row => row.id === 'china-ip')!.current!;
+  const originalBytes = await snapshot.read('stable/china-ip/office-networks.srs');
+  assert.ok(originalBytes);
+  const copied = await snapshot.read('stable/ip-copy/branch-networks.srs');
+  assert.deepEqual(copied, originalBytes);
+  assert.equal((await pinRuleVersion({ ...request, id: 'china-ip', version: original.versionId! })).status, 'success');
+  const resumed = await resumeRuleUpdates({ ...request, id: 'china-ip' });
+  assert.equal(resumed.status, 'success', JSON.stringify(resumed));
+  assert.equal(resumed.results[0].current?.versionId, original.versionId);
+
+  config.ruleSets[1] = ip('china-ip', 'replacement-name');
+  env.configure(config);
+  const conflict = await syncRules(request);
+  assert.equal(conflict.status, 'partial', JSON.stringify(conflict));
+  const rejected = conflict.results.find(row => row.id === 'china-ip')!;
+  assert.equal(rejected.status, 'failed');
+  assert.match(rejected.error!, /Existing subscription contract cannot change/);
+  assert.deepEqual(rejected.current, resumed.results[0].current);
+  const stable = await env.context.repository.snapshot();
+  assert.deepEqual(await stable.read('stable/china-ip/office-networks.srs'), originalBytes);
+  assert.equal(await stable.read('stable/china-ip/replacement-name.srs'), undefined);
+});
 
 test('gfw 经 sync 交付并可核验，非法 Git 更新保留 gfw 且不阻断独立规则集', async () => {
   const env = rulesEnvironment(binary!, 'acceptance-gfw');

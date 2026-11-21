@@ -69,7 +69,7 @@ export function githubPublication(request: typeof ghJson = ghJson, branch = PUBL
       const tree = [];
       for (const [path, content] of Object.entries(files)) {
         // This transport can only append unique candidate paths, never stable files.
-        if (!/^candidates\/[a-f0-9-]+\/[a-z0-9.-]+$/.test(path)) throw new Error('Invalid candidate path');
+        if (!/^candidates\/[a-f0-9-]+\/[a-z0-9._-]+$/.test(path)) throw new Error('Invalid candidate path');
         if (paths.has(path)) throw new Error('Refusing to overwrite a historical candidate file');
         const blob = await api('git/blobs', { content: content.toString('base64'), encoding: 'base64' });
         tree.push({ path, mode: '100644', type: 'blob', sha: blob.sha });

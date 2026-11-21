@@ -44,6 +44,27 @@ test('配置在写入前拒绝旧格式、无效来源、用途、身份和目�
   ]) assert.throws(() => parseBuildConfiguration(invalid));
 });
 
+test('非法产物名、记录冲突及共用用途错误在读取上游前拒绝', async () => {
+  const cases = [
+    ...['', '../outside', 'a/b', 'ips.json', 'ips.srs', 'a'.repeat(251)].map(name => ['china-ip', name, name, /basename/] as const),
+    ...['activation', 'manifest', 'build', 'readback', 'source', 'conversion-report'].map(name => [
+      'china-ip', name, name, /conflicts with metadata/,
+    ] as const),
+    ['chatgpt-voice', 'chatgpt-voice', 'chatgpt-voice', /conflicts with metadata or an input snapshot/] as const,
+    ['china-ip', 'office-networks', 'other', /dns-response must share the route artifact basename/] as const,
+  ];
+  for (const [id, route, response, error] of cases) {
+    const configuration = parseBuildConfiguration(readOfficialConfiguration());
+    const rule = configuration.ruleSets.find(entry => entry.id === id)!;
+    rule.usages.route = { artifact: route };
+    rule.usages['dns-response'] = { artifact: response };
+    await assert.rejects(buildConfiguredCommit({
+      configuration: JSON.stringify(configuration), selectedIds: ['china-ip'], binary: '/unused',
+      github: { fetch: async () => assert.fail('Invalid artifact must fail before source access') },
+    }), new RegExp(`Rule set ${id}, source .*${error.source}`));
+  }
+});
+
 test('一份固定来源构建三集，单选只构建目标集；同内容定义保持独立身份', { skip: !process.env.SING_BOX_TEST_BINARY }, async () => {
   const remote = upstream();
   const options = { configuration, release: { tag, fetch: remote.fetcher }, binary: process.env.SING_BOX_TEST_BINARY! };

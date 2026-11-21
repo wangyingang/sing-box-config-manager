@@ -1,32 +1,41 @@
 import { readFileSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
+import { reservedArtifactBasename, validArtifactBasename } from './artifact-path.js';
 import { validRepository, validBranch, validInputPath, validInputFile } from './source-input.js';
 import { isMap, parseDocument, visit } from 'yaml';
 import { USAGES, type Usage } from './projection.js';
 import { ARTIFACT_REPOSITORY } from './publication.js';
 import { CHINA_IP_INPUT, isCommitInputFormat, type CommitInput } from './github-commit.js';
-import { OPENAI_VOICE_URL, type OpenAiVoiceInput } from './openai-voice-source.js';
+import { OPENAI_VOICE_FILE, OPENAI_VOICE_URL, type OpenAiVoiceInput } from './openai-voice-source.js';
 import { V2FLY_RELEASE_INPUT, type ReleaseInput } from './release.js';
 
 export type SourceInput = ReleaseInput | CommitInput | OpenAiVoiceInput;
 export type SourceFormat = SourceInput['input']['format'];
-type ConfiguredUsage = { artifact: 'domains' | 'route' } | { unavailable: 'empty' };
+type AvailableUsage = { artifact: string };
+type ConfiguredUsage = AvailableUsage | { unavailable: 'empty' };
+type DnsUsage = Exclude<Usage, 'route'>;
 
 const formatCapabilities = {
-  'plain-yaml': { artifact: 'domains', namedLists: true },
-  'domain-suffix-text': { artifact: 'domains', namedLists: false },
-  'typed-domain-text': { artifact: 'domains', namedLists: false },
-  'sing-box-domain-json': { artifact: 'domains', namedLists: false },
-  'cidr-text': { artifact: 'route', namedLists: false },
-  'openai-voice-json': { artifact: 'route', namedLists: false },
-} as const satisfies Record<SourceFormat, { artifact: 'domains' | 'route'; namedLists: boolean }>;
+  'plain-yaml': { dns: 'dns-query', namedLists: true },
+  'domain-suffix-text': { dns: 'dns-query', namedLists: false },
+  'typed-domain-text': { dns: 'dns-query', namedLists: false },
+  'sing-box-domain-json': { dns: 'dns-query', namedLists: false },
+  'cidr-text': { dns: 'dns-response', namedLists: false },
+  'openai-voice-json': { dns: 'dns-response', namedLists: false },
+} as const satisfies Record<SourceFormat, { dns: DnsUsage; namedLists: boolean }>;
 
-export function configuredLayout(format: SourceFormat) {
-  return formatCapabilities[format].artifact === 'domains'
-    ? { stem: 'domains', dns: 'dns-query', unavailable: 'dns-response' } as const
-    : { stem: 'route', dns: 'dns-response', unavailable: 'dns-query' } as const;
+export function configuredUsages(format: SourceFormat) {
+  const dns = formatCapabilities[format].dns;
+  const unavailable = dns === 'dns-query' ? 'dns-response' : 'dns-query';
+  return { dns, unavailable } as const;
 }
-export interface RuleDefinition { id: string; source: string; list: string; stablePath: string; usages: Record<Usage, ConfiguredUsage> }
+export interface RuleDefinition {
+  id: string;
+  source: string;
+  list: string;
+  stablePath: string;
+  usages: Record<Usage, ConfiguredUsage> & { route: AvailableUsage };
+}
 export interface BuildConfiguration {
   schemaVersion: 3;
   candidateRetentionDays: number;
@@ -63,17 +72,26 @@ export function parseRuleDefinition(input: unknown, format: SourceFormat = 'plai
     throw new Error(`Invalid stable path: ${String(path)}`);
   }
   const declared = exact(usages, [...USAGES], 'usages');
-  const layout = configuredLayout(format);
-  function usage(key: Usage): ConfiguredUsage {
-    if (key === layout.unavailable) {
-      if (exact(declared[key], ['unavailable'], key).unavailable !== 'empty') throw new Error(`Invalid ${format} usage: ${key}`);
-      return { unavailable: 'empty' };
+  const layout = configuredUsages(format);
+  function availableUsage(key: Usage): AvailableUsage {
+    const { artifact } = exact(declared[key], ['artifact'], key);
+    if (!validArtifactBasename(artifact)) {
+      throw new Error(`Invalid ${format} usage: ${key}: artifact must be a file basename of at most 250 characters using lowercase letters, digits, hyphens or underscores`);
     }
-    const artifact = layout.stem;
-    if (exact(declared[key], ['artifact'], key).artifact !== artifact) throw new Error(`Invalid ${format} usage: ${key}`);
+    if (reservedArtifactBasename(artifact) || (format === 'openai-voice-json' && `${artifact}.json` === OPENAI_VOICE_FILE)) {
+      throw new Error(`Invalid ${format} usage: ${key}: artifact ${artifact} conflicts with metadata or an input snapshot`);
+    }
     return { artifact };
   }
-  return { id, source, list, stablePath: path, usages: { route: usage('route'), 'dns-query': usage('dns-query'), 'dns-response': usage('dns-response') } };
+  const route = availableUsage('route');
+  const dns = availableUsage(layout.dns);
+  if (route.artifact !== dns.artifact) throw new Error(`Invalid ${format} usage: ${layout.dns} must share the route artifact basename`);
+  if (exact(declared[layout.unavailable], ['unavailable'], layout.unavailable).unavailable !== 'empty') {
+    throw new Error(`Invalid ${format} usage: ${layout.unavailable}`);
+  }
+  const empty = { unavailable: 'empty' } as const;
+  return { id, source, list, stablePath: path, usages: { route,
+    'dns-query': layout.dns === 'dns-query' ? dns : empty, 'dns-response': layout.dns === 'dns-response' ? dns : empty } };
 }
 
 export function parseSource(input: unknown): SourceInput {

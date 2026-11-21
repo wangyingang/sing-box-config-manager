@@ -30,7 +30,7 @@ export type ConfiguredResult = { id: string; definition: RuleDefinition; status:
   | { id: string; definition: RuleDefinition; status: 'built-validated'; report: ConversionReport; native: NativeBuild; buildId: string };
 
 export async function configuredBuildTools(format: SourceFormat = 'plain-yaml') {
-  const files = ['source-input', 'configuration', 'configured-build', 'release', 'plain-yaml-adapter', 'yaml-input', 'convert',
+  const files = ['artifact-path', 'source-input', 'configuration', 'configured-build', 'release', 'plain-yaml-adapter', 'yaml-input', 'convert',
     'types', 'projection', 'native'];
   if (format === 'cidr-text') files.push('github-commit', 'cidr-text-adapter');
   if (format === 'domain-suffix-text') files.push('github-commit', 'domain-suffix-text-adapter');
@@ -110,7 +110,7 @@ export async function buildConfigured<Source extends SourceRecord | CommitSource
       continue;
     }
     try {
-      const native = await nativeBuild(converted.terms, binary);
+      const native = await nativeBuild(converted.terms, binary, definition.usages.route.artifact);
       for (const usage of USAGES) {
         const declared = definition.usages[usage], actual = native.usages[usage];
         if ('artifact' in declared

@@ -28,7 +28,7 @@ function github(options: { existing?: string; truncated?: boolean; conflict?: bo
 
 test('GitHub 发布只追加候选文件，通过非强制 candidates 引用更新，保留历史 tree', async () => {
   const remote = github();
-  assert.equal(await remote.transport.commit({ 'candidates/abc-123/domains.srs': Buffer.from([0, 255, 1]) }, 'candidate'), 'e'.repeat(40));
+  assert.equal(await remote.transport.commit({ 'candidates/abc-123/custom_domains.srs': Buffer.from([0, 255, 1]) }, 'candidate'), 'e'.repeat(40));
   const blob = remote.calls.find(call => call.args[1].endsWith('/git/blobs'))!;
   assert.deepEqual(Buffer.from(blob.input.content, 'base64'), Buffer.from([0, 255, 1]));
   const tree = remote.calls.find(call => call.args[1].endsWith('/git/trees'))!;

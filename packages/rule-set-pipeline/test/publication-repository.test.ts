@@ -50,7 +50,7 @@ test('远端快照固定 head，并区分缺失记录与读取失败', async () 
 test('候选字节和进度在同一预期 head 提交，状态可更新且历史候选不可覆盖', async () => {
   const remote = github({ existing: 'pipeline/state.json' });
   const files = { 'pipeline/state.json': Buffer.from('{"generation":1,"stage":"files"}'),
-    'candidates/abc-123/domains.srs': Buffer.from([0, 255, 1]) };
+    'candidates/abc-123/custom_domains.srs': Buffer.from([0, 255, 1]) };
   assert.equal(await remote.repository.commit(oldHead, files, '候选与进度'), newHead);
   const writtenTree = remote.calls.find(call => call.args[1].endsWith('/git/trees'))!.input;
   assert.equal(writtenTree.base_tree, treeSha);
@@ -58,7 +58,7 @@ test('候选字节和进度在同一预期 head 提交，状态可更新且历�
   const commit = remote.calls.find(call => call.args[1].endsWith('/git/commits'))!.input;
   assert.deepEqual(commit.parents, [oldHead]);
   assert.deepEqual(remote.calls.at(-1)?.input, { sha: newHead, force: false });
-  const duplicate = github({ existing: 'candidates/abc-123/domains.srs' });
+  const duplicate = github({ existing: 'candidates/abc-123/custom_domains.srs' });
   await assert.rejects(duplicate.repository.commit(oldHead, files, 'duplicate'), /historical candidate/);
   assert.ok(duplicate.calls.every(call => call.input === undefined), '拒绝覆盖时不得产生外部写入');
 });

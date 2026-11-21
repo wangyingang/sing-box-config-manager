@@ -42,7 +42,7 @@ function historicalTime(bytes: Buffer, candidateId: string) {
 }
 
 function historicalSource(source: RuleCandidate['source'], definition: RuleCandidate['definition']): SourceInput {
-  const format = definition.usages.route && 'artifact' in definition.usages.route && definition.usages.route.artifact === 'route' ? 'cidr-text' : 'plain-yaml';
+  const format = 'artifact' in definition.usages['dns-response'] ? 'cidr-text' : 'plain-yaml';
   if ('kind' in source) {
     if (source.kind !== 'github-commit') throw new Error('RULE_MIGRATION_BLOCKED: unsupported historical source');
     return parseSource({ repository: source.repository, version: 'git-branch', branch: source.branch, input: { format, path: source.file.path } });
@@ -110,7 +110,7 @@ async function prepareMigration(loaded: LoadedRules, journal: RemoteJournal, sna
       audit.quarantinedCandidates.push(id); audit.pending.push(`Candidate ${id}: ${reason}`); continue;
     }
     const build = JSON.parse(buildBytes.toString());
-    const format = build.definition?.usages?.route?.artifact === 'route' ? 'cidr-text' : 'plain-yaml';
+    const format = build.definition?.usages?.['dns-response']?.artifact ? 'cidr-text' : 'plain-yaml';
     const definition = parseRuleDefinition(build.definition, format);
     const evidenceUrl = active?.candidateEvidenceUrl ?? registered?.evidenceUrl
       ?? immutableUrl(await loaded.context.repository.lastChange(snapshot.head, `candidates/${id}/readback.json`), `candidates/${id}/readback.json`);

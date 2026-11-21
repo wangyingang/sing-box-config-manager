@@ -5,7 +5,7 @@ import subscriptionV2Schema from '../contracts/rule-subscription-v2.schema.json'
 import { CANDIDATE_READBACK_VERSION, candidateFiles } from './candidate-publication.js';
 import { verifyActivationCandidate, verifyCandidateEvidence } from './activation.js';
 import { githubActivation, type ActivationTransport } from './activation-transport.js';
-import { configuredLayout, parseRuleDefinition, type RuleDefinition } from './configuration.js';
+import { configuredUsages, parseRuleDefinition, type RuleDefinition } from './configuration.js';
 import { retainedCandidateDownload, type PublicationRepository } from './publication-repository.js';
 import { ARTIFACT_REPOSITORY, githubPublication, immutableUrl, type PublicationTransport } from './publication.js';
 import { readRemoteState } from './remote-state.js';
@@ -44,7 +44,8 @@ export function activationRecord(value: unknown, path: string, targetBranch: str
   const subscription: any = value.subscription;
   requireThat(subscription.systemRuleSetId === value.logicalId, 'Remote subscription identity mismatch');
   const git = value.source?.kind === 'github-commit';
-  const { stem, dns, unavailable } = configuredLayout(git ? 'cidr-text' : 'plain-yaml');
+  const { dns, unavailable } = configuredUsages(git ? 'cidr-text' : 'plain-yaml');
+  const stem = git ? 'route' : 'domains';
   requireThat(subscription.projections[unavailable].unavailable === 'empty'
     && subscription.projections.route.formats && subscription.projections[dns].formats, 'Remote subscription usage mismatch');
   requireThat(isDeepStrictEqual(subscription.projections.route.formats, subscription.projections[dns].formats),

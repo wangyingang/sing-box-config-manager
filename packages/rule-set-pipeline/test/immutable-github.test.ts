@@ -76,6 +76,41 @@ test('跨快照复用 Git 内容但保持 heads 与公开权限检查；每次�
   env.makePrivate(); await assert.rejects(env.repository.snapshot(), /public/);
 });
 
+test('GitHub 写入按分支保留自定义候选和稳定文件名', async () => {
+  const candidate = 'candidates/12345678-1234-4123-8123-123456789abc';
+  const stable = 'stable/test/networks';
+  const filesFor = (root: string) => ({
+    [`${root}/office-networks.srs`]: Buffer.from([0, 255, 1]),
+    [`${root}/office-networks.json`]: Buffer.from('{}'),
+    [`${root}/custom_domains.srs`]: Buffer.from([255, 0, 1]),
+    [`${root}/custom_domains.json`]: Buffer.from('{}'),
+  });
+  for (const [branch, files] of [
+    ['candidates', { ...filesFor(candidate), [`${candidate}/manifest.json`]: Buffer.from('{}') }],
+    ['main', { ...filesFor(stable), [`${stable}/activation.json`]: Buffer.from('{}') }],
+  ] as const) {
+    const env = remote();
+    const head = await env.repository.commit(branch, 'a'.repeat(40), files, 'custom filenames', async () => {});
+    const tree = env.calls.find(call => call.path === '/git/trees')!.input.tree;
+    assert.deepEqual(tree.map((entry: { path: string }) => entry.path), Object.keys(files));
+    assert.deepEqual(env.calls.at(-1), { path: `/git/refs/heads/${branch}`, input: { sha: head, force: false } });
+  }
+
+  for (const [branch, path] of [
+    ['candidates', `${stable}/office-networks.srs`],
+    ['main', `${candidate}/custom_domains.json`],
+    ['main', `${stable}/../../office-networks.srs`],
+    ['main', `${stable}/office-networks.txt`],
+    ['main', `${stable}/office.networks.json`],
+    ['main', `${stable}/manifest.json`],
+  ]) {
+    const env = remote();
+    await assert.rejects(env.repository.commit(branch, 'a'.repeat(40),
+      { [path]: Buffer.from('{}') }, 'invalid file path', async () => {}), /Invalid rules write path/);
+    assert.ok(env.calls.every(call => call.input === undefined));
+  }
+});
+
 for (const at of [1, 2]) test(`第 ${at} 次 guard 拒绝新意图或维护隔离时不移动 ref`, async () => {
   const env = remote(); let guards = 0;
   await assert.rejects(env.repository.commit('main', 'a'.repeat(40), { 'pipeline/state.json': Buffer.from('{}') }, 'test', async () => {

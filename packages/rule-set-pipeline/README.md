@@ -68,6 +68,8 @@ pnpm rules sync --config /path/to/rulesets-draft.yml --dry-run --json
 
 配置使用 `schemaVersion: 3`，必须显式声明正整数 `candidateRetentionDays`。正式配置和样例采用已确定的 30 天策略；`cleanup` 读取正式值，不自行设置默认保留期。`ruleSets` 必须显式存在。`ruleSets: []` 与空 `sources: {}` 可以表达删除全部受管规则；配置缺失、无法读取、未知字段、无效引用、重复 ID 或重叠稳定路径均在写入前拒绝。
 
+每个可用用途用 `artifact` 声明规则文件基名，构建和交付追加 `.json` 或 `.srs`。基名最多 250 个字符，以小写 ASCII 字母或数字开头，可继续使用这些字符、连字符和下划线。保留的候选、交付记录或输入快照文件名不能用作规则产物。每个纯域名集或纯 IP 集的两个可用用途声明相同的基名，共用这组文件。已交付的稳定订阅地址受现有兼容性检查保护。
+
 正式配置为域名集 `openai`、`anthropic`、`google-deepmind`、`china-domains`、`global`、`apple`、`microsoft`、`docker`、`github`、`google`、`youtube`、`gfw`、`onedrive` 和 `stream` 定义 Route 与 DNS query 共用的 `domains.json` 和 `domains.srs`。`china-domains` 选择 V2Fly 的 `geolocation-cn`，`global` 选择 `geolocation-!cn`，其余 V2Fly 规则集选择与 ID 同名的列表。DNS response 对这些域名集不可用。规则集保留上游重叠，匹配优先级由客户端配置中的规则顺序决定。
 
 `gfw` 使用独立的上游域名分类。[Loyalsoldier 的 `release:gfw.txt`](https://github.com/Loyalsoldier/v2ray-rules-dat/blob/release/gfw.txt)
