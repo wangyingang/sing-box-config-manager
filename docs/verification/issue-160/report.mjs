@@ -16,11 +16,15 @@ function median(values) {
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
-console.log('scenario\tmetric\tbaseline median\treuse median\tpaired median savings');
+console.log('scenario\tmetric\tbaseline median\treuse median\tpaired median (baseline minus reuse)');
 for (const scenario of Object.keys(report.facts)) {
-  for (const key of ['totalMs', 'toolIdentity', 'toolInspections', 'eligibleChecks', 'fullHashes', 'byteMatches',
+  for (const key of ['totalMs', 'toolIdentity', 'toolInspections', 'allToolHashes', 'eligibleChecks', 'fullHashes', 'byteMatches',
     'maxRetainedBytes', 'nativeBuilds', 'commits']) {
-    const values = mode => report.samples.map(pair => pair[mode].metrics[scenario][key]);
+    const values = mode => report.samples.map(pair => {
+      const metrics = pair[mode].metrics[scenario];
+      // Each successful native build also hashes the executable once after its commands.
+      return key === 'allToolHashes' ? metrics.toolInspections - metrics.byteMatches + metrics.nativeBuilds : metrics[key];
+    });
     const baseline = values('baseline'), reuse = values('reuse');
     console.log([scenario, key, median(baseline), median(reuse),
       median(baseline.map((before, i) => before - reuse[i]))].map(v => typeof v === 'number' ? +v.toFixed(2) : v).join('\t'));
