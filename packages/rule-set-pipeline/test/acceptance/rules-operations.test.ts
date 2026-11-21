@@ -11,39 +11,69 @@ import { NATIVE_VALIDATION_POLICY } from '../../src/native.js';
 import test from 'node:test';
 import { stringify } from 'yaml';
 import { baselineConfiguration } from '../fixtures/baseline-configuration.js';
+import { configuredProjections, configuredUsages, parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
 import { convertCidrText } from '../../src/cidr-text-adapter.js';
+import { buildRulesInput } from '../../src/rules-build.js';
 import { createGitCommit } from '../../src/publication-repository.js';
-import { ARTIFACT_REPOSITORY, GitHubHttpError, ghJson } from '../../src/publication.js';
+import { ARTIFACT_REPOSITORY, GitHubHttpError, ghJson, immutableUrl } from '../../src/publication.js';
 import { githubRulesRepository } from '../../src/rules-repository.js';
-import type { RulesContext } from '../../src/rules-context.js';
+import { loadRulesRequest, type RulesContext } from '../../src/rules-context.js';
 import type { RuleDelivery, RulesResult } from '../../src/rules-model.js';
 import { candidateFiles, RULE_READBACK_VERSION } from '../../src/candidate-publication.js';
 import { syncRules, pinRuleVersion, resumeRuleUpdates } from '../../src/rules-operations.js';
-import { getRulesStatus } from '../../src/rules-status.js';
+import { getRulesStatus, type RuleStatus } from '../../src/rules-status.js';
 import { sha256 } from '../../src/release.js';
 import { countNativeCommands } from '../fixtures/native-commands.js';
 
 const originalTag = '20261104112839', updatedTag = '20261108011013';
 const originalCommit = 'f162630c8cdad6ced5ef59e606cc93919123ac57';
 const updatedCommit = '62bc1fc8b015bece77271b568e10d6337915bc96';
+const formalBaseline = '544112489eec94dc73663d27ca481438a441ec32';
+const formalTag = '20261118141523';
+const formalCommits: Readonly<Record<string, string>> = {
+  'china-operator-ip': 'be3de75a9698c50193c35c1215509e89d5d5cf6f',
+  loyalsoldier: '3914c5cf42be87696db5139fc4b7d681b09b8d4a',
+  blackmatrix7: '0b6897dc17e0c513d25449c935a9694818e32f0c',
+  sukka: '838801f009734aa324e7d42d7b7b51561d1df5ba',
+};
+const controlledVoice = '{ "prefixes": [{ "ipv4Prefix": "192.0.2.0/24" }, { "ipv6Prefix": "2001:db8:1::/48" }] }\n';
 
-/** Only discovery is pinned. Source bytes, Git writes and HTTPS readback are real. */
+/** Git and HTTPS readback are real. The formal first-delivery case pins Git/Release discovery and supplies controlled Voice bytes. */
 test('GitHub 隔离验收：正式规则集首次交付或四集生命周期，生产 refs/开关不变', {
   skip: process.env.RULE_OPERATIONS_PROBE !== '1', timeout: 3_600_000,
 }, async t => {
   const binary = process.env.SING_BOX_TEST_BINARY, evidencePath = process.env.RULE_OPERATIONS_EVIDENCE;
   assert.ok(binary, 'Set SING_BOX_TEST_BINARY');
   assert.ok(evidencePath, 'Set RULE_OPERATIONS_EVIDENCE to a new file');
-  const firstOnly = process.env.RULE_OPERATIONS_FIRST_ONLY === '1';
+  const formalFirst = process.env.RULE_OPERATIONS_FORMAL_FIRST === '1';
+  const firstOnly = formalFirst || process.env.RULE_OPERATIONS_FIRST_ONLY === '1';
   const exec = promisify(execFile);
+  const git = async (...args: string[]) => (await exec('git', args, { maxBuffer: 10 * 1024 * 1024 })).stdout;
+  const official = readOfficialConfiguration();
+  const config = formalFirst ? parseBuildConfiguration(official) : baselineConfiguration(firstOnly);
+  const baseline = formalFirst
+    ? parseBuildConfiguration(await git('show', `${formalBaseline}:packages/rule-set-pipeline/config/rulesets.yml`))
+    : undefined;
+  const ipIds = ['china-ip', 'chatgpt-voice'];
+  if (baseline) {
+    assert.equal(baseline.ruleSets.length, 16);
+    const renamed = structuredClone(baseline);
+    assert.equal(renamed.ruleSets.filter(rule => ipIds.includes(rule.id)).length, 2);
+    for (const rule of renamed.ruleSets.filter(rule => ipIds.includes(rule.id))) {
+      assert.deepEqual(rule.usages.route, { artifact: 'route' });
+      assert.deepEqual(rule.usages['dns-response'], rule.usages.route);
+      rule.usages.route = rule.usages['dns-response'] = { artifact: 'ips' };
+    }
+    assert.deepEqual(config, renamed);
+  }
   const token = process.env.GH_TOKEN ?? (await exec('gh', ['auth', 'token'])).stdout.trim();
-  const target = `acceptance-issue-96-${randomUUID()}`;
-  assert.match(target, /^acceptance-issue-96-[a-f0-9-]+$/);
-  const sourceIdentity = { commit: (await exec('git', ['rev-parse', 'HEAD'])).stdout.trim(),
-    status: (await exec('git', ['status', '--porcelain'])).stdout,
-    diffSha256: sha256((await exec('git', ['diff', 'HEAD'], { maxBuffer: 10 * 1024 * 1024 })).stdout),
+  const target = `acceptance-issue-${formalFirst ? 164 : 96}-${randomUUID()}`;
+  const sourceIdentity = { commit: (await git('rev-parse', 'HEAD')).trim(),
+    status: await git('status', '--porcelain'),
+    diffSha256: sha256(await git('diff', 'HEAD')),
     probeSha256: sha256(await readFile(new URL(import.meta.url))), binary, binarySha256: sha256(await readFile(binary)),
-    command: `RULE_OPERATIONS_PROBE=1 ${firstOnly ? 'RULE_OPERATIONS_FIRST_ONLY=1 ' : ''}pnpm --dir packages/rule-set-pipeline test:acceptance:rules` };
+    configurationSha256: sha256(official), ...(baseline && { baseline: formalBaseline }),
+    command: `RULE_OPERATIONS_PROBE=1 ${formalFirst ? 'RULE_OPERATIONS_FORMAL_FIRST=1 ' : firstOnly ? 'RULE_OPERATIONS_FIRST_ONLY=1 ' : ''}pnpm --dir packages/rule-set-pipeline test:acceptance:rules` };
   const observations: unknown[] = [], requests: string[] = [], readbacks: unknown[] = [];
   const acquisitionAttempts: { label: string; attempt: number; requests: string[] }[] = [];
   const nativeTrace = await mkdtemp(join(tmpdir(), 'rule-operations-native-'));
@@ -113,7 +143,7 @@ exec ${shellQuote(binary)} "$@"
     assert.deepEqual(cleanupErrors, []); assert.deepEqual(remaining, []); assert.deepEqual(after, before);
     console.log(JSON.stringify({ target, cleaned: true, productionUnchanged: true, evidencePath }));
   });
-  const head = await createGitCommit((path, input) => api(path, input), { 'README.md': Buffer.from(`Issue 96 isolated probe ${target}\n`) }, '隔离规则集交付验收');
+  const head = await createGitCommit((path, input) => api(path, input), { 'README.md': Buffer.from(`Isolated rules operation probe ${target}\n`) }, '隔离规则集交付验收');
   await api('git/refs', { ref: `refs/heads/${target}`, sha: head }); created = true;
   const repository = githubRulesRepository(target, request);
   const download = repository.download;
@@ -122,7 +152,15 @@ exec ${shellQuote(binary)} "$@"
     catch (error) { if (error instanceof TypeError) return download(url); throw error; }
   };
   const sources = new Map<string, Response>();
-  let tag = originalTag, commit = originalCommit;
+  let tag = formalFirst ? formalTag : originalTag, commit = originalCommit;
+  const fixedGitBranches = new Map<string, { name: string; sha: string }>();
+  if (formalFirst) {
+    for (const [key, sha] of Object.entries(formalCommits)) {
+      const source = config.sources[key];
+      assert.equal(source.version, 'git-branch');
+      fixedGitBranches.set(`https://api.github.com/repos/${source.repository}/branches/${source.branch}`, { name: source.branch, sha });
+    }
+  }
   const upstream = async (address: string, init?: RequestInit) => {
     const cached = sources.get(address); if (cached) return cached.clone();
     const endpoint = new URL(address);
@@ -144,13 +182,15 @@ exec ${shellQuote(binary)} "$@"
     const address = String(url); requests.push(address);
     if (address === OPENAI_VOICE_URL) {
       assert.equal(new Headers(init?.headers).has('Authorization'), false);
-      const response = await fetch(url, init);
+      const response = formalFirst ? new Response(controlledVoice, { headers: { etag: '"issue-164-controlled-voice"' } }) : await fetch(url, init);
       if (response.ok) {
         const bytes = new Uint8Array(await response.clone().arrayBuffer());
         voiceInputs.set(sha256(bytes), bytes);
       }
       return response;
     }
+    const fixedBranch = fixedGitBranches.get(address);
+    if (fixedBranch) return Response.json({ name: fixedBranch.name, commit: { sha: fixedBranch.sha } });
     if (address.endsWith('/branches/ip-lists')) {
       const branch = await (await upstream(address, init)).json();
       assert.equal(branch.name, 'ip-lists');
@@ -161,15 +201,16 @@ exec ${shellQuote(binary)} "$@"
     }
     return upstream(address.replace(/\/releases\/latest$/, `/releases/tags/${tag}`), init);
   };
-  const config = baselineConfiguration(firstOnly); config.target.branch = target;
+  config.target.branch = target;
   let revision = 1;
   const context: RulesContext = { repository, targetBranch: target, allowWrites: true, binary: tracedBinary, token,
     readConfiguration: async () => ({ revision: String(revision).padStart(40, '0'), origin: 'isolated-github-probe', content: stringify(config) }),
     fetch: sourceFetch,
   };
   const input = { context, onProgress: (event: { stage: string; id?: string }) => console.log(JSON.stringify(event)) };
+  const stableUrl = (path: string) => `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${target}/${path}`;
   const stableBytes = new Map<string, Buffer>();
-  let checkedStatus: Awaited<ReturnType<typeof getRulesStatus>> | undefined;
+  let checkedRules: RuleStatus[] = [];
   async function readBytes(url: string, expected?: { sha256: string; byteLength: number }) {
     const deadline = Date.now() + 480_000; let attempts = 0;
     do {
@@ -206,12 +247,14 @@ exec ${shellQuote(binary)} "$@"
     // New context/session, not a local success index.
     const status = await getRulesStatus({ context: { ...context } }); assert.equal(status.status, 'success', JSON.stringify(status));
     assert.deepEqual(status.readbackRequests, []);
-    observations.push({ label, status }); checkedStatus = status;
+    assert.ok(status.rules);
+    observations.push({ label, status }); checkedRules = status.rules;
     const snapshot = await repository.snapshot();
     for (const rule of status.rules ?? []) {
       for (const [path, expected] of Object.entries(rule.current?.files ?? {})) {
-        const immutableBytes = await readBytes(`https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${snapshot.head}/${path}`, expected);
-        if (canonical) assert.deepEqual(await readBytes(`https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${target}/${path}`, expected), immutableBytes);
+        const deliveryCommit = formalFirst ? await repository.lastChange(snapshot.head, path) : snapshot.head;
+        const immutableBytes = await readBytes(immutableUrl(deliveryCommit, path), expected);
+        if (canonical) assert.deepEqual(await readBytes(stableUrl(path), expected), immutableBytes);
         const key = `${rule.current!.versionId}/${path}`;
         if (!stableBytes.has(key)) stableBytes.set(key, immutableBytes);
       }
@@ -241,7 +284,7 @@ exec ${shellQuote(binary)} "$@"
     assert.equal(readback.readback.length, 2);
     const files = [];
     const definition = config.ruleSets.find(x => x.id === current.logicalId)!;
-    const isCidr = 'artifact' in definition.usages.route && definition.usages.route.artifact === 'route';
+    const layout = configuredUsages(config.sources[definition.source].input.format);
     const retainedFiles = candidateFiles(definition);
     if (validOpenAiVoiceSource(current.source)) {
       const input = await readGit(OPENAI_VOICE_FILE);
@@ -253,7 +296,7 @@ exec ${shellQuote(binary)} "$@"
       const addresses = prefixes.map((entry: { ipv4Prefix?: string; ipv6Prefix?: string }) => entry.ipv4Prefix ?? entry.ipv6Prefix);
       const expected = convertCidrText(Buffer.from(addresses.join('\n')), OPENAI_VOICE_FILE, 'all');
       assert.ok(expected.ok);
-      const route = JSON.parse((await readGit('route.json')).toString());
+      const route = JSON.parse((await readGit(definition.usages.route.artifact + '.json')).toString());
       assert.deepEqual(route.rules, [{ ip_cidr: expected.terms.map(term => term.value) }]);
       expectedCount = addresses.length;
       retainedFiles.push(OPENAI_VOICE_FILE);
@@ -270,16 +313,20 @@ exec ${shellQuote(binary)} "$@"
     const build = JSON.parse((await readGit('build.json')).toString());
     assert.equal(manifest.id, current.logicalId); assert.equal(manifest.targetVersion, '1.14.4'); assert.equal(manifest.sourceFormatVersion, 4);
     assert.equal(build.id, current.logicalId);
-    assert.equal(build.definition.list, isCidr ? 'all' : expectedList);
+    assert.equal(build.definition.list, layout.dns === 'dns-response' ? 'all' : expectedList);
     assert.deepEqual(build.source, current.source); assert.equal(build.validation.status, 'passed');
+    assert.equal(build.tool.version, '1.14.4');
     assert.equal(build.validation.policy, NATIVE_VALIDATION_POLICY);
     assert.deepEqual(build.source, JSON.parse((await readGit('source.json')).toString()));
     if (expectedCount !== undefined) assert.equal(report.inputCount, expectedCount);
     assert.deepEqual(manifest.artifacts.map((x: { format: string }) => x.format), ['source', 'binary']);
-    assert.deepEqual(manifest.projections.route, manifest.projections[isCidr ? 'dns-response' : 'dns-query']);
-    assert.deepEqual(manifest.projections[isCidr ? 'dns-query' : 'dns-response'], { unavailable: 'empty' });
+    assert.deepEqual(manifest.projections.route, manifest.projections[layout.dns]);
+    assert.deepEqual(manifest.projections[layout.unavailable], { unavailable: 'empty' });
     for (const artifact of manifest.artifacts) {
-      await readBytes(artifact.url, artifact);
+      const file = definition.usages.route.artifact + (artifact.format === 'source' ? '.json' : '.srs');
+      assert.equal(artifact.url, immutableUrl(readback.filesCommit, prefix + file));
+      const bytes = await readBytes(artifact.url, artifact);
+      assert.deepEqual(bytes, stableBytes.get(`${current.versionId}/${definition.stablePath}/${file}`));
       if (artifact.format === 'source') {
         assert.equal(artifact.termCount, report.outputTermCount);
         if (expectedCount !== undefined && !validOpenAiVoiceSource(current.source)) assert.equal(artifact.termCount, expectedCount);
@@ -292,7 +339,10 @@ exec ${shellQuote(binary)} "$@"
   assert.deepEqual((await repository.snapshot()).paths, ['README.md']);
   const empty = await getRulesStatus(input);
   assert.equal(empty.status, 'success', JSON.stringify(empty));
-  assert.ok(empty.rules?.every(rule => rule.deliveryState === 'not-delivered' && rule.candidateCount === 0));
+  assert.ok(empty.rules);
+  assert.deepEqual(empty.rules.map(rule => rule.id), config.ruleSets.map(rule => rule.id));
+  assert.ok(empty.rules.every(rule => rule.deliveryState === 'not-delivered' && rule.candidateCount === 0));
+  observations.push({ label: 'empty-target', head, status: empty });
   const first = await check('first-delivery', () => syncRules(input));
   const nativeCommands = (await readFile(tracePath, 'utf8')).trim().split('\n');
   const nativeCounts = countNativeCommands(nativeCommands);
@@ -304,13 +354,73 @@ exec ${shellQuote(binary)} "$@"
   assert.equal(nativeCounts.binaryLoad, config.ruleSets.length);
   assert.deepEqual(first.results.map(x => x.id), config.ruleSets.map(rule => rule.id));
   assert.ok(first.results.every(x => x.current && ['delivered', 'unchanged'].includes(x.status)));
-  assert.deepEqual(checkedStatus?.rules?.map(x => x.candidateCount), config.ruleSets.map(() => 1));
+  assert.deepEqual(checkedRules.map(x => x.candidateCount), config.ruleSets.map(() => 1));
+  if (baseline) {
+    const stable = await repository.snapshot();
+    const stablePaths: string[] = [];
+    for (const [index, rule] of config.ruleSets.entries()) {
+      const row = checkedRules[index], current = row.current!;
+      assert.equal(row.id, rule.id);
+      assert.equal(row.deliveryState, 'delivered');
+      assert.ok(row.candidates.some(candidate => candidate.id === current.candidateId && candidate.current && candidate.selectable));
+      const ip = ipIds.includes(rule.id);
+      const stem = ip ? 'ips' : 'domains';
+      const paths = ['json', 'srs'].map(extension => `${rule.stablePath}/${stem}.${extension}`);
+      stablePaths.push(rule.stablePath, ...paths, `${rule.stablePath}/activation.json`);
+      assert.deepEqual(Object.keys(current.files).sort(), paths);
+      assert.deepEqual([...row.stableUrls].sort(), paths.map(stableUrl));
+      const { projections } = current.subscription as { projections: ReturnType<typeof configuredProjections> };
+      assert.deepEqual(projections, configuredProjections(rule, target));
+      assert.deepEqual(projections.route, projections[ip ? 'dns-response' : 'dns-query']);
+      assert.deepEqual(projections[ip ? 'dns-query' : 'dns-response'], { unavailable: 'empty' });
+      if (!ip) continue;
+      for (const extension of ['json', 'srs']) {
+        const oldAddress = stableUrl(`${rule.stablePath}/route.${extension}`);
+        await assert.rejects(repository.download(oldAddress), /Readback HTTP 404/);
+        observations.push({ label: 'retired-url', id: rule.id, url: oldAddress, status: 404 });
+      }
+      const oldRule = baseline.ruleSets[index];
+      const oldConfig = { ...baseline, target: config.target, ruleSets: [oldRule] };
+      const loaded = await loadRulesRequest({ context: { ...context, binary,
+        readConfiguration: async () => ({ revision: formalBaseline, origin: 'pre-rename-baseline', content: stringify(oldConfig) }) } });
+      const old = await buildRulesInput(loaded, [oldRule]);
+      assert.deepEqual(old.source, current.source);
+      const [oldResult] = old.results; assert.equal(oldResult.status, 'built-validated');
+      const probes = rule.id === 'china-ip'
+        ? [['1.0.1.1', true], ['192.0.2.1', false], ['240e::1', true], ['2001:db8::1', false]] as const
+        : [['192.0.2.1', true], ['192.0.3.1', false], ['2001:db8:1::1', true], ['2001:db8:2::1', false]] as const;
+      for (const artifact of oldResult.native.artifacts) {
+        const file = `${stem}.${artifact.file.split('.').at(-1)}`;
+        const currentBytes = stableBytes.get(`${current.versionId}/${rule.stablePath}/${file}`);
+        assert.ok(currentBytes);
+        assert.deepEqual(currentBytes, artifact.content);
+        for (const [name, bytes] of [[artifact.file, artifact.content], [file, currentBytes]] as const) {
+          const local = join(nativeTrace, name);
+          await writeFile(local, bytes);
+          for (const [value, expected] of probes) {
+            const result: { stdout: string; stderr: string } = await exec(binary,
+              ['rule-set', 'match', local, value, '--format', artifact.format]);
+            const matched = (result.stdout + result.stderr).includes('match rules.');
+            assert.equal(matched, expected, `${rule.id} ${name} ${value}`);
+            observations.push({ label: 'native-ip-match', id: rule.id, file: name, format: artifact.format, value, matched, expected,
+              sha256: sha256(bytes), byteLength: bytes.length });
+          }
+        }
+      }
+    }
+    assert.deepEqual(stable.paths.filter(path => path.startsWith('stable/')).sort(), stablePaths.sort());
+    observations.push({ label: 'first-delivery-stable-tree', head: stable.head, paths: stablePaths });
+    await checkpoint('first-delivery-stable-tree');
+  }
   for (const [i, entry] of first.results.entries()) {
     const source = entry.current!.source;
+    const definition = config.ruleSets[i];
+    const fixed = formalCommits[definition.source];
     if (entry.id === 'chatgpt-voice') assert.ok(validOpenAiVoiceSource(source));
+    else if (formalFirst && fixed) { assert.ok('commit' in source); assert.equal(source.commit, fixed); }
     else if (entry.id === 'china-ip') { assert.ok('commit' in source); assert.equal(source.commit, originalCommit); }
-    else { assert.ok('tag' in source); assert.equal(source.tag, originalTag); }
-    await inspectCandidate(entry.current!, [25, 19, 49][i]);
+    else { assert.ok('tag' in source); assert.equal(source.tag, formalFirst ? formalTag : originalTag); }
+    await inspectCandidate(entry.current!, formalFirst ? undefined : [25, 19, 49][i], definition.list);
   }
   if (firstOnly) return;
   const domainSource = first.results[0].current!.source;

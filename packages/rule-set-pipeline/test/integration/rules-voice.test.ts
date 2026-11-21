@@ -73,7 +73,7 @@ test('ChatGPT Voice 恢复原始快照，损坏时拒绝使用新上游替代', 
   assert.deepEqual(validators, [null]);
   assert.equal(recovered.results[0].current?.candidateId, registered.id);
   assert.deepEqual(recovered.results[0].current?.source, registered.source);
-  const route = await (await env.context.repository.snapshot()).read('stable/chatgpt-voice/route.json');
+  const route = await (await env.context.repository.snapshot()).read('stable/chatgpt-voice/ips.json');
   assert.deepEqual(JSON.parse(route!.toString()).rules, [{ ip_cidr: ['192.0.2.0/24', '2001:db8:1::/48'] }]);
   const updated = await syncRules(req);
   assert.equal(updated.status, 'success', JSON.stringify(updated));
