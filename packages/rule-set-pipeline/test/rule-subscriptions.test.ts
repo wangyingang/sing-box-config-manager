@@ -14,7 +14,7 @@ test('official configuration provides stable subscriptions and reuses files acro
       const route = subscription.projections.route;
       const prefix = `https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/${branch}/stable/${id}`;
       const ip = id === 'china-ip' || id === 'chatgpt-voice';
-      const stem = ip ? 'route' : 'domains';
+      const stem = ip ? 'ips' : 'domains';
       assert.deepEqual(route, { formats: {
         binary: { url: `${prefix}/${stem}.srs`, requiredCapabilities: [] },
         source: { url: `${prefix}/${stem}.json`, requiredCapabilities: [] },
