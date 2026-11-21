@@ -9,7 +9,7 @@ import { inspectBinary, type NativeBuildOptions } from './native.js';
 import type { PublicationSnapshot } from './publication-repository.js';
 import { immutableUrl } from './publication.js';
 import { encodeRecord, parseRulesJournal, RULE_STATE_PATH, type RuleCandidate, type RulesJournal } from './rules-model.js';
-import { readRuleDeliveries } from './rules-delivery.js';
+import { verifyStableDeliveries } from './stable-deliveries.js';
 import { verifyRuleCandidateInSnapshot } from './rules-build.js';
 import type { RulesRepository } from './rules-repository.js';
 
@@ -125,7 +125,7 @@ export async function verifyRulesBaseline(options: RulesBaselineVerification, st
       }
     }
   }
-  const deliveries = await readRuleDeliveries(stable);
+  const { records: deliveries } = await verifyStableDeliveries(stable);
   if (deliveries.size !== plan.retain.active.length) throw new Error('Baseline active entry count changed');
   const stablePaths = new Set<string>();
   for (const { recordPath, record } of plan.retain.active) {

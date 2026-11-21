@@ -46,10 +46,11 @@ export async function openRulesSession(loaded: LoadedRules): Promise<RulesSessio
       parseRulesJournal(state);
       const writes = { ...files, [RULE_STATE_PATH]: state,
         ...(!persisted ? { 'pipeline/identity.json': encodeRecord({ schemaVersion: 2, id: next.id }) } : {}) };
+      let committed: string;
       try {
         // The repository guards object creation and the ref update; avoid a
         // third redundant preflight while retaining both actual write checks.
-        await repository.commit(repository.branch, snapshot.head, writes, '保存规则配置、版本与操作状态', session.guard);
+        committed = await repository.commit(repository.branch, snapshot.head, writes, '保存规则配置、版本与操作状态', session.guard);
       } catch (error) {
         if (!(error instanceof PublicationWriteError)) throw error;
         const observed = await repository.snapshot().catch(() => undefined);
@@ -57,6 +58,7 @@ export async function openRulesSession(loaded: LoadedRules): Promise<RulesSessio
         if (!observedState || parseRulesJournal(observedState).writeId !== next.writeId) {
           throw new Error(`RULE_WRITE_PENDING: cannot confirm ${error.attemptedCommit}`, { cause: error });
         }
+        committed = error.attemptedCommit;
       }
       snapshot = await repository.snapshot();
       const actual = await snapshot.read(RULE_STATE_PATH);
@@ -64,7 +66,8 @@ export async function openRulesSession(loaded: LoadedRules): Promise<RulesSessio
       persisted = parseRulesJournal(actual);
       session.snapshot = snapshot;
       session.journal.writeId = next.writeId;
-      return snapshot.head;
+      // The ref may advance after our write while retaining these journal bytes.
+      return committed;
     },
   };
   return session;

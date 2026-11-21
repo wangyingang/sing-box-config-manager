@@ -73,7 +73,7 @@ async function unchangedResult(session: RulesSession, rule: ManagedRule, success
 
 async function updateSelectedRules(session: RulesSession, definitions: RuleDefinition[], changes: Map<string, string[]>, recoveredDeliveryId?: string) {
   const results: RuleResult[] = [];
-  const deliveries = await readRuleDeliveries(await session.stable());
+  const deliveries = new Map(await readRuleDeliveries(session, await session.stable()));
   const groups = new Map<string, RuleDefinition[]>();
   for (const definition of definitions) {
     const rule = session.loaded.dryRun ? desiredRule(session, definition) : ownRule(session, definition.id)!;
@@ -235,7 +235,7 @@ export async function syncRules(request: RulesRequest = {}): Promise<RulesResult
     if (disabled) return disabled;
     session = await openRulesSession(loaded);
     // Shared delivery corruption must stop even definition/control checkpoints.
-    await readRuleDeliveries(await session.stable());
+    await readRuleDeliveries(session, await session.stable());
     const recoveredDeliveryId = session.journal.pendingDelivery?.logicalId;
     if (!session.loaded.dryRun) { await guardRulesConfiguration(session.loaded); await recoverRuleDelivery(session); }
     else if (session.journal.pendingDelivery) {
@@ -259,7 +259,7 @@ export async function syncRules(request: RulesRequest = {}): Promise<RulesResult
       }
       await session.save();
     }
-    const deliveries = await readRuleDeliveries(await session.stable());
+    const deliveries = await readRuleDeliveries(session, await session.stable());
     for (const rule of removed) {
       const id = rule.definition.id;
       if (session.loaded.dryRun) { results.push({ id, status: 'planned', changes: ['delete-stable-entry', 'delete-candidates'] }); continue; }
@@ -301,7 +301,7 @@ export async function pinRuleVersion(request: RulesRequest & { id: string; versi
     session = await openRulesSession(loaded);
     const definition = selectedDefinition(session, request.id);
     const candidate = selectedVersion(session, request.id, request.version);
-    let current = (await readRuleDeliveries(await session.stable())).get(request.id);
+    let current = (await readRuleDeliveries(session, await session.stable())).get(request.id);
     let afterRule = desiredRule(session, definition);
     // All candidate and contract checks happen before accepting even the target
     // definition, so an invalid pin is a genuinely read-only failure.
@@ -314,7 +314,7 @@ export async function pinRuleVersion(request: RulesRequest & { id: string; versi
     await guardRulesConfiguration(session.loaded);
     if (session.journal.pendingDelivery && session.journal.pendingDelivery.logicalId !== request.id) throw new Error('RULE_WRITE_PENDING: another rule set has an unresolved delivery');
     await recoverRuleDelivery(session);
-    current = (await readRuleDeliveries(await session.stable())).get(request.id);
+    current = (await readRuleDeliveries(session, await session.stable())).get(request.id);
     afterRule = desiredRule(session, definition);
     const existing = ownRule(session, request.id);
     if (existing?.control.mode === 'pinned' && existing.control.candidateId === candidate.id
@@ -344,7 +344,7 @@ export async function resumeRuleUpdates(request: RulesRequest & { id: string }):
     if (disabled) return disabled;
     session = await openRulesSession(loaded);
     const definition = selectedDefinition(session, request.id);
-    await readRuleDeliveries(await session.stable());
+    await readRuleDeliveries(session, await session.stable());
     const recoveredDeliveryId = session.journal.pendingDelivery?.logicalId;
     if (!session.loaded.dryRun) {
       await guardRulesConfiguration(session.loaded);
@@ -356,7 +356,7 @@ export async function resumeRuleUpdates(request: RulesRequest & { id: string }):
     if (session.loaded.dryRun) {
       // Preview uses only the latest input and native validation. It does not
       // simulate journal writes or manufacture a published candidate.
-      const current = (await readRuleDeliveries(await session.stable())).get(request.id);
+      const current = (await readRuleDeliveries(session, await session.stable())).get(request.id);
       ruleSubscription(session, next, current);
       await ensureRulePathAvailable(session, definition);
       const built = await buildRulesInput(session.loaded, [definition]);

@@ -9,6 +9,7 @@ import { githubBaselineTransport, type BaselineTransport } from './maintenance-b
 import { gitMaintenanceRefs, type MaintenanceRefTransport } from './maintenance-refs.js';
 import { createOperationEvidenceVerifier } from './evidence-download.js';
 import { cacheImmutableGitReads } from './immutable-github.js';
+import { createStableDeliveryReader } from './stable-deliveries.js';
 import { createOperationNativeBuilder } from './native.js';
 import { reportRulesProgress, type RulesProgress } from './rules-progress.js';
 
@@ -99,6 +100,7 @@ export async function loadRulesRequest(request: RulesRequest, writeKind: 'update
   };
   return { context, observed, configuration, readbackRequests, downloadEvidence, dryRun: Boolean(request.dryRun), allowWrites, writeKind,
     nativeBuild: createOperationNativeBuilder(),
+    readStableDeliveries: createStableDeliveryReader(),
     verifyEvidence: createOperationEvidenceVerifier(downloadEvidence),
     progress: (stage: RulesProgress['stage'], id?: string) => reportRulesProgress(request.onProgress, stage, id) };
 }
