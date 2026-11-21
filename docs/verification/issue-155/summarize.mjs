@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 const paths = process.argv.slice(2);
 assert.ok(paths.length === 1 || paths.length === 2, 'summarize.mjs BASELINE_JSON [COMPARISON_JSON]');
 const reports = await Promise.all(paths.map(async path => JSON.parse(await readFile(path, 'utf8'))));
+for (const report of reports) assert.ok(report.samples.length > 0, 'Missing samples');
 const [before, after] = reports;
 if (after) {
   assert.equal(before.samples.length, after.samples.length, 'rounds');
@@ -16,13 +17,11 @@ function median(values) {
   const middle = Math.floor(sorted.length / 2);
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
-const metrics = ['totalMs', 'snapshotCheck', 'source', 'native', 'toolIdentity', 'gitWrite', 'checkReads',
-  'checkBytes', 'stableReads', 'stableBytes', 'reads', 'snapshots', 'upstream', 'nativeBuilds', 'toolInspections', 'commits'];
-console.log(['scenario', 'metric', 'baseline', ...(after ? ['comparison'] : [])].join('\t'));
+console.log(['scenario', 'metric', 'baseline (n=' + before.samples.length + ')',
+  ...(after ? ['comparison (n=' + after.samples.length + ')'] : [])].join('\t'));
 for (const scenario of Object.keys(before.facts)) {
-  for (const key of metrics) {
+  for (const key of Object.keys(before.samples[0][scenario])) {
     const values = reports.map(report => {
-      assert.ok(report.samples.length > 0);
       const samples = report.samples.map(sample => sample[scenario][key]);
       assert.ok(samples.every(Number.isFinite), key);
       return Number(median(samples).toFixed(2));
