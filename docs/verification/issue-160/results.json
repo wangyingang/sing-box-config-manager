@@ -1,0 +1,3615 @@
+{
+  "experimentSha256": "eaf5c87246361ec393fc07b634ed98ef9c0f6cb772bc68914f3ee4f423e9217a",
+  "commit": "c29a41b21c420bbd12e400867c47e0bc6c386a04",
+  "sourceTree": "b3753940b83047e4e24f05f30b33b13df695b98c",
+  "fixtureSha256": "1ccf6dc68253eeee955e8e482fa1167f99bb95c7f3179d1cb85c1533159fb79e",
+  "lockSha256": "1b4da3c88f7db9e86e325c7813cc0dac8e9bcfe53a6d12c846b1e1ae0fd5a936",
+  "probeSha256": "b0629ede10c45ad21b94927b14a87b7020019256e84b7196b8b225230d84c711",
+  "configurationSha256": "c73361933d1663b3f0ccc8772b5d939bfea39d7374fd78dd33472df998bf67c8",
+  "node": "v26.13.0",
+  "platform": "darwin/arm64",
+  "binarySha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2",
+  "binaryVersion": "sing-box version 1.14.4",
+  "layout": "local in-memory candidates/main, replayed upstream and artifact transport",
+  "facts": {
+    "first": {
+      "openai": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "481b2b2c45202ef9b4b2ac0ef3e4e371296d0aa4cb1f245c450ecd1edde9b5d7",
+          "domains.json": "a70096077d78af43df6f56dbad775c27e8b0be7c92a81e36baaf8229b04de5d5"
+        }
+      },
+      "anthropic": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "6bdf4ebc85d20b873b860875dd00030c40a673d92152a8fbae26a367f02fd8d1",
+          "domains.json": "2f50f77b8c2d6885e40d729dc16a8c830e4364f00330231ded8f696e636fff84"
+        }
+      },
+      "google-deepmind": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "652abe66df71563d3836fccafd551448935b7551a00fe9af572062bd7008fa45",
+          "domains.json": "1f417b044c3cff900faa62bd5df7f92cb0bfca8c288c9f64689ccd17ffd83322"
+        }
+      },
+      "china-domains": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "5572d2c40839b39cd604fca8153f4f6b2601311cd208a434cfcd1a1030bb41dc",
+          "domains.json": "dd2c6e600d9714eacc47b783beb6aca1738aa506b3c475aa1d6ac7fb6e909136"
+        }
+      },
+      "global": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "c155925ca5d6b31237b660259302fdb42482ea84245b1e635f2d1f5b96205c52",
+          "domains.json": "7680a6c8fe2b2ff017641ca5338f5ee4d23d956c9419de69f471514f9725cbfa"
+        }
+      },
+      "apple": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "f2707c6e86f68b1cf44c2ecda98030956fb03e2dec552b65965f569e1da1e422",
+          "domains.json": "9e6cc2bbdf49f7540d9fb4eeabf42cf476cf704e91e89628557373adf3701cc3"
+        }
+      },
+      "microsoft": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "f418743e05510367c47a5f7b60283299f089097f90d72e132990ce3e5e9f1ba8",
+          "domains.json": "1ccfdb68b011a47194e4d80dd33d09a3f1e863ca6333cdc4e828a4d2eabff67f"
+        }
+      },
+      "docker": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "1f66f663694e9aa2b8b986f6dc8c3fa67eafd8e4ad268b81bfa9ea4b6b0a58fe",
+          "domains.json": "9447a56a0228a8363375ec02875abde7492bf0c771d6cba4763bbc105a3a5a34"
+        }
+      },
+      "github": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "870bcad14e670a18894f479e477495bd5b736cff2110ab6205253f4a2e930e45",
+          "domains.json": "a6d13f172f3ef7a1603a62baa5f9f0bb048dca910e29a7eecf633df110b2f1ca"
+        }
+      },
+      "google": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "f3b09639e72ba0376655bc3cf509019967b9c6daeff0ef3cf4520484d2773b9e",
+          "domains.json": "67b9c9e1d0ea23d2080f5a5b15098e108e95be2f8539aa32b8498540316fdd3a"
+        }
+      },
+      "youtube": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "a0b1e05d6df5862ee6405ab7b9d18f13e8f559175b4539aa5e96006121ef75a3",
+          "domains.json": "38295c61f484ccbf4ba6375b649553298c841766e1ad6f2ea9a181af5d42bcc5"
+        }
+      },
+      "china-ip": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "kind": "github-commit",
+          "repository": "gaoyifan/china-operator-ip",
+          "branch": "ip-lists",
+          "commit": "be3de75a9698c50193c35c1215509e89d5d5cf6f",
+          "file": {
+            "path": "china46.txt",
+            "url": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/be3de75a9698c50193c35c1215509e89d5d5cf6f/china46.txt"
+          },
+          "inputSha256": "cc2acc4a6c0c9378573140c86ecbf343a9fc99c42aa53d59554feb7238841f68",
+          "inputBytes": 154234
+        },
+        "observedSource": {
+          "kind": "github-commit",
+          "repository": "gaoyifan/china-operator-ip",
+          "branch": "ip-lists",
+          "commit": "be3de75a9698c50193c35c1215509e89d5d5cf6f",
+          "file": {
+            "path": "china46.txt",
+            "url": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/be3de75a9698c50193c35c1215509e89d5d5cf6f/china46.txt"
+          },
+          "inputSha256": "cc2acc4a6c0c9378573140c86ecbf343a9fc99c42aa53d59554feb7238841f68",
+          "inputBytes": 154234
+        },
+        "files": {
+          "route.srs": "6ed8b6685f23d5265dc275e1fd7cde6d902936902ee72199fc7697c292dfb440",
+          "route.json": "c9bf767ff90bfecc7732dcf6c390f75623ed149561e648df953b8273c1f0bb07"
+        }
+      },
+      "gfw": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "kind": "github-commit",
+          "repository": "Loyalsoldier/v2ray-rules-dat",
+          "branch": "release",
+          "commit": "3914c5cf42be87696db5139fc4b7d681b09b8d4a",
+          "file": {
+            "path": "gfw.txt",
+            "url": "https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/3914c5cf42be87696db5139fc4b7d681b09b8d4a/gfw.txt"
+          },
+          "inputSha256": "cd8db183d21c1ae65daa5cf3fd54a2b316b3b7f71fad6cb1621d523ad60be7dc",
+          "inputBytes": 59822
+        },
+        "observedSource": {
+          "kind": "github-commit",
+          "repository": "Loyalsoldier/v2ray-rules-dat",
+          "branch": "release",
+          "commit": "3914c5cf42be87696db5139fc4b7d681b09b8d4a",
+          "file": {
+            "path": "gfw.txt",
+            "url": "https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/3914c5cf42be87696db5139fc4b7d681b09b8d4a/gfw.txt"
+          },
+          "inputSha256": "cd8db183d21c1ae65daa5cf3fd54a2b316b3b7f71fad6cb1621d523ad60be7dc",
+          "inputBytes": 59822
+        },
+        "files": {
+          "domains.srs": "45fac0dbb876e5c4c3f878578a7f2379201b4a75b39a25767daab4f077df6011",
+          "domains.json": "85927f603b1c88997636c9f7f3e4dcdfbcc495cd7f82182fda89d29fd7cc1c4d"
+        }
+      },
+      "onedrive": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "kind": "github-commit",
+          "repository": "blackmatrix7/ios_rule_script",
+          "branch": "master",
+          "commit": "0b6897dc17e0c513d25449c935a9694818e32f0c",
+          "file": {
+            "path": "rule/Clash/OneDrive/OneDrive.list",
+            "url": "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/0b6897dc17e0c513d25449c935a9694818e32f0c/rule/Clash/OneDrive/OneDrive.list"
+          },
+          "inputSha256": "cf4f6b24e434b6c6033b70fc88cf7e33f5aaa0f353f6963ced770f5fa1ae6c9b",
+          "inputBytes": 735
+        },
+        "observedSource": {
+          "kind": "github-commit",
+          "repository": "blackmatrix7/ios_rule_script",
+          "branch": "master",
+          "commit": "0b6897dc17e0c513d25449c935a9694818e32f0c",
+          "file": {
+            "path": "rule/Clash/OneDrive/OneDrive.list",
+            "url": "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/0b6897dc17e0c513d25449c935a9694818e32f0c/rule/Clash/OneDrive/OneDrive.list"
+          },
+          "inputSha256": "cf4f6b24e434b6c6033b70fc88cf7e33f5aaa0f353f6963ced770f5fa1ae6c9b",
+          "inputBytes": 735
+        },
+        "files": {
+          "domains.srs": "c294fe0d9a20ec433a67af492fa8f53b3f7b47f6b85fa9894e226c1934e2344b",
+          "domains.json": "bf5b223c60555033f61a1f4c19c1a8deba5b79abf47001848a125be2cc66db41"
+        }
+      },
+      "stream": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "kind": "github-commit",
+          "repository": "SukkaLab/ruleset.skk.moe",
+          "branch": "master",
+          "commit": "838801f009734aa324e7d42d7b7b51561d1df5ba",
+          "file": {
+            "path": "sing-box/non_ip/stream.json",
+            "url": "https://raw.githubusercontent.com/SukkaLab/ruleset.skk.moe/838801f009734aa324e7d42d7b7b51561d1df5ba/sing-box/non_ip/stream.json"
+          },
+          "inputSha256": "88487bf51615620ee8fcca449fad6199db6968dc429804acb7ad3348a5df8ed5",
+          "inputBytes": 7653
+        },
+        "observedSource": {
+          "kind": "github-commit",
+          "repository": "SukkaLab/ruleset.skk.moe",
+          "branch": "master",
+          "commit": "838801f009734aa324e7d42d7b7b51561d1df5ba",
+          "file": {
+            "path": "sing-box/non_ip/stream.json",
+            "url": "https://raw.githubusercontent.com/SukkaLab/ruleset.skk.moe/838801f009734aa324e7d42d7b7b51561d1df5ba/sing-box/non_ip/stream.json"
+          },
+          "inputSha256": "88487bf51615620ee8fcca449fad6199db6968dc429804acb7ad3348a5df8ed5",
+          "inputBytes": 7653
+        },
+        "files": {
+          "domains.srs": "a495177e3b1e8e82220ddd82851e2f20ced2f5d1f040ff1f74a8508d74ee94af",
+          "domains.json": "d9681c23db68a039bee87134b223ca565812259e3831d0e6771ed41fe04c2614"
+        }
+      },
+      "chatgpt-voice": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "kind": "openai-voice",
+          "url": "https://openai.com/chatgpt-voice.json",
+          "inputSha256": "e0e4df0f751d5025d24b3177191fd2484213599f64a001f732c7ca4881fbce2c",
+          "inputBytes": 88,
+          "etag": "\"verification-149\""
+        },
+        "observedSource": {
+          "kind": "openai-voice",
+          "url": "https://openai.com/chatgpt-voice.json",
+          "inputSha256": "e0e4df0f751d5025d24b3177191fd2484213599f64a001f732c7ca4881fbce2c",
+          "inputBytes": 88,
+          "etag": "\"verification-149\""
+        },
+        "files": {
+          "route.srs": "c2603e43eefc3fa5cd890c5e58f0e3b5130df8657ed1ce9c963089da8dccc6a0",
+          "route.json": "0a35cb86a36d37fd2079e3b66e24d4a1ffb5c41df4c7402a9643f373ca520dfe"
+        }
+      }
+    },
+    "unchanged": {
+      "openai": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "481b2b2c45202ef9b4b2ac0ef3e4e371296d0aa4cb1f245c450ecd1edde9b5d7",
+          "domains.json": "a70096077d78af43df6f56dbad775c27e8b0be7c92a81e36baaf8229b04de5d5"
+        }
+      },
+      "anthropic": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "6bdf4ebc85d20b873b860875dd00030c40a673d92152a8fbae26a367f02fd8d1",
+          "domains.json": "2f50f77b8c2d6885e40d729dc16a8c830e4364f00330231ded8f696e636fff84"
+        }
+      },
+      "google-deepmind": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "652abe66df71563d3836fccafd551448935b7551a00fe9af572062bd7008fa45",
+          "domains.json": "1f417b044c3cff900faa62bd5df7f92cb0bfca8c288c9f64689ccd17ffd83322"
+        }
+      },
+      "china-domains": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "5572d2c40839b39cd604fca8153f4f6b2601311cd208a434cfcd1a1030bb41dc",
+          "domains.json": "dd2c6e600d9714eacc47b783beb6aca1738aa506b3c475aa1d6ac7fb6e909136"
+        }
+      },
+      "global": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "c155925ca5d6b31237b660259302fdb42482ea84245b1e635f2d1f5b96205c52",
+          "domains.json": "7680a6c8fe2b2ff017641ca5338f5ee4d23d956c9419de69f471514f9725cbfa"
+        }
+      },
+      "apple": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "f2707c6e86f68b1cf44c2ecda98030956fb03e2dec552b65965f569e1da1e422",
+          "domains.json": "9e6cc2bbdf49f7540d9fb4eeabf42cf476cf704e91e89628557373adf3701cc3"
+        }
+      },
+      "microsoft": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "f418743e05510367c47a5f7b60283299f089097f90d72e132990ce3e5e9f1ba8",
+          "domains.json": "1ccfdb68b011a47194e4d80dd33d09a3f1e863ca6333cdc4e828a4d2eabff67f"
+        }
+      },
+      "docker": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "1f66f663694e9aa2b8b986f6dc8c3fa67eafd8e4ad268b81bfa9ea4b6b0a58fe",
+          "domains.json": "9447a56a0228a8363375ec02875abde7492bf0c771d6cba4763bbc105a3a5a34"
+        }
+      },
+      "github": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "870bcad14e670a18894f479e477495bd5b736cff2110ab6205253f4a2e930e45",
+          "domains.json": "a6d13f172f3ef7a1603a62baa5f9f0bb048dca910e29a7eecf633df110b2f1ca"
+        }
+      },
+      "google": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "f3b09639e72ba0376655bc3cf509019967b9c6daeff0ef3cf4520484d2773b9e",
+          "domains.json": "67b9c9e1d0ea23d2080f5a5b15098e108e95be2f8539aa32b8498540316fdd3a"
+        }
+      },
+      "youtube": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "a0b1e05d6df5862ee6405ab7b9d18f13e8f559175b4539aa5e96006121ef75a3",
+          "domains.json": "38295c61f484ccbf4ba6375b649553298c841766e1ad6f2ea9a181af5d42bcc5"
+        }
+      },
+      "china-ip": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "kind": "github-commit",
+          "repository": "gaoyifan/china-operator-ip",
+          "branch": "ip-lists",
+          "commit": "be3de75a9698c50193c35c1215509e89d5d5cf6f",
+          "file": {
+            "path": "china46.txt",
+            "url": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/be3de75a9698c50193c35c1215509e89d5d5cf6f/china46.txt"
+          },
+          "inputSha256": "cc2acc4a6c0c9378573140c86ecbf343a9fc99c42aa53d59554feb7238841f68",
+          "inputBytes": 154234
+        },
+        "observedSource": {
+          "kind": "github-commit",
+          "repository": "gaoyifan/china-operator-ip",
+          "branch": "ip-lists",
+          "commit": "be3de75a9698c50193c35c1215509e89d5d5cf6f",
+          "file": {
+            "path": "china46.txt",
+            "url": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/be3de75a9698c50193c35c1215509e89d5d5cf6f/china46.txt"
+          },
+          "inputSha256": "cc2acc4a6c0c9378573140c86ecbf343a9fc99c42aa53d59554feb7238841f68",
+          "inputBytes": 154234
+        },
+        "files": {
+          "route.srs": "6ed8b6685f23d5265dc275e1fd7cde6d902936902ee72199fc7697c292dfb440",
+          "route.json": "c9bf767ff90bfecc7732dcf6c390f75623ed149561e648df953b8273c1f0bb07"
+        }
+      },
+      "gfw": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "kind": "github-commit",
+          "repository": "Loyalsoldier/v2ray-rules-dat",
+          "branch": "release",
+          "commit": "3914c5cf42be87696db5139fc4b7d681b09b8d4a",
+          "file": {
+            "path": "gfw.txt",
+            "url": "https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/3914c5cf42be87696db5139fc4b7d681b09b8d4a/gfw.txt"
+          },
+          "inputSha256": "cd8db183d21c1ae65daa5cf3fd54a2b316b3b7f71fad6cb1621d523ad60be7dc",
+          "inputBytes": 59822
+        },
+        "observedSource": {
+          "kind": "github-commit",
+          "repository": "Loyalsoldier/v2ray-rules-dat",
+          "branch": "release",
+          "commit": "3914c5cf42be87696db5139fc4b7d681b09b8d4a",
+          "file": {
+            "path": "gfw.txt",
+            "url": "https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/3914c5cf42be87696db5139fc4b7d681b09b8d4a/gfw.txt"
+          },
+          "inputSha256": "cd8db183d21c1ae65daa5cf3fd54a2b316b3b7f71fad6cb1621d523ad60be7dc",
+          "inputBytes": 59822
+        },
+        "files": {
+          "domains.srs": "45fac0dbb876e5c4c3f878578a7f2379201b4a75b39a25767daab4f077df6011",
+          "domains.json": "85927f603b1c88997636c9f7f3e4dcdfbcc495cd7f82182fda89d29fd7cc1c4d"
+        }
+      },
+      "onedrive": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "kind": "github-commit",
+          "repository": "blackmatrix7/ios_rule_script",
+          "branch": "master",
+          "commit": "0b6897dc17e0c513d25449c935a9694818e32f0c",
+          "file": {
+            "path": "rule/Clash/OneDrive/OneDrive.list",
+            "url": "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/0b6897dc17e0c513d25449c935a9694818e32f0c/rule/Clash/OneDrive/OneDrive.list"
+          },
+          "inputSha256": "cf4f6b24e434b6c6033b70fc88cf7e33f5aaa0f353f6963ced770f5fa1ae6c9b",
+          "inputBytes": 735
+        },
+        "observedSource": {
+          "kind": "github-commit",
+          "repository": "blackmatrix7/ios_rule_script",
+          "branch": "master",
+          "commit": "0b6897dc17e0c513d25449c935a9694818e32f0c",
+          "file": {
+            "path": "rule/Clash/OneDrive/OneDrive.list",
+            "url": "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/0b6897dc17e0c513d25449c935a9694818e32f0c/rule/Clash/OneDrive/OneDrive.list"
+          },
+          "inputSha256": "cf4f6b24e434b6c6033b70fc88cf7e33f5aaa0f353f6963ced770f5fa1ae6c9b",
+          "inputBytes": 735
+        },
+        "files": {
+          "domains.srs": "c294fe0d9a20ec433a67af492fa8f53b3f7b47f6b85fa9894e226c1934e2344b",
+          "domains.json": "bf5b223c60555033f61a1f4c19c1a8deba5b79abf47001848a125be2cc66db41"
+        }
+      },
+      "stream": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "kind": "github-commit",
+          "repository": "SukkaLab/ruleset.skk.moe",
+          "branch": "master",
+          "commit": "838801f009734aa324e7d42d7b7b51561d1df5ba",
+          "file": {
+            "path": "sing-box/non_ip/stream.json",
+            "url": "https://raw.githubusercontent.com/SukkaLab/ruleset.skk.moe/838801f009734aa324e7d42d7b7b51561d1df5ba/sing-box/non_ip/stream.json"
+          },
+          "inputSha256": "88487bf51615620ee8fcca449fad6199db6968dc429804acb7ad3348a5df8ed5",
+          "inputBytes": 7653
+        },
+        "observedSource": {
+          "kind": "github-commit",
+          "repository": "SukkaLab/ruleset.skk.moe",
+          "branch": "master",
+          "commit": "838801f009734aa324e7d42d7b7b51561d1df5ba",
+          "file": {
+            "path": "sing-box/non_ip/stream.json",
+            "url": "https://raw.githubusercontent.com/SukkaLab/ruleset.skk.moe/838801f009734aa324e7d42d7b7b51561d1df5ba/sing-box/non_ip/stream.json"
+          },
+          "inputSha256": "88487bf51615620ee8fcca449fad6199db6968dc429804acb7ad3348a5df8ed5",
+          "inputBytes": 7653
+        },
+        "files": {
+          "domains.srs": "a495177e3b1e8e82220ddd82851e2f20ced2f5d1f040ff1f74a8508d74ee94af",
+          "domains.json": "d9681c23db68a039bee87134b223ca565812259e3831d0e6771ed41fe04c2614"
+        }
+      },
+      "chatgpt-voice": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "kind": "openai-voice",
+          "url": "https://openai.com/chatgpt-voice.json",
+          "inputSha256": "e0e4df0f751d5025d24b3177191fd2484213599f64a001f732c7ca4881fbce2c",
+          "inputBytes": 88,
+          "etag": "\"verification-149\""
+        },
+        "observedSource": {
+          "kind": "openai-voice",
+          "url": "https://openai.com/chatgpt-voice.json",
+          "inputSha256": "e0e4df0f751d5025d24b3177191fd2484213599f64a001f732c7ca4881fbce2c",
+          "inputBytes": 88,
+          "etag": "\"verification-149\""
+        },
+        "files": {
+          "route.srs": "c2603e43eefc3fa5cd890c5e58f0e3b5130df8657ed1ce9c963089da8dccc6a0",
+          "route.json": "0a35cb86a36d37fd2079e3b66e24d4a1ffb5c41df4c7402a9643f373ca520dfe"
+        }
+      }
+    },
+    "same-source": {
+      "openai": {
+        "status": "delivered",
+        "publishedAt": "2026-11-21T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083967,
+          "tag": "local-baseline-155",
+          "commit": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c",
+          "yaml": {
+            "id": 900000001,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/local-baseline-155/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 900000002,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/local-baseline-155/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c324d733ca97edc55185f876b",
+          "inputBytes": 3778643,
+          "checksumSha256": "29b87dcbeca27bf8c40f8a3694e6f4790738fe396dbe0e3ea6bd1a6db95da305"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083967,
+          "tag": "local-baseline-155",
+          "commit": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c",
+          "yaml": {
+            "id": 900000001,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/local-baseline-155/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 900000002,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/local-baseline-155/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c324d733ca97edc55185f876b",
+          "inputBytes": 3778643,
+          "checksumSha256": "29b87dcbeca27bf8c40f8a3694e6f4790738fe396dbe0e3ea6bd1a6db95da305"
+        },
+        "files": {
+          "domains.srs": "1c95fa7e0fd9dc9709c739d057c3e9832ade92a750d0abd89277fe863b2c82f6",
+          "domains.json": "c9e76d578024c578972aa3e4aa14284f3a249fa3cc0d2f97d48c2ee5ea0f31a0"
+        }
+      },
+      "anthropic": {
+        "status": "delivered",
+        "publishedAt": "2026-11-21T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083967,
+          "tag": "local-baseline-155",
+          "commit": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c",
+          "yaml": {
+            "id": 900000001,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/local-baseline-155/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 900000002,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/local-baseline-155/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c324d733ca97edc55185f876b",
+          "inputBytes": 3778643,
+          "checksumSha256": "29b87dcbeca27bf8c40f8a3694e6f4790738fe396dbe0e3ea6bd1a6db95da305"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083967,
+          "tag": "local-baseline-155",
+          "commit": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c",
+          "yaml": {
+            "id": 900000001,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/local-baseline-155/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 900000002,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/local-baseline-155/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c324d733ca97edc55185f876b",
+          "inputBytes": 3778643,
+          "checksumSha256": "29b87dcbeca27bf8c40f8a3694e6f4790738fe396dbe0e3ea6bd1a6db95da305"
+        },
+        "files": {
+          "domains.srs": "593ad8188ad4663e7d6d121b0ed98df6f89d5d2c6f054ec53797fb9c5534c1b0",
+          "domains.json": "8321705dd770f63f80c1d340b6379b92c5f65d2226afe1aed87586c270401097"
+        }
+      },
+      "google-deepmind": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083967,
+          "tag": "local-baseline-155",
+          "commit": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c",
+          "yaml": {
+            "id": 900000001,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/local-baseline-155/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 900000002,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/local-baseline-155/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c324d733ca97edc55185f876b",
+          "inputBytes": 3778643,
+          "checksumSha256": "29b87dcbeca27bf8c40f8a3694e6f4790738fe396dbe0e3ea6bd1a6db95da305"
+        },
+        "files": {
+          "domains.srs": "652abe66df71563d3836fccafd551448935b7551a00fe9af572062bd7008fa45",
+          "domains.json": "1f417b044c3cff900faa62bd5df7f92cb0bfca8c288c9f64689ccd17ffd83322"
+        }
+      },
+      "china-domains": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083967,
+          "tag": "local-baseline-155",
+          "commit": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c",
+          "yaml": {
+            "id": 900000001,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/local-baseline-155/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 900000002,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/local-baseline-155/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c324d733ca97edc55185f876b",
+          "inputBytes": 3778643,
+          "checksumSha256": "29b87dcbeca27bf8c40f8a3694e6f4790738fe396dbe0e3ea6bd1a6db95da305"
+        },
+        "files": {
+          "domains.srs": "5572d2c40839b39cd604fca8153f4f6b2601311cd208a434cfcd1a1030bb41dc",
+          "domains.json": "dd2c6e600d9714eacc47b783beb6aca1738aa506b3c475aa1d6ac7fb6e909136"
+        }
+      },
+      "global": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083967,
+          "tag": "local-baseline-155",
+          "commit": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c",
+          "yaml": {
+            "id": 900000001,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/local-baseline-155/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 900000002,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/local-baseline-155/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c324d733ca97edc55185f876b",
+          "inputBytes": 3778643,
+          "checksumSha256": "29b87dcbeca27bf8c40f8a3694e6f4790738fe396dbe0e3ea6bd1a6db95da305"
+        },
+        "files": {
+          "domains.srs": "c155925ca5d6b31237b660259302fdb42482ea84245b1e635f2d1f5b96205c52",
+          "domains.json": "7680a6c8fe2b2ff017641ca5338f5ee4d23d956c9419de69f471514f9725cbfa"
+        }
+      },
+      "apple": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083967,
+          "tag": "local-baseline-155",
+          "commit": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c",
+          "yaml": {
+            "id": 900000001,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/local-baseline-155/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 900000002,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/local-baseline-155/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c324d733ca97edc55185f876b",
+          "inputBytes": 3778643,
+          "checksumSha256": "29b87dcbeca27bf8c40f8a3694e6f4790738fe396dbe0e3ea6bd1a6db95da305"
+        },
+        "files": {
+          "domains.srs": "f2707c6e86f68b1cf44c2ecda98030956fb03e2dec552b65965f569e1da1e422",
+          "domains.json": "9e6cc2bbdf49f7540d9fb4eeabf42cf476cf704e91e89628557373adf3701cc3"
+        }
+      },
+      "microsoft": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083967,
+          "tag": "local-baseline-155",
+          "commit": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c",
+          "yaml": {
+            "id": 900000001,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/local-baseline-155/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 900000002,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/local-baseline-155/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c324d733ca97edc55185f876b",
+          "inputBytes": 3778643,
+          "checksumSha256": "29b87dcbeca27bf8c40f8a3694e6f4790738fe396dbe0e3ea6bd1a6db95da305"
+        },
+        "files": {
+          "domains.srs": "f418743e05510367c47a5f7b60283299f089097f90d72e132990ce3e5e9f1ba8",
+          "domains.json": "1ccfdb68b011a47194e4d80dd33d09a3f1e863ca6333cdc4e828a4d2eabff67f"
+        }
+      },
+      "docker": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083967,
+          "tag": "local-baseline-155",
+          "commit": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c",
+          "yaml": {
+            "id": 900000001,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/local-baseline-155/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 900000002,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/local-baseline-155/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c324d733ca97edc55185f876b",
+          "inputBytes": 3778643,
+          "checksumSha256": "29b87dcbeca27bf8c40f8a3694e6f4790738fe396dbe0e3ea6bd1a6db95da305"
+        },
+        "files": {
+          "domains.srs": "1f66f663694e9aa2b8b986f6dc8c3fa67eafd8e4ad268b81bfa9ea4b6b0a58fe",
+          "domains.json": "9447a56a0228a8363375ec02875abde7492bf0c771d6cba4763bbc105a3a5a34"
+        }
+      },
+      "github": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083967,
+          "tag": "local-baseline-155",
+          "commit": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c",
+          "yaml": {
+            "id": 900000001,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/local-baseline-155/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 900000002,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/local-baseline-155/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c324d733ca97edc55185f876b",
+          "inputBytes": 3778643,
+          "checksumSha256": "29b87dcbeca27bf8c40f8a3694e6f4790738fe396dbe0e3ea6bd1a6db95da305"
+        },
+        "files": {
+          "domains.srs": "870bcad14e670a18894f479e477495bd5b736cff2110ab6205253f4a2e930e45",
+          "domains.json": "a6d13f172f3ef7a1603a62baa5f9f0bb048dca910e29a7eecf633df110b2f1ca"
+        }
+      },
+      "google": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083967,
+          "tag": "local-baseline-155",
+          "commit": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c",
+          "yaml": {
+            "id": 900000001,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/local-baseline-155/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 900000002,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/local-baseline-155/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c324d733ca97edc55185f876b",
+          "inputBytes": 3778643,
+          "checksumSha256": "29b87dcbeca27bf8c40f8a3694e6f4790738fe396dbe0e3ea6bd1a6db95da305"
+        },
+        "files": {
+          "domains.srs": "f3b09639e72ba0376655bc3cf509019967b9c6daeff0ef3cf4520484d2773b9e",
+          "domains.json": "67b9c9e1d0ea23d2080f5a5b15098e108e95be2f8539aa32b8498540316fdd3a"
+        }
+      },
+      "youtube": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083967,
+          "tag": "local-baseline-155",
+          "commit": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c",
+          "yaml": {
+            "id": 900000001,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/local-baseline-155/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 900000002,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/local-baseline-155/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c324d733ca97edc55185f876b",
+          "inputBytes": 3778643,
+          "checksumSha256": "29b87dcbeca27bf8c40f8a3694e6f4790738fe396dbe0e3ea6bd1a6db95da305"
+        },
+        "files": {
+          "domains.srs": "a0b1e05d6df5862ee6405ab7b9d18f13e8f559175b4539aa5e96006121ef75a3",
+          "domains.json": "38295c61f484ccbf4ba6375b649553298c841766e1ad6f2ea9a181af5d42bcc5"
+        }
+      },
+      "china-ip": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "kind": "github-commit",
+          "repository": "gaoyifan/china-operator-ip",
+          "branch": "ip-lists",
+          "commit": "be3de75a9698c50193c35c1215509e89d5d5cf6f",
+          "file": {
+            "path": "china46.txt",
+            "url": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/be3de75a9698c50193c35c1215509e89d5d5cf6f/china46.txt"
+          },
+          "inputSha256": "cc2acc4a6c0c9378573140c86ecbf343a9fc99c42aa53d59554feb7238841f68",
+          "inputBytes": 154234
+        },
+        "observedSource": {
+          "kind": "github-commit",
+          "repository": "gaoyifan/china-operator-ip",
+          "branch": "ip-lists",
+          "commit": "be3de75a9698c50193c35c1215509e89d5d5cf6f",
+          "file": {
+            "path": "china46.txt",
+            "url": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/be3de75a9698c50193c35c1215509e89d5d5cf6f/china46.txt"
+          },
+          "inputSha256": "cc2acc4a6c0c9378573140c86ecbf343a9fc99c42aa53d59554feb7238841f68",
+          "inputBytes": 154234
+        },
+        "files": {
+          "route.srs": "6ed8b6685f23d5265dc275e1fd7cde6d902936902ee72199fc7697c292dfb440",
+          "route.json": "c9bf767ff90bfecc7732dcf6c390f75623ed149561e648df953b8273c1f0bb07"
+        }
+      },
+      "gfw": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "kind": "github-commit",
+          "repository": "Loyalsoldier/v2ray-rules-dat",
+          "branch": "release",
+          "commit": "3914c5cf42be87696db5139fc4b7d681b09b8d4a",
+          "file": {
+            "path": "gfw.txt",
+            "url": "https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/3914c5cf42be87696db5139fc4b7d681b09b8d4a/gfw.txt"
+          },
+          "inputSha256": "cd8db183d21c1ae65daa5cf3fd54a2b316b3b7f71fad6cb1621d523ad60be7dc",
+          "inputBytes": 59822
+        },
+        "observedSource": {
+          "kind": "github-commit",
+          "repository": "Loyalsoldier/v2ray-rules-dat",
+          "branch": "release",
+          "commit": "3914c5cf42be87696db5139fc4b7d681b09b8d4a",
+          "file": {
+            "path": "gfw.txt",
+            "url": "https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/3914c5cf42be87696db5139fc4b7d681b09b8d4a/gfw.txt"
+          },
+          "inputSha256": "cd8db183d21c1ae65daa5cf3fd54a2b316b3b7f71fad6cb1621d523ad60be7dc",
+          "inputBytes": 59822
+        },
+        "files": {
+          "domains.srs": "45fac0dbb876e5c4c3f878578a7f2379201b4a75b39a25767daab4f077df6011",
+          "domains.json": "85927f603b1c88997636c9f7f3e4dcdfbcc495cd7f82182fda89d29fd7cc1c4d"
+        }
+      },
+      "onedrive": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "kind": "github-commit",
+          "repository": "blackmatrix7/ios_rule_script",
+          "branch": "master",
+          "commit": "0b6897dc17e0c513d25449c935a9694818e32f0c",
+          "file": {
+            "path": "rule/Clash/OneDrive/OneDrive.list",
+            "url": "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/0b6897dc17e0c513d25449c935a9694818e32f0c/rule/Clash/OneDrive/OneDrive.list"
+          },
+          "inputSha256": "cf4f6b24e434b6c6033b70fc88cf7e33f5aaa0f353f6963ced770f5fa1ae6c9b",
+          "inputBytes": 735
+        },
+        "observedSource": {
+          "kind": "github-commit",
+          "repository": "blackmatrix7/ios_rule_script",
+          "branch": "master",
+          "commit": "0b6897dc17e0c513d25449c935a9694818e32f0c",
+          "file": {
+            "path": "rule/Clash/OneDrive/OneDrive.list",
+            "url": "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/0b6897dc17e0c513d25449c935a9694818e32f0c/rule/Clash/OneDrive/OneDrive.list"
+          },
+          "inputSha256": "cf4f6b24e434b6c6033b70fc88cf7e33f5aaa0f353f6963ced770f5fa1ae6c9b",
+          "inputBytes": 735
+        },
+        "files": {
+          "domains.srs": "c294fe0d9a20ec433a67af492fa8f53b3f7b47f6b85fa9894e226c1934e2344b",
+          "domains.json": "bf5b223c60555033f61a1f4c19c1a8deba5b79abf47001848a125be2cc66db41"
+        }
+      },
+      "stream": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "kind": "github-commit",
+          "repository": "SukkaLab/ruleset.skk.moe",
+          "branch": "master",
+          "commit": "838801f009734aa324e7d42d7b7b51561d1df5ba",
+          "file": {
+            "path": "sing-box/non_ip/stream.json",
+            "url": "https://raw.githubusercontent.com/SukkaLab/ruleset.skk.moe/838801f009734aa324e7d42d7b7b51561d1df5ba/sing-box/non_ip/stream.json"
+          },
+          "inputSha256": "88487bf51615620ee8fcca449fad6199db6968dc429804acb7ad3348a5df8ed5",
+          "inputBytes": 7653
+        },
+        "observedSource": {
+          "kind": "github-commit",
+          "repository": "SukkaLab/ruleset.skk.moe",
+          "branch": "master",
+          "commit": "838801f009734aa324e7d42d7b7b51561d1df5ba",
+          "file": {
+            "path": "sing-box/non_ip/stream.json",
+            "url": "https://raw.githubusercontent.com/SukkaLab/ruleset.skk.moe/838801f009734aa324e7d42d7b7b51561d1df5ba/sing-box/non_ip/stream.json"
+          },
+          "inputSha256": "88487bf51615620ee8fcca449fad6199db6968dc429804acb7ad3348a5df8ed5",
+          "inputBytes": 7653
+        },
+        "files": {
+          "domains.srs": "a495177e3b1e8e82220ddd82851e2f20ced2f5d1f040ff1f74a8508d74ee94af",
+          "domains.json": "d9681c23db68a039bee87134b223ca565812259e3831d0e6771ed41fe04c2614"
+        }
+      },
+      "chatgpt-voice": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "kind": "openai-voice",
+          "url": "https://openai.com/chatgpt-voice.json",
+          "inputSha256": "e0e4df0f751d5025d24b3177191fd2484213599f64a001f732c7ca4881fbce2c",
+          "inputBytes": 88,
+          "etag": "\"verification-149\""
+        },
+        "observedSource": {
+          "kind": "openai-voice",
+          "url": "https://openai.com/chatgpt-voice.json",
+          "inputSha256": "e0e4df0f751d5025d24b3177191fd2484213599f64a001f732c7ca4881fbce2c",
+          "inputBytes": 88,
+          "etag": "\"verification-149\""
+        },
+        "files": {
+          "route.srs": "c2603e43eefc3fa5cd890c5e58f0e3b5130df8657ed1ce9c963089da8dccc6a0",
+          "route.json": "0a35cb86a36d37fd2079e3b66e24d4a1ffb5c41df4c7402a9643f373ca520dfe"
+        }
+      }
+    },
+    "multi-source": {
+      "openai": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "481b2b2c45202ef9b4b2ac0ef3e4e371296d0aa4cb1f245c450ecd1edde9b5d7",
+          "domains.json": "a70096077d78af43df6f56dbad775c27e8b0be7c92a81e36baaf8229b04de5d5"
+        }
+      },
+      "anthropic": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "6bdf4ebc85d20b873b860875dd00030c40a673d92152a8fbae26a367f02fd8d1",
+          "domains.json": "2f50f77b8c2d6885e40d729dc16a8c830e4364f00330231ded8f696e636fff84"
+        }
+      },
+      "google-deepmind": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "652abe66df71563d3836fccafd551448935b7551a00fe9af572062bd7008fa45",
+          "domains.json": "1f417b044c3cff900faa62bd5df7f92cb0bfca8c288c9f64689ccd17ffd83322"
+        }
+      },
+      "china-domains": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "5572d2c40839b39cd604fca8153f4f6b2601311cd208a434cfcd1a1030bb41dc",
+          "domains.json": "dd2c6e600d9714eacc47b783beb6aca1738aa506b3c475aa1d6ac7fb6e909136"
+        }
+      },
+      "global": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "c155925ca5d6b31237b660259302fdb42482ea84245b1e635f2d1f5b96205c52",
+          "domains.json": "7680a6c8fe2b2ff017641ca5338f5ee4d23d956c9419de69f471514f9725cbfa"
+        }
+      },
+      "apple": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "f2707c6e86f68b1cf44c2ecda98030956fb03e2dec552b65965f569e1da1e422",
+          "domains.json": "9e6cc2bbdf49f7540d9fb4eeabf42cf476cf704e91e89628557373adf3701cc3"
+        }
+      },
+      "microsoft": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "f418743e05510367c47a5f7b60283299f089097f90d72e132990ce3e5e9f1ba8",
+          "domains.json": "1ccfdb68b011a47194e4d80dd33d09a3f1e863ca6333cdc4e828a4d2eabff67f"
+        }
+      },
+      "docker": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "1f66f663694e9aa2b8b986f6dc8c3fa67eafd8e4ad268b81bfa9ea4b6b0a58fe",
+          "domains.json": "9447a56a0228a8363375ec02875abde7492bf0c771d6cba4763bbc105a3a5a34"
+        }
+      },
+      "github": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "870bcad14e670a18894f479e477495bd5b736cff2110ab6205253f4a2e930e45",
+          "domains.json": "a6d13f172f3ef7a1603a62baa5f9f0bb048dca910e29a7eecf633df110b2f1ca"
+        }
+      },
+      "google": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "f3b09639e72ba0376655bc3cf509019967b9c6daeff0ef3cf4520484d2773b9e",
+          "domains.json": "67b9c9e1d0ea23d2080f5a5b15098e108e95be2f8539aa32b8498540316fdd3a"
+        }
+      },
+      "youtube": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "observedSource": {
+          "repository": "v2fly/domain-list-community",
+          "releaseId": 450083966,
+          "tag": "20261118141523",
+          "yaml": {
+            "id": 763666587,
+            "name": "dlc.dat_plain.yml",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml"
+          },
+          "checksum": {
+            "id": 763666591,
+            "name": "dlc.dat_plain.yml.sha256sum",
+            "url": "https://github.com/v2fly/domain-list-community/releases/download/20261118141523/dlc.dat_plain.yml.sha256sum"
+          },
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8",
+          "inputBytes": 3778556,
+          "checksumSha256": "50a74aabea378fc454beb6164e636a4f7a3c6250667fc7ee15ffb69279cc8271"
+        },
+        "files": {
+          "domains.srs": "a0b1e05d6df5862ee6405ab7b9d18f13e8f559175b4539aa5e96006121ef75a3",
+          "domains.json": "38295c61f484ccbf4ba6375b649553298c841766e1ad6f2ea9a181af5d42bcc5"
+        }
+      },
+      "china-ip": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "kind": "github-commit",
+          "repository": "gaoyifan/china-operator-ip",
+          "branch": "ip-lists",
+          "commit": "be3de75a9698c50193c35c1215509e89d5d5cf6f",
+          "file": {
+            "path": "china46.txt",
+            "url": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/be3de75a9698c50193c35c1215509e89d5d5cf6f/china46.txt"
+          },
+          "inputSha256": "cc2acc4a6c0c9378573140c86ecbf343a9fc99c42aa53d59554feb7238841f68",
+          "inputBytes": 154234
+        },
+        "observedSource": {
+          "kind": "github-commit",
+          "repository": "gaoyifan/china-operator-ip",
+          "branch": "ip-lists",
+          "commit": "be3de75a9698c50193c35c1215509e89d5d5cf6f",
+          "file": {
+            "path": "china46.txt",
+            "url": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/be3de75a9698c50193c35c1215509e89d5d5cf6f/china46.txt"
+          },
+          "inputSha256": "cc2acc4a6c0c9378573140c86ecbf343a9fc99c42aa53d59554feb7238841f68",
+          "inputBytes": 154234
+        },
+        "files": {
+          "route.srs": "6ed8b6685f23d5265dc275e1fd7cde6d902936902ee72199fc7697c292dfb440",
+          "route.json": "c9bf767ff90bfecc7732dcf6c390f75623ed149561e648df953b8273c1f0bb07"
+        }
+      },
+      "gfw": {
+        "status": "delivered",
+        "publishedAt": "2026-11-21T00:00:00.000Z",
+        "currentSource": {
+          "kind": "github-commit",
+          "repository": "Loyalsoldier/v2ray-rules-dat",
+          "branch": "release",
+          "commit": "cd1c5c429c783849df5edaad13fb2870f7ceed4b",
+          "file": {
+            "path": "gfw.txt",
+            "url": "https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/cd1c5c429c783849df5edaad13fb2870f7ceed4b/gfw.txt"
+          },
+          "inputSha256": "cd1c5c429c783849df5edaad13fb2870f7ceed4ba68b957f915ad8cfd4b2ccc4",
+          "inputBytes": 59845
+        },
+        "observedSource": {
+          "kind": "github-commit",
+          "repository": "Loyalsoldier/v2ray-rules-dat",
+          "branch": "release",
+          "commit": "cd1c5c429c783849df5edaad13fb2870f7ceed4b",
+          "file": {
+            "path": "gfw.txt",
+            "url": "https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/cd1c5c429c783849df5edaad13fb2870f7ceed4b/gfw.txt"
+          },
+          "inputSha256": "cd1c5c429c783849df5edaad13fb2870f7ceed4ba68b957f915ad8cfd4b2ccc4",
+          "inputBytes": 59845
+        },
+        "files": {
+          "domains.srs": "844d431e7a435e3a7372918980e18b7429228f7b585fd649cf415c782da3f2fc",
+          "domains.json": "560e8ff9ce0dc7a27c2c1635f9a382d656017324ff1120164c355c1d50a4376e"
+        }
+      },
+      "onedrive": {
+        "status": "delivered",
+        "publishedAt": "2026-11-21T00:00:00.000Z",
+        "currentSource": {
+          "kind": "github-commit",
+          "repository": "blackmatrix7/ios_rule_script",
+          "branch": "master",
+          "commit": "4ce45a66bff2bab8d93ba2584f776987df2ef2be",
+          "file": {
+            "path": "rule/Clash/OneDrive/OneDrive.list",
+            "url": "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/4ce45a66bff2bab8d93ba2584f776987df2ef2be/rule/Clash/OneDrive/OneDrive.list"
+          },
+          "inputSha256": "4ce45a66bff2bab8d93ba2584f776987df2ef2bebc3fd6f339e9d00638175f87",
+          "inputBytes": 777
+        },
+        "observedSource": {
+          "kind": "github-commit",
+          "repository": "blackmatrix7/ios_rule_script",
+          "branch": "master",
+          "commit": "4ce45a66bff2bab8d93ba2584f776987df2ef2be",
+          "file": {
+            "path": "rule/Clash/OneDrive/OneDrive.list",
+            "url": "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/4ce45a66bff2bab8d93ba2584f776987df2ef2be/rule/Clash/OneDrive/OneDrive.list"
+          },
+          "inputSha256": "4ce45a66bff2bab8d93ba2584f776987df2ef2bebc3fd6f339e9d00638175f87",
+          "inputBytes": 777
+        },
+        "files": {
+          "domains.srs": "9a0bfe508328c12d3b2b0d649c6bfec7d5ab583f853af2f1d744877fda709c67",
+          "domains.json": "a5c0190cc988384da317c9e91b6fa54a5004aa49a4fc9b7c62c23a255469f106"
+        }
+      },
+      "stream": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "kind": "github-commit",
+          "repository": "SukkaLab/ruleset.skk.moe",
+          "branch": "master",
+          "commit": "838801f009734aa324e7d42d7b7b51561d1df5ba",
+          "file": {
+            "path": "sing-box/non_ip/stream.json",
+            "url": "https://raw.githubusercontent.com/SukkaLab/ruleset.skk.moe/838801f009734aa324e7d42d7b7b51561d1df5ba/sing-box/non_ip/stream.json"
+          },
+          "inputSha256": "88487bf51615620ee8fcca449fad6199db6968dc429804acb7ad3348a5df8ed5",
+          "inputBytes": 7653
+        },
+        "observedSource": {
+          "kind": "github-commit",
+          "repository": "SukkaLab/ruleset.skk.moe",
+          "branch": "master",
+          "commit": "838801f009734aa324e7d42d7b7b51561d1df5ba",
+          "file": {
+            "path": "sing-box/non_ip/stream.json",
+            "url": "https://raw.githubusercontent.com/SukkaLab/ruleset.skk.moe/838801f009734aa324e7d42d7b7b51561d1df5ba/sing-box/non_ip/stream.json"
+          },
+          "inputSha256": "88487bf51615620ee8fcca449fad6199db6968dc429804acb7ad3348a5df8ed5",
+          "inputBytes": 7653
+        },
+        "files": {
+          "domains.srs": "a495177e3b1e8e82220ddd82851e2f20ced2f5d1f040ff1f74a8508d74ee94af",
+          "domains.json": "d9681c23db68a039bee87134b223ca565812259e3831d0e6771ed41fe04c2614"
+        }
+      },
+      "chatgpt-voice": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "kind": "openai-voice",
+          "url": "https://openai.com/chatgpt-voice.json",
+          "inputSha256": "e0e4df0f751d5025d24b3177191fd2484213599f64a001f732c7ca4881fbce2c",
+          "inputBytes": 88,
+          "etag": "\"verification-149\""
+        },
+        "observedSource": {
+          "kind": "openai-voice",
+          "url": "https://openai.com/chatgpt-voice.json",
+          "inputSha256": "e0e4df0f751d5025d24b3177191fd2484213599f64a001f732c7ca4881fbce2c",
+          "inputBytes": 88,
+          "etag": "\"verification-149\""
+        },
+        "files": {
+          "route.srs": "c2603e43eefc3fa5cd890c5e58f0e3b5130df8657ed1ce9c963089da8dccc6a0",
+          "route.json": "0a35cb86a36d37fd2079e3b66e24d4a1ffb5c41df4c7402a9643f373ca520dfe"
+        }
+      }
+    }
+  },
+  "samples": [
+    {
+      "pair": 1,
+      "order": [
+        "baseline",
+        "reuse"
+      ],
+      "baseline": {
+        "metrics": {
+          "first": {
+            "totalMs": 8960.744334,
+            "snapshotCheck": 8.70649999999958,
+            "source": 568.0662930000001,
+            "native": 2827.7862519999985,
+            "toolIdentity": 5236.130206999997,
+            "gitWrite": 2.58316899999852,
+            "snapshots": 280,
+            "reads": 939,
+            "stableReads": 456,
+            "stableBytes": 18372755,
+            "checkReads": 408,
+            "checkBytes": 16678429,
+            "commits": 113,
+            "upstream": 13,
+            "nativeBuilds": 16,
+            "toolInspections": 64,
+            "eligibleChecks": 0,
+            "fullHashes": 0,
+            "byteMatches": 0,
+            "maxRetainedBytes": 0
+          },
+          "unchanged": {
+            "totalMs": 1351.1325419999994,
+            "snapshotCheck": 1.0427050000052986,
+            "source": 2.741502999995646,
+            "native": 0,
+            "toolIdentity": 1302.7613340000007,
+            "gitWrite": 0,
+            "snapshots": 54,
+            "reads": 178,
+            "stableReads": 96,
+            "stableBytes": 3388652,
+            "checkReads": 48,
+            "checkBytes": 1694326,
+            "commits": 0,
+            "upstream": 7,
+            "nativeBuilds": 0,
+            "toolInspections": 16,
+            "eligibleChecks": 16,
+            "fullHashes": 16,
+            "byteMatches": 0,
+            "maxRetainedBytes": 0
+          },
+          "same-source": {
+            "totalMs": 2764.036250000001,
+            "snapshotCheck": 2.655126999996355,
+            "source": 568.4848310000016,
+            "native": 304.95408300000054,
+            "toolIdentity": 1799.2922500000004,
+            "gitWrite": 0.915791999996145,
+            "snapshots": 102,
+            "reads": 349,
+            "stableReads": 198,
+            "stableBytes": 6785669,
+            "checkReads": 144,
+            "checkBytes": 5083201,
+            "commits": 23,
+            "upstream": 9,
+            "nativeBuilds": 2,
+            "toolInspections": 22,
+            "eligibleChecks": 14,
+            "fullHashes": 14,
+            "byteMatches": 0,
+            "maxRetainedBytes": 0
+          },
+          "multi-source": {
+            "totalMs": 2216.4417080000003,
+            "snapshotCheck": 2.6154569999998785,
+            "source": 7.510958999999275,
+            "native": 337.0064999999995,
+            "toolIdentity": 1796.4667919999993,
+            "gitWrite": 0.24724799999785319,
+            "snapshots": 84,
+            "reads": 340,
+            "stableReads": 198,
+            "stableBytes": 6920989,
+            "checkReads": 144,
+            "checkBytes": 5083148,
+            "commits": 14,
+            "upstream": 11,
+            "nativeBuilds": 2,
+            "toolInspections": 22,
+            "eligibleChecks": 14,
+            "fullHashes": 14,
+            "byteMatches": 0,
+            "maxRetainedBytes": 0
+          }
+        },
+        "maxRssKiB": 564400
+      },
+      "reuse": {
+        "metrics": {
+          "first": {
+            "totalMs": 8999.548042,
+            "snapshotCheck": 8.979542999999893,
+            "source": 573.8779159999993,
+            "native": 2823.912622999999,
+            "toolIdentity": 5281.423790000002,
+            "gitWrite": 2.7384579999977348,
+            "snapshots": 280,
+            "reads": 939,
+            "stableReads": 456,
+            "stableBytes": 18372755,
+            "checkReads": 408,
+            "checkBytes": 16678429,
+            "commits": 113,
+            "upstream": 13,
+            "nativeBuilds": 16,
+            "toolInspections": 64,
+            "eligibleChecks": 0,
+            "fullHashes": 0,
+            "byteMatches": 0,
+            "maxRetainedBytes": 0
+          },
+          "unchanged": {
+            "totalMs": 913.9490409999999,
+            "snapshotCheck": 0.9569570000057865,
+            "source": 2.732210000000123,
+            "native": 0,
+            "toolIdentity": 866.5311669999974,
+            "gitWrite": 0,
+            "snapshots": 54,
+            "reads": 178,
+            "stableReads": 96,
+            "stableBytes": 3388652,
+            "checkReads": 48,
+            "checkBytes": 1694326,
+            "commits": 0,
+            "upstream": 7,
+            "nativeBuilds": 0,
+            "toolInspections": 16,
+            "eligibleChecks": 16,
+            "fullHashes": 1,
+            "byteMatches": 15,
+            "maxRetainedBytes": 83934930
+          },
+          "same-source": {
+            "totalMs": 2352.683959,
+            "snapshotCheck": 2.5610429999978805,
+            "source": 537.0711260000007,
+            "native": 297.4158329999991,
+            "toolIdentity": 1430.2739149999998,
+            "gitWrite": 1.021374999996624,
+            "snapshots": 102,
+            "reads": 349,
+            "stableReads": 198,
+            "stableBytes": 6785669,
+            "checkReads": 144,
+            "checkBytes": 5083201,
+            "commits": 23,
+            "upstream": 9,
+            "nativeBuilds": 2,
+            "toolInspections": 22,
+            "eligibleChecks": 14,
+            "fullHashes": 1,
+            "byteMatches": 13,
+            "maxRetainedBytes": 83934930
+          },
+          "multi-source": {
+            "totalMs": 1819.5313330000008,
+            "snapshotCheck": 2.7658750000009604,
+            "source": 7.325415999997858,
+            "native": 333.46633400000064,
+            "toolIdentity": 1403.0992500000048,
+            "gitWrite": 0.25462499999594,
+            "snapshots": 84,
+            "reads": 340,
+            "stableReads": 198,
+            "stableBytes": 6920989,
+            "checkReads": 144,
+            "checkBytes": 5083148,
+            "commits": 14,
+            "upstream": 11,
+            "nativeBuilds": 2,
+            "toolInspections": 22,
+            "eligibleChecks": 14,
+            "fullHashes": 1,
+            "byteMatches": 13,
+            "maxRetainedBytes": 83934930
+          }
+        },
+        "maxRssKiB": 645968
+      }
+    },
+    {
+      "pair": 2,
+      "order": [
+        "reuse",
+        "baseline"
+      ],
+      "reuse": {
+        "metrics": {
+          "first": {
+            "totalMs": 9005.222333,
+            "snapshotCheck": 8.861168999999308,
+            "source": 570.2224569999983,
+            "native": 2838.584708000002,
+            "toolIdentity": 5277.245207000002,
+            "gitWrite": 2.631869000004201,
+            "snapshots": 280,
+            "reads": 939,
+            "stableReads": 456,
+            "stableBytes": 18372755,
+            "checkReads": 408,
+            "checkBytes": 16678429,
+            "commits": 113,
+            "upstream": 13,
+            "nativeBuilds": 16,
+            "toolInspections": 64,
+            "eligibleChecks": 0,
+            "fullHashes": 0,
+            "byteMatches": 0,
+            "maxRetainedBytes": 0
+          },
+          "unchanged": {
+            "totalMs": 898.6988339999989,
+            "snapshotCheck": 0.9954170000055456,
+            "source": 2.7768359999954555,
+            "native": 0,
+            "toolIdentity": 852.0065399999949,
+            "gitWrite": 0,
+            "snapshots": 54,
+            "reads": 178,
+            "stableReads": 96,
+            "stableBytes": 3388652,
+            "checkReads": 48,
+            "checkBytes": 1694326,
+            "commits": 0,
+            "upstream": 7,
+            "nativeBuilds": 0,
+            "toolInspections": 16,
+            "eligibleChecks": 16,
+            "fullHashes": 1,
+            "byteMatches": 15,
+            "maxRetainedBytes": 83934930
+          },
+          "same-source": {
+            "totalMs": 2359.3980410000004,
+            "snapshotCheck": 2.6910829999978887,
+            "source": 547.253792999998,
+            "native": 299.643250000001,
+            "toolIdentity": 1421.9353779999983,
+            "gitWrite": 0.9719999999997526,
+            "snapshots": 102,
+            "reads": 349,
+            "stableReads": 198,
+            "stableBytes": 6785669,
+            "checkReads": 144,
+            "checkBytes": 5083201,
+            "commits": 23,
+            "upstream": 9,
+            "nativeBuilds": 2,
+            "toolInspections": 22,
+            "eligibleChecks": 14,
+            "fullHashes": 1,
+            "byteMatches": 13,
+            "maxRetainedBytes": 83934930
+          },
+          "multi-source": {
+            "totalMs": 1818.0614580000001,
+            "snapshotCheck": 2.5509580000016285,
+            "source": 7.61229299999286,
+            "native": 329.3027080000011,
+            "toolIdentity": 1405.476833000006,
+            "gitWrite": 0.26333400000112306,
+            "snapshots": 84,
+            "reads": 340,
+            "stableReads": 198,
+            "stableBytes": 6920989,
+            "checkReads": 144,
+            "checkBytes": 5083148,
+            "commits": 14,
+            "upstream": 11,
+            "nativeBuilds": 2,
+            "toolInspections": 22,
+            "eligibleChecks": 14,
+            "fullHashes": 1,
+            "byteMatches": 13,
+            "maxRetainedBytes": 83934930
+          }
+        },
+        "maxRssKiB": 648224
+      },
+      "baseline": {
+        "metrics": {
+          "first": {
+            "totalMs": 8993.583292000001,
+            "snapshotCheck": 9.024541999999371,
+            "source": 563.7777499999997,
+            "native": 2832.375792999999,
+            "toolIdentity": 5281.590201000003,
+            "gitWrite": 2.6376580000018635,
+            "snapshots": 280,
+            "reads": 939,
+            "stableReads": 456,
+            "stableBytes": 18372755,
+            "checkReads": 408,
+            "checkBytes": 16678429,
+            "commits": 113,
+            "upstream": 13,
+            "nativeBuilds": 16,
+            "toolInspections": 64,
+            "eligibleChecks": 0,
+            "fullHashes": 0,
+            "byteMatches": 0,
+            "maxRetainedBytes": 0
+          },
+          "unchanged": {
+            "totalMs": 1353.0438749999994,
+            "snapshotCheck": 0.9191690000061499,
+            "source": 2.6828369999930146,
+            "native": 0,
+            "toolIdentity": 1306.8487470000036,
+            "gitWrite": 0,
+            "snapshots": 54,
+            "reads": 178,
+            "stableReads": 96,
+            "stableBytes": 3388652,
+            "checkReads": 48,
+            "checkBytes": 1694326,
+            "commits": 0,
+            "upstream": 7,
+            "nativeBuilds": 0,
+            "toolInspections": 16,
+            "eligibleChecks": 16,
+            "fullHashes": 16,
+            "byteMatches": 0,
+            "maxRetainedBytes": 0
+          },
+          "same-source": {
+            "totalMs": 2762.810916999999,
+            "snapshotCheck": 2.935498999999254,
+            "source": 546.3432070000053,
+            "native": 305.2497509999994,
+            "toolIdentity": 1816.4925819999971,
+            "gitWrite": 1.072997999999643,
+            "snapshots": 102,
+            "reads": 349,
+            "stableReads": 198,
+            "stableBytes": 6785669,
+            "checkReads": 144,
+            "checkBytes": 5083201,
+            "commits": 23,
+            "upstream": 9,
+            "nativeBuilds": 2,
+            "toolInspections": 22,
+            "eligibleChecks": 14,
+            "fullHashes": 14,
+            "byteMatches": 0,
+            "maxRetainedBytes": 0
+          },
+          "multi-source": {
+            "totalMs": 2209.9759589999994,
+            "snapshotCheck": 2.7157090000036987,
+            "source": 7.911667999998826,
+            "native": 332.2659590000003,
+            "toolIdentity": 1792.3548309999987,
+            "gitWrite": 0.2925820000018575,
+            "snapshots": 84,
+            "reads": 340,
+            "stableReads": 198,
+            "stableBytes": 6920989,
+            "checkReads": 144,
+            "checkBytes": 5083148,
+            "commits": 14,
+            "upstream": 11,
+            "nativeBuilds": 2,
+            "toolInspections": 22,
+            "eligibleChecks": 14,
+            "fullHashes": 14,
+            "byteMatches": 0,
+            "maxRetainedBytes": 0
+          }
+        },
+        "maxRssKiB": 565808
+      }
+    },
+    {
+      "pair": 3,
+      "order": [
+        "baseline",
+        "reuse"
+      ],
+      "baseline": {
+        "metrics": {
+          "first": {
+            "totalMs": 8977.252583,
+            "snapshotCheck": 9.072750000001435,
+            "source": 574.9652089999978,
+            "native": 2829.533751,
+            "toolIdentity": 5257.433086999997,
+            "gitWrite": 2.784051999999889,
+            "snapshots": 280,
+            "reads": 939,
+            "stableReads": 456,
+            "stableBytes": 18372755,
+            "checkReads": 408,
+            "checkBytes": 16678429,
+            "commits": 113,
+            "upstream": 13,
+            "nativeBuilds": 16,
+            "toolInspections": 64,
+            "eligibleChecks": 0,
+            "fullHashes": 0,
+            "byteMatches": 0,
+            "maxRetainedBytes": 0
+          },
+          "unchanged": {
+            "totalMs": 1378.6435419999998,
+            "snapshotCheck": 0.8929580000040005,
+            "source": 2.847709000001487,
+            "native": 0,
+            "toolIdentity": 1331.960543000001,
+            "gitWrite": 0,
+            "snapshots": 54,
+            "reads": 178,
+            "stableReads": 96,
+            "stableBytes": 3388652,
+            "checkReads": 48,
+            "checkBytes": 1694326,
+            "commits": 0,
+            "upstream": 7,
+            "nativeBuilds": 0,
+            "toolInspections": 16,
+            "eligibleChecks": 16,
+            "fullHashes": 16,
+            "byteMatches": 0,
+            "maxRetainedBytes": 0
+          },
+          "same-source": {
+            "totalMs": 2812.1765419999992,
+            "snapshotCheck": 2.7657080000026326,
+            "source": 590.7021220000042,
+            "native": 307.4861249999976,
+            "toolIdentity": 1821.4141689999979,
+            "gitWrite": 1.1115020000052027,
+            "snapshots": 102,
+            "reads": 349,
+            "stableReads": 198,
+            "stableBytes": 6785669,
+            "checkReads": 144,
+            "checkBytes": 5083201,
+            "commits": 23,
+            "upstream": 9,
+            "nativeBuilds": 2,
+            "toolInspections": 22,
+            "eligibleChecks": 14,
+            "fullHashes": 14,
+            "byteMatches": 0,
+            "maxRetainedBytes": 0
+          },
+          "multi-source": {
+            "totalMs": 2229.5304579999993,
+            "snapshotCheck": 2.623916000000463,
+            "source": 8.395415999997567,
+            "native": 332.630459,
+            "toolIdentity": 1807.7705410000053,
+            "gitWrite": 0.3308350000042992,
+            "snapshots": 84,
+            "reads": 340,
+            "stableReads": 198,
+            "stableBytes": 6920989,
+            "checkReads": 144,
+            "checkBytes": 5083148,
+            "commits": 14,
+            "upstream": 11,
+            "nativeBuilds": 2,
+            "toolInspections": 22,
+            "eligibleChecks": 14,
+            "fullHashes": 14,
+            "byteMatches": 0,
+            "maxRetainedBytes": 0
+          }
+        },
+        "maxRssKiB": 566288
+      },
+      "reuse": {
+        "metrics": {
+          "first": {
+            "totalMs": 9040.68925,
+            "snapshotCheck": 8.893332999999842,
+            "source": 574.6675390000005,
+            "native": 2861.522248000001,
+            "toolIdentity": 5282.473585,
+            "gitWrite": 2.714670000009505,
+            "snapshots": 280,
+            "reads": 939,
+            "stableReads": 456,
+            "stableBytes": 18372755,
+            "checkReads": 408,
+            "checkBytes": 16678429,
+            "commits": 113,
+            "upstream": 13,
+            "nativeBuilds": 16,
+            "toolInspections": 64,
+            "eligibleChecks": 0,
+            "fullHashes": 0,
+            "byteMatches": 0,
+            "maxRetainedBytes": 0
+          },
+          "unchanged": {
+            "totalMs": 922.8360410000005,
+            "snapshotCheck": 0.9376269999975193,
+            "source": 2.672248999995645,
+            "native": 0,
+            "toolIdentity": 876.2696679999954,
+            "gitWrite": 0,
+            "snapshots": 54,
+            "reads": 178,
+            "stableReads": 96,
+            "stableBytes": 3388652,
+            "checkReads": 48,
+            "checkBytes": 1694326,
+            "commits": 0,
+            "upstream": 7,
+            "nativeBuilds": 0,
+            "toolInspections": 16,
+            "eligibleChecks": 16,
+            "fullHashes": 1,
+            "byteMatches": 15,
+            "maxRetainedBytes": 83934930
+          },
+          "same-source": {
+            "totalMs": 2364.5005,
+            "snapshotCheck": 2.793830999997226,
+            "source": 546.7297889999954,
+            "native": 301.69858399999976,
+            "toolIdentity": 1426.6719999999968,
+            "gitWrite": 0.9244960000014544,
+            "snapshots": 102,
+            "reads": 349,
+            "stableReads": 198,
+            "stableBytes": 6785669,
+            "checkReads": 144,
+            "checkBytes": 5083201,
+            "commits": 23,
+            "upstream": 9,
+            "nativeBuilds": 2,
+            "toolInspections": 22,
+            "eligibleChecks": 14,
+            "fullHashes": 1,
+            "byteMatches": 13,
+            "maxRetainedBytes": 83934930
+          },
+          "multi-source": {
+            "totalMs": 1837.5179160000007,
+            "snapshotCheck": 2.6844989999935933,
+            "source": 7.374291000001904,
+            "native": 333.2832920000001,
+            "toolIdentity": 1419.6468760000007,
+            "gitWrite": 0.26233099999808474,
+            "snapshots": 84,
+            "reads": 340,
+            "stableReads": 198,
+            "stableBytes": 6920989,
+            "checkReads": 144,
+            "checkBytes": 5083148,
+            "commits": 14,
+            "upstream": 11,
+            "nativeBuilds": 2,
+            "toolInspections": 22,
+            "eligibleChecks": 14,
+            "fullHashes": 1,
+            "byteMatches": 13,
+            "maxRetainedBytes": 83934930
+          }
+        },
+        "maxRssKiB": 646384
+      }
+    },
+    {
+      "pair": 4,
+      "order": [
+        "reuse",
+        "baseline"
+      ],
+      "reuse": {
+        "metrics": {
+          "first": {
+            "totalMs": 9063.953333,
+            "snapshotCheck": 8.915498999999926,
+            "source": 575.2753309999982,
+            "native": 2862.4836670000022,
+            "toolIdentity": 5301.668583,
+            "gitWrite": 2.7917959999985555,
+            "snapshots": 280,
+            "reads": 939,
+            "stableReads": 456,
+            "stableBytes": 18372755,
+            "checkReads": 408,
+            "checkBytes": 16678429,
+            "commits": 113,
+            "upstream": 13,
+            "nativeBuilds": 16,
+            "toolInspections": 64,
+            "eligibleChecks": 0,
+            "fullHashes": 0,
+            "byteMatches": 0,
+            "maxRetainedBytes": 0
+          },
+          "unchanged": {
+            "totalMs": 911.8080419999987,
+            "snapshotCheck": 0.958333999997194,
+            "source": 2.7422909999950207,
+            "native": 0,
+            "toolIdentity": 864.7664570000052,
+            "gitWrite": 0,
+            "snapshots": 54,
+            "reads": 178,
+            "stableReads": 96,
+            "stableBytes": 3388652,
+            "checkReads": 48,
+            "checkBytes": 1694326,
+            "commits": 0,
+            "upstream": 7,
+            "nativeBuilds": 0,
+            "toolInspections": 16,
+            "eligibleChecks": 16,
+            "fullHashes": 1,
+            "byteMatches": 15,
+            "maxRetainedBytes": 83934930
+          },
+          "same-source": {
+            "totalMs": 2375.7614169999997,
+            "snapshotCheck": 2.6792889999978797,
+            "source": 547.1044980000042,
+            "native": 305.25324999999975,
+            "toolIdentity": 1433.634709,
+            "gitWrite": 1.017001000001983,
+            "snapshots": 102,
+            "reads": 349,
+            "stableReads": 198,
+            "stableBytes": 6785669,
+            "checkReads": 144,
+            "checkBytes": 5083201,
+            "commits": 23,
+            "upstream": 9,
+            "nativeBuilds": 2,
+            "toolInspections": 22,
+            "eligibleChecks": 14,
+            "fullHashes": 1,
+            "byteMatches": 13,
+            "maxRetainedBytes": 83934930
+          },
+          "multi-source": {
+            "totalMs": 1854.4074170000004,
+            "snapshotCheck": 2.671168000000762,
+            "source": 7.618792999999641,
+            "native": 333.4808329999996,
+            "toolIdentity": 1435.3520370000024,
+            "gitWrite": 0.26041499999882944,
+            "snapshots": 84,
+            "reads": 340,
+            "stableReads": 198,
+            "stableBytes": 6920989,
+            "checkReads": 144,
+            "checkBytes": 5083148,
+            "commits": 14,
+            "upstream": 11,
+            "nativeBuilds": 2,
+            "toolInspections": 22,
+            "eligibleChecks": 14,
+            "fullHashes": 1,
+            "byteMatches": 13,
+            "maxRetainedBytes": 83934930
+          }
+        },
+        "maxRssKiB": 646656
+      },
+      "baseline": {
+        "metrics": {
+          "first": {
+            "totalMs": 9069.638375,
+            "snapshotCheck": 8.855704999999517,
+            "source": 589.1027069999994,
+            "native": 2861.6432080000022,
+            "toolIdentity": 5296.093789999999,
+            "gitWrite": 2.7240399999958242,
+            "snapshots": 280,
+            "reads": 939,
+            "stableReads": 456,
+            "stableBytes": 18372755,
+            "checkReads": 408,
+            "checkBytes": 16678429,
+            "commits": 113,
+            "upstream": 13,
+            "nativeBuilds": 16,
+            "toolInspections": 64,
+            "eligibleChecks": 0,
+            "fullHashes": 0,
+            "byteMatches": 0,
+            "maxRetainedBytes": 0
+          },
+          "unchanged": {
+            "totalMs": 1364.1912920000013,
+            "snapshotCheck": 0.9258759999956965,
+            "source": 2.720788000000539,
+            "native": 0,
+            "toolIdentity": 1317.3159560000004,
+            "gitWrite": 0,
+            "snapshots": 54,
+            "reads": 178,
+            "stableReads": 96,
+            "stableBytes": 3388652,
+            "checkReads": 48,
+            "checkBytes": 1694326,
+            "commits": 0,
+            "upstream": 7,
+            "nativeBuilds": 0,
+            "toolInspections": 16,
+            "eligibleChecks": 16,
+            "fullHashes": 16,
+            "byteMatches": 0,
+            "maxRetainedBytes": 0
+          },
+          "same-source": {
+            "totalMs": 2832.6196660000005,
+            "snapshotCheck": 2.671247999998741,
+            "source": 581.4693350000034,
+            "native": 311.67570800000067,
+            "toolIdentity": 1850.063207000001,
+            "gitWrite": 0.9241270000056829,
+            "snapshots": 102,
+            "reads": 349,
+            "stableReads": 198,
+            "stableBytes": 6785669,
+            "checkReads": 144,
+            "checkBytes": 5083201,
+            "commits": 23,
+            "upstream": 9,
+            "nativeBuilds": 2,
+            "toolInspections": 22,
+            "eligibleChecks": 14,
+            "fullHashes": 14,
+            "byteMatches": 0,
+            "maxRetainedBytes": 0
+          },
+          "multi-source": {
+            "totalMs": 2211.2310419999994,
+            "snapshotCheck": 2.6442490000008547,
+            "source": 7.199247999998988,
+            "native": 331.94295800000145,
+            "toolIdentity": 1796.7134999999962,
+            "gitWrite": 0.25333400000454276,
+            "snapshots": 84,
+            "reads": 340,
+            "stableReads": 198,
+            "stableBytes": 6920989,
+            "checkReads": 144,
+            "checkBytes": 5083148,
+            "commits": 14,
+            "upstream": 11,
+            "nativeBuilds": 2,
+            "toolInspections": 22,
+            "eligibleChecks": 14,
+            "fullHashes": 14,
+            "byteMatches": 0,
+            "maxRetainedBytes": 0
+          }
+        },
+        "maxRssKiB": 564480
+      }
+    },
+    {
+      "pair": 5,
+      "order": [
+        "baseline",
+        "reuse"
+      ],
+      "baseline": {
+        "metrics": {
+          "first": {
+            "totalMs": 8892.514792,
+            "snapshotCheck": 9.160458999999491,
+            "source": 565.9693750000002,
+            "native": 2772.1479999999997,
+            "toolIdentity": 5241.055874999993,
+            "gitWrite": 2.3974959999997054,
+            "snapshots": 280,
+            "reads": 939,
+            "stableReads": 456,
+            "stableBytes": 18372755,
+            "checkReads": 408,
+            "checkBytes": 16678429,
+            "commits": 113,
+            "upstream": 13,
+            "nativeBuilds": 16,
+            "toolInspections": 64,
+            "eligibleChecks": 0,
+            "fullHashes": 0,
+            "byteMatches": 0,
+            "maxRetainedBytes": 0
+          },
+          "unchanged": {
+            "totalMs": 1358.4779999999992,
+            "snapshotCheck": 0.9712469999994937,
+            "source": 2.861334999994142,
+            "native": 0,
+            "toolIdentity": 1310.4335009999977,
+            "gitWrite": 0,
+            "snapshots": 54,
+            "reads": 178,
+            "stableReads": 96,
+            "stableBytes": 3388652,
+            "checkReads": 48,
+            "checkBytes": 1694326,
+            "commits": 0,
+            "upstream": 7,
+            "nativeBuilds": 0,
+            "toolInspections": 16,
+            "eligibleChecks": 16,
+            "fullHashes": 16,
+            "byteMatches": 0,
+            "maxRetainedBytes": 0
+          },
+          "same-source": {
+            "totalMs": 2760.855625,
+            "snapshotCheck": 2.8740819999984524,
+            "source": 543.0702079999974,
+            "native": 298.56762499999786,
+            "toolIdentity": 1828.7128760000014,
+            "gitWrite": 0.9998730000024807,
+            "snapshots": 102,
+            "reads": 349,
+            "stableReads": 198,
+            "stableBytes": 6785669,
+            "checkReads": 144,
+            "checkBytes": 5083201,
+            "commits": 23,
+            "upstream": 9,
+            "nativeBuilds": 2,
+            "toolInspections": 22,
+            "eligibleChecks": 14,
+            "fullHashes": 14,
+            "byteMatches": 0,
+            "maxRetainedBytes": 0
+          },
+          "multi-source": {
+            "totalMs": 2219.098249999999,
+            "snapshotCheck": 2.598790000005465,
+            "source": 7.570500000003449,
+            "native": 334.80150100000174,
+            "toolIdentity": 1802.187956999991,
+            "gitWrite": 0.2755409999972471,
+            "snapshots": 84,
+            "reads": 340,
+            "stableReads": 198,
+            "stableBytes": 6920989,
+            "checkReads": 144,
+            "checkBytes": 5083148,
+            "commits": 14,
+            "upstream": 11,
+            "nativeBuilds": 2,
+            "toolInspections": 22,
+            "eligibleChecks": 14,
+            "fullHashes": 14,
+            "byteMatches": 0,
+            "maxRetainedBytes": 0
+          }
+        },
+        "maxRssKiB": 565056
+      },
+      "reuse": {
+        "metrics": {
+          "first": {
+            "totalMs": 9121.435459,
+            "snapshotCheck": 9.237207999999896,
+            "source": 592.775332000003,
+            "native": 2872.8663719999995,
+            "toolIdentity": 5313.573128999998,
+            "gitWrite": 2.7498759999982383,
+            "snapshots": 280,
+            "reads": 939,
+            "stableReads": 456,
+            "stableBytes": 18372755,
+            "checkReads": 408,
+            "checkBytes": 16678429,
+            "commits": 113,
+            "upstream": 13,
+            "nativeBuilds": 16,
+            "toolInspections": 64,
+            "eligibleChecks": 0,
+            "fullHashes": 0,
+            "byteMatches": 0,
+            "maxRetainedBytes": 0
+          },
+          "unchanged": {
+            "totalMs": 955.6290420000005,
+            "snapshotCheck": 1.7027060000036727,
+            "source": 3.754290000000765,
+            "native": 0,
+            "toolIdentity": 901.0680010000015,
+            "gitWrite": 0,
+            "snapshots": 54,
+            "reads": 178,
+            "stableReads": 96,
+            "stableBytes": 3388652,
+            "checkReads": 48,
+            "checkBytes": 1694326,
+            "commits": 0,
+            "upstream": 7,
+            "nativeBuilds": 0,
+            "toolInspections": 16,
+            "eligibleChecks": 16,
+            "fullHashes": 1,
+            "byteMatches": 15,
+            "maxRetainedBytes": 83934930
+          },
+          "same-source": {
+            "totalMs": 2413.694834,
+            "snapshotCheck": 2.7000430000007327,
+            "source": 564.5832049999954,
+            "native": 308.06670699999995,
+            "toolIdentity": 1447.733999,
+            "gitWrite": 0.9753739999941899,
+            "snapshots": 102,
+            "reads": 349,
+            "stableReads": 198,
+            "stableBytes": 6785669,
+            "checkReads": 144,
+            "checkBytes": 5083201,
+            "commits": 23,
+            "upstream": 9,
+            "nativeBuilds": 2,
+            "toolInspections": 22,
+            "eligibleChecks": 14,
+            "fullHashes": 1,
+            "byteMatches": 13,
+            "maxRetainedBytes": 83934930
+          },
+          "multi-source": {
+            "totalMs": 1863.333290999999,
+            "snapshotCheck": 2.669793999999456,
+            "source": 8.213709000001472,
+            "native": 341.6136250000018,
+            "toolIdentity": 1433.816793,
+            "gitWrite": 0.2558770000032382,
+            "snapshots": 84,
+            "reads": 340,
+            "stableReads": 198,
+            "stableBytes": 6920989,
+            "checkReads": 144,
+            "checkBytes": 5083148,
+            "commits": 14,
+            "upstream": 11,
+            "nativeBuilds": 2,
+            "toolInspections": 22,
+            "eligibleChecks": 14,
+            "fullHashes": 1,
+            "byteMatches": 13,
+            "maxRetainedBytes": 83934930
+          }
+        },
+        "maxRssKiB": 647200
+      }
+    }
+  ]
+}
