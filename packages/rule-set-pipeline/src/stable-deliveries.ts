@@ -2,7 +2,7 @@ import type { PublicationSnapshot } from './publication-repository.js';
 import { sha256 } from './release.js';
 import type { FileEvidence, RuleDelivery } from './rules-model.js';
 
-interface StableDeliveries {
+export interface StableDeliveries {
   records: ReadonlyMap<string, RuleDelivery>;
   recordPaths: ReadonlyMap<string, string>;
 }
