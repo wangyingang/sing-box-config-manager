@@ -1,0 +1,440 @@
+{
+  "event": "workflow_dispatch",
+  "target": "main",
+  "exitCode": 0,
+  "results": [
+    {
+      "operation": "sync",
+      "dryRun": true,
+      "configurationRevision": "bf46226edcaf724357065ab776f248fc4179e78e",
+      "configurationOrigin": "wangyingang/sing-box-config-manager@main",
+      "target": {
+        "repository": "wangyingang/sing-box-rule-artifacts",
+        "branch": "main"
+      },
+      "status": "success",
+      "exitCode": 0,
+      "results": [
+        {
+          "id": "openai",
+          "status": "planned",
+          "changes": [
+            "add",
+            "first-delivery"
+          ],
+          "verified": [
+            "source",
+            "native",
+            "subscription"
+          ],
+          "unverified": [
+            "remote-publication",
+            "HTTPS-readback"
+          ],
+          "expectedSource": {
+            "repository": "v2fly/domain-list-community",
+            "version": "latest-release",
+            "input": {
+              "format": "plain-yaml",
+              "asset": "dlc.dat_plain.yml",
+              "checksum": "dlc.dat_plain.yml.sha256sum"
+            }
+          }
+        },
+        {
+          "id": "anthropic",
+          "status": "planned",
+          "changes": [
+            "add",
+            "first-delivery"
+          ],
+          "verified": [
+            "source",
+            "native",
+            "subscription"
+          ],
+          "unverified": [
+            "remote-publication",
+            "HTTPS-readback"
+          ],
+          "expectedSource": {
+            "repository": "v2fly/domain-list-community",
+            "version": "latest-release",
+            "input": {
+              "format": "plain-yaml",
+              "asset": "dlc.dat_plain.yml",
+              "checksum": "dlc.dat_plain.yml.sha256sum"
+            }
+          }
+        },
+        {
+          "id": "google-deepmind",
+          "status": "planned",
+          "changes": [
+            "add",
+            "first-delivery"
+          ],
+          "verified": [
+            "source",
+            "native",
+            "subscription"
+          ],
+          "unverified": [
+            "remote-publication",
+            "HTTPS-readback"
+          ],
+          "expectedSource": {
+            "repository": "v2fly/domain-list-community",
+            "version": "latest-release",
+            "input": {
+              "format": "plain-yaml",
+              "asset": "dlc.dat_plain.yml",
+              "checksum": "dlc.dat_plain.yml.sha256sum"
+            }
+          }
+        },
+        {
+          "id": "china-domains",
+          "status": "planned",
+          "changes": [
+            "add",
+            "first-delivery"
+          ],
+          "verified": [
+            "source",
+            "native",
+            "subscription"
+          ],
+          "unverified": [
+            "remote-publication",
+            "HTTPS-readback"
+          ],
+          "expectedSource": {
+            "repository": "v2fly/domain-list-community",
+            "version": "latest-release",
+            "input": {
+              "format": "plain-yaml",
+              "asset": "dlc.dat_plain.yml",
+              "checksum": "dlc.dat_plain.yml.sha256sum"
+            }
+          }
+        },
+        {
+          "id": "global",
+          "status": "planned",
+          "changes": [
+            "add",
+            "first-delivery"
+          ],
+          "verified": [
+            "source",
+            "native",
+            "subscription"
+          ],
+          "unverified": [
+            "remote-publication",
+            "HTTPS-readback"
+          ],
+          "expectedSource": {
+            "repository": "v2fly/domain-list-community",
+            "version": "latest-release",
+            "input": {
+              "format": "plain-yaml",
+              "asset": "dlc.dat_plain.yml",
+              "checksum": "dlc.dat_plain.yml.sha256sum"
+            }
+          }
+        },
+        {
+          "id": "apple",
+          "status": "planned",
+          "changes": [
+            "add",
+            "first-delivery"
+          ],
+          "verified": [
+            "source",
+            "native",
+            "subscription"
+          ],
+          "unverified": [
+            "remote-publication",
+            "HTTPS-readback"
+          ],
+          "expectedSource": {
+            "repository": "v2fly/domain-list-community",
+            "version": "latest-release",
+            "input": {
+              "format": "plain-yaml",
+              "asset": "dlc.dat_plain.yml",
+              "checksum": "dlc.dat_plain.yml.sha256sum"
+            }
+          }
+        },
+        {
+          "id": "microsoft",
+          "status": "planned",
+          "changes": [
+            "add",
+            "first-delivery"
+          ],
+          "verified": [
+            "source",
+            "native",
+            "subscription"
+          ],
+          "unverified": [
+            "remote-publication",
+            "HTTPS-readback"
+          ],
+          "expectedSource": {
+            "repository": "v2fly/domain-list-community",
+            "version": "latest-release",
+            "input": {
+              "format": "plain-yaml",
+              "asset": "dlc.dat_plain.yml",
+              "checksum": "dlc.dat_plain.yml.sha256sum"
+            }
+          }
+        },
+        {
+          "id": "docker",
+          "status": "planned",
+          "changes": [
+            "add",
+            "first-delivery"
+          ],
+          "verified": [
+            "source",
+            "native",
+            "subscription"
+          ],
+          "unverified": [
+            "remote-publication",
+            "HTTPS-readback"
+          ],
+          "expectedSource": {
+            "repository": "v2fly/domain-list-community",
+            "version": "latest-release",
+            "input": {
+              "format": "plain-yaml",
+              "asset": "dlc.dat_plain.yml",
+              "checksum": "dlc.dat_plain.yml.sha256sum"
+            }
+          }
+        },
+        {
+          "id": "github",
+          "status": "planned",
+          "changes": [
+            "add",
+            "first-delivery"
+          ],
+          "verified": [
+            "source",
+            "native",
+            "subscription"
+          ],
+          "unverified": [
+            "remote-publication",
+            "HTTPS-readback"
+          ],
+          "expectedSource": {
+            "repository": "v2fly/domain-list-community",
+            "version": "latest-release",
+            "input": {
+              "format": "plain-yaml",
+              "asset": "dlc.dat_plain.yml",
+              "checksum": "dlc.dat_plain.yml.sha256sum"
+            }
+          }
+        },
+        {
+          "id": "google",
+          "status": "planned",
+          "changes": [
+            "add",
+            "first-delivery"
+          ],
+          "verified": [
+            "source",
+            "native",
+            "subscription"
+          ],
+          "unverified": [
+            "remote-publication",
+            "HTTPS-readback"
+          ],
+          "expectedSource": {
+            "repository": "v2fly/domain-list-community",
+            "version": "latest-release",
+            "input": {
+              "format": "plain-yaml",
+              "asset": "dlc.dat_plain.yml",
+              "checksum": "dlc.dat_plain.yml.sha256sum"
+            }
+          }
+        },
+        {
+          "id": "youtube",
+          "status": "planned",
+          "changes": [
+            "add",
+            "first-delivery"
+          ],
+          "verified": [
+            "source",
+            "native",
+            "subscription"
+          ],
+          "unverified": [
+            "remote-publication",
+            "HTTPS-readback"
+          ],
+          "expectedSource": {
+            "repository": "v2fly/domain-list-community",
+            "version": "latest-release",
+            "input": {
+              "format": "plain-yaml",
+              "asset": "dlc.dat_plain.yml",
+              "checksum": "dlc.dat_plain.yml.sha256sum"
+            }
+          }
+        },
+        {
+          "id": "china-ip",
+          "status": "planned",
+          "changes": [
+            "add",
+            "first-delivery"
+          ],
+          "verified": [
+            "source",
+            "native",
+            "subscription"
+          ],
+          "unverified": [
+            "remote-publication",
+            "HTTPS-readback"
+          ],
+          "expectedSource": {
+            "repository": "gaoyifan/china-operator-ip",
+            "version": "git-branch",
+            "branch": "ip-lists",
+            "input": {
+              "format": "cidr-text",
+              "path": "china46.txt"
+            }
+          }
+        },
+        {
+          "id": "chatgpt-voice",
+          "status": "planned",
+          "changes": [
+            "add",
+            "first-delivery"
+          ],
+          "verified": [
+            "source",
+            "native",
+            "subscription"
+          ],
+          "unverified": [
+            "remote-publication",
+            "HTTPS-readback"
+          ],
+          "expectedSource": {
+            "version": "openai-voice",
+            "input": {
+              "format": "openai-voice-json",
+              "url": "https://openai.com/chatgpt-voice.json"
+            }
+          }
+        },
+        {
+          "id": "gfw",
+          "status": "planned",
+          "changes": [
+            "add",
+            "first-delivery"
+          ],
+          "verified": [
+            "source",
+            "native",
+            "subscription"
+          ],
+          "unverified": [
+            "remote-publication",
+            "HTTPS-readback"
+          ],
+          "expectedSource": {
+            "repository": "Loyalsoldier/v2ray-rules-dat",
+            "version": "git-branch",
+            "branch": "release",
+            "input": {
+              "format": "domain-suffix-text",
+              "path": "gfw.txt"
+            }
+          }
+        },
+        {
+          "id": "onedrive",
+          "status": "planned",
+          "changes": [
+            "add",
+            "first-delivery"
+          ],
+          "verified": [
+            "source",
+            "native",
+            "subscription"
+          ],
+          "unverified": [
+            "remote-publication",
+            "HTTPS-readback"
+          ],
+          "expectedSource": {
+            "repository": "blackmatrix7/ios_rule_script",
+            "version": "git-branch",
+            "branch": "master",
+            "input": {
+              "format": "typed-domain-text",
+              "path": "rule/Clash/OneDrive/OneDrive.list"
+            }
+          }
+        },
+        {
+          "id": "stream",
+          "status": "planned",
+          "changes": [
+            "add",
+            "first-delivery"
+          ],
+          "verified": [
+            "source",
+            "native",
+            "subscription"
+          ],
+          "unverified": [
+            "remote-publication",
+            "HTTPS-readback"
+          ],
+          "expectedSource": {
+            "repository": "SukkaLab/ruleset.skk.moe",
+            "version": "git-branch",
+            "branch": "master",
+            "input": {
+              "format": "sing-box-domain-json",
+              "path": "sing-box/non_ip/stream.json"
+            }
+          }
+        }
+      ],
+      "readbackRequests": [],
+      "observedHeads": {
+        "journal": "b3c3f5324a7fd023cff4583fb3b3e522591a0aa9",
+        "stable": "b3c3f5324a7fd023cff4583fb3b3e522591a0aa9"
+      }
+    }
+  ]
+}

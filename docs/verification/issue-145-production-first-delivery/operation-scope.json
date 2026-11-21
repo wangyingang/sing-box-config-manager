@@ -1,0 +1,21 @@
+{
+  "run": {
+    "conclusion": "success",
+    "createdAt": "2026-11-21T08:26:29Z",
+    "headSha": "bf46226edcaf724357065ab776f248fc4179e78e",
+    "status": "completed",
+    "updatedAt": "2026-11-21T08:40:13Z",
+    "url": "https://github.com/wangyingang/sing-box-config-manager/actions/runs/44884895711"
+  },
+  "previewRunId": 44884772047,
+  "gateOperation": {
+    "before": [],
+    "temporary": {
+      "name": "RULE_UPDATE_ENABLED",
+      "value": "true",
+      "created_at": "2026-11-21T08:26:26Z",
+      "updated_at": "2026-11-21T08:26:26Z"
+    },
+    "after": []
+  }
+}
