@@ -1,0 +1,1409 @@
+{
+  "commit": "543add278db38b49ed77039b30d49d38b553bed1",
+  "sourceTree": "8f816cc3747a4a77a79f5a05b8d3925d717c97b5",
+  "probeSha256": "d4d75fe19b1836596c48233b35eedb974d641675f1ced987abd2ffe79fa7c0a0",
+  "configurationSha256": "c73361933d1663b3f0ccc8772b5d939bfea39d7374fd78dd33472df998bf67c8",
+  "node": "v26.13.0",
+  "platform": "darwin/arm64",
+  "binarySha256": "6546126c1759683fe85798da92409215d53c50e0f2b346b4f74a61babc8dbec2",
+  "binaryVersion": "sing-box version 1.14.4",
+  "layout": "local in-memory candidates/main, replayed upstream and artifact transport",
+  "facts": {
+    "first": {
+      "openai": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "481b2b2c45202ef9b4b2ac0ef3e4e371296d0aa4cb1f245c450ecd1edde9b5d7",
+          "domains.json": "a70096077d78af43df6f56dbad775c27e8b0be7c92a81e36baaf8229b04de5d5"
+        }
+      },
+      "anthropic": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "6bdf4ebc85d20b873b860875dd00030c40a673d92152a8fbae26a367f02fd8d1",
+          "domains.json": "2f50f77b8c2d6885e40d729dc16a8c830e4364f00330231ded8f696e636fff84"
+        }
+      },
+      "google-deepmind": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "652abe66df71563d3836fccafd551448935b7551a00fe9af572062bd7008fa45",
+          "domains.json": "1f417b044c3cff900faa62bd5df7f92cb0bfca8c288c9f64689ccd17ffd83322"
+        }
+      },
+      "china-domains": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "5572d2c40839b39cd604fca8153f4f6b2601311cd208a434cfcd1a1030bb41dc",
+          "domains.json": "dd2c6e600d9714eacc47b783beb6aca1738aa506b3c475aa1d6ac7fb6e909136"
+        }
+      },
+      "global": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "c155925ca5d6b31237b660259302fdb42482ea84245b1e635f2d1f5b96205c52",
+          "domains.json": "7680a6c8fe2b2ff017641ca5338f5ee4d23d956c9419de69f471514f9725cbfa"
+        }
+      },
+      "apple": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "f2707c6e86f68b1cf44c2ecda98030956fb03e2dec552b65965f569e1da1e422",
+          "domains.json": "9e6cc2bbdf49f7540d9fb4eeabf42cf476cf704e91e89628557373adf3701cc3"
+        }
+      },
+      "microsoft": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "f418743e05510367c47a5f7b60283299f089097f90d72e132990ce3e5e9f1ba8",
+          "domains.json": "1ccfdb68b011a47194e4d80dd33d09a3f1e863ca6333cdc4e828a4d2eabff67f"
+        }
+      },
+      "docker": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "1f66f663694e9aa2b8b986f6dc8c3fa67eafd8e4ad268b81bfa9ea4b6b0a58fe",
+          "domains.json": "9447a56a0228a8363375ec02875abde7492bf0c771d6cba4763bbc105a3a5a34"
+        }
+      },
+      "github": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "870bcad14e670a18894f479e477495bd5b736cff2110ab6205253f4a2e930e45",
+          "domains.json": "a6d13f172f3ef7a1603a62baa5f9f0bb048dca910e29a7eecf633df110b2f1ca"
+        }
+      },
+      "google": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "f3b09639e72ba0376655bc3cf509019967b9c6daeff0ef3cf4520484d2773b9e",
+          "domains.json": "67b9c9e1d0ea23d2080f5a5b15098e108e95be2f8539aa32b8498540316fdd3a"
+        }
+      },
+      "youtube": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "a0b1e05d6df5862ee6405ab7b9d18f13e8f559175b4539aa5e96006121ef75a3",
+          "domains.json": "38295c61f484ccbf4ba6375b649553298c841766e1ad6f2ea9a181af5d42bcc5"
+        }
+      },
+      "china-ip": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "be3de75a9698c50193c35c1215509e89d5d5cf6f",
+          "inputSha256": "cc2acc4a6c0c9378573140c86ecbf343a9fc99c42aa53d59554feb7238841f68"
+        },
+        "observedSource": {
+          "commit": "be3de75a9698c50193c35c1215509e89d5d5cf6f",
+          "inputSha256": "cc2acc4a6c0c9378573140c86ecbf343a9fc99c42aa53d59554feb7238841f68"
+        },
+        "files": {
+          "route.srs": "6ed8b6685f23d5265dc275e1fd7cde6d902936902ee72199fc7697c292dfb440",
+          "route.json": "c9bf767ff90bfecc7732dcf6c390f75623ed149561e648df953b8273c1f0bb07"
+        }
+      },
+      "gfw": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "3914c5cf42be87696db5139fc4b7d681b09b8d4a",
+          "inputSha256": "cd8db183d21c1ae65daa5cf3fd54a2b316b3b7f71fad6cb1621d523ad60be7dc"
+        },
+        "observedSource": {
+          "commit": "3914c5cf42be87696db5139fc4b7d681b09b8d4a",
+          "inputSha256": "cd8db183d21c1ae65daa5cf3fd54a2b316b3b7f71fad6cb1621d523ad60be7dc"
+        },
+        "files": {
+          "domains.srs": "45fac0dbb876e5c4c3f878578a7f2379201b4a75b39a25767daab4f077df6011",
+          "domains.json": "85927f603b1c88997636c9f7f3e4dcdfbcc495cd7f82182fda89d29fd7cc1c4d"
+        }
+      },
+      "onedrive": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "0b6897dc17e0c513d25449c935a9694818e32f0c",
+          "inputSha256": "cf4f6b24e434b6c6033b70fc88cf7e33f5aaa0f353f6963ced770f5fa1ae6c9b"
+        },
+        "observedSource": {
+          "commit": "0b6897dc17e0c513d25449c935a9694818e32f0c",
+          "inputSha256": "cf4f6b24e434b6c6033b70fc88cf7e33f5aaa0f353f6963ced770f5fa1ae6c9b"
+        },
+        "files": {
+          "domains.srs": "c294fe0d9a20ec433a67af492fa8f53b3f7b47f6b85fa9894e226c1934e2344b",
+          "domains.json": "bf5b223c60555033f61a1f4c19c1a8deba5b79abf47001848a125be2cc66db41"
+        }
+      },
+      "stream": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "838801f009734aa324e7d42d7b7b51561d1df5ba",
+          "inputSha256": "88487bf51615620ee8fcca449fad6199db6968dc429804acb7ad3348a5df8ed5"
+        },
+        "observedSource": {
+          "commit": "838801f009734aa324e7d42d7b7b51561d1df5ba",
+          "inputSha256": "88487bf51615620ee8fcca449fad6199db6968dc429804acb7ad3348a5df8ed5"
+        },
+        "files": {
+          "domains.srs": "a495177e3b1e8e82220ddd82851e2f20ced2f5d1f040ff1f74a8508d74ee94af",
+          "domains.json": "d9681c23db68a039bee87134b223ca565812259e3831d0e6771ed41fe04c2614"
+        }
+      },
+      "chatgpt-voice": {
+        "status": "delivered",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "inputSha256": "e0e4df0f751d5025d24b3177191fd2484213599f64a001f732c7ca4881fbce2c"
+        },
+        "observedSource": {
+          "inputSha256": "e0e4df0f751d5025d24b3177191fd2484213599f64a001f732c7ca4881fbce2c"
+        },
+        "files": {
+          "route.srs": "c2603e43eefc3fa5cd890c5e58f0e3b5130df8657ed1ce9c963089da8dccc6a0",
+          "route.json": "0a35cb86a36d37fd2079e3b66e24d4a1ffb5c41df4c7402a9643f373ca520dfe"
+        }
+      }
+    },
+    "unchanged": {
+      "openai": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "481b2b2c45202ef9b4b2ac0ef3e4e371296d0aa4cb1f245c450ecd1edde9b5d7",
+          "domains.json": "a70096077d78af43df6f56dbad775c27e8b0be7c92a81e36baaf8229b04de5d5"
+        }
+      },
+      "anthropic": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "6bdf4ebc85d20b873b860875dd00030c40a673d92152a8fbae26a367f02fd8d1",
+          "domains.json": "2f50f77b8c2d6885e40d729dc16a8c830e4364f00330231ded8f696e636fff84"
+        }
+      },
+      "google-deepmind": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "652abe66df71563d3836fccafd551448935b7551a00fe9af572062bd7008fa45",
+          "domains.json": "1f417b044c3cff900faa62bd5df7f92cb0bfca8c288c9f64689ccd17ffd83322"
+        }
+      },
+      "china-domains": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "5572d2c40839b39cd604fca8153f4f6b2601311cd208a434cfcd1a1030bb41dc",
+          "domains.json": "dd2c6e600d9714eacc47b783beb6aca1738aa506b3c475aa1d6ac7fb6e909136"
+        }
+      },
+      "global": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "c155925ca5d6b31237b660259302fdb42482ea84245b1e635f2d1f5b96205c52",
+          "domains.json": "7680a6c8fe2b2ff017641ca5338f5ee4d23d956c9419de69f471514f9725cbfa"
+        }
+      },
+      "apple": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "f2707c6e86f68b1cf44c2ecda98030956fb03e2dec552b65965f569e1da1e422",
+          "domains.json": "9e6cc2bbdf49f7540d9fb4eeabf42cf476cf704e91e89628557373adf3701cc3"
+        }
+      },
+      "microsoft": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "f418743e05510367c47a5f7b60283299f089097f90d72e132990ce3e5e9f1ba8",
+          "domains.json": "1ccfdb68b011a47194e4d80dd33d09a3f1e863ca6333cdc4e828a4d2eabff67f"
+        }
+      },
+      "docker": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "1f66f663694e9aa2b8b986f6dc8c3fa67eafd8e4ad268b81bfa9ea4b6b0a58fe",
+          "domains.json": "9447a56a0228a8363375ec02875abde7492bf0c771d6cba4763bbc105a3a5a34"
+        }
+      },
+      "github": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "870bcad14e670a18894f479e477495bd5b736cff2110ab6205253f4a2e930e45",
+          "domains.json": "a6d13f172f3ef7a1603a62baa5f9f0bb048dca910e29a7eecf633df110b2f1ca"
+        }
+      },
+      "google": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "f3b09639e72ba0376655bc3cf509019967b9c6daeff0ef3cf4520484d2773b9e",
+          "domains.json": "67b9c9e1d0ea23d2080f5a5b15098e108e95be2f8539aa32b8498540316fdd3a"
+        }
+      },
+      "youtube": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "a0b1e05d6df5862ee6405ab7b9d18f13e8f559175b4539aa5e96006121ef75a3",
+          "domains.json": "38295c61f484ccbf4ba6375b649553298c841766e1ad6f2ea9a181af5d42bcc5"
+        }
+      },
+      "china-ip": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "be3de75a9698c50193c35c1215509e89d5d5cf6f",
+          "inputSha256": "cc2acc4a6c0c9378573140c86ecbf343a9fc99c42aa53d59554feb7238841f68"
+        },
+        "observedSource": {
+          "commit": "be3de75a9698c50193c35c1215509e89d5d5cf6f",
+          "inputSha256": "cc2acc4a6c0c9378573140c86ecbf343a9fc99c42aa53d59554feb7238841f68"
+        },
+        "files": {
+          "route.srs": "6ed8b6685f23d5265dc275e1fd7cde6d902936902ee72199fc7697c292dfb440",
+          "route.json": "c9bf767ff90bfecc7732dcf6c390f75623ed149561e648df953b8273c1f0bb07"
+        }
+      },
+      "gfw": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "3914c5cf42be87696db5139fc4b7d681b09b8d4a",
+          "inputSha256": "cd8db183d21c1ae65daa5cf3fd54a2b316b3b7f71fad6cb1621d523ad60be7dc"
+        },
+        "observedSource": {
+          "commit": "3914c5cf42be87696db5139fc4b7d681b09b8d4a",
+          "inputSha256": "cd8db183d21c1ae65daa5cf3fd54a2b316b3b7f71fad6cb1621d523ad60be7dc"
+        },
+        "files": {
+          "domains.srs": "45fac0dbb876e5c4c3f878578a7f2379201b4a75b39a25767daab4f077df6011",
+          "domains.json": "85927f603b1c88997636c9f7f3e4dcdfbcc495cd7f82182fda89d29fd7cc1c4d"
+        }
+      },
+      "onedrive": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "0b6897dc17e0c513d25449c935a9694818e32f0c",
+          "inputSha256": "cf4f6b24e434b6c6033b70fc88cf7e33f5aaa0f353f6963ced770f5fa1ae6c9b"
+        },
+        "observedSource": {
+          "commit": "0b6897dc17e0c513d25449c935a9694818e32f0c",
+          "inputSha256": "cf4f6b24e434b6c6033b70fc88cf7e33f5aaa0f353f6963ced770f5fa1ae6c9b"
+        },
+        "files": {
+          "domains.srs": "c294fe0d9a20ec433a67af492fa8f53b3f7b47f6b85fa9894e226c1934e2344b",
+          "domains.json": "bf5b223c60555033f61a1f4c19c1a8deba5b79abf47001848a125be2cc66db41"
+        }
+      },
+      "stream": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "838801f009734aa324e7d42d7b7b51561d1df5ba",
+          "inputSha256": "88487bf51615620ee8fcca449fad6199db6968dc429804acb7ad3348a5df8ed5"
+        },
+        "observedSource": {
+          "commit": "838801f009734aa324e7d42d7b7b51561d1df5ba",
+          "inputSha256": "88487bf51615620ee8fcca449fad6199db6968dc429804acb7ad3348a5df8ed5"
+        },
+        "files": {
+          "domains.srs": "a495177e3b1e8e82220ddd82851e2f20ced2f5d1f040ff1f74a8508d74ee94af",
+          "domains.json": "d9681c23db68a039bee87134b223ca565812259e3831d0e6771ed41fe04c2614"
+        }
+      },
+      "chatgpt-voice": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "inputSha256": "e0e4df0f751d5025d24b3177191fd2484213599f64a001f732c7ca4881fbce2c"
+        },
+        "observedSource": {
+          "inputSha256": "e0e4df0f751d5025d24b3177191fd2484213599f64a001f732c7ca4881fbce2c"
+        },
+        "files": {
+          "route.srs": "c2603e43eefc3fa5cd890c5e58f0e3b5130df8657ed1ce9c963089da8dccc6a0",
+          "route.json": "0a35cb86a36d37fd2079e3b66e24d4a1ffb5c41df4c7402a9643f373ca520dfe"
+        }
+      }
+    },
+    "same-source": {
+      "openai": {
+        "status": "delivered",
+        "publishedAt": "2026-11-21T00:00:00.000Z",
+        "currentSource": {
+          "commit": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c",
+          "inputSha256": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c324d733ca97edc55185f876b"
+        },
+        "observedSource": {
+          "commit": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c",
+          "inputSha256": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c324d733ca97edc55185f876b"
+        },
+        "files": {
+          "domains.srs": "1c95fa7e0fd9dc9709c739d057c3e9832ade92a750d0abd89277fe863b2c82f6",
+          "domains.json": "c9e76d578024c578972aa3e4aa14284f3a249fa3cc0d2f97d48c2ee5ea0f31a0"
+        }
+      },
+      "anthropic": {
+        "status": "delivered",
+        "publishedAt": "2026-11-21T00:00:00.000Z",
+        "currentSource": {
+          "commit": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c",
+          "inputSha256": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c324d733ca97edc55185f876b"
+        },
+        "observedSource": {
+          "commit": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c",
+          "inputSha256": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c324d733ca97edc55185f876b"
+        },
+        "files": {
+          "domains.srs": "593ad8188ad4663e7d6d121b0ed98df6f89d5d2c6f054ec53797fb9c5534c1b0",
+          "domains.json": "8321705dd770f63f80c1d340b6379b92c5f65d2226afe1aed87586c270401097"
+        }
+      },
+      "google-deepmind": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c",
+          "inputSha256": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c324d733ca97edc55185f876b"
+        },
+        "files": {
+          "domains.srs": "652abe66df71563d3836fccafd551448935b7551a00fe9af572062bd7008fa45",
+          "domains.json": "1f417b044c3cff900faa62bd5df7f92cb0bfca8c288c9f64689ccd17ffd83322"
+        }
+      },
+      "china-domains": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c",
+          "inputSha256": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c324d733ca97edc55185f876b"
+        },
+        "files": {
+          "domains.srs": "5572d2c40839b39cd604fca8153f4f6b2601311cd208a434cfcd1a1030bb41dc",
+          "domains.json": "dd2c6e600d9714eacc47b783beb6aca1738aa506b3c475aa1d6ac7fb6e909136"
+        }
+      },
+      "global": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c",
+          "inputSha256": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c324d733ca97edc55185f876b"
+        },
+        "files": {
+          "domains.srs": "c155925ca5d6b31237b660259302fdb42482ea84245b1e635f2d1f5b96205c52",
+          "domains.json": "7680a6c8fe2b2ff017641ca5338f5ee4d23d956c9419de69f471514f9725cbfa"
+        }
+      },
+      "apple": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c",
+          "inputSha256": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c324d733ca97edc55185f876b"
+        },
+        "files": {
+          "domains.srs": "f2707c6e86f68b1cf44c2ecda98030956fb03e2dec552b65965f569e1da1e422",
+          "domains.json": "9e6cc2bbdf49f7540d9fb4eeabf42cf476cf704e91e89628557373adf3701cc3"
+        }
+      },
+      "microsoft": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c",
+          "inputSha256": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c324d733ca97edc55185f876b"
+        },
+        "files": {
+          "domains.srs": "f418743e05510367c47a5f7b60283299f089097f90d72e132990ce3e5e9f1ba8",
+          "domains.json": "1ccfdb68b011a47194e4d80dd33d09a3f1e863ca6333cdc4e828a4d2eabff67f"
+        }
+      },
+      "docker": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c",
+          "inputSha256": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c324d733ca97edc55185f876b"
+        },
+        "files": {
+          "domains.srs": "1f66f663694e9aa2b8b986f6dc8c3fa67eafd8e4ad268b81bfa9ea4b6b0a58fe",
+          "domains.json": "9447a56a0228a8363375ec02875abde7492bf0c771d6cba4763bbc105a3a5a34"
+        }
+      },
+      "github": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c",
+          "inputSha256": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c324d733ca97edc55185f876b"
+        },
+        "files": {
+          "domains.srs": "870bcad14e670a18894f479e477495bd5b736cff2110ab6205253f4a2e930e45",
+          "domains.json": "a6d13f172f3ef7a1603a62baa5f9f0bb048dca910e29a7eecf633df110b2f1ca"
+        }
+      },
+      "google": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c",
+          "inputSha256": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c324d733ca97edc55185f876b"
+        },
+        "files": {
+          "domains.srs": "f3b09639e72ba0376655bc3cf509019967b9c6daeff0ef3cf4520484d2773b9e",
+          "domains.json": "67b9c9e1d0ea23d2080f5a5b15098e108e95be2f8539aa32b8498540316fdd3a"
+        }
+      },
+      "youtube": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c",
+          "inputSha256": "94b3a1732be71e22ba4d71dc189e45c45cf9e32c324d733ca97edc55185f876b"
+        },
+        "files": {
+          "domains.srs": "a0b1e05d6df5862ee6405ab7b9d18f13e8f559175b4539aa5e96006121ef75a3",
+          "domains.json": "38295c61f484ccbf4ba6375b649553298c841766e1ad6f2ea9a181af5d42bcc5"
+        }
+      },
+      "china-ip": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "be3de75a9698c50193c35c1215509e89d5d5cf6f",
+          "inputSha256": "cc2acc4a6c0c9378573140c86ecbf343a9fc99c42aa53d59554feb7238841f68"
+        },
+        "observedSource": {
+          "commit": "be3de75a9698c50193c35c1215509e89d5d5cf6f",
+          "inputSha256": "cc2acc4a6c0c9378573140c86ecbf343a9fc99c42aa53d59554feb7238841f68"
+        },
+        "files": {
+          "route.srs": "6ed8b6685f23d5265dc275e1fd7cde6d902936902ee72199fc7697c292dfb440",
+          "route.json": "c9bf767ff90bfecc7732dcf6c390f75623ed149561e648df953b8273c1f0bb07"
+        }
+      },
+      "gfw": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "3914c5cf42be87696db5139fc4b7d681b09b8d4a",
+          "inputSha256": "cd8db183d21c1ae65daa5cf3fd54a2b316b3b7f71fad6cb1621d523ad60be7dc"
+        },
+        "observedSource": {
+          "commit": "3914c5cf42be87696db5139fc4b7d681b09b8d4a",
+          "inputSha256": "cd8db183d21c1ae65daa5cf3fd54a2b316b3b7f71fad6cb1621d523ad60be7dc"
+        },
+        "files": {
+          "domains.srs": "45fac0dbb876e5c4c3f878578a7f2379201b4a75b39a25767daab4f077df6011",
+          "domains.json": "85927f603b1c88997636c9f7f3e4dcdfbcc495cd7f82182fda89d29fd7cc1c4d"
+        }
+      },
+      "onedrive": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "0b6897dc17e0c513d25449c935a9694818e32f0c",
+          "inputSha256": "cf4f6b24e434b6c6033b70fc88cf7e33f5aaa0f353f6963ced770f5fa1ae6c9b"
+        },
+        "observedSource": {
+          "commit": "0b6897dc17e0c513d25449c935a9694818e32f0c",
+          "inputSha256": "cf4f6b24e434b6c6033b70fc88cf7e33f5aaa0f353f6963ced770f5fa1ae6c9b"
+        },
+        "files": {
+          "domains.srs": "c294fe0d9a20ec433a67af492fa8f53b3f7b47f6b85fa9894e226c1934e2344b",
+          "domains.json": "bf5b223c60555033f61a1f4c19c1a8deba5b79abf47001848a125be2cc66db41"
+        }
+      },
+      "stream": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "838801f009734aa324e7d42d7b7b51561d1df5ba",
+          "inputSha256": "88487bf51615620ee8fcca449fad6199db6968dc429804acb7ad3348a5df8ed5"
+        },
+        "observedSource": {
+          "commit": "838801f009734aa324e7d42d7b7b51561d1df5ba",
+          "inputSha256": "88487bf51615620ee8fcca449fad6199db6968dc429804acb7ad3348a5df8ed5"
+        },
+        "files": {
+          "domains.srs": "a495177e3b1e8e82220ddd82851e2f20ced2f5d1f040ff1f74a8508d74ee94af",
+          "domains.json": "d9681c23db68a039bee87134b223ca565812259e3831d0e6771ed41fe04c2614"
+        }
+      },
+      "chatgpt-voice": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "inputSha256": "e0e4df0f751d5025d24b3177191fd2484213599f64a001f732c7ca4881fbce2c"
+        },
+        "observedSource": {
+          "inputSha256": "e0e4df0f751d5025d24b3177191fd2484213599f64a001f732c7ca4881fbce2c"
+        },
+        "files": {
+          "route.srs": "c2603e43eefc3fa5cd890c5e58f0e3b5130df8657ed1ce9c963089da8dccc6a0",
+          "route.json": "0a35cb86a36d37fd2079e3b66e24d4a1ffb5c41df4c7402a9643f373ca520dfe"
+        }
+      }
+    },
+    "multi-source": {
+      "openai": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "481b2b2c45202ef9b4b2ac0ef3e4e371296d0aa4cb1f245c450ecd1edde9b5d7",
+          "domains.json": "a70096077d78af43df6f56dbad775c27e8b0be7c92a81e36baaf8229b04de5d5"
+        }
+      },
+      "anthropic": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "6bdf4ebc85d20b873b860875dd00030c40a673d92152a8fbae26a367f02fd8d1",
+          "domains.json": "2f50f77b8c2d6885e40d729dc16a8c830e4364f00330231ded8f696e636fff84"
+        }
+      },
+      "google-deepmind": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "652abe66df71563d3836fccafd551448935b7551a00fe9af572062bd7008fa45",
+          "domains.json": "1f417b044c3cff900faa62bd5df7f92cb0bfca8c288c9f64689ccd17ffd83322"
+        }
+      },
+      "china-domains": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "5572d2c40839b39cd604fca8153f4f6b2601311cd208a434cfcd1a1030bb41dc",
+          "domains.json": "dd2c6e600d9714eacc47b783beb6aca1738aa506b3c475aa1d6ac7fb6e909136"
+        }
+      },
+      "global": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "c155925ca5d6b31237b660259302fdb42482ea84245b1e635f2d1f5b96205c52",
+          "domains.json": "7680a6c8fe2b2ff017641ca5338f5ee4d23d956c9419de69f471514f9725cbfa"
+        }
+      },
+      "apple": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "f2707c6e86f68b1cf44c2ecda98030956fb03e2dec552b65965f569e1da1e422",
+          "domains.json": "9e6cc2bbdf49f7540d9fb4eeabf42cf476cf704e91e89628557373adf3701cc3"
+        }
+      },
+      "microsoft": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "f418743e05510367c47a5f7b60283299f089097f90d72e132990ce3e5e9f1ba8",
+          "domains.json": "1ccfdb68b011a47194e4d80dd33d09a3f1e863ca6333cdc4e828a4d2eabff67f"
+        }
+      },
+      "docker": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "1f66f663694e9aa2b8b986f6dc8c3fa67eafd8e4ad268b81bfa9ea4b6b0a58fe",
+          "domains.json": "9447a56a0228a8363375ec02875abde7492bf0c771d6cba4763bbc105a3a5a34"
+        }
+      },
+      "github": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "870bcad14e670a18894f479e477495bd5b736cff2110ab6205253f4a2e930e45",
+          "domains.json": "a6d13f172f3ef7a1603a62baa5f9f0bb048dca910e29a7eecf633df110b2f1ca"
+        }
+      },
+      "google": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "f3b09639e72ba0376655bc3cf509019967b9c6daeff0ef3cf4520484d2773b9e",
+          "domains.json": "67b9c9e1d0ea23d2080f5a5b15098e108e95be2f8539aa32b8498540316fdd3a"
+        }
+      },
+      "youtube": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "observedSource": {
+          "commit": "bc3a8f5e24792303cf82bfff33b1ff164a0e4b3c",
+          "inputSha256": "20352b9263f6e3db420465efb565a7a0345ddde535afedf92515a7bb0ffa4dd8"
+        },
+        "files": {
+          "domains.srs": "a0b1e05d6df5862ee6405ab7b9d18f13e8f559175b4539aa5e96006121ef75a3",
+          "domains.json": "38295c61f484ccbf4ba6375b649553298c841766e1ad6f2ea9a181af5d42bcc5"
+        }
+      },
+      "china-ip": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "be3de75a9698c50193c35c1215509e89d5d5cf6f",
+          "inputSha256": "cc2acc4a6c0c9378573140c86ecbf343a9fc99c42aa53d59554feb7238841f68"
+        },
+        "observedSource": {
+          "commit": "be3de75a9698c50193c35c1215509e89d5d5cf6f",
+          "inputSha256": "cc2acc4a6c0c9378573140c86ecbf343a9fc99c42aa53d59554feb7238841f68"
+        },
+        "files": {
+          "route.srs": "6ed8b6685f23d5265dc275e1fd7cde6d902936902ee72199fc7697c292dfb440",
+          "route.json": "c9bf767ff90bfecc7732dcf6c390f75623ed149561e648df953b8273c1f0bb07"
+        }
+      },
+      "gfw": {
+        "status": "delivered",
+        "publishedAt": "2026-11-21T00:00:00.000Z",
+        "currentSource": {
+          "commit": "cd1c5c429c783849df5edaad13fb2870f7ceed4b",
+          "inputSha256": "cd1c5c429c783849df5edaad13fb2870f7ceed4ba68b957f915ad8cfd4b2ccc4"
+        },
+        "observedSource": {
+          "commit": "cd1c5c429c783849df5edaad13fb2870f7ceed4b",
+          "inputSha256": "cd1c5c429c783849df5edaad13fb2870f7ceed4ba68b957f915ad8cfd4b2ccc4"
+        },
+        "files": {
+          "domains.srs": "844d431e7a435e3a7372918980e18b7429228f7b585fd649cf415c782da3f2fc",
+          "domains.json": "560e8ff9ce0dc7a27c2c1635f9a382d656017324ff1120164c355c1d50a4376e"
+        }
+      },
+      "onedrive": {
+        "status": "delivered",
+        "publishedAt": "2026-11-21T00:00:00.000Z",
+        "currentSource": {
+          "commit": "4ce45a66bff2bab8d93ba2584f776987df2ef2be",
+          "inputSha256": "4ce45a66bff2bab8d93ba2584f776987df2ef2bebc3fd6f339e9d00638175f87"
+        },
+        "observedSource": {
+          "commit": "4ce45a66bff2bab8d93ba2584f776987df2ef2be",
+          "inputSha256": "4ce45a66bff2bab8d93ba2584f776987df2ef2bebc3fd6f339e9d00638175f87"
+        },
+        "files": {
+          "domains.srs": "9a0bfe508328c12d3b2b0d649c6bfec7d5ab583f853af2f1d744877fda709c67",
+          "domains.json": "a5c0190cc988384da317c9e91b6fa54a5004aa49a4fc9b7c62c23a255469f106"
+        }
+      },
+      "stream": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "commit": "838801f009734aa324e7d42d7b7b51561d1df5ba",
+          "inputSha256": "88487bf51615620ee8fcca449fad6199db6968dc429804acb7ad3348a5df8ed5"
+        },
+        "observedSource": {
+          "commit": "838801f009734aa324e7d42d7b7b51561d1df5ba",
+          "inputSha256": "88487bf51615620ee8fcca449fad6199db6968dc429804acb7ad3348a5df8ed5"
+        },
+        "files": {
+          "domains.srs": "a495177e3b1e8e82220ddd82851e2f20ced2f5d1f040ff1f74a8508d74ee94af",
+          "domains.json": "d9681c23db68a039bee87134b223ca565812259e3831d0e6771ed41fe04c2614"
+        }
+      },
+      "chatgpt-voice": {
+        "status": "unchanged",
+        "publishedAt": "2026-11-20T00:00:00.000Z",
+        "currentSource": {
+          "inputSha256": "e0e4df0f751d5025d24b3177191fd2484213599f64a001f732c7ca4881fbce2c"
+        },
+        "observedSource": {
+          "inputSha256": "e0e4df0f751d5025d24b3177191fd2484213599f64a001f732c7ca4881fbce2c"
+        },
+        "files": {
+          "route.srs": "c2603e43eefc3fa5cd890c5e58f0e3b5130df8657ed1ce9c963089da8dccc6a0",
+          "route.json": "0a35cb86a36d37fd2079e3b66e24d4a1ffb5c41df4c7402a9643f373ca520dfe"
+        }
+      }
+    }
+  },
+  "samples": [
+    {
+      "first": {
+        "totalMs": 9013.891125,
+        "snapshotCheck": 9.55924899999846,
+        "source": 582.920541000003,
+        "native": 2834.9646250000005,
+        "toolIdentity": 5277.010123999998,
+        "gitWrite": 2.5641220000030955,
+        "snapshots": 296,
+        "reads": 1059,
+        "stableReads": 576,
+        "stableBytes": 18695991,
+        "checkReads": 528,
+        "checkBytes": 17001665,
+        "commits": 113,
+        "upstream": 13,
+        "nativeBuilds": 16,
+        "toolInspections": 64
+      },
+      "unchanged": {
+        "totalMs": 1372.1729999999989,
+        "snapshotCheck": 16.85887399999592,
+        "source": 2.851333999997223,
+        "native": 0,
+        "toolIdentity": 1307.7332929999993,
+        "gitWrite": 0,
+        "snapshots": 54,
+        "reads": 1346,
+        "stableReads": 1264,
+        "stableBytes": 36248862,
+        "checkReads": 1216,
+        "checkBytes": 34554536,
+        "commits": 0,
+        "upstream": 7,
+        "nativeBuilds": 0,
+        "toolInspections": 16
+      },
+      "same-source": {
+        "totalMs": 2752.3785000000007,
+        "snapshotCheck": 18.785957000000053,
+        "source": 527.2146690000009,
+        "native": 305.19783299999835,
+        "toolIdentity": 1811.1162939999995,
+        "gitWrite": 1.1149579999946582,
+        "snapshots": 104,
+        "reads": 1549,
+        "stableReads": 1398,
+        "stableBytes": 39729393,
+        "checkReads": 1344,
+        "checkBytes": 38026925,
+        "commits": 23,
+        "upstream": 9,
+        "nativeBuilds": 2,
+        "toolInspections": 22
+      },
+      "multi-source": {
+        "totalMs": 2232.8980420000007,
+        "snapshotCheck": 18.694335000003775,
+        "source": 8.261835999997857,
+        "native": 334.3906240000015,
+        "toolIdentity": 1795.7477920000001,
+        "gitWrite": 0.2954589999917516,
+        "snapshots": 86,
+        "reads": 1540,
+        "stableReads": 1398,
+        "stableBytes": 39864701,
+        "checkReads": 1344,
+        "checkBytes": 38026860,
+        "commits": 14,
+        "upstream": 11,
+        "nativeBuilds": 2,
+        "toolInspections": 22
+      }
+    },
+    {
+      "first": {
+        "totalMs": 8796.415708999999,
+        "snapshotCheck": 8.959043000008023,
+        "source": 565.4816670000037,
+        "native": 2786.983873999994,
+        "toolIdentity": 5150.676922999997,
+        "gitWrite": 2.4036579999938112,
+        "snapshots": 296,
+        "reads": 1059,
+        "stableReads": 576,
+        "stableBytes": 18695991,
+        "checkReads": 528,
+        "checkBytes": 17001665,
+        "commits": 113,
+        "upstream": 13,
+        "nativeBuilds": 16,
+        "toolInspections": 64
+      },
+      "unchanged": {
+        "totalMs": 1338.4493749999965,
+        "snapshotCheck": 15.608168000002479,
+        "source": 2.087916000000405,
+        "native": 0,
+        "toolIdentity": 1284.3213749999923,
+        "gitWrite": 0,
+        "snapshots": 54,
+        "reads": 1346,
+        "stableReads": 1264,
+        "stableBytes": 36248862,
+        "checkReads": 1216,
+        "checkBytes": 34554536,
+        "commits": 0,
+        "upstream": 7,
+        "nativeBuilds": 0,
+        "toolInspections": 16
+      },
+      "same-source": {
+        "totalMs": 2758.7734999999993,
+        "snapshotCheck": 17.530372000008356,
+        "source": 522.2331660000018,
+        "native": 306.95600099999865,
+        "toolIdentity": 1832.403585,
+        "gitWrite": 0.8597919999883743,
+        "snapshots": 104,
+        "reads": 1549,
+        "stableReads": 1398,
+        "stableBytes": 39729393,
+        "checkReads": 1344,
+        "checkBytes": 38026925,
+        "commits": 23,
+        "upstream": 9,
+        "nativeBuilds": 2,
+        "toolInspections": 22
+      },
+      "multi-source": {
+        "totalMs": 2212.073207999998,
+        "snapshotCheck": 17.46366699999271,
+        "source": 6.638085000005958,
+        "native": 330.4604159999981,
+        "toolIdentity": 1787.3272079999915,
+        "gitWrite": 0.23537400000714115,
+        "snapshots": 86,
+        "reads": 1540,
+        "stableReads": 1398,
+        "stableBytes": 39864701,
+        "checkReads": 1344,
+        "checkBytes": 38026860,
+        "commits": 14,
+        "upstream": 11,
+        "nativeBuilds": 2,
+        "toolInspections": 22
+      }
+    },
+    {
+      "first": {
+        "totalMs": 8879.383499999996,
+        "snapshotCheck": 8.720254999996541,
+        "source": 558.1245850000159,
+        "native": 2808.6050429999887,
+        "toolIdentity": 5231.135710999963,
+        "gitWrite": 2.2457959999774175,
+        "snapshots": 296,
+        "reads": 1059,
+        "stableReads": 576,
+        "stableBytes": 18695991,
+        "checkReads": 528,
+        "checkBytes": 17001665,
+        "commits": 113,
+        "upstream": 13,
+        "nativeBuilds": 16,
+        "toolInspections": 64
+      },
+      "unchanged": {
+        "totalMs": 1361.3387920000023,
+        "snapshotCheck": 15.663041000014346,
+        "source": 2.02058300000499,
+        "native": 0,
+        "toolIdentity": 1306.788044000008,
+        "gitWrite": 0,
+        "snapshots": 54,
+        "reads": 1346,
+        "stableReads": 1264,
+        "stableBytes": 36248862,
+        "checkReads": 1216,
+        "checkBytes": 34554536,
+        "commits": 0,
+        "upstream": 7,
+        "nativeBuilds": 0,
+        "toolInspections": 16
+      },
+      "same-source": {
+        "totalMs": 2728.311207999999,
+        "snapshotCheck": 17.703414999996312,
+        "source": 525.1402910000106,
+        "native": 304.7759589999987,
+        "toolIdentity": 1797.023417000004,
+        "gitWrite": 0.9850439999863738,
+        "snapshots": 104,
+        "reads": 1549,
+        "stableReads": 1398,
+        "stableBytes": 39729393,
+        "checkReads": 1344,
+        "checkBytes": 38026925,
+        "commits": 23,
+        "upstream": 9,
+        "nativeBuilds": 2,
+        "toolInspections": 22
+      },
+      "multi-source": {
+        "totalMs": 2209.476416999998,
+        "snapshotCheck": 17.790084000014758,
+        "source": 6.2095790000021225,
+        "native": 331.53975000000355,
+        "toolIdentity": 1784.5247510000045,
+        "gitWrite": 0.24700099998153746,
+        "snapshots": 86,
+        "reads": 1540,
+        "stableReads": 1398,
+        "stableBytes": 39864701,
+        "checkReads": 1344,
+        "checkBytes": 38026860,
+        "commits": 14,
+        "upstream": 11,
+        "nativeBuilds": 2,
+        "toolInspections": 22
+      }
+    },
+    {
+      "first": {
+        "totalMs": 9039.792290999998,
+        "snapshotCheck": 8.783415000019886,
+        "source": 561.4685399999944,
+        "native": 2848.5419169999877,
+        "toolIdentity": 5346.560665000026,
+        "gitWrite": 2.203581000016129,
+        "snapshots": 296,
+        "reads": 1059,
+        "stableReads": 576,
+        "stableBytes": 18695991,
+        "checkReads": 528,
+        "checkBytes": 17001665,
+        "commits": 113,
+        "upstream": 13,
+        "nativeBuilds": 16,
+        "toolInspections": 64
+      },
+      "unchanged": {
+        "totalMs": 1373.2441249999974,
+        "snapshotCheck": 15.731334999996761,
+        "source": 2.0692469999703462,
+        "native": 0,
+        "toolIdentity": 1317.459500000019,
+        "gitWrite": 0,
+        "snapshots": 54,
+        "reads": 1346,
+        "stableReads": 1264,
+        "stableBytes": 36248862,
+        "checkReads": 1216,
+        "checkBytes": 34554536,
+        "commits": 0,
+        "upstream": 7,
+        "nativeBuilds": 0,
+        "toolInspections": 16
+      },
+      "same-source": {
+        "totalMs": 2763.9778330000045,
+        "snapshotCheck": 17.95745699998224,
+        "source": 534.6685829999842,
+        "native": 305.26408300000185,
+        "toolIdentity": 1822.725917999982,
+        "gitWrite": 0.9067499999946449,
+        "snapshots": 104,
+        "reads": 1549,
+        "stableReads": 1398,
+        "stableBytes": 39729393,
+        "checkReads": 1344,
+        "checkBytes": 38026925,
+        "commits": 23,
+        "upstream": 9,
+        "nativeBuilds": 2,
+        "toolInspections": 22
+      },
+      "multi-source": {
+        "totalMs": 2229.251375,
+        "snapshotCheck": 17.42895700000372,
+        "source": 6.061125000000175,
+        "native": 336.61787500000355,
+        "toolIdentity": 1799.8858349999937,
+        "gitWrite": 0.23425199998746393,
+        "snapshots": 86,
+        "reads": 1540,
+        "stableReads": 1398,
+        "stableBytes": 39864701,
+        "checkReads": 1344,
+        "checkBytes": 38026860,
+        "commits": 14,
+        "upstream": 11,
+        "nativeBuilds": 2,
+        "toolInspections": 22
+      }
+    },
+    {
+      "first": {
+        "totalMs": 8967.459125000008,
+        "snapshotCheck": 8.587790000012319,
+        "source": 563.2037509999718,
+        "native": 2829.802663999966,
+        "toolIdentity": 5290.427457999962,
+        "gitWrite": 2.366204000056314,
+        "snapshots": 296,
+        "reads": 1059,
+        "stableReads": 576,
+        "stableBytes": 18695991,
+        "checkReads": 528,
+        "checkBytes": 17001665,
+        "commits": 113,
+        "upstream": 13,
+        "nativeBuilds": 16,
+        "toolInspections": 64
+      },
+      "unchanged": {
+        "totalMs": 1351.7462919999962,
+        "snapshotCheck": 15.927458999998635,
+        "source": 2.1958729999460047,
+        "native": 0,
+        "toolIdentity": 1296.8905820000073,
+        "gitWrite": 0,
+        "snapshots": 54,
+        "reads": 1346,
+        "stableReads": 1264,
+        "stableBytes": 36248862,
+        "checkReads": 1216,
+        "checkBytes": 34554536,
+        "commits": 0,
+        "upstream": 7,
+        "nativeBuilds": 0,
+        "toolInspections": 16
+      },
+      "same-source": {
+        "totalMs": 2710.3392909999966,
+        "snapshotCheck": 17.436582000009366,
+        "source": 532.5420420000446,
+        "native": 293.3774589999957,
+        "toolIdentity": 1785.8367119999893,
+        "gitWrite": 0.8526279999787221,
+        "snapshots": 104,
+        "reads": 1549,
+        "stableReads": 1398,
+        "stableBytes": 39729393,
+        "checkReads": 1344,
+        "checkBytes": 38026925,
+        "commits": 23,
+        "upstream": 9,
+        "nativeBuilds": 2,
+        "toolInspections": 22
+      },
+      "multi-source": {
+        "totalMs": 2188.339957999997,
+        "snapshotCheck": 17.676833000019542,
+        "source": 6.06828800002404,
+        "native": 324.8937920000026,
+        "toolIdentity": 1770.828498999981,
+        "gitWrite": 0.2565440000325907,
+        "snapshots": 86,
+        "reads": 1540,
+        "stableReads": 1398,
+        "stableBytes": 39864701,
+        "checkReads": 1344,
+        "checkBytes": 38026860,
+        "commits": 14,
+        "upstream": 11,
+        "nativeBuilds": 2,
+        "toolInspections": 22
+      }
+    }
+  ]
+}
