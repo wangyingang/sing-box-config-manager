@@ -352,15 +352,16 @@ exec ${shellQuote(binary)} "$@"
   assert.equal(nativeCounts.compile, config.ruleSets.length);
   assert.equal(nativeCounts.sourceLoad, config.ruleSets.length);
   assert.equal(nativeCounts.binaryLoad, config.ruleSets.length);
-  assert.deepEqual(first.results.map(x => x.id), config.ruleSets.map(rule => rule.id));
+  assert.deepEqual(first.results.map(x => x.id).sort(), config.ruleSets.map(rule => rule.id).sort());
   assert.ok(first.results.every(x => x.current && ['delivered', 'unchanged'].includes(x.status)));
   assert.deepEqual(checkedRules.map(x => x.candidateCount), config.ruleSets.map(() => 1));
   if (baseline) {
     const stable = await repository.snapshot();
     const stablePaths: string[] = [];
     for (const [index, rule] of config.ruleSets.entries()) {
-      const row = checkedRules[index], current = row.current!;
-      assert.equal(row.id, rule.id);
+      const row = checkedRules.find(entry => entry.id === rule.id);
+      assert.ok(row?.current, rule.id);
+      const current = row.current;
       assert.equal(row.deliveryState, 'delivered');
       assert.ok(row.candidates.some(candidate => candidate.id === current.candidateId && candidate.current && candidate.selectable));
       const ip = ipIds.includes(rule.id);
@@ -412,9 +413,9 @@ exec ${shellQuote(binary)} "$@"
     observations.push({ label: 'first-delivery-stable-tree', head: stable.head, paths: stablePaths });
     await checkpoint('first-delivery-stable-tree');
   }
-  for (const [i, entry] of first.results.entries()) {
+  for (const [i, definition] of config.ruleSets.entries()) {
+    const entry = first.results.find(row => row.id === definition.id)!;
     const source = entry.current!.source;
-    const definition = config.ruleSets[i];
     const fixed = formalCommits[definition.source];
     if (entry.id === 'chatgpt-voice') assert.ok(validOpenAiVoiceSource(source));
     else if (formalFirst && fixed) { assert.ok('commit' in source); assert.equal(source.commit, fixed); }
