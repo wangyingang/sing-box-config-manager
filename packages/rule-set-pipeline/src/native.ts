@@ -48,8 +48,8 @@ export function nativeArtifactCommands(source: string, srs: string): string[][] 
 }
 
 /** Local validated bytes only: no remote URLs, publication or activation state. */
-export function buildNative(terms: readonly BuildTerm[], binary: string): Promise<NativeBuild> {
-  return validateNative(terms, binary);
+export function buildNative(terms: readonly BuildTerm[], binary: string, artifact?: string): Promise<NativeBuild> {
+  return validateNative(terms, binary, artifact);
 }
 
 export interface NativeBuildOptions { binary: string; nativeBuild?: typeof buildNative }
@@ -62,26 +62,30 @@ function copyBuild({ artifacts, ...record }: NativeBuild): NativeBuild {
 
 /**
  * Share only completed native builds within one rules operation. The normalized
- * route terms determine all rendered projections and their formats and filenames.
+ * route terms determine projections. The configured name also determines filenames.
  * Callers still compare their actual JSON/SRS bytes with the validated output.
  */
 export function createOperationNativeBuilder(): typeof buildNative {
   const passed = new Map<string, NativeBuild>();
-  return (terms, binary) => validateNative(terms, binary, passed);
+  return (terms, binary, artifact) => validateNative(terms, binary, artifact, passed);
 }
 
-async function validateNative(terms: readonly BuildTerm[], binary: string, passed?: Map<string, NativeBuild>) {
+async function validateNative(terms: readonly BuildTerm[], binary: string, artifact?: string, passed?: Map<string, NativeBuild>) {
   const projections = projectTerms(terms);
+  if (artifact !== undefined && projections['dns-query'].length && projections['dns-response'].length) {
+    throw new NativeBuildError('A shared artifact name requires a pure domain or pure IP rule set');
+  }
   const tool = await inspectBinary(binary);
   const id = nativeBuildIdentity(tool.sha256, projections.route);
-  const previous = passed?.get(id);
+  const key = JSON.stringify([id, artifact]);
+  const previous = passed?.get(key);
   if (previous) return { ...copyBuild(previous), tool };
-  const built = await buildWithTool(projections, tool, id);
-  passed?.set(id, copyBuild(built));
+  const built = await buildWithTool(projections, tool, id, artifact);
+  passed?.set(key, copyBuild(built));
   return built;
 }
 
-async function buildWithTool(projections: ReturnType<typeof projectTerms>, tool: NativeTool, buildId: string): Promise<NativeBuild> {
+async function buildWithTool(projections: ReturnType<typeof projectTerms>, tool: NativeTool, buildId: string, artifact?: string): Promise<NativeBuild> {
   const directory = await mkdtemp(join(tmpdir(), 'rule-native-'));
   const steps: NativeStep[] = [];
   const run = async (args: string[]) => {
@@ -104,7 +108,7 @@ async function buildWithTool(projections: ReturnType<typeof projectTerms>, tool:
       const json = renderRuleJson(projected);
       const existing = filesByContent.get(json);
       if (existing) { usages[usage] = { artifactFiles: existing }; continue; }
-      const stem = usage === 'route' && projected.every(term => term.type !== 'ip_cidr') ? 'domains' : usage;
+      const stem = artifact ?? (usage === 'route' && projected.every(term => term.type !== 'ip_cidr') ? 'domains' : usage);
       const source = `${stem}.json`, srs = `${stem}.srs`;
       await writeFile(join(directory, source), json);
       for (const args of nativeArtifactCommands(source, srs)) await run(args);

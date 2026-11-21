@@ -1,5 +1,4 @@
 import { isDeepStrictEqual } from 'node:util';
-import { configuredLayout } from './configuration.js';
 import type { ActivationTransport } from './activation-transport.js';
 import type { PublicationRepository, PublicationSnapshot } from './publication-repository.js';
 import { immutableUrl } from './publication.js';
@@ -64,7 +63,8 @@ export async function authorizeActivationWrite(repository: PublicationRepository
   const record = recordBytes && JSON.parse(recordBytes.toString());
   const directory = operation.recordPath.slice(0, -'activation.json'.length);
   const ruleFiles = Object.keys(files).filter(path => path !== operation.recordPath);
-  const { stem } = configuredLayout(record?.source?.kind === 'github-commit' ? 'cidr-text' : 'plain-yaml');
+  // Schema 1 activation writes use the original artifact layout.
+  const stem = record?.source?.kind === 'github-commit' ? 'route' : 'domains';
   if (record?.schemaVersion !== 1 || record.subscription?.schemaVersion !== 2 || record.id !== operation.id || record.logicalId !== operation.logicalId || record.expectedHead !== expectedHead
     || record.candidateId !== operation.candidateId || record.candidateEvidenceUrl !== operation.candidateEvidenceUrl
     || record.operation !== (operation.kind === 'activate' ? undefined : operation.kind)

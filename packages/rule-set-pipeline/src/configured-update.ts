@@ -286,7 +286,8 @@ export async function publishConfiguredCandidate(result: Extract<Awaited<ReturnT
   publication: PublicationTransport, { binary, nativeBuild, verifyEvidence, ruleFilesOnly }: NativeBuildOptions & { verifyEvidence?: VerifyEvidence; ruleFilesOnly?: boolean },
   save: () => Promise<void>, beforeEvidence?: () => void) {
   const prefix = `candidates/${candidate.id}`;
-  return publishCandidate({ candidate, native: result.native, buildId: result.buildId, binary, nativeBuild, verifyEvidence, publication, save, beforeEvidence, ruleFilesOnly,
+  return publishCandidate({ candidate, native: result.native, buildId: result.buildId, artifact: result.definition.usages.route.artifact,
+    binary, nativeBuild, verifyEvidence, publication, save, beforeEvidence, ruleFilesOnly,
     records: filesCommit => {
       const artifactId = (file: string) => `${result.id}@${candidate.id}:${file}`;
       const manifest = { schemaVersion: ARTIFACT_MANIFEST_VERSION, id: result.id, revision: candidate.id, targetVersion: '1.14.4', sourceFormatVersion: 4,

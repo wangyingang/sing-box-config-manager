@@ -84,12 +84,12 @@ test('Release 恢复逐字段拒绝固定身份或输入变化，保留原候选
   }
 });
 
-function gitEnvironment() {
+function gitEnvironment(artifact = 'route') {
   const env = cleanupEnvironment(binary!, 'main'), config = env.config();
   config.sources = { cidr: { repository: 'gaoyifan/china-operator-ip', version: 'git-branch', branch: 'ip-lists',
     input: { format: 'cidr-text', path: 'china46.txt' } } };
   config.ruleSets = [{ id: 'china-ip', source: 'cidr', list: 'all', stablePath: 'stable/china-ip',
-    usages: { route: { artifact: 'route' }, 'dns-query': { unavailable: 'empty' }, 'dns-response': { artifact: 'route' } } }];
+    usages: { route: { artifact }, 'dns-query': { unavailable: 'empty' }, 'dns-response': { artifact } } }];
   env.configure(config);
   const fixed = 'a'.repeat(40), latest = 'b'.repeat(40);
   const original = '192.0.2.0/24\n2001:db8::/32\n';
@@ -121,9 +121,9 @@ test('Git 首次输入下载失败尚无候选，重试按最新分支建立候�
   assert.ok(!env.requests.some(url => url.includes(`/${env.fixed}/`)));
 });
 
-for (const file of ['route.json', 'route.srs']) {
+for (const file of ['office-networks.json', 'office-networks.srs']) {
   test(`Git/CIDR ${file} 阶段 HTTPS 回读失败，按固定 commit 恢复原身份与字节`, async () => {
-    const env = gitEnvironment();
+    const env = gitEnvironment('office-networks');
     env.failDownload(url => { if (url.endsWith('/' + file)) throw new Error('stage HTTPS unavailable'); });
     assert.equal((await syncRules({ context: env.context })).status, 'failed');
     const candidate = Object.values((await env.journal()).candidates)[0];
@@ -146,8 +146,9 @@ for (const file of ['route.json', 'route.srs']) {
     assert.deepEqual(env.requests, [`https://raw.githubusercontent.com/gaoyifan/china-operator-ip/${env.fixed}/china46.txt`]);
     for (const path of retained.keys()) assert.equal(env.writes.filter(write => Object.hasOwn(write.files, path)).length, 1, path);
     const stable = await bytesUnder(env, 'stable/', 'main');
-    assert.ok(stable.get('stable/china-ip/route.srs'));
-    assert.deepEqual(stable.get('stable/china-ip/route.srs'), (await bytesUnder(env, `candidates/${candidate.id}/`)).get(`candidates/${candidate.id}/route.srs`));
+    const stableFile = stable.get(`stable/china-ip/${file}`);
+    assert.ok(stableFile);
+    assert.deepEqual(stableFile, (await bytesUnder(env, `candidates/${candidate.id}/`)).get(`candidates/${candidate.id}/${file}`));
   });
 }
 
@@ -175,9 +176,9 @@ test('Git/CIDR 固定输入消失或变化拒绝恢复，恢复原输入后沿�
 });
 
 for (const stage of ['metadata', 'evidence']) test(`Git/CIDR ${stage} 恢复拒绝保留文件篡改或缺失`, async t => {
-  const env = gitEnvironment();
+  const env = gitEnvironment('office-networks');
   if (stage === 'metadata') {
-    env.failDownload(url => { if (url.includes('/candidates/') && url.endsWith('/route.srs')) throw new Error('candidate HTTPS unavailable'); });
+    env.failDownload(url => { if (url.includes('/candidates/') && url.endsWith('/office-networks.srs')) throw new Error('candidate HTTPS unavailable'); });
   } else {
     env.beforeWrite(async files => {
       const state = files[RULE_STATE_PATH];
@@ -187,11 +188,11 @@ for (const stage of ['metadata', 'evidence']) test(`Git/CIDR ${stage} 恢复拒�
   assert.notEqual((await syncRules({ context: env.context })).status, 'success');
   env.failDownload(); env.beforeWrite();
   const candidate = Object.values((await env.journal()).candidates)[0], restore = checkpoint(env);
-  for (const fault of ['changed-route.srs', 'missing-build.json', ...(stage === 'evidence' ? ['wrong-version'] : [])]) await t.test(fault, async () => {
+  for (const fault of ['changed-custom.srs', 'missing-build.json', ...(stage === 'evidence' ? ['wrong-version'] : [])]) await t.test(fault, async () => {
     restore();
     const tree = env.trees.get(env.heads.get(env.context.repository.branch)!)!;
     const prefix = `candidates/${candidate.id}/`;
-    if (fault === 'changed-route.srs') tree.set(prefix + 'route.srs', Buffer.from('tampered retained SRS'));
+    if (fault === 'changed-custom.srs') tree.set(prefix + 'office-networks.srs', Buffer.from('tampered retained SRS'));
     else if (fault === 'missing-build.json') tree.delete(prefix + 'build.json');
     else tree.set(prefix + 'readback.json', encodeRecord({ ...JSON.parse(tree.get(prefix + 'readback.json')!.toString()), versionId: 'wrong' }));
     const retained = await bytesUnder(env, prefix), stableHead = env.heads.get('main');
@@ -202,6 +203,15 @@ for (const stage of ['metadata', 'evidence']) test(`Git/CIDR ${stage} 恢复拒�
     assert.deepEqual(await bytesUnder(env, prefix), retained); assert.equal(env.heads.get('main'), stableHead);
     assert.equal(failed.results[0].current, undefined);
   });
+  if (stage === 'evidence') {
+    restore();
+    assert.ok(candidate.versionId);
+    const recovered = await syncRules({ context: { ...env.context } });
+    assert.equal(recovered.status, 'success', JSON.stringify(recovered));
+    assert.equal(recovered.results[0].current?.candidateId, candidate.id);
+    assert.equal(recovered.results[0].current?.versionId, candidate.versionId);
+    assert.ok(recovered.results[0].current?.files['stable/china-ip/office-networks.srs']);
+  }
 });
 
 test('正常 sync 工具字节变化产生新 buildId，旧候选、来源和稳定语义保留', async t => {

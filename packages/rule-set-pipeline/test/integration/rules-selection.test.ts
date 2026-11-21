@@ -99,6 +99,14 @@ test('候选证据边界逐项拒绝损坏；status 只读且 pin 保留当前�
     ['missing-readback', /Missing complete readback/, async d => { d.evidence.readback.pop(); await d.saveEvidence(); }],
     ['readback-digest', /Readback integrity mismatch/, d => d.replace('domains.srs', Buffer.from('tampered'))],
     ['readback-length', /Readback integrity mismatch/, async d => { d.evidence.readback.find((r: any) => r.url.endsWith('/domains.srs')).byteLength++; await d.saveEvidence(); }],
+    ['wrong-content-type', /incompatible usage content/, async d => {
+      const wrong = encodeRecord({ version: 4, rules: [{ ip_cidr: ['192.0.2.0/24'] }] });
+      const checksum = { sha256: sha256(wrong), byteLength: wrong.length };
+      d.replace('domains.json', wrong);
+      Object.assign(d.evidence.readback.find((r: { url: string }) => r.url.endsWith('/domains.json')), checksum);
+      await d.change('manifest.json', m => Object.assign(m.artifacts.find((a: { format: string }) => a.format === 'source'), checksum));
+      d.saveEvidence();
+    }],
     ['manifest-digest', /Artifact integrity/, d => d.change('manifest.json', m => { m.artifacts[1].sha256 = 'f'.repeat(64); })],
     ['manifest-length', /Artifact integrity/, d => d.change('manifest.json', m => { m.artifacts[1].byteLength++; })],
     ['usage', /Projection availability/, d => d.change('manifest.json', m => { m.projections['dns-response'] = m.projections.route; })],

@@ -110,7 +110,7 @@ export async function buildConfigured<Source extends SourceRecord | CommitSource
       continue;
     }
     try {
-      const native = await nativeBuild(converted.terms, binary);
+      const native = await nativeBuild(converted.terms, binary, definition.usages.route.artifact);
       for (const usage of USAGES) {
         const declared = definition.usages[usage], actual = native.usages[usage];
         if ('artifact' in declared

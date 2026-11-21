@@ -34,6 +34,11 @@ async function retainedFixture(target: string) {
 
 async function prepareRetainedHistory(target: string) {
   const env = fourSetCleanupEnvironment(binary!, target);
+  const config = env.config();
+  const cidrDefinition = config.ruleSets.find(rule => rule.id === 'china-ip')!;
+  cidrDefinition.usages.route = { artifact: 'office-networks' };
+  cidrDefinition.usages['dns-response'] = cidrDefinition.usages.route;
+  env.configure(config);
   env.clock('2026-09-01T00:00:00.000Z');
   const first = success(await syncRules(request(env)));
   const expired = current(first);
@@ -147,6 +152,7 @@ for (const target of ['acceptance-issue-85', 'main']) {
   test(`${target}: 四集含 CIDR 按首次发布时间保留多版本，两轮清理后旧历史不可用仍可查询和 pin`, { skip: !binary, timeout: 120_000 }, async () => {
     const { env, expired, pinned, boundary, recent, latest, cidr, retained } = await retainedFixture(target);
     const beforeBytes = await stableBytes(env);
+    assert.ok(beforeBytes['stable/china-ip/office-networks.srs']);
     const beforeJournal = await env.journal();
     const oldHeads = new Set(env.trees.keys());
     env.heads.set('unrelated-work', env.heads.get(env.context.repository.branch)!);

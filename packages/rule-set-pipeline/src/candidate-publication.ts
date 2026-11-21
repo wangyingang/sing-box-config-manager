@@ -13,8 +13,7 @@ export const RULE_READBACK_VERSION = 3;
 export const LEGACY_BUILD_RECORD = 2;
 
 export function candidateArtifactFiles(definition?: RuleDefinition) {
-  const route = definition?.usages.route;
-  const stem = route && 'artifact' in route ? route.artifact : 'domains';
+  const stem = definition?.usages.route.artifact ?? 'domains';
   return { source: `${stem}.json`, binary: `${stem}.srs` };
 }
 
@@ -44,7 +43,7 @@ export interface PublicationCandidate {
 
 /** Common immutable publication gate for legacy and configured candidates. */
 export async function publishCandidate(options: NativeBuildOptions & {
-  candidate: PublicationCandidate; native: NativeBuild; buildId: string;
+  candidate: PublicationCandidate; native: NativeBuild; buildId: string; artifact?: string;
   publication: PublicationTransport; save: () => Promise<void>;
   records: (filesCommit: string) => Record<string, Buffer>;
   beforeEvidence?: () => void;
@@ -108,7 +107,7 @@ export async function publishCandidate(options: NativeBuildOptions & {
   const route = native.usages.route;
   const json = 'artifactFiles' in route && downloaded.get(`${prefix}/${route.artifactFiles[0]}`);
   if (!json) throw new Error('Remote native JSON is missing');
-  const remoteNative = await nativeBuild(readSourceTerms(JSON.parse(json.toString('utf8'))), binary);
+  const remoteNative = await nativeBuild(readSourceTerms(JSON.parse(json.toString('utf8'))), binary, options.artifact);
   if (remoteNative.tool.sha256 !== native.tool.sha256) throw new Error('Binary changed between build and readback');
   if (remoteNative.artifacts.length !== native.artifacts.length || remoteNative.artifacts.some(artifact =>
     !downloaded.get(`${prefix}/${artifact.file}`)?.equals(artifact.content))) throw new Error('Remote native content mismatch');
