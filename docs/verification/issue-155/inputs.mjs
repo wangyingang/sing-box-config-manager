@@ -79,7 +79,9 @@ export function replay(bytes, scenario) {
   });
   routes.set(api + '/releases/latest', () => Response.json({ id: releaseId, tag_name: tag, assets }));
   routes.set(api + '/git/ref/tags/' + tag, () => Response.json({ object: { type: 'commit', sha: commit } }));
-  const identities = { dlc: { commit, inputSha256: yamlHash }, 'openai-voice': { inputSha256: voice.inputSha256 } };
+  const [yamlAsset, checksumAsset] = assets.map(asset => ({ id: asset.id, name: asset.name, url: asset.browser_download_url }));
+  const identities = { dlc: { ...release, releaseId, tag, commit, yaml: yamlAsset, checksum: checksumAsset,
+    inputSha256: yamlHash, inputBytes: yaml.length, checksumSha256: digest(checksum) }, 'openai-voice': voice };
   for (const { id, definition, source } of gitRows) {
     let body = bytes.get(id);
     const added = { gfw: '\nbenchmark-gfw.invalid\n', onedrive: '\nDOMAIN-SUFFIX,benchmark-onedrive.invalid\n' }[id];
@@ -90,11 +92,12 @@ export function replay(bytes, scenario) {
     const gitApi = 'https://api.github.com/repos/' + source.repository;
     routes.set(gitApi + '/branches/' + encodeURIComponent(source.branch),
       () => Response.json({ name: source.branch, commit: { sha: revision } }));
-    routes.set('https://raw.githubusercontent.com/' + source.repository + '/' + revision + '/' + source.file.path,
+    const url = 'https://raw.githubusercontent.com/' + source.repository + '/' + revision + '/' + source.file.path;
+    routes.set(url,
       () => new Response(body));
     // Without optional tree metadata the real adapter checks the pinned body.
     routes.set(gitApi + '/git/commits/' + revision, () => new Response(null, { status: 404 }));
-    identities[definition.source] = { commit: revision, inputSha256: hash };
+    identities[definition.source] = { ...source, commit: revision, file: { ...source.file, url }, inputSha256: hash, inputBytes: body.length };
   }
   routes.set(voice.url, init => new Headers(init?.headers).get('if-none-match') === voice.etag
     ? new Response(null, { status: 304, headers: { etag: voice.etag } })

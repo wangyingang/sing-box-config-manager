@@ -6,7 +6,8 @@ assert.ok(paths.length === 1 || paths.length === 2, 'summarize.mjs BASELINE_JSON
 const reports = await Promise.all(paths.map(async path => JSON.parse(await readFile(path, 'utf8'))));
 const [before, after] = reports;
 if (after) {
-  for (const key of ['configurationSha256', 'probeSha256', 'node', 'platform', 'binarySha256', 'layout', 'facts']) {
+  assert.equal(before.samples.length, after.samples.length, 'rounds');
+  for (const key of ['configurationSha256', 'probeSha256', 'fixtureSha256', 'lockSha256', 'node', 'platform', 'binarySha256', 'layout', 'facts']) {
     assert.deepEqual(after[key], before[key], key);
   }
 }
@@ -16,7 +17,7 @@ function median(values) {
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 const metrics = ['totalMs', 'snapshotCheck', 'source', 'native', 'toolIdentity', 'gitWrite', 'checkReads',
-  'checkBytes', 'stableReads', 'reads', 'snapshots', 'upstream', 'nativeBuilds', 'toolInspections', 'commits'];
+  'checkBytes', 'stableReads', 'stableBytes', 'reads', 'snapshots', 'upstream', 'nativeBuilds', 'toolInspections', 'commits'];
 console.log(['scenario', 'metric', 'baseline', ...(after ? ['comparison'] : [])].join('\t'));
 for (const scenario of Object.keys(before.facts)) {
   for (const key of metrics) {

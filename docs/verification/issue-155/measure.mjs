@@ -26,9 +26,9 @@ const { syncRules } = await load('src/rules-operations.ts');
 const configuration = await readFile(join(pipeline, 'config/rulesets.yml'), 'utf8');
 const git = (...args) => execFileSync('git', ['-C', target, ...args], { encoding: 'utf8' }).trim();
 const measuredPaths = ['packages/rule-set-pipeline/src', 'packages/rule-set-pipeline/config',
-  'packages/rule-set-pipeline/test/fixtures/rules-environment.ts', 'pnpm-lock.yaml'];
+  'packages/rule-set-pipeline/test/fixtures', 'packages/rule-set-pipeline/package.json', 'package.json', 'pnpm-lock.yaml'];
 assert.equal(git('status', '--porcelain', '--', ...measuredPaths), '', 'Commit the measured implementation first');
-const probeSha256 = digest(Buffer.concat(await Promise.all(['measure.mjs', 'inputs.mjs', 'timing.mjs'].map(name =>
+const probeSha256 = digest(Buffer.concat(await Promise.all(['measure.mjs', 'inputs.mjs', 'timing.mjs', '../issue-149/fixed-builds.json'].map(name =>
   readFile(new URL(name, import.meta.url))))));
 const scenarios = { first: reference.ruleSets.map(row => row.id), unchanged: [],
   'same-source': ['openai', 'anthropic'], 'multi-source': ['gfw', 'onedrive'] };
@@ -75,12 +75,10 @@ async function runScenario(scenario, seed, initial) {
     const currentIdentity = delivered ? newIdentity : streams.first.identities[definition.source];
     assert.equal(row.status, delivered ? 'delivered' : 'unchanged', id);
     assert.equal(row.control.mode, 'auto', id);
-    assert.equal(row.successfulInput.source.inputSha256, newIdentity.inputSha256, id);
-    assert.equal(row.successfulInput.source.commit, newIdentity.commit, id);
+    assert.deepEqual(row.successfulInput.source, newIdentity, id);
     const record = JSON.parse((await actual.read(definition.stablePath + '/activation.json')).toString());
     assert.deepEqual(record, row.current);
-    assert.equal(record.source.inputSha256, currentIdentity.inputSha256, id);
-    assert.equal(record.source.commit, currentIdentity.commit, id);
+    assert.deepEqual(record.source, currentIdentity, id);
     assert.equal(record.publishedAt, delivered && scenario !== 'first' ? changedAt : started);
     if (initial) assert.equal(record.versionId === initial.get(id).current.versionId, !delivered, id);
     const hashes = {};
@@ -101,8 +99,8 @@ async function runScenario(scenario, seed, initial) {
       }
       hashes[basename(path)] = hash;
     }
-    facts[id] = { status: row.status, publishedAt: record.publishedAt, currentSource: currentIdentity,
-      observedSource: newIdentity, files: hashes };
+    facts[id] = { status: row.status, publishedAt: record.publishedAt, currentSource: record.source,
+      observedSource: row.successfulInput.source, files: hashes };
   }
   return { metric: { totalMs, ...ms, ...counts }, facts,
     ...(scenario === 'first' && { seed: environment.checkpoint(), initial: selected }) };
@@ -123,6 +121,8 @@ for (let round = 1; round <= rounds; round++) {
   samples.push(measurements);
 }
 const evidence = { commit: git('rev-parse', 'HEAD'), sourceTree: git('rev-parse', 'HEAD:packages/rule-set-pipeline/src'),
+  fixtureSha256: digest(await readFile(join(pipeline, 'test/fixtures/rules-environment.ts'))),
+  lockSha256: digest(await readFile(join(target, 'pnpm-lock.yaml'))),
   probeSha256, configurationSha256: digest(configuration), node: process.version, platform: process.platform + '/' + process.arch,
   binarySha256: digest(await readFile(binary)), binaryVersion: execFileSync(binary, ['version'], { encoding: 'utf8' }).split('\n')[0],
   layout: 'local in-memory candidates/main, replayed upstream and artifact transport', facts, samples };
