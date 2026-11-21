@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "files": [
+    {
+      "path": "check.log",
+      "byteLength": 53840,
+      "sha256": "f3e55c0c67fe61dda6c91faf8d4d54cd735fee431c5547099aafef7e92319184"
+    },
+    {
+      "path": "pnpm-version.stderr.log",
+      "byteLength": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "pnpm-version.stdout.log",
+      "byteLength": 8,
+      "sha256": "abb3ce293b7ae818d9d22051b093e51415a4de46f6dd529189c4feb458037cb5"
+    },
+    {
+      "path": "sing-box-version.stderr.log",
+      "byteLength": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "sing-box-version.stdout.log",
+      "byteLength": 357,
+      "sha256": "9811c090325893260aef4b4b36d2f10065041502bdbd1da6bf76e0b2479e7147"
+    },
+    {
+      "path": "summary.json",
+      "byteLength": 4128,
+      "sha256": "2c919689d1112fcc4e0c251d3c74e79a5cfa75d398eaac447bad77dbfa8c2b2b"
+    }
+  ]
+}
