@@ -270,6 +270,7 @@ SING_BOX_TEST_BINARY=/absolute/path/to/sing-box-1.14.4 pnpm --dir packages/rule-
 真实 GitHub 交付验收使用独立入口；命令不会自动启用门禁。显式启用后必须提供真实 binary、可写隔离分支的 `gh` 登录和一个尚不存在的证据文件路径：
 
 ```sh
+pnpm --filter @sing-box-config-manager/config-compiler generate:validator
 RULE_OPERATIONS_PROBE=1 \
 RULE_OPERATIONS_EVIDENCE=/absolute/path/to/new-evidence.json \
 SING_BOX_TEST_BINARY=/absolute/path/to/sing-box-1.14.4 \
