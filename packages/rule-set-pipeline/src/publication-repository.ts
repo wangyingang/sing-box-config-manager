@@ -104,7 +104,7 @@ export function githubPublicationRepository(branch = PUBLICATION_BRANCH, request
       // are append-only; only the control records may replace existing content.
       for (const path of Object.keys(files)) {
         const control = path === 'pipeline/state.json' || path === 'pipeline/identity.json';
-        if (!control && !/^candidates\/[a-f0-9][a-f0-9-]*\/[a-z0-9][a-z0-9.-]*$/.test(path)) throw new Error('Invalid publication path');
+        if (!control && !/^candidates\/[a-f0-9][a-f0-9-]*\/[a-z0-9][a-z0-9._-]*$/.test(path)) throw new Error('Invalid publication path');
         const existing = current.entries.get(path);
         if (existing && !control) throw new Error('Refusing to overwrite a historical candidate file');
         if (existing && (existing.type !== 'blob' || existing.mode !== '100644')) throw new Error('Invalid remote record type');

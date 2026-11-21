@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
+import { reservedArtifactBasename, validArtifactBasename } from './artifact-path.js';
 import { validRepository, validBranch, validInputPath, validInputFile } from './source-input.js';
 import { isMap, parseDocument, visit } from 'yaml';
 import { USAGES, type Usage } from './projection.js';
@@ -13,7 +14,6 @@ export type SourceFormat = SourceInput['input']['format'];
 type AvailableUsage = { artifact: string };
 type ConfiguredUsage = AvailableUsage | { unavailable: 'empty' };
 type DnsUsage = Exclude<Usage, 'route'>;
-const reservedArtifactNames = new Set(['activation', 'manifest', 'build', 'readback', 'source', 'conversion-report']);
 
 const formatCapabilities = {
   'plain-yaml': { dns: 'dns-query', namedLists: true },
@@ -75,10 +75,10 @@ export function parseRuleDefinition(input: unknown, format: SourceFormat = 'plai
   const layout = configuredUsages(format);
   function availableUsage(key: Usage): AvailableUsage {
     const { artifact } = exact(declared[key], ['artifact'], key);
-    if (typeof artifact !== 'string' || artifact.length > 250 || !/^[a-z0-9][a-z0-9_-]*$/.test(artifact)) {
+    if (!validArtifactBasename(artifact)) {
       throw new Error(`Invalid ${format} usage: ${key}: artifact must be a file basename of at most 250 characters using lowercase letters, digits, hyphens or underscores`);
     }
-    if (reservedArtifactNames.has(artifact) || (format === 'openai-voice-json' && `${artifact}.json` === OPENAI_VOICE_FILE)) {
+    if (reservedArtifactBasename(artifact) || (format === 'openai-voice-json' && `${artifact}.json` === OPENAI_VOICE_FILE)) {
       throw new Error(`Invalid ${format} usage: ${key}: artifact ${artifact} conflicts with metadata or an input snapshot`);
     }
     return { artifact };
