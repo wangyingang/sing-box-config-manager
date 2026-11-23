@@ -1,6 +1,7 @@
 import { TERM_TYPES, type RuleTerm } from './types.js';
 
 export type BuildTerm = RuleTerm | { type: 'ip_cidr'; value: string };
+export type BuildRule = BuildTerm | { type: 'headless'; rule: Record<string, unknown> };
 export const BUILD_TERM_TYPES = [...TERM_TYPES, 'ip_cidr'] as const;
 export const USAGES = ['route', 'dns-query', 'dns-response'] as const;
 export type Usage = typeof USAGES[number];
@@ -27,21 +28,35 @@ export function projectTerms(terms: readonly BuildTerm[]): Record<Usage, BuildTe
 export function renderRuleJson(terms: readonly BuildTerm[]): string {
   const normalized = normalizeTerms(terms);
   if (!normalized.length) throw new Error('Cannot render an empty rule set');
-  return JSON.stringify({ version: 4, rules: BUILD_TERM_TYPES.flatMap(type => {
-    const values = normalized.filter(term => term.type === type).map(term => term.value);
+  return renderRules(normalized);
+}
+
+/** Keep native rules intact, including the order of logical children. */
+export function normalizeBuildRules(rules: readonly BuildRule[]): BuildRule[] {
+  // A single native default rule can merge with the consumer's outer groups.
+  // Preserve the original native rule count, boundaries and order.
+  return rules.every(rule => rule.type !== 'headless') ? normalizeTerms(rules) : [...rules];
+}
+
+export function renderRules(rules: readonly BuildRule[]): string {
+  const independent = rules.filter(rule => rule.type !== 'headless');
+  const terms = BUILD_TERM_TYPES.flatMap(type => {
+    const values = independent.filter(term => term.type === type).map(term => term.value);
     return values.length ? [{ [type]: values }] : [];
-  }) }, null, 2) + '\n';
+  });
+  const headless = rules.filter(rule => rule.type === 'headless').map(rule => rule.rule);
+  return JSON.stringify({ version: 4, rules: [...terms, ...headless] }, null, 2) + '\n';
 }
 
-/** Read generated Source Format v4 without flattening AND/logical rules into OR. */
-export function readSourceTerms(value: unknown): BuildTerm[] {
-  return normalizeTerms(readIndependentTerms(value));
+/** Read artifacts rendered from independent predicates. */
+export function readSourceTerms(value: unknown, allowEmpty = false): BuildTerm[] {
+  return normalizeTerms(readIndependentTerms(value, allowEmpty));
 }
 
-export function readIndependentTerms(value: unknown): BuildTerm[] {
+function readIndependentTerms(value: unknown, allowEmpty: boolean): BuildTerm[] {
   const source = value as { version?: unknown; rules?: unknown };
   if (!source || source.version !== 4
-      || !Array.isArray(source.rules) || !source.rules.length) throw new Error('Invalid candidate source rules');
+      || !Array.isArray(source.rules) || (!allowEmpty && !source.rules.length)) throw new Error('Invalid candidate source rules');
   const terms: BuildTerm[] = [];
   for (const rule of source.rules) {
     if (!rule || typeof rule !== 'object' || Array.isArray(rule)) throw new Error('Invalid candidate rule');

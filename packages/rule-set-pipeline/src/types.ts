@@ -24,7 +24,8 @@ export interface RuleConversionReport {
   outputTermCount: number;
   attributeRecordCount: number;
   filteredRules?: { type: 'PROCESS-NAME'; value: string; line: number }[];
-  typeCounts: Record<TermType, TermCounts> & { ip_cidr?: TermCounts };
+  typeCounts: Record<TermType, TermCounts> & Partial<Record<'ip_cidr' | 'headless', TermCounts>>;
+  skippedRuleTypeCounts?: Record<string, number>;
   diagnostics: Diagnostic[];
 }
 export interface ConversionReport extends RuleConversionReport {

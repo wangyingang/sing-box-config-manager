@@ -4,7 +4,7 @@ import type { BuildConfiguration, RuleDefinition, SourceInput } from './configur
 import { parseStoredRuleDefinition, parseSource } from './configuration.js';
 import { validCommitSource, type CommitSourceRecord } from './github-commit.js';
 import { validFixedUrlSource, type FixedUrlSource } from './fixed-url-source.js';
-import type { SourceRecord } from './types.js';
+import type { RuleConversionReport, SourceRecord } from './types.js';
 import { validOpenAiVoiceSource, type OpenAiVoiceSource } from './openai-voice-source.js';
 import { sha256 } from './release.js';
 import { validReleaseSource } from './release-source-fact.js';
@@ -134,6 +134,7 @@ export interface RuleResult {
   reliedOn?: string[];
   unverified?: string[];
   continueWith?: string;
+  conversionReport?: RuleConversionReport;
 }
 export interface RulesResult {
   operation: 'status' | 'sync' | 'pin' | 'resume' | 'cleanup';

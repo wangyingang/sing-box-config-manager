@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import ipaddrPackage from 'ipaddr.js/package.json' with { type: 'json' };
 import yamlPackage from 'yaml/package.json' with { type: 'json' };
 import packageInfo from '../package.json' with { type: 'json' };
-import { buildRuleArtifacts, requireProjectedBuild, type NativeBuild, type ValidatedNativeBuild, type NativeBuildOptions } from './native.js';
+import { buildRuleArtifacts, invalidNativeSourceRules, NativeBuildError, requireProjectedBuild, type NativeBuilder, type NativeBuild, type ValidatedNativeBuild, type NativeBuildOptions } from './native.js';
 import { readReleaseInput, sha256, SourceError, type ReleaseOptions } from './release.js';
 import { diagnostic, type RuleConversionReport, type ConversionReport } from './types.js';
 import { readCommitInput, type CommitOptions } from './github-commit.js';
@@ -13,8 +13,9 @@ import { convertDomainSuffixText } from './domain-suffix-text-adapter.js';
 import { convertTypedDomainText } from './typed-domain-text-adapter.js';
 import { convertSingBoxDomainJson } from './sing-box-domain-json-adapter.js';
 import { convertCidrText } from './cidr-text-adapter.js';
-import { USAGES, type BuildTerm } from './projection.js';
-import { convertSingBoxSourceJson } from './sing-box-source-json-adapter.js';
+import { USAGES, type BuildRule } from './projection.js';
+import { convertSingBoxSourceJson, NATIVE_SOURCE_CONVERSION_POLICY, noConvertedRules, recordRejectedSourceRule,
+  sourceBuildRules, sourceConversionReport, sourceRuleType, type SourceRuleEntries } from './sing-box-source-json-adapter.js';
 import type { RuleSource } from './rules-model.js';
 
 export { parseBuildConfiguration } from './configuration.js';
@@ -45,13 +46,14 @@ export async function configuredBuildTools(format: SourceFormat = 'plain-yaml') 
     files.map(name =>
       readFile(new URL(`./${name}.${import.meta.url.endsWith('.ts') ? 'ts' : 'js'}`, import.meta.url))),
   )));
-  return { pipeline: packageInfo.version, implementationSha256, conversionPolicy: format === 'plain-yaml' ? 'v2fly-domain-v1' : `${format}-v1`,
+  return { pipeline: packageInfo.version, implementationSha256, conversionPolicy: format === 'sing-box-source-json' ? NATIVE_SOURCE_CONVERSION_POLICY
+    : format === 'plain-yaml' ? 'v2fly-domain-v1' : `${format}-v1`,
     node: process.versions.node, yaml: yamlPackage.version, sourceFormat: 4,
     ...(format === 'cidr-text' || format === 'openai-voice-json' ? { ipaddr: ipaddrPackage.version } : {}) };
 }
 
 interface BuildOptions { configuration: string; binary: string; selectedIds?: string[] }
-type Converted = { ok: true; terms: readonly BuildTerm[]; report: RuleConversionReport }
+type Converted = { ok: true; terms: readonly BuildRule[]; sourceEntries?: SourceRuleEntries; report: RuleConversionReport }
   | { ok: false; report: RuleConversionReport; error: string };
 
 function selectDefinitions<Definition extends RuleDefinition>(configuration: { ruleSets: Definition[] }, selectedIds?: string[]) {
@@ -118,6 +120,30 @@ async function buildProjectedConfiguration<Source extends RuleSource>(
   return { ...built, results };
 }
 
+async function buildConvertedRules(converted: Extract<Converted, { ok: true }>, report: RuleConversionReport, file: string,
+  nativeBuild: NativeBuilder, binary: string, target: ReturnType<typeof nativeTargetForRule>) {
+  try {
+    return await nativeBuild(converted.terms, binary, target);
+  } catch (error) {
+    const entries = converted.sourceEntries;
+    const failedStep = error instanceof NativeBuildError && error.steps.at(-1);
+    const sourceFailed = failedStep && (failedStep.args[1] === 'compile' || failedStep.args.at(-1) === 'source');
+    if (!entries?.accepted.length || !sourceFailed) throw error;
+    // Probe the original rule boundaries, before any wrapper for a lone survivor.
+    const invalid = await invalidNativeSourceRules(entries.accepted.map(({ rule }) => ({ type: 'headless', rule })), binary);
+    if (!invalid.size) throw error;
+    const accepted = entries.accepted.filter(({ index, rule }, position) => {
+      const reason = invalid.get(position);
+      if (reason === undefined) return true;
+      recordRejectedSourceRule(report, file, index, sourceRuleType(rule), `rules[${index}]: ${reason}`);
+      return false;
+    });
+    const remaining = { ...entries, accepted };
+    sourceConversionReport(report, remaining);
+    if (accepted.length) return nativeBuild(sourceBuildRules(remaining), binary, target);
+  }
+}
+
 export async function buildConfigured<Source extends RuleSource, Definition extends RuleDefinition>(
   configuration: BuildConfiguration, definitions: Definition[], { binary, nativeBuild = buildRuleArtifacts }: NativeBuildOptions,
   source: Source, lists: ReadonlyMap<string | undefined, Converted>, format: SourceFormat, file: string,
@@ -132,7 +158,11 @@ export async function buildConfigured<Source extends RuleSource, Definition exte
       continue;
     }
     try {
-      const native = await nativeBuild(converted.terms, binary, nativeTargetForRule(definition));
+      const native = await buildConvertedRules(converted, report, file, nativeBuild, binary, nativeTargetForRule(definition));
+      if (!native) {
+        results.push({ id: definition.id, definition, status: 'failed', report, error: noConvertedRules(file, report) });
+        continue;
+      }
       if ('usages' in definition) {
         const projected = requireProjectedBuild(native);
         for (const usage of USAGES) {
