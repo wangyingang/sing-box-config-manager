@@ -62,7 +62,8 @@ export function ruleSourceAdapter(input: SourceInput): RuleSourceAdapter {
     const snapshotRequirement = (candidate: CandidateSource): InputSnapshot => {
       const source = candidate.source;
       if (!validFixedUrlSource(source, input)) throw new Error('Invalid recorded URL input identity');
-      return { path: `candidates/${candidate.id}/input.source.json`, verify: bytes => verifyFixedUrlSnapshot(source, bytes) };
+      const extension = input.input.format === 'v2fly-dlc-yaml' ? 'yml' : 'json';
+      return { path: `candidates/${candidate.id}/input.source.${extension}`, verify: bytes => verifyFixedUrlSnapshot(source, bytes) };
     };
     return {
       file: input.input.url,

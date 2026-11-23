@@ -7,7 +7,7 @@ class SharedYamlError extends Error {
 }
 
 /** Decode YAML exactly once. Keep scalar values and locations for conversion. */
-export function readLists(input: Uint8Array, names: readonly string[]): Map<string, ReadResult> {
+export function readLists(input: Uint8Array, names: readonly string[], { allowEmpty = false } = {}): Map<string, ReadResult> {
   const fail = (name: string, code: string, message: string, inputCount = 0): ReadResult => ({
     ok: false, diagnostics: [diagnostic(code, message, { list: name })], inputCount,
   });
@@ -35,7 +35,11 @@ export function readLists(input: Uint8Array, names: readonly string[]): Map<stri
     if (!isMap(target)) return [name, fail(name, 'INVALID_LIST', '目标列表必须为 mapping')];
     const rules = target.get('rules', true);
     const length = target.get('length');
-    if (!isSeq(rules) || rules.items.length === 0) return [name, fail(name, 'EMPTY_LIST', '目标 rules 必须为非空列表')];
+    // V2Fly's exporter writes a bare "rules:" key for zero entries.
+    if (allowEmpty && length === 0 && isScalar(rules) && rules.value === null) return [name, { ok: true, rules: [] }];
+    if (!isSeq(rules) || (!allowEmpty && rules.items.length === 0)) {
+      return [name, fail(name, 'EMPTY_LIST', allowEmpty ? '目标 rules 必须为列表' : '目标 rules 必须为非空列表')];
+    }
     if (!Number.isSafeInteger(length) || length !== rules.items.length) {
       return [name, fail(name, 'LENGTH_MISMATCH', `声明 length ${String(length)} 与规则数 ${rules.items.length} 不一致`, rules.items.length)];
     }

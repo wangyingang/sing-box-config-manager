@@ -25,9 +25,9 @@ export function projectTerms(terms: readonly BuildTerm[]): Record<Usage, BuildTe
     'dns-response': route.filter(term => term.type === 'ip_cidr') };
 }
 
-export function renderRuleJson(terms: readonly BuildTerm[]): string {
+export function renderRuleJson(terms: readonly BuildTerm[], { allowEmpty = false } = {}): string {
   const normalized = normalizeTerms(terms);
-  if (!normalized.length) throw new Error('Cannot render an empty rule set');
+  if (!allowEmpty && !normalized.length) throw new Error('Cannot render an empty rule set');
   return renderRules(normalized);
 }
 
@@ -49,11 +49,11 @@ export function renderRules(rules: readonly BuildRule[]): string {
 }
 
 /** Read artifacts rendered from independent predicates. */
-export function readSourceTerms(value: unknown, allowEmpty = false): BuildTerm[] {
-  return normalizeTerms(readIndependentTerms(value, allowEmpty));
+export function readSourceTerms(value: unknown, options?: { allowEmpty: boolean }): BuildTerm[] {
+  return normalizeTerms(readIndependentTerms(value, options));
 }
 
-function readIndependentTerms(value: unknown, allowEmpty: boolean): BuildTerm[] {
+export function readIndependentTerms(value: unknown, { allowEmpty = false } = {}): BuildTerm[] {
   const source = value as { version?: unknown; rules?: unknown };
   if (!source || source.version !== 4
       || !Array.isArray(source.rules) || (!allowEmpty && !source.rules.length)) throw new Error('Invalid candidate source rules');

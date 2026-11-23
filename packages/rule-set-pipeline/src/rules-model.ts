@@ -154,7 +154,7 @@ export interface RulesResult {
 
 /** Only resolved input semantics participate; aliases and upstream revisions do not. */
 export function inputBindingRevision(source: SourceInput, definition: RuleDefinition) {
-  return sha256(JSON.stringify({ source: parseSource(source), list: definition.list }));
+  return sha256(JSON.stringify({ source: parseSource(source), list: definition.list, filter: 'artifact' in definition ? definition.filter : undefined }));
 }
 
 export function definitionRevision(source: SourceInput, definition: RuleDefinition) {

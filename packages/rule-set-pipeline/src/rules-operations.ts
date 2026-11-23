@@ -179,7 +179,7 @@ async function updateSelectedRules(session: RulesSession, definitions: RuleDefin
       const current = deliveries.get(id);
       try {
         const input = await (body ??= source.read(bodyNeeded));
-        const report = input.lists.get(definition.list)?.report;
+        const report = input.conversionsByRuleId.get(id)?.report;
         if (input.format === 'sing-box-source-json' && report?.diagnostics.length) conversionReports.set(id, report);
         const reused = !session.loaded.dryRun && await reuseSuccessfulInput(session, rule, current, input);
         if (reused) {

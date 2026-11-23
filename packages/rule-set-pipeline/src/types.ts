@@ -19,6 +19,7 @@ export interface RuleConversionReport {
   inputCount: number;
   convertedCount: number;
   unsupportedCount: number;
+  unsupportedTypeCounts?: Record<string, number>;
   invalidCount: number;
   duplicateCount: number;
   outputTermCount: number;

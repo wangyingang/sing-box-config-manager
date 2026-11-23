@@ -90,7 +90,7 @@ pnpm rules sync --config /path/to/rulesets-draft.yml --dry-run --json
 
 `chatgpt-voice` 使用 `list: all`，发布到 `stable/chatgpt-voice`。流水线直接读取 [OpenAI 官方 JSON](https://openai.com/chatgpt-voice.json) 的 IPv4/IPv6 CIDR。规则集匹配地址，客户端策略可另按 [OpenAI 的网络说明](https://help.openai.com/en/articles/9247338-network-recommendations-for-chatgpt-errors-on-web-and-apps#chatgpt-voice-firewall-settings) 约束 UDP 3478 或 TCP 443。适用的强 ETag 可用条件 GET 取得 304；否则读取正文并比较 SHA-256。同一候选的原始 JSON 与登记原子保存，恢复按登记的字节数和 SHA-256 读回原始输入，历史清理保留仍被保留候选引用的快照。
 
-输入绑定由来源位置、获取方式、格式和所选列表决定。实质变化表示换源，接受新定义时撤销旧 pin。source 别名、注释、排列和保留期调整不会解除固定；上游新 Release/commit 是正常更新。稳定路径与用途变化另做订阅兼容检查，不能借换源更改已交付契约。
+输入绑定由来源位置、获取方式、格式、所选列表及 DLC 标签过滤条件决定。实质变化表示换源，接受新定义时撤销旧 pin。source 别名、注释、排列和保留期调整不会解除固定；上游新 Release/commit 是正常更新。稳定路径与用途变化另做订阅兼容检查，不能借换源更改已交付契约。
 
 ### 在隔离目标同步混合规则集
 
@@ -137,9 +137,45 @@ reader 接受 UTF-8 JSON 格式的 sing-box Source Format v4。顶层必须包�
 
 遇到不支持的字段、无效的条件结构，或原生解析器能定位到的无效值时，reader 跳过该顶层规则。原本有多条规则时，跳过后剩下的单条默认规则维持原有匹配范围，避免新触发 sing-box 对外层条件的分组合并。转换报告给出源文件、从 0 开始的规则下标、出错子条件路径及按字段汇总的数量。同步重新读取上游并发现跳过项时，`sync --json` 返回本次转换报告，即使当前交付版本可复用。候选的转换报告随其构建证据保留。空 `rules` 数组可发布为空规则集。非空输入若全部跳过，或通过结构检查的内容未能通过原生编译及任一格式的加载，构建失败并保留已有交付。[`sing-box` 1.14.4 的 SRS 字段定义](https://github.com/SagerNet/sing-box/blob/v1.14.4/common/srs/binary.go)
 
-源端点须直接返回 JSON，上限为 8 MiB。候选保留原始输入字节，重试按记录的摘要和长度核对快照。
+源文件上限为 8 MiB。候选保留原始输入字节，重试按记录的摘要和长度核对快照。
 
 新候选的 [Artifact Manifest v3](contracts/artifact-manifest-v3.schema.json) 直接列出两种格式的固定 URL、字节数和 SHA-256。交付记录的 `subscription.formats` 列出两种格式的稳定 URL，`files` 记录实际发布文件的摘要和长度。正式配置迁移见 [#174](https://github.com/wangyingang/sing-box-config-manager/issues/174)。
+
+### 从固定 HTTPS URL 读取 DLC 和 ChatGPT Voice
+
+在 v4 的 `sources` 中给每个固定 URL 声明 `fetch.method: url` 和 `format`。GitHub Release 附件可以使用 `releases/latest/download/...` 地址，获取过程允许有限次数的 HTTPS 跳转。配置了 `fetch.sha256Url` 时，摘要必须是单个 SHA-256 十六进制值或一行 `sha256sum` 记录。摘要不可获取、格式错误或与正文不符时，依赖该来源的规则集保留旧交付，其他来源继续同步。
+
+```yaml
+sources:
+  dlc:
+    fetch:
+      method: url
+      url: https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat_plain.yml
+      sha256Url: https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat_plain.yml.sha256sum
+    format: v2fly-dlc-yaml
+  voice:
+    fetch:
+      method: url
+      url: https://openai.com/chatgpt-voice.json
+    format: openai-voice-json
+ruleSets:
+  openai:
+    data: { source: dlc, list: openai }
+    filter:
+      exclude:
+        tags:
+          anyOf: [cn]
+    publishPath: stable/openai
+    artifact: domains
+  voice:
+    data: { source: voice }
+    publishPath: stable/voice
+    artifact: ips
+```
+
+`v2fly-dlc-yaml` 必须用 `data.list` 选择真实列表。`all` 也按名称查找。各规则集可独立设置 `filter.include` 或 `filter.exclude`。同一条目上 `tags.allOf` 要求所有指定标签，`tags.anyOf` 要求任一指定标签。标签精确匹配，配置中省略 `@`，`'!cn'` 是完整标签名。两种发布格式均移除属性标签。存在空列表或过滤结果为空时发布空规则集。指定列表缺失时只阻止该规则集更新。ChatGPT Voice 按整份文件读取 IPv4 和 IPv6 CIDR，省略 `data.list`。
+
+DLC 的 [YAML 导出程序](https://github.com/v2fly/domain-list-community/blob/master/cmd/datdump/main.go) 直接在正则值后拼接属性。无法从文本区分的尾部沿用现有解析约定。符合标签语法且未转义的小写尾部按属性处理。
 
 ## 环境与远端状态
 

@@ -112,7 +112,7 @@ export function readCandidateRules(document: unknown, singleArtifact: boolean, c
   if (singleArtifact && conversionPolicy === NATIVE_SOURCE_CONVERSION_POLICY) {
     return sourceRules(document).map((rule, index) => headless(readRule(rule, `rules[${index}]`)));
   }
-  return readSourceTerms(document, singleArtifact);
+  return readSourceTerms(document, { allowEmpty: singleArtifact });
 }
 
 export function recordRejectedSourceRule(report: RuleConversionReport, file: string, index: number,
