@@ -11,7 +11,7 @@ import { NATIVE_VALIDATION_POLICY } from '../../src/native.js';
 import test from 'node:test';
 import { stringify } from 'yaml';
 import { baselineConfiguration } from '../fixtures/baseline-configuration.js';
-import { configuredProjections, configuredUsages, parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
+import { configuredProjections, configuredUsages, parseProjectedConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
 import { convertCidrText } from '../../src/cidr-text-adapter.js';
 import { buildRulesInput } from '../../src/rules-build.js';
 import { createGitCommit } from '../../src/publication-repository.js';
@@ -50,9 +50,9 @@ test('GitHub 隔离验收：正式规则集首次交付或四集生命周期，�
   const exec = promisify(execFile);
   const git = async (...args: string[]) => (await exec('git', args, { maxBuffer: 10 * 1024 * 1024 })).stdout;
   const official = readOfficialConfiguration();
-  const config = formalFirst ? parseBuildConfiguration(official) : baselineConfiguration(firstOnly);
+  const config = formalFirst ? parseProjectedConfiguration(official) : baselineConfiguration(firstOnly);
   const baseline = formalFirst
-    ? parseBuildConfiguration(await git('show', `${formalBaseline}:packages/rule-set-pipeline/config/rulesets.yml`))
+    ? parseProjectedConfiguration(await git('show', `${formalBaseline}:packages/rule-set-pipeline/config/rulesets.yml`))
     : undefined;
   const ipIds = ['china-ip', 'chatgpt-voice'];
   if (baseline) {

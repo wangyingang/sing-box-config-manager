@@ -66,7 +66,7 @@ pnpm rules sync --config /path/to/rulesets-draft.yml --dry-run --json
 
 草稿可从 [`config/rulesets.yml`](config/rulesets.yml) 复制并编辑。隔离样例 [`samples/rulesets.example.yml`](samples/rulesets.example.yml) 的目标是 `acceptance-example`，须使用匹配的已准备隔离环境，不能据此写生产目标。
 
-配置使用 `schemaVersion: 3`，必须显式声明正整数 `candidateRetentionDays`。正式配置和样例采用已确定的 30 天策略；`cleanup` 读取正式值，不自行设置默认保留期。`ruleSets` 必须显式存在。`ruleSets: []` 与空 `sources: {}` 可以表达删除全部受管规则；配置缺失、无法读取、未知字段、无效引用、重复 ID 或重叠稳定路径均在写入前拒绝。
+正式配置使用 `schemaVersion: 3`，必须显式声明正整数 `candidateRetentionDays`。正式配置和样例采用已确定的 30 天策略；`cleanup` 读取正式值，不自行设置默认保留期。`ruleSets` 必须显式存在。`ruleSets: []` 与空 `sources: {}` 可以表达删除全部受管规则；配置缺失、无法读取、未知字段、无效引用、重复 ID 或重叠稳定路径均在写入前拒绝。
 
 每个可用用途用 `artifact` 声明规则文件基名，构建和交付追加 `.json` 或 `.srs`。基名最多 250 个字符，以小写 ASCII 字母或数字开头，可继续使用这些字符、连字符和下划线。保留的候选、交付记录或输入快照文件名不能用作规则产物。每个纯域名集或纯 IP 集的两个可用用途声明相同的基名，共用这组文件。已交付的稳定订阅地址受现有兼容性检查保护。
 
@@ -91,6 +91,34 @@ pnpm rules sync --config /path/to/rulesets-draft.yml --dry-run --json
 `chatgpt-voice` 使用 `list: all`，发布到 `stable/chatgpt-voice`。流水线直接读取 [OpenAI 官方 JSON](https://openai.com/chatgpt-voice.json) 的 IPv4/IPv6 CIDR。规则集匹配地址，客户端策略可另按 [OpenAI 的网络说明](https://help.openai.com/en/articles/9247338-network-recommendations-for-chatgpt-errors-on-web-and-apps#chatgpt-voice-firewall-settings) 约束 UDP 3478 或 TCP 443。适用的强 ETag 可用条件 GET 取得 304；否则读取正文并比较 SHA-256。同一候选的原始 JSON 与登记原子保存，恢复按登记的字节数和 SHA-256 读回原始输入，历史清理保留仍被保留候选引用的快照。
 
 输入绑定由来源位置、获取方式、格式和所选列表决定。实质变化表示换源，接受新定义时撤销旧 pin。source 别名、注释、排列和保留期调整不会解除固定；上游新 Release/commit 是正常更新。稳定路径与用途变化另做订阅兼容检查，不能借换源更改已交付契约。
+
+### 在隔离目标同步混合规则集
+
+`sync` 支持最小 v4 配置。使用 `fetch.method: url` 从固定 HTTPS 地址读取整份 `sing-box-source-json`，在 `publishPath` 下发布以 `artifact` 命名的 JSON 和 SRS。将下例中的 URL 换成实际端点，并按下节配置同名的隔离目标。
+
+```yaml
+schemaVersion: 4
+candidateRetentionDays: 30
+target:
+  repository: wangyingang/sing-box-rule-artifacts
+  branch: acceptance-mixed
+sources:
+  example:
+    fetch:
+      method: url
+      url: https://rules.example.test/mixed.json
+    format: sing-box-source-json
+ruleSets:
+  example-mixed:
+    data:
+      source: example
+    publishPath: stable/example-mixed
+    artifact: mixed
+```
+
+初版 reader 支持 sing-box Source Format v4 中的独立域名和 CIDR 条件，例如 `{"version":4,"rules":[{"domain_suffix":["example.test"]},{"ip_cidr":["192.0.2.0/24"]}]}`。每个规则对象只接受一个匹配字段，组合规则由 [#173](https://github.com/wangyingang/sing-box-config-manager/issues/173) 跟踪。源端点须直接返回 JSON，上限为 8 MiB。候选保留原始输入字节，重试按记录的摘要和长度核对快照。
+
+新候选的 [Artifact Manifest v3](contracts/artifact-manifest-v3.schema.json) 直接列出两种格式的固定 URL、字节数和 SHA-256。交付记录的 `subscription.formats` 列出两种格式的稳定 URL，`files` 记录实际发布文件的摘要和长度。正式配置迁移见 [#174](https://github.com/wangyingang/sing-box-config-manager/issues/174)。
 
 ## 环境与远端状态
 
@@ -232,11 +260,11 @@ Recipe／Template v2 跟随稳定入口，管理者 pin 会影响所有引用该
 
 CIDR 输入使用固定 `ipaddr.js 2.5.0` 解析 IPv4／IPv6 并规范化地址。生成 JSON 保留去重后的独立 CIDR 条目。原生验证依赖指定的官方 1.14.4 编译器生成 SRS，再分别使用 `rule-set match` 实际加载 JSON 和 SRS。真实集成测试用域名、正则和双栈边界验证匹配表现。
 
-同一次 `sync`、`pin`、`resume` 或 `cleanup` 中，后续阶段可以复用与实际 JSON/SRS 字节、工具 SHA-256、验证策略、格式和用途投影相符的成功证明。各阶段仍核对当前配置、规则更新控制、保留证据、订阅和写入条件。失败可重试，每次调用及重启后的恢复都重新建立操作内证明。详见[配置驱动操作契约](contracts/rules-operations.md#远端事实与版本身份)。
+同一次 `sync`、`pin`、`resume` 或 `cleanup` 中，后续阶段可以复用与实际 JSON/SRS 字节、工具 SHA-256、验证策略、文件名和产物布局相符的成功证明。各阶段仍核对当前配置、规则更新控制、保留证据、订阅和写入条件。失败可重试，每次调用及重启后的恢复都重新建立操作内证明。详见[配置驱动操作契约](contracts/rules-operations.md#远端事实与版本身份)。
 
 YAML 解析使用固定版本的 [yaml](https://eemeli.org/yaml/)，拒绝语法错误、重复 key、未知 tag、多个文档和 alias。记录级诊断包含文件、列表、从零开始的记录 index，以及从一开始的 line／column。列表级诊断以文件与目标列表定位。
 
-每个非空用途分别生成 JSON／SRS，内容相同的用途复用同一组物理文件。纯域名文件同时供 Route 和 DNS 请求复用。纯 IP 的 Route／DNS 响应同样复用，混合 IR 分别输出三组文件。当前官方纯域名列表的 DNS 响应用途为 `{ status: "unavailable", reason: "empty" }`，不生成空匹配文件。`build.json` 记录构建工具内容摘要、验证策略和实际命令。[固定产物 Manifest v2](contracts/README.md) 为 Compiler 定义独立的内存契约。输入和转换报告保留逻辑计数，JSON 的 `termCount` 按投影条目计数。SRS 记录格式、字节长度、摘要与能力。
+v3 构建中，每个非空用途分别生成 JSON／SRS，内容相同的用途复用同一组物理文件。纯域名文件同时供 Route 和 DNS 请求复用。纯 IP 的 Route／DNS 响应同样复用，混合 IR 分别输出三组文件。当前官方纯域名列表的 DNS 响应用途为 `{ status: "unavailable", reason: "empty" }`，不生成空匹配文件。`build.json` 记录构建工具内容摘要、验证策略和实际命令。[固定产物 Manifest v2](contracts/README.md) 为 Compiler 定义独立的内存契约。输入和转换报告保留逻辑计数，JSON 的 `termCount` 按投影条目计数。SRS 记录格式、字节长度、摘要与能力。
 
 ## 从空产物状态启用新验证策略
 

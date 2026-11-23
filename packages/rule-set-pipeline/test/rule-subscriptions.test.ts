@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { configuredSubscriptions, parseBuildConfiguration, readOfficialConfiguration } from '../src/configuration.js';
+import { configuredSubscriptions, parseProjectedConfiguration, readOfficialConfiguration } from '../src/configuration.js';
 
 test('official configuration provides stable subscriptions and reuses files across compatible usages', () => {
   for (const branch of ['main', 'acceptance-subscriptions']) {
-    const official = parseBuildConfiguration(readOfficialConfiguration());
-    const configuration = parseBuildConfiguration(JSON.stringify({ ...official, target: { ...official.target, branch } }));
+    const official = parseProjectedConfiguration(readOfficialConfiguration());
+    const configuration = parseProjectedConfiguration(JSON.stringify({ ...official, target: { ...official.target, branch } }));
     const subscriptions = configuredSubscriptions(configuration);
     assert.deepEqual(Object.keys(subscriptions), ['openai', 'anthropic', 'google-deepmind', 'china-ip', 'chatgpt-voice',
       'china-domains', 'global', 'apple', 'microsoft', 'docker', 'github', 'google', 'youtube', 'gfw', 'onedrive', 'stream']);

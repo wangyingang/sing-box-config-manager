@@ -1,16 +1,16 @@
-import type { OpenAiVoiceSource } from './openai-voice-source.js';
+import type { RuleSource } from './rules-model.js';
 import type { VerifyEvidence } from './evidence-download.js';
 import { randomUUID } from 'node:crypto';
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { configuredInput } from './configuration.js';
-import { buildConfiguredCommit, buildConfiguredRelease, CONFIGURED_BUILD_RECORD, parseBuildConfiguration } from './configured-build.js';
-import { ARTIFACT_MANIFEST_VERSION, publishCandidate, type PublicationCandidate } from './candidate-publication.js';
+import { configuredInput, nativeTargetForRule, parseProjectedConfiguration } from './configuration.js';
+import { buildConfiguredCommit, buildConfiguredRelease, CONFIGURED_BUILD_RECORD, type ConfiguredResult } from './configured-build.js';
+import { ARTIFACT_MANIFEST_VERSION, SINGLE_ARTIFACT_MANIFEST_VERSION, publishCandidate, type PublicationCandidate } from './candidate-publication.js';
 import { githubPublication, immutableUrl, type PublicationTransport } from './publication.js';
 import { lookupRelease, type ReleaseInput } from './release.js';
 import { commitSourceKey, fullGitCommit, resolveCommit, withCommitCheckpoint, type CommitInput, type CommitSourceRecord } from './github-commit.js';
 import type { SourceRecord } from './types.js';
-import type { NativeBuildOptions } from './native.js';
+import { requireProjectedBuild, type NativeBuildOptions } from './native.js';
 import { readUpdateState, ruleDefinitionSha256, sourceReferenceKey, type Candidate, type SourceReference, type UpdateState } from './update.js';
 import { openRemoteSession, selectRemoteOperation, type RemoteOperation } from './remote-state.js';
 import { verifyRetainedCandidate } from './candidate-recovery.js';
@@ -36,7 +36,7 @@ type BatchEntry = { id: string; status: 'skipped'; candidateId: string; evidence
   | { id: string; status: 'failed'; candidateId: string; candidate?: Candidate; error: string };
 
 export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, rebuild?: FixedVersion) {
-  const configuration = parseBuildConfiguration(options.configuration);
+  const configuration = parseProjectedConfiguration(options.configuration);
   const selected = options.selectedIds;
   if (selected && (selected.length === 0 || new Set(selected).size !== selected.length ||
       selected.some(id => !configuration.ruleSets.some(rule => rule.id === id)))) {
@@ -67,7 +67,7 @@ export async function processConfiguredUpdate(options: ConfiguredUpdateOptions, 
     const state: UpdateState = session?.state ?? (await readUpdateState(options.stateDirectory)).state;
     const fixedTag = rebuild?.release ?? options.retryRelease;
     const matches = (entry: RemoteOperation) => entry.kind === (rebuild ? 'rebuild' : 'update') && entry.configuration
-      && JSON.stringify(parseBuildConfiguration(entry.configuration)) === JSON.stringify(configuration)
+      && JSON.stringify(parseProjectedConfiguration(entry.configuration)) === JSON.stringify(configuration)
       && definitions.every(rule => !entry.selectedIds || entry.selectedIds.includes(rule.id))
       && (entry.sourceKey !== undefined) === git
       && (!fixedTag || fixedTag === entry.tag) && (!rebuild?.commit || (entry.sourceKey && state.commitPins?.[entry.sourceKey]?.identity.commit === rebuild.commit));
@@ -281,21 +281,23 @@ async function prepareRelease(source: ReleaseInput, options: ConfiguredUpdateOpt
   }) };
 }
 
-export async function publishConfiguredCandidate(result: Extract<Awaited<ReturnType<typeof buildConfiguredRelease>>['results'][number], { status: 'built-validated' }>,
-  candidate: PublicationCandidate & { operation?: string; previousCandidateId?: string }, source: SourceRecord | CommitSourceRecord | OpenAiVoiceSource, tools: Record<string, string | number>, target: { repository: string; branch: string },
+export async function publishConfiguredCandidate(result: Extract<ConfiguredResult, { status: 'built-validated' }>,
+  candidate: PublicationCandidate & { operation?: string; previousCandidateId?: string }, source: RuleSource, tools: Record<string, string | number>, target: { repository: string; branch: string },
   publication: PublicationTransport, { binary, nativeBuild, verifyEvidence, ruleFilesOnly }: NativeBuildOptions & { verifyEvidence?: VerifyEvidence; ruleFilesOnly?: boolean },
   save: () => Promise<void>, beforeEvidence?: () => void) {
   const prefix = `candidates/${candidate.id}`;
-  return publishCandidate({ candidate, native: result.native, buildId: result.buildId, artifact: result.definition.usages.route.artifact,
+  const singleArtifact = 'artifact' in result.definition;
+  const manifestVersion = singleArtifact ? SINGLE_ARTIFACT_MANIFEST_VERSION : ARTIFACT_MANIFEST_VERSION;
+  return publishCandidate({ candidate, native: result.native, buildId: result.buildId, target: nativeTargetForRule(result.definition),
     binary, nativeBuild, verifyEvidence, publication, save, beforeEvidence, ruleFilesOnly,
     records: filesCommit => {
       const artifactId = (file: string) => `${result.id}@${candidate.id}:${file}`;
-      const manifest = { schemaVersion: ARTIFACT_MANIFEST_VERSION, id: result.id, revision: candidate.id, targetVersion: '1.14.4', sourceFormatVersion: 4,
+      const manifest = { schemaVersion: manifestVersion, id: result.id, revision: candidate.id, targetVersion: '1.14.4', sourceFormatVersion: 4,
         artifacts: result.native.artifacts.map(artifact => ({ id: artifactId(artifact.file), format: artifact.format,
           url: immutableUrl(filesCommit, `${prefix}/${artifact.file}`), sha256: artifact.sha256, byteLength: artifact.bytes,
           ...(artifact.format === 'source' && { termCount: artifact.termCount }), requiredCapabilities: artifact.requiredCapabilities })),
-        projections: Object.fromEntries(Object.entries(result.native.usages).map(([usage, projection]) => [usage,
-          'artifactFiles' in projection ? { artifactIds: projection.artifactFiles.map(artifactId) } : { unavailable: 'empty' }])),
+        ...(!singleArtifact && { projections: Object.fromEntries(Object.entries(requireProjectedBuild(result.native).usages).map(([usage, projection]) => [usage,
+          'artifactFiles' in projection ? { artifactIds: projection.artifactFiles.map(artifactId) } : { unavailable: 'empty' }])) }),
       };
       const { artifacts: _artifacts, buildId: nativeBuildId, ...validation } = result.native;
       return {
@@ -304,7 +306,7 @@ export async function publishConfiguredCandidate(result: Extract<Awaited<ReturnT
         [`${prefix}/conversion-report.json`]: encode(result.report),
         [`${prefix}/build.json`]: encode({ id: result.id, definition: result.definition, target, buildId: result.buildId,
           candidateId: candidate.id, operation: candidate.operation, previousCandidateId: candidate.previousCandidateId,
-          contracts: { artifactManifest: ARTIFACT_MANIFEST_VERSION, sourceFormat: 4, buildRecord: CONFIGURED_BUILD_RECORD }, source, tools, nativeBuildId, ...validation,
+          contracts: { artifactManifest: manifestVersion, sourceFormat: 4, buildRecord: CONFIGURED_BUILD_RECORD }, source, tools, nativeBuildId, ...validation,
           artifacts: result.native.artifacts.map(({ content: _content, ...metadata }) => metadata) }),
       };
     } });

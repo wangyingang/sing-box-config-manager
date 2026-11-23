@@ -15,7 +15,7 @@ import { join } from 'node:path';
 import test, { type TestContext } from 'node:test';
 import { syncRules, pinRuleVersion, resumeRuleUpdates } from '../../src/rules-operations.js';
 import { getRulesStatus } from '../../src/rules-status.js';
-import { parseBuildConfiguration } from '../../src/configuration.js';
+import { parseProjectedConfiguration } from '../../src/configuration.js';
 import { publishRecipe, readPublication } from '../../../config-compiler/src/publisher.js';
 import { ARTIFACT_REPOSITORY } from '../../src/publication.js';
 import { sha256 } from '../../src/release.js';
@@ -35,7 +35,7 @@ const versionInputs = ['192.0.2.0/25\n2001:db8:1::/48\n', '192.0.2.128/25\n2001:
 
 async function fixture() {
   const env = rulesEnvironment(binary!, branch);
-  const configuration = parseBuildConfiguration(await readFile(new URL('../../config/china-ip.yml', import.meta.url), 'utf8'));
+  const configuration = parseProjectedConfiguration(await readFile(new URL('../../config/china-ip.yml', import.meta.url), 'utf8'));
   env.configure({ ...configuration, target: { ...configuration.target, branch } });
   let revision = 0;
   const requests: string[] = [];

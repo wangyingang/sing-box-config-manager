@@ -1,8 +1,9 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { PublicationCandidate } from './candidate-publication.js';
 import type { BuildConfiguration, RuleDefinition, SourceInput } from './configuration.js';
-import { parseRuleDefinition, parseSource } from './configuration.js';
+import { parseStoredRuleDefinition, parseSource } from './configuration.js';
 import { validCommitSource, type CommitSourceRecord } from './github-commit.js';
+import { validFixedUrlSource, type FixedUrlSource } from './fixed-url-source.js';
 import type { SourceRecord } from './types.js';
 import { validOpenAiVoiceSource, type OpenAiVoiceSource } from './openai-voice-source.js';
 import { sha256 } from './release.js';
@@ -13,7 +14,7 @@ import { validateCleanupFields } from './rules-cleanup-model.js';
 export const RULE_STATE_PATH = 'pipeline/state.json';
 export const RULE_RECEIPT_PATH = 'pipeline/rule-operation.json';
 export const encodeRecord = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
-export type RuleSource = SourceRecord | CommitSourceRecord | OpenAiVoiceSource;
+export type RuleSource = SourceRecord | CommitSourceRecord | OpenAiVoiceSource | FixedUrlSource;
 export type RuleControl = { mode: 'auto'; revision: string; inputBindingRevision: string }
   | { mode: 'pinned'; revision: string; inputBindingRevision: string; candidateId: string };
 
@@ -171,6 +172,7 @@ function validQualification(value: unknown) {
 
 export function validRuleSource(value: unknown, input: SourceInput): value is RuleSource {
   if (!object(value)) return false;
+  if (input.version === 'url') return validFixedUrlSource(value, input);
   if (input.version === 'openai-voice') return validOpenAiVoiceSource(value);
   if (input.version === 'git-branch') {
     return value.kind === 'github-commit' && validCommitSource(value as CommitSourceRecord, input) && value.inputBytes > 0;
@@ -194,7 +196,7 @@ export function parseRulesJournal(bytes: Buffer): RulesJournal {
     if (!object(rule) || !object(rule.control) || !uuid(rule.generation) || !uuid(rule.control.revision)
       || !['present', 'deleting', 'deleted'].includes(rule.lifecycle) || !['auto', 'pinned'].includes(rule.control.mode)
       || typeof rule.configurationRevision !== 'string' || !rule.configurationRevision) throw new Error('RULE_STATE_CORRUPT: rule');
-    const source = parseSource(rule.source), definition = parseRuleDefinition(rule.definition, source.input.format);
+    const source = parseSource(rule.source), definition = parseStoredRuleDefinition(rule.definition, source.input.format);
     const pinned = rule.control.mode === 'pinned' ? value.candidates[rule.control.candidateId] : undefined;
     if (definition.id !== id || inputBindingRevision(source, definition) !== rule.inputBindingRevision
       || definitionRevision(source, definition) !== rule.definitionRevision || rule.control.inputBindingRevision !== rule.inputBindingRevision
@@ -218,9 +220,9 @@ export function parseRulesJournal(bytes: Buffer): RulesJournal {
       || !uuid(candidate.definitionGeneration) || !['building', 'publishing', 'verified', 'failed'].includes(candidate.status)
       || !object(candidate.source) || !digest(candidate.inputBindingRevision)
       || candidate.operation === 'sync' && !uuid(candidate.controlRevision)) throw new Error('RULE_STATE_CORRUPT: candidate');
-    const source = parseSource(candidate.sourceInput), definition = parseRuleDefinition(candidate.definition, source.input.format);
+    const source = parseSource(candidate.sourceInput), definition = parseStoredRuleDefinition(candidate.definition, source.input.format);
     if (candidate.logicalId !== definition.id || inputBindingRevision(source, definition) !== candidate.inputBindingRevision
-      || source.version === 'openai-voice' && !validOpenAiVoiceSource(candidate.source)) throw new Error('RULE_STATE_CORRUPT: candidate binding');
+      || (source.version === 'url' || source.version === 'openai-voice') && !validRuleSource(candidate.source, source)) throw new Error('RULE_STATE_CORRUPT: candidate binding');
     if (candidate.publishedAt !== undefined || candidate.versionId !== undefined) {
       if (typeof candidate.publishedAt !== 'string' || !Number.isFinite(Date.parse(candidate.publishedAt))
         || new Date(candidate.publishedAt).toISOString() !== candidate.publishedAt || typeof candidate.versionId !== 'string'

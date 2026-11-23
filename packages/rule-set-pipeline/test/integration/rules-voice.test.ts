@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { configuredBuildTools } from '../../src/configured-build.js';
-import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
+import { parseProjectedConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
 import { OPENAI_VOICE_URL, openAiVoiceSnapshotPath, probeOpenAiVoiceInput } from '../../src/openai-voice-source.js';
 import { sha256 } from '../../src/release.js';
 import { cleanupRuleHistory } from '../../src/rules-cleanup.js';
@@ -18,7 +18,7 @@ const second = JSON.stringify({ prefixes: [{ ipv4Prefix: '198.51.100.0/24' }] })
 
 function fixture() {
   const env = cleanupEnvironment(binary!, 'acceptance-chatgpt-voice');
-  const config = parseBuildConfiguration(readOfficialConfiguration());
+  const config = parseProjectedConfiguration(readOfficialConfiguration());
   config.target.branch = env.context.targetBranch;
   config.ruleSets = config.ruleSets.filter(rule => rule.id === 'chatgpt-voice');
   env.configure(config);

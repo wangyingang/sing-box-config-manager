@@ -1,4 +1,4 @@
-import { readOfficialConfiguration } from '../src/configuration.js';
+import { parseProjectedConfiguration, readOfficialConfiguration } from '../src/configuration.js';
 import { releaseConfiguration } from './fixtures/release-configuration.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -54,7 +54,7 @@ test('非法产物名、记录冲突及共用用途错误在读取上游前拒�
     ['china-ip', 'office-networks', 'other', /dns-response must share the route artifact basename/] as const,
   ];
   for (const [id, route, response, error] of cases) {
-    const configuration = parseBuildConfiguration(readOfficialConfiguration());
+    const configuration = parseProjectedConfiguration(readOfficialConfiguration());
     const rule = configuration.ruleSets.find(entry => entry.id === id)!;
     rule.usages.route = { artifact: route };
     rule.usages['dns-response'] = { artifact: response };
@@ -81,7 +81,7 @@ test('一份固定来源构建三集，单选只构建目标集；同内容定�
     assert.deepEqual(result.native.artifacts.map(artifact => artifact.file), ['domains.json', 'domains.srs']);
     assert.ok(result.native.artifacts.every(artifact => artifact.requiredCapabilities.length === 0));
   }
-  const aliases = parseBuildConfiguration(configuration);
+  const aliases = parseProjectedConfiguration(configuration);
   aliases.sources['dlc-alias'] = aliases.sources.dlc;
   aliases.ruleSets[1].source = 'dlc-alias';
   const shared = upstream();
@@ -128,7 +128,7 @@ test('新增列表缺失或非法时报告列表位置，共用来源的兄弟�
 });
 
 test('gfw 用途错误在获取输入前定位到规则集和文件', async () => {
-  const config = parseBuildConfiguration(readOfficialConfiguration());
+  const config = parseProjectedConfiguration(readOfficialConfiguration());
   const gfw = config.ruleSets.find(rule => rule.id === 'gfw')!;
   gfw.usages['dns-query'] = { unavailable: 'empty' };
   await assert.rejects(buildConfiguredCommit({
@@ -196,7 +196,7 @@ test('onedrive 拒绝非法条件和用途，过滤后为空时保留进程过�
   assert.equal(utf8.results[0].status, 'failed');
   assert.deepEqual(utf8.results[0].report.diagnostics.map(d => [d.code, d.file]), [['INVALID_UTF8', path]]);
 
-  const config = parseBuildConfiguration(configuration);
+  const config = parseProjectedConfiguration(configuration);
   const onedrive = config.ruleSets.find(rule => rule.id === 'onedrive')!;
   onedrive.usages['dns-response'] = { artifact: 'domains' };
   await assert.rejects(buildConfiguredCommit({
@@ -257,7 +257,7 @@ test('stream 拒绝不支持的 Source Format、规则结构、字段和值，�
   }
   await assert.rejects(build(null), { code: 'DOWNLOAD_FAILED', message: /stream.*non_ip\/stream\.json/ });
 
-  const parsed = parseBuildConfiguration(configuration);
+  const parsed = parseProjectedConfiguration(configuration);
   parsed.ruleSets.find(rule => rule.id === 'stream')!.usages['dns-response'] = { artifact: 'domains' };
   await assert.rejects(buildConfiguredCommit({
     configuration: JSON.stringify(parsed), selectedIds: ['stream'], binary: '/unused',

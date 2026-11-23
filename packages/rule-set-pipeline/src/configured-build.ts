@@ -2,18 +2,20 @@ import { readFile } from 'node:fs/promises';
 import ipaddrPackage from 'ipaddr.js/package.json' with { type: 'json' };
 import yamlPackage from 'yaml/package.json' with { type: 'json' };
 import packageInfo from '../package.json' with { type: 'json' };
-import { buildNative, type NativeBuild, type NativeBuildOptions } from './native.js';
+import { buildRuleArtifacts, requireProjectedBuild, type NativeBuild, type ValidatedNativeBuild, type NativeBuildOptions } from './native.js';
 import { readReleaseInput, sha256, SourceError, type ReleaseOptions } from './release.js';
-import { diagnostic, type ConversionReport, type SourceRecord } from './types.js';
-import { readCommitInput, type CommitOptions, type CommitSourceRecord } from './github-commit.js';
-import { configuredInput, configuredReleaseInput, parseBuildConfiguration, type BuildConfiguration, type RuleDefinition, type SourceFormat } from './configuration.js';
-import { convertOpenAiVoice, type OpenAiVoiceSource } from './openai-voice-source.js';
+import { diagnostic, type RuleConversionReport, type ConversionReport } from './types.js';
+import { readCommitInput, type CommitOptions } from './github-commit.js';
+import { configuredInput, configuredReleaseInput, nativeTargetForRule, parseProjectedConfiguration, type BuildConfiguration, type ProjectedRuleDefinition, type RuleDefinition, type SourceFormat } from './configuration.js';
+import { convertOpenAiVoice } from './openai-voice-source.js';
 import { convertPlainYaml } from './plain-yaml-adapter.js';
 import { convertDomainSuffixText } from './domain-suffix-text-adapter.js';
 import { convertTypedDomainText } from './typed-domain-text-adapter.js';
 import { convertSingBoxDomainJson } from './sing-box-domain-json-adapter.js';
 import { convertCidrText } from './cidr-text-adapter.js';
 import { USAGES, type BuildTerm } from './projection.js';
+import { convertSingBoxSourceJson } from './sing-box-source-json-adapter.js';
+import type { RuleSource } from './rules-model.js';
 
 export { parseBuildConfiguration } from './configuration.js';
 export type { BuildConfiguration, RuleDefinition } from './configuration.js';
@@ -26,8 +28,9 @@ export function configuredBuildIdentity(identity: object) {
     : value));
 }
 
-export type ConfiguredResult = { id: string; definition: RuleDefinition; status: 'failed'; report: ConversionReport; error: string }
-  | { id: string; definition: RuleDefinition; status: 'built-validated'; report: ConversionReport; native: NativeBuild; buildId: string };
+export type ConfiguredResult<Definition = RuleDefinition, Built = ValidatedNativeBuild, Report = RuleConversionReport> =
+  { id: string; definition: Definition; report: Report }
+  & ({ status: 'failed'; error: string } | { status: 'built-validated'; native: Built; buildId: string });
 
 export async function configuredBuildTools(format: SourceFormat = 'plain-yaml') {
   const files = ['artifact-path', 'source-input', 'configuration', 'configured-build', 'release', 'plain-yaml-adapter', 'yaml-input', 'convert',
@@ -37,6 +40,7 @@ export async function configuredBuildTools(format: SourceFormat = 'plain-yaml') 
   if (format === 'typed-domain-text') files.push('github-commit', 'typed-domain-text-adapter');
   if (format === 'sing-box-domain-json') files.push('github-commit', 'sing-box-domain-json-adapter');
   if (format === 'openai-voice-json') files.push('openai-voice-source', 'cidr-text-adapter');
+  if (format === 'sing-box-source-json') files.push('fixed-url-source', 'sing-box-source-json-adapter');
   const implementationSha256 = sha256(Buffer.concat(await Promise.all(
     files.map(name =>
       readFile(new URL(`./${name}.${import.meta.url.endsWith('.ts') ? 'ts' : 'js'}`, import.meta.url))),
@@ -47,10 +51,10 @@ export async function configuredBuildTools(format: SourceFormat = 'plain-yaml') 
 }
 
 interface BuildOptions { configuration: string; binary: string; selectedIds?: string[] }
-type Converted = { ok: true; terms: readonly BuildTerm[]; report: ConversionReport }
-  | { ok: false; report: ConversionReport; error: string };
+type Converted = { ok: true; terms: readonly BuildTerm[]; report: RuleConversionReport }
+  | { ok: false; report: RuleConversionReport; error: string };
 
-function selectDefinitions(configuration: BuildConfiguration, selectedIds?: string[]) {
+function selectDefinitions<Definition extends RuleDefinition>(configuration: { ruleSets: Definition[] }, selectedIds?: string[]) {
   if (selectedIds && (new Set(selectedIds).size !== selectedIds.length || selectedIds.some(id => !configuration.ruleSets.some(rule => rule.id === id)))) {
     throw new Error('Selected logical ID is duplicate or unknown');
   }
@@ -60,16 +64,16 @@ function selectDefinitions(configuration: BuildConfiguration, selectedIds?: stri
 }
 
 export async function buildConfiguredRelease(options: BuildOptions & { release: ReleaseOptions }) {
-  const configuration = parseBuildConfiguration(options.configuration);
+  const configuration = parseProjectedConfiguration(options.configuration);
   const definitions = selectDefinitions(configuration, options.selectedIds);
   const input = configuredReleaseInput(configuration, definitions);
   const { bytes, source } = await readReleaseInput(options.release, input);
   const lists = convertInput(bytes, definitions, input.input.format, input.input.asset);
-  return buildConfigured(configuration, definitions, { binary: options.binary }, source, lists, input.input.format, input.input.asset);
+  return buildProjectedConfiguration(configuration, definitions, { binary: options.binary }, source, lists, input.input.format, input.input.asset);
 }
 
 export async function buildConfiguredCommit(options: BuildOptions & { github: CommitOptions }) {
-  const configuration = parseBuildConfiguration(options.configuration);
+  const configuration = parseProjectedConfiguration(options.configuration);
   const definitions = selectDefinitions(configuration, options.selectedIds);
   const input = configuredInput(configuration, definitions);
   if (input.version !== 'git-branch') throw new Error('Git commit build requires a configured Git source; use --release for Release sources');
@@ -79,7 +83,7 @@ export async function buildConfiguredCommit(options: BuildOptions & { github: Co
     throw new SourceError(error.code, `Rule set(s) ${ids}, Git input ${input.input.path}: ${error.message}`);
   });
   const lists = convertInput(bytes, definitions, input.input.format, input.input.path);
-  return buildConfigured(configuration, definitions, { binary: options.binary }, source, lists, input.input.format, input.input.path);
+  return buildProjectedConfiguration(configuration, definitions, { binary: options.binary }, source, lists, input.input.format, input.input.path);
 }
 
 const wholeFileConverters = {
@@ -90,18 +94,36 @@ const wholeFileConverters = {
   'openai-voice-json': convertOpenAiVoice,
 };
 
-export function convertInput(bytes: Uint8Array, definitions: RuleDefinition[], format: SourceFormat, file: string) {
-  if (format === 'plain-yaml') return convertPlainYaml(bytes, definitions.map(rule => rule.list));
+export function convertInput(bytes: Uint8Array, definitions: RuleDefinition[], format: SourceFormat, file: string): ReadonlyMap<string | undefined, Converted> {
+  if (format === 'sing-box-source-json') return new Map([[undefined, convertSingBoxSourceJson(bytes, file)]]);
+  const lists = definitions.map(rule => {
+    if (rule.list === undefined) throw new Error(`Missing list selection for ${rule.id}`);
+    return rule.list;
+  });
+  if (format === 'plain-yaml') return convertPlainYaml(bytes, lists);
   const convert = wholeFileConverters[format];
-  return new Map([...new Set(definitions.map(rule => rule.list))].map(list => [list, convert(bytes, file, list)]));
+  return new Map([...new Set(lists)].map(list => [list, convert(bytes, file, list)]));
 }
 
-export async function buildConfigured<Source extends SourceRecord | CommitSourceRecord | OpenAiVoiceSource>(
-  configuration: BuildConfiguration, definitions: RuleDefinition[], { binary, nativeBuild = buildNative }: NativeBuildOptions,
-  source: Source, lists: ReadonlyMap<string, Converted>, format: SourceFormat, file: string,
+async function buildProjectedConfiguration<Source extends RuleSource>(
+  configuration: BuildConfiguration, definitions: ProjectedRuleDefinition[], options: NativeBuildOptions,
+  source: Source, lists: ReadonlyMap<string | undefined, Converted>, format: SourceFormat, file: string,
+) {
+  const built = await buildConfigured(configuration, definitions, options, source, lists, format, file);
+  const results = built.results.map((result): ConfiguredResult<ProjectedRuleDefinition, NativeBuild, ConversionReport> => {
+    if (!('usageCounts' in result.report)) throw new Error('Missing legacy conversion usage counts');
+    const report = result.report as ConversionReport;
+    return result.status === 'failed' ? { ...result, report } : { ...result, report, native: requireProjectedBuild(result.native) };
+  });
+  return { ...built, results };
+}
+
+export async function buildConfigured<Source extends RuleSource, Definition extends RuleDefinition>(
+  configuration: BuildConfiguration, definitions: Definition[], { binary, nativeBuild = buildRuleArtifacts }: NativeBuildOptions,
+  source: Source, lists: ReadonlyMap<string | undefined, Converted>, format: SourceFormat, file: string,
 ) {
   const tools = await configuredBuildTools(format);
-  const results: ConfiguredResult[] = [];
+  const results: ConfiguredResult<Definition>[] = [];
   for (const definition of definitions) {
     const converted = lists.get(definition.list)!;
     const report = structuredClone(converted.report);
@@ -110,13 +132,16 @@ export async function buildConfigured<Source extends SourceRecord | CommitSource
       continue;
     }
     try {
-      const native = await nativeBuild(converted.terms, binary, definition.usages.route.artifact);
-      for (const usage of USAGES) {
-        const declared = definition.usages[usage], actual = native.usages[usage];
-        if ('artifact' in declared
-          ? !('artifactFiles' in actual) || actual.artifactFiles.join(',') !== `${declared.artifact}.json,${declared.artifact}.srs`
-          : !('reason' in actual) || actual.reason !== declared.unavailable) {
-          throw new Error(`Built artifacts do not match configured usage: ${usage}`);
+      const native = await nativeBuild(converted.terms, binary, nativeTargetForRule(definition));
+      if ('usages' in definition) {
+        const projected = requireProjectedBuild(native);
+        for (const usage of USAGES) {
+          const declared = definition.usages[usage], actual = projected.usages[usage];
+          if ('artifact' in declared
+            ? !('artifactFiles' in actual) || actual.artifactFiles.join(',') !== `${declared.artifact}.json,${declared.artifact}.srs`
+            : !('reason' in actual) || actual.reason !== declared.unavailable) {
+            throw new Error(`Built artifacts do not match configured usage: ${usage}`);
+          }
         }
       }
       const buildId = configuredBuildIdentity({ definition, target: configuration.target, source, tools, nativeBuildId: native.buildId,

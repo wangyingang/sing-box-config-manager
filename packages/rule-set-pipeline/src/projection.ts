@@ -26,7 +26,7 @@ export function projectTerms(terms: readonly BuildTerm[]): Record<Usage, BuildTe
 
 export function renderRuleJson(terms: readonly BuildTerm[]): string {
   const normalized = normalizeTerms(terms);
-  if (!normalized.length) throw new Error('Cannot render an empty projection');
+  if (!normalized.length) throw new Error('Cannot render an empty rule set');
   return JSON.stringify({ version: 4, rules: BUILD_TERM_TYPES.flatMap(type => {
     const values = normalized.filter(term => term.type === type).map(term => term.value);
     return values.length ? [{ [type]: values }] : [];
@@ -35,6 +35,10 @@ export function renderRuleJson(terms: readonly BuildTerm[]): string {
 
 /** Read generated Source Format v4 without flattening AND/logical rules into OR. */
 export function readSourceTerms(value: unknown): BuildTerm[] {
+  return normalizeTerms(readIndependentTerms(value));
+}
+
+export function readIndependentTerms(value: unknown): BuildTerm[] {
   const source = value as { version?: unknown; rules?: unknown };
   if (!source || source.version !== 4
       || !Array.isArray(source.rules) || !source.rules.length) throw new Error('Invalid candidate source rules');
@@ -44,9 +48,16 @@ export function readSourceTerms(value: unknown): BuildTerm[] {
     const entries = Object.entries(rule);
     if (entries.length !== 1) throw new Error('Candidate rule is not an independent OR predicate');
     const [type, values] = entries[0];
-    if (!BUILD_TERM_TYPES.includes(type as BuildTerm['type'])) throw new Error(`Unexpected candidate rule field ${type}`);
-    if (!Array.isArray(values) || !values.length || values.some(value => typeof value !== 'string' || !value)) throw new Error('Invalid candidate rule values');
-    terms.push(...values.map(value => ({ type, value }) as BuildTerm));
+    if (!buildTermType(type)) throw new Error(`Unexpected rule field ${type}`);
+    if (!Array.isArray(values) || !values.length) throw new Error('Invalid rule values');
+    for (const value of values) {
+      if (typeof value !== 'string' || !value) throw new Error('Invalid rule value');
+      terms.push({ type, value });
+    }
   }
-  return normalizeTerms(terms);
+  return terms;
+}
+
+function buildTermType(type: string): type is BuildTerm['type'] {
+  return (BUILD_TERM_TYPES as readonly string[]).includes(type);
 }

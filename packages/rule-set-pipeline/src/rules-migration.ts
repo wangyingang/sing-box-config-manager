@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { activationSubscription, candidateStableFiles, verifyCandidateEvidence } from './activation.js';
-import { configuredSubscriptions, parseHistoricalConfiguration, parseRuleDefinition, parseSource, type RuleDefinition, type SourceInput } from './configuration.js';
+import { configuredSubscription, parseHistoricalConfiguration, parseRuleDefinition, parseSource, type ProjectedRuleDefinition, type RuleDefinition, type SourceInput } from './configuration.js';
 import { effectiveControl } from './manual-activation.js';
 import { immutableUrl } from './publication.js';
 import { retainedCandidateDownload, type PublicationRepository, type PublicationSnapshot } from './publication-repository.js';
@@ -41,7 +41,7 @@ function historicalTime(bytes: Buffer, candidateId: string) {
   return { publishedAt: evidence.publishedAt as string, versionId };
 }
 
-function historicalSource(source: RuleCandidate['source'], definition: RuleCandidate['definition']): SourceInput {
+function historicalSource(source: RuleCandidate['source'], definition: ProjectedRuleDefinition): SourceInput {
   const format = 'artifact' in definition.usages['dns-response'] ? 'cidr-text' : 'plain-yaml';
   if ('kind' in source) {
     if (source.kind !== 'github-commit') throw new Error('RULE_MIGRATION_BLOCKED: unsupported historical source');
@@ -145,7 +145,8 @@ async function prepareMigration(loaded: LoadedRules, journal: RemoteJournal, sna
     const source = definitions.has(id) ? loaded.configuration.sources[definition.source] : previous?.sourceInput ?? quarantinedDefinitions.get(id)!.source;
     const binding = inputBindingRevision(source, definition);
     if (active && definitions.has(id)) {
-      const expected = activationSubscription(configuredSubscriptions({ ...loaded.configuration, ruleSets: [definition] })[id], journal.targetBranch, definition);
+      if (!('usages' in definition)) throw new Error('RULE_MIGRATION_BLOCKED: historical migration requires configuration v3');
+      const expected = activationSubscription(configuredSubscription(definition, journal.targetBranch), journal.targetBranch, definition);
       if (!isDeepStrictEqual(active.subscription, expected)) throw new Error(`RULE_MIGRATION_BLOCKED: ${id} subscription contract changed`);
     }
     const keepPin = active && previous && definitions.has(id) && previous.inputBindingRevision === binding

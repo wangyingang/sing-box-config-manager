@@ -8,8 +8,9 @@ import { ARTIFACT_REPOSITORY } from './publication.js';
 import { CHINA_IP_INPUT, isCommitInputFormat, type CommitInput } from './github-commit.js';
 import { OPENAI_VOICE_FILE, OPENAI_VOICE_URL, type OpenAiVoiceInput } from './openai-voice-source.js';
 import { V2FLY_RELEASE_INPUT, type ReleaseInput } from './release.js';
+import { validFixedUrl, type FixedUrlInput } from './fixed-url-source.js';
 
-export type SourceInput = ReleaseInput | CommitInput | OpenAiVoiceInput;
+export type SourceInput = ReleaseInput | CommitInput | OpenAiVoiceInput | FixedUrlInput;
 export type SourceFormat = SourceInput['input']['format'];
 type AvailableUsage = { artifact: string };
 type ConfiguredUsage = AvailableUsage | { unavailable: 'empty' };
@@ -22,27 +23,39 @@ const formatCapabilities = {
   'sing-box-domain-json': { dns: 'dns-query', namedLists: false },
   'cidr-text': { dns: 'dns-response', namedLists: false },
   'openai-voice-json': { dns: 'dns-response', namedLists: false },
-} as const satisfies Record<SourceFormat, { dns: DnsUsage; namedLists: boolean }>;
+} as const satisfies Record<Exclude<SourceFormat, 'sing-box-source-json'>, { dns: DnsUsage; namedLists: boolean }>;
 
-export function configuredUsages(format: SourceFormat) {
+export function configuredUsages(format: Exclude<SourceFormat, 'sing-box-source-json'>) {
   const dns = formatCapabilities[format].dns;
   const unavailable = dns === 'dns-query' ? 'dns-response' : 'dns-query';
   return { dns, unavailable } as const;
 }
-export interface RuleDefinition {
+interface RuleLocation {
   id: string;
   source: string;
-  list: string;
   stablePath: string;
+}
+
+export interface ProjectedRuleDefinition extends RuleLocation {
+  list: string;
   usages: Record<Usage, ConfiguredUsage> & { route: AvailableUsage };
 }
+
+export interface SingleArtifactDefinition extends RuleLocation {
+  artifact: string;
+  list?: never;
+}
+
+export type RuleDefinition = ProjectedRuleDefinition | SingleArtifactDefinition;
 export interface BuildConfiguration {
-  schemaVersion: 3;
+  schemaVersion: 3 | 4;
   candidateRetentionDays: number;
   sources: Record<string, SourceInput>;
   target: { repository: typeof ARTIFACT_REPOSITORY; branch: string };
   ruleSets: RuleDefinition[];
 }
+
+export type ProjectedConfiguration = Omit<BuildConfiguration, 'schemaVersion' | 'sources' | 'ruleSets'> & { schemaVersion: 3; sources: Record<string, Exclude<SourceInput, FixedUrlInput>>; ruleSets: ProjectedRuleDefinition[] };
 
 const logicalId = /^[a-z][a-z0-9-]*$/;
 const stablePath = /^stable\/[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)*$/;
@@ -61,15 +74,34 @@ function exact(value: unknown, fields: string[], label: string) {
   return record;
 }
 
-export function parseRuleDefinition(input: unknown, format: SourceFormat = 'plain-yaml'): RuleDefinition {
-  const { id, source, list, stablePath: path, usages } = exact(input, ['id', 'source', 'list', 'stablePath', 'usages'], 'rule definition');
+function ruleLocation({ id, source, stablePath: path }: Record<string, unknown>, pathField: string): RuleLocation {
   if (typeof id !== 'string' || !logicalId.test(id)) throw new Error(`Invalid logical ID: ${String(id)}`);
   if (typeof source !== 'string' || !logicalId.test(source)) throw new Error(`Invalid source ID: ${String(source)}`);
+  if (typeof path !== 'string' || !stablePath.test(path)) throw new Error(`Invalid ${pathField}: ${String(path)}`);
+  return { id, source, stablePath: path };
+}
+
+function parseSingleArtifactDefinition(input: unknown): SingleArtifactDefinition {
+  const definition = exact(input, ['id', 'source', 'stablePath', 'artifact'], 'rule definition');
+  const location = ruleLocation(definition, 'publishPath');
+  if (!validArtifactBasename(definition.artifact) || reservedArtifactBasename(definition.artifact)) {
+    throw new Error(`Invalid artifact basename: ${String(definition.artifact)}`);
+  }
+  return { ...location, artifact: definition.artifact };
+}
+
+export function parseStoredRuleDefinition(input: unknown, format: SourceFormat): RuleDefinition {
+  if (Object.hasOwn(mapping(input, 'rule definition'), 'artifact')) return parseSingleArtifactDefinition(input);
+  if (format === 'sing-box-source-json') throw new Error('sing-box-source-json requires a single artifact');
+  return parseRuleDefinition(input, format);
+}
+
+export function parseRuleDefinition(input: unknown, format: Exclude<SourceFormat, 'sing-box-source-json'> = 'plain-yaml'): ProjectedRuleDefinition {
+  const definition = exact(input, ['id', 'source', 'list', 'stablePath', 'usages'], 'rule definition');
+  const { list, usages } = definition;
+  const { id, source, stablePath: path } = ruleLocation(definition, 'stable path');
   if (typeof list !== 'string' || (formatCapabilities[format].namedLists ? !/^[a-z0-9][a-z0-9!._-]*$/.test(list) : list !== 'all')) {
     throw new Error(`Invalid ${format} list: ${String(list)}`);
-  }
-  if (typeof path !== 'string' || !stablePath.test(path)) {
-    throw new Error(`Invalid stable path: ${String(path)}`);
   }
   const declared = exact(usages, [...USAGES], 'usages');
   const layout = configuredUsages(format);
@@ -96,6 +128,12 @@ export function parseRuleDefinition(input: unknown, format: SourceFormat = 'plai
 
 export function parseSource(input: unknown): SourceInput {
   const raw = mapping(input, 'source');
+  if (raw.version === 'url') {
+    const { input: declaration } = exact(raw, ['version', 'input'], 'URL source');
+    const { format, url } = exact(declaration, ['format', 'url'], 'URL input');
+    if (format !== 'sing-box-source-json' || !validFixedUrl(url)) throw new Error('Invalid sing-box-source-json HTTPS input');
+    return { version: 'url', input: { format, url } };
+  }
   if (raw.version === 'openai-voice') {
     const source = exact(raw, ['version', 'input'], 'ChatGPT Voice source');
     const file = exact(source.input, ['format', 'url'], 'ChatGPT Voice input');
@@ -128,7 +166,7 @@ export function parseBuildConfiguration(input: string): BuildConfiguration {
   visit(document, { Alias() { alias = true; } });
   if (alias || !isMap(document.contents)) throw new Error('Invalid build configuration YAML');
   const raw = exact(document.toJS(), ['schemaVersion', 'candidateRetentionDays', 'sources', 'target', 'ruleSets'], 'configuration');
-  if (raw.schemaVersion !== 3) throw new Error('Unsupported configuration version');
+  if (raw.schemaVersion !== 3 && raw.schemaVersion !== 4) throw new Error('Unsupported configuration version');
   if (!Number.isSafeInteger(raw.candidateRetentionDays) || Number(raw.candidateRetentionDays) <= 0) throw new Error('candidateRetentionDays must be a positive integer');
   const target = exact(raw.target, ['repository', 'branch'], 'target');
   if (target.repository !== ARTIFACT_REPOSITORY || typeof target.branch !== 'string'
@@ -138,18 +176,37 @@ export function parseBuildConfiguration(input: string): BuildConfiguration {
   const declarations = Object.entries(mapping(raw.sources, 'sources'));
   const sources = Object.fromEntries(declarations.map(([id, source]) => {
     if (!logicalId.test(id)) throw new Error(`Invalid source ID: ${id}`);
-    return [id, parseSource(source)];
+    if (raw.schemaVersion === 4) {
+      const { fetch, format } = exact(source, ['fetch', 'format'], `source ${id}`);
+      const { method, url } = exact(fetch, ['method', 'url'], `source ${id} fetch`);
+      if (method !== 'url') throw new Error(`Unsupported source acquisition method: ${String(method)}`);
+      return [id, parseSource({ version: 'url', input: { format, url } })];
+    }
+    const parsed = parseSource(source);
+    if (parsed.version === 'url') throw new Error('URL sources require configuration v4');
+    return [id, parsed];
   }));
-  if (!Array.isArray(raw.ruleSets)) throw new Error('ruleSets must be an explicit sequence');
+  const entries = raw.schemaVersion === 4 ? Object.entries(mapping(raw.ruleSets, 'ruleSets')).map(([id, entry]) => {
+    const { data, publishPath, artifact } = exact(entry, ['data', 'publishPath', 'artifact'], `rule set ${id}`);
+    const { source } = exact(data, ['source'], `rule set ${id} data`);
+    return { id, source, stablePath: publishPath, artifact };
+  }) : raw.ruleSets;
+  if (!Array.isArray(entries)) throw new Error('ruleSets must be an explicit sequence');
   const ids = new Set<string>(), paths = new Set<string>();
-  const ruleSets = raw.ruleSets.map(entry => {
+  const ruleSets = entries.map(entry => {
     const { id, source } = mapping(entry, 'rule definition');
     if (typeof source !== 'string' || !Object.hasOwn(sources, source)) {
       throw new Error(`Rule set ${String(id)}: unknown source ${String(source)}`);
     }
     const input = sources[source].input;
     let rule: RuleDefinition;
-    try { rule = parseRuleDefinition(entry, input.format); }
+    try {
+      if (raw.schemaVersion === 4) rule = parseSingleArtifactDefinition(entry);
+      else {
+        if (input.format === 'sing-box-source-json') throw new Error('sing-box-source-json requires configuration v4');
+        rule = parseRuleDefinition(entry, input.format);
+      }
+    }
     catch (error) {
       const file = 'path' in input ? input.path : 'asset' in input ? input.asset : input.url;
       throw new Error(`Rule set ${String(id)}, source ${source} (${file}): ${(error as Error).message}`, { cause: error });
@@ -162,10 +219,10 @@ export function parseBuildConfiguration(input: string): BuildConfiguration {
     ids.add(rule.id); paths.add(path);
     return rule;
   });
-  return { schemaVersion: 3, candidateRetentionDays: Number(raw.candidateRetentionDays), sources, target: { repository: target.repository, branch: target.branch }, ruleSets };
+  return { schemaVersion: raw.schemaVersion, candidateRetentionDays: Number(raw.candidateRetentionDays), sources, target: { repository: target.repository, branch: target.branch }, ruleSets };
 }
 
-export function configuredInput(configuration: BuildConfiguration, definitions: readonly RuleDefinition[]) {
+export function configuredInput<Input extends SourceInput>(configuration: { sources: Record<string, Input> }, definitions: readonly RuleDefinition[]) {
   const first = definitions[0];
   if (!first) throw new Error('Select at least one rule set');
   const source = configuration.sources[first.source];
@@ -181,12 +238,22 @@ export function configuredReleaseInput(configuration: BuildConfiguration, defini
   return source;
 }
 
+export function parseProjectedConfiguration(input: string): ProjectedConfiguration {
+  const configuration = parseBuildConfiguration(input);
+  if (configuration.schemaVersion !== 3) throw new Error('Projected rule operations require configuration v3');
+  return configuration as ProjectedConfiguration;
+}
+
 export function readOfficialConfiguration() {
   // Source runs from src/; the package build runs from dist/src/.
   return readFileSync(new URL(import.meta.url.endsWith('.ts') ? '../config/rulesets.yml' : '../../config/rulesets.yml', import.meta.url), 'utf8');
 }
 
-export function configuredProjections({ stablePath, usages }: RuleDefinition, branch: string) {
+export function nativeTargetForRule(definition: RuleDefinition) {
+  return 'artifact' in definition ? { artifact: definition.artifact, kind: 'single-artifact' as const } : definition.usages.route.artifact;
+}
+
+export function configuredProjections({ stablePath, usages }: ProjectedRuleDefinition, branch: string) {
   const prefix = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${branch}/${stablePath}`;
   function projection(usage: ConfiguredUsage) {
     if ('unavailable' in usage) return { unavailable: usage.unavailable } as const;
@@ -198,20 +265,30 @@ export function configuredProjections({ stablePath, usages }: RuleDefinition, br
   return { route: projection(usages.route), 'dns-query': projection(usages['dns-query']), 'dns-response': projection(usages['dns-response']) };
 }
 
-export function configuredSubscriptions({ ruleSets, target }: BuildConfiguration) {
-  return Object.fromEntries(ruleSets.map(rule => [rule.id, {
+export function artifactSubscription(definition: SingleArtifactDefinition, branch: string) {
+  const prefix = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${branch}/${definition.stablePath}/${definition.artifact}`;
+  return { schemaVersion: 3, systemRuleSetId: definition.id, targetVersion: '1.14.4', sourceFormatVersion: 4,
+    formats: { source: { url: `${prefix}.json` }, binary: { url: `${prefix}.srs` } } };
+}
+
+export function configuredSubscription(rule: ProjectedRuleDefinition, branch: string) {
+  return {
     schemaVersion: 2, systemRuleSetId: rule.id, targetVersion: '1.14.4', sourceFormatVersion: 4,
-    projections: configuredProjections(rule, target.branch),
-  }]));
+    projections: configuredProjections(rule, branch),
+  };
+}
+
+export function configuredSubscriptions({ ruleSets, target }: ProjectedConfiguration) {
+  return Object.fromEntries(ruleSets.map(rule => [rule.id, configuredSubscription(rule, target.branch)]));
 }
 
 /** Read-only support for the one-time conversion of pre-operations journals. */
-export function parseHistoricalConfiguration(input: string): BuildConfiguration {
+export function parseHistoricalConfiguration(input: string): ProjectedConfiguration {
   const document = parseDocument(input);
-  if (document.get('schemaVersion') !== 2) return parseBuildConfiguration(input);
+  if (document.get('schemaVersion') !== 2) return parseProjectedConfiguration(input);
   document.set('schemaVersion', 3);
   // The old configuration had no retention policy. This value is only used to
   // validate old source/definition records; it is never accepted as policy.
   document.set('candidateRetentionDays', 1);
-  return parseBuildConfiguration(document.toString());
+  return parseProjectedConfiguration(document.toString());
 }

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { syncRules, pinRuleVersion, resumeRuleUpdates } from '../../src/rules-operations.js';
 import { getRulesStatus, type RuleStatus } from '../../src/rules-status.js';
-import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
+import { parseProjectedConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
 import { sha256 } from '../../src/release.js';
 import { rulesEnvironment } from '../fixtures/rules-environment.js';
 import { baselineConfiguration } from '../fixtures/baseline-configuration.js';
@@ -123,7 +123,7 @@ for (const fault of ['release-offline', 'checksum', 'yaml', 'missing-list', 'inv
 test('YAML 自定义名称随两类规则交付，内容复用与稳定订阅各自保留名称', async () => {
   const env = rulesEnvironment(binary!, 'acceptance-artifact-names');
   const config = env.config();
-  config.sources.cidr = parseBuildConfiguration(readOfficialConfiguration()).sources['china-operator-ip'];
+  config.sources.cidr = parseProjectedConfiguration(readOfficialConfiguration()).sources['china-operator-ip'];
   const domain = config.ruleSets[0];
   domain.usages.route = { artifact: 'ips' };
   domain.usages['dns-query'] = { artifact: 'ips' };
@@ -197,7 +197,7 @@ test('YAML 自定义名称随两类规则交付，内容复用与稳定订阅各
 test('gfw 经 sync 交付并可核验，非法 Git 更新保留 gfw 且不阻断独立规则集', async () => {
   const env = rulesEnvironment(binary!, 'acceptance-gfw');
   const request = { context: env.context };
-  const config = parseBuildConfiguration(readOfficialConfiguration());
+  const config = parseProjectedConfiguration(readOfficialConfiguration());
   config.target.branch = env.context.targetBranch;
   config.ruleSets = config.ruleSets.filter(rule => ['openai', 'gfw'].includes(rule.id));
   env.configure(config);
@@ -389,7 +389,7 @@ const gitDomainDeliveries = [
 ];
 for (const { id, repository, path, input, policy, filtered, terms } of gitDomainDeliveries) test(`${id} 经 sync 交付两种域名格式并保留转换报告及固定来源`, async () => {
   const env = rulesEnvironment(binary!, `acceptance-${id}`);
-  const configuration = parseBuildConfiguration(readOfficialConfiguration());
+  const configuration = parseProjectedConfiguration(readOfficialConfiguration());
   configuration.target.branch = env.context.targetBranch;
   configuration.ruleSets = configuration.ruleSets.filter(rule => rule.id === id);
   env.configure(configuration);

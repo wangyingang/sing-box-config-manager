@@ -1,8 +1,8 @@
 import { isDeepStrictEqual } from 'node:util';
 import { deserialize, serialize } from 'node:v8';
-import type { BuildConfiguration } from '../../src/configuration.js';
+import type { ProjectedConfiguration } from '../../src/configuration.js';
 import { stringify } from 'yaml';
-import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
+import { parseProjectedConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
 import { sha256 } from '../../src/release.js';
 import type { RulesContext } from '../../src/rules-context.js';
 import type { RulesRepository, RuleWrites } from '../../src/rules-repository.js';
@@ -13,7 +13,7 @@ interface RulesFixtureHistory {
   parents: Map<string, string>;
   state?: {
     sequence: number;
-    config: BuildConfiguration;
+    config: ProjectedConfiguration;
     revision: number;
     upstreamRevision: number;
     contents: Record<string, string>;
@@ -43,8 +43,8 @@ export function rulesEnvironment(binary: string, target = 'acceptance-issue-84',
   const parents = persisted?.parents ?? new Map<string, string>();
   const writes: { branch: string; files: RuleWrites }[] = [];
   const requests: string[] = [];
-  const official = parseBuildConfiguration(readOfficialConfiguration());
-  let config: BuildConfiguration = state?.config ?? { ...official, target: { ...official.target, branch: target }, sources: { dlc: official.sources.dlc },
+  const official = parseProjectedConfiguration(readOfficialConfiguration());
+  let config: ProjectedConfiguration = state?.config ?? { ...official, target: { ...official.target, branch: target }, sources: { dlc: official.sources.dlc },
     ruleSets: official.ruleSets.filter(rule => ['openai', 'anthropic'].includes(rule.id)) };
   let revision = state?.revision ?? 1;
   let upstreamRevision = state?.upstreamRevision ?? 1;
