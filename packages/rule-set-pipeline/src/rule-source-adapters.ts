@@ -1,4 +1,5 @@
 import type { SourceInput } from './configuration.js';
+import { readFixedUrlInput, validFixedUrlSource, verifyFixedUrlSnapshot } from './fixed-url-source.js';
 import type { CommitSourceRecord } from './github-commit.js';
 import { probeCommitInput, readPinnedCommitInput } from './git-input-probe.js';
 import { OPENAI_VOICE_FILE, openAiVoiceSnapshotPath, probeOpenAiVoiceInput, validOpenAiVoiceSource,
@@ -57,6 +58,21 @@ const voiceAdapter: RuleSourceAdapter = {
 };
 
 export function ruleSourceAdapter(input: SourceInput): RuleSourceAdapter {
+  if (input.version === 'url') {
+    const snapshotRequirement = (candidate: CandidateSource): InputSnapshot => {
+      const source = candidate.source;
+      if (!validFixedUrlSource(source, input)) throw new Error('Invalid recorded URL input identity');
+      return { path: `candidates/${candidate.id}/input.source.json`, verify: bytes => verifyFixedUrlSnapshot(source, bytes) };
+    };
+    return {
+      file: input.input.url,
+      probe: network => ({ read: () => readFixedUrlInput(input, network.fetch) }),
+      openFixed(_network, candidate, snapshot) {
+        return { read: async () => ({ source: candidate.source, bytes: await readSnapshot(snapshotRequirement(candidate), snapshot) }) };
+      },
+      snapshotRequirement,
+    };
+  }
   if (input.version === 'openai-voice') return voiceAdapter;
   if (input.version === 'git-branch') return {
     file: input.input.path,

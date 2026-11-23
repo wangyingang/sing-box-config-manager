@@ -14,7 +14,7 @@ export interface Diagnostic {
   index?: number;
 }
 interface TermCounts { input: number; converted: number; output: number }
-export interface ConversionReport {
+export interface RuleConversionReport {
   status: 'failed' | 'converted';
   inputCount: number;
   convertedCount: number;
@@ -25,8 +25,10 @@ export interface ConversionReport {
   attributeRecordCount: number;
   filteredRules?: { type: 'PROCESS-NAME'; value: string; line: number }[];
   typeCounts: Record<TermType, TermCounts> & { ip_cidr?: TermCounts };
-  usageCounts: Record<'route' | 'dns-query' | 'dns-response', number>;
   diagnostics: Diagnostic[];
+}
+export interface ConversionReport extends RuleConversionReport {
+  usageCounts: Record<'route' | 'dns-query' | 'dns-response', number>;
 }
 export interface AssetIdentity { id: number; name: string; url: string }
 export interface SourceRecord {
@@ -40,13 +42,17 @@ export interface SourceRecord {
   inputBytes: number;
   checksumSha256: string;
 }
-export function emptyReport(): ConversionReport {
+export function emptyRuleReport(): RuleConversionReport {
   return {
     status: 'failed', inputCount: 0, convertedCount: 0, unsupportedCount: 0,
     invalidCount: 0, duplicateCount: 0, outputTermCount: 0, attributeRecordCount: 0,
     typeCounts: Object.fromEntries(TERM_TYPES.map((type) => [type, { input: 0, converted: 0, output: 0 }])) as ConversionReport['typeCounts'],
-    usageCounts: { route: 0, 'dns-query': 0, 'dns-response': 0 }, diagnostics: [],
+    diagnostics: [],
   };
+}
+export function emptyReport(): ConversionReport {
+  const { diagnostics, ...counts } = emptyRuleReport();
+  return { ...counts, usageCounts: { route: 0, 'dns-query': 0, 'dns-response': 0 }, diagnostics };
 }
 export function diagnostic(code: string, message: string, location: Partial<Diagnostic> = {}): Diagnostic {
   return { code, message, file: 'dlc.dat_plain.yml', list: TARGET_LIST, ...location };

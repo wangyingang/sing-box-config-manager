@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import test, { type TestContext } from 'node:test';
 import { promisify } from 'node:util';
 import { serialize } from 'node:v8';
-import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
+import { parseProjectedConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
 import { sha256 } from '../../src/release.js';
 import { pinRuleVersion, resumeRuleUpdates, syncRules } from '../../src/rules-operations.js';
 import { encodeRecord, parseRulesJournal, RULE_RECEIPT_PATH, RULE_STATE_PATH } from '../../src/rules-model.js';
@@ -119,7 +119,7 @@ test('每日预检零历史候选读取，人工 status 仍检查全部保留候
 test('Release 与 Git 输入更新后同语义保留交付，零编译和加载，并独立记住新输入', { skip: !binary }, async t => {
   const { wrapper, take } = await traceNative(t);
   const env = cleanupEnvironment(wrapper, 'main');
-  const config = parseBuildConfiguration(readOfficialConfiguration());
+  const config = parseProjectedConfiguration(readOfficialConfiguration());
   config.ruleSets = config.ruleSets.filter(rule => ['openai', 'china-ip'].includes(rule.id));
   env.configure(config);
   let revision = 'a', cidr = '192.0.2.0/24\n2001:db8::/32\n';
@@ -197,7 +197,7 @@ test('Release 与 Git 输入更新后同语义保留交付，零编译和加载�
 test('Git 分支移动后只复用可信的同路径 blob，缺失或改变时读取固定正文', { skip: !binary }, async t => {
   const { wrapper, take } = await traceNative(t);
   const env = cleanupEnvironment(wrapper, 'main');
-  const config = parseBuildConfiguration(readOfficialConfiguration());
+  const config = parseProjectedConfiguration(readOfficialConfiguration());
   config.ruleSets = config.ruleSets.filter(rule => rule.id === 'china-ip');
   const input = config.sources[config.ruleSets[0].source];
   assert.equal(input.version, 'git-branch');

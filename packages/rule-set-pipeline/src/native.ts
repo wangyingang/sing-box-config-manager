@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { promisify } from 'node:util';
 import { sha256 } from './release.js';
-import { projectTerms, renderRuleJson, USAGES, type BuildTerm, type Usage } from './projection.js';
+import { normalizeTerms, projectTerms, renderRuleJson, USAGES, type BuildTerm, type Usage } from './projection.js';
 
 const exec = promisify(execFile);
 export interface NativeTool { path: string; version: '1.14.4'; identity: string; sha256: string }
@@ -14,12 +14,20 @@ export interface NativeValidation { status: 'passed'; policy: typeof NATIVE_VALI
 export type BuiltArtifact = {
   file: string; sha256: string; bytes: number; requiredCapabilities: []; content: Buffer;
 } & ({ format: 'source'; termCount: number } | { format: 'binary'; termCount?: never });
-export interface NativeBuild {
+export interface ValidatedNativeBuild {
   status: 'built-validated'; tool: NativeTool; buildId: string;
   artifacts: BuiltArtifact[];
-  usages: Record<Usage, { artifactFiles: string[] } | { status: 'unavailable'; reason: 'empty' }>;
   validation: NativeValidation;
 }
+export interface NativeBuild extends ValidatedNativeBuild {
+  usages: Record<Usage, { artifactFiles: string[] } | { status: 'unavailable'; reason: 'empty' }>;
+}
+
+export type NativeTarget = string | { kind: 'single-artifact'; artifact: string };
+type NativeLayout = { artifact: string; terms: BuildTerm[] }
+  | { artifact?: string; projections: ReturnType<typeof projectTerms> };
+export type NativeBuilder = (terms: readonly BuildTerm[], binary: string, target?: NativeTarget) => Promise<ValidatedNativeBuild>;
+
 export class NativeBuildError extends Error {
   constructor(message: string, public readonly steps: NativeStep[] = []) { super(message); }
 }
@@ -48,44 +56,49 @@ export function nativeArtifactCommands(source: string, srs: string): string[][] 
 }
 
 /** Local validated bytes only: no remote URLs, publication or activation state. */
-export function buildNative(terms: readonly BuildTerm[], binary: string, artifact?: string): Promise<NativeBuild> {
-  return validateNative(terms, binary, artifact);
+export async function buildNative(terms: readonly BuildTerm[], binary: string, artifact?: string): Promise<NativeBuild> {
+  return requireProjectedBuild(await validateNative(terms, binary, artifact));
 }
 
-export interface NativeBuildOptions { binary: string; nativeBuild?: typeof buildNative }
+export function requireProjectedBuild(build: ValidatedNativeBuild): NativeBuild {
+  if (!('usages' in build)) throw new Error('Missing legacy native usage metadata');
+  return build as NativeBuild;
+}
 
-function copyBuild({ artifacts, ...record }: NativeBuild): NativeBuild {
+export const buildRuleArtifacts: NativeBuilder = (terms, binary, target) => validateNative(terms, binary, target);
+export interface NativeBuildOptions { binary: string; nativeBuild?: NativeBuilder }
+
+function copyBuild({ artifacts, ...record }: ValidatedNativeBuild): ValidatedNativeBuild {
   return { ...structuredClone(record), artifacts: artifacts.map(artifact => ({
     ...artifact, requiredCapabilities: [], content: Buffer.from(artifact.content),
   })) };
 }
 
-/**
- * Share only completed native builds within one rules operation. The normalized
- * route terms determine projections. The configured name also determines filenames.
- * Callers still compare their actual JSON/SRS bytes with the validated output.
- */
-export function createOperationNativeBuilder(): typeof buildNative {
-  const passed = new Map<string, NativeBuild>();
-  return (terms, binary, artifact) => validateNative(terms, binary, artifact, passed);
+/** Share only completed builds for this tool, content and output layout within one operation. */
+export function createOperationNativeBuilder(): NativeBuilder {
+  const passed = new Map<string, ValidatedNativeBuild>();
+  return (terms, binary, target) => validateNative(terms, binary, target, passed);
 }
 
-async function validateNative(terms: readonly BuildTerm[], binary: string, artifact?: string, passed?: Map<string, NativeBuild>) {
-  const projections = projectTerms(terms);
-  if (artifact !== undefined && projections['dns-query'].length && projections['dns-response'].length) {
+async function validateNative(terms: readonly BuildTerm[], binary: string, target?: NativeTarget, passed?: Map<string, ValidatedNativeBuild>) {
+  const layout: NativeLayout = typeof target === 'object'
+    ? { artifact: target.artifact, terms: normalizeTerms(terms) }
+    : { artifact: target, projections: projectTerms(terms) };
+  if ('projections' in layout && layout.artifact !== undefined
+    && layout.projections['dns-query'].length && layout.projections['dns-response'].length) {
     throw new NativeBuildError('A shared artifact name requires a pure domain or pure IP rule set');
   }
   const tool = await inspectBinary(binary);
-  const id = nativeBuildIdentity(tool.sha256, projections.route);
-  const key = JSON.stringify([id, artifact]);
+  const id = nativeBuildIdentity(tool.sha256, 'terms' in layout ? layout.terms : layout.projections.route);
+  const key = JSON.stringify([id, target]);
   const previous = passed?.get(key);
   if (previous) return { ...copyBuild(previous), tool };
-  const built = await buildWithTool(projections, tool, id, artifact);
+  const built = await buildWithTool(layout, tool, id);
   passed?.set(key, copyBuild(built));
   return built;
 }
 
-async function buildWithTool(projections: ReturnType<typeof projectTerms>, tool: NativeTool, buildId: string, artifact?: string): Promise<NativeBuild> {
+async function buildWithTool(layout: NativeLayout, tool: NativeTool, buildId: string): Promise<ValidatedNativeBuild> {
   const directory = await mkdtemp(join(tmpdir(), 'rule-native-'));
   const steps: NativeStep[] = [];
   const run = async (args: string[]) => {
@@ -99,31 +112,43 @@ async function buildWithTool(projections: ReturnType<typeof projectTerms>, tool:
     }
   };
   const artifacts: BuiltArtifact[] = [];
-  const usages = {} as NativeBuild['usages'];
-  const filesByContent = new Map<string, string[]>();
-  try {
-    for (const usage of USAGES) {
-      const projected = projections[usage];
-      if (!projected.length) { usages[usage] = { status: 'unavailable', reason: 'empty' }; continue; }
-      const json = renderRuleJson(projected);
-      const existing = filesByContent.get(json);
-      if (existing) { usages[usage] = { artifactFiles: existing }; continue; }
-      const stem = artifact ?? (usage === 'route' && projected.every(term => term.type !== 'ip_cidr') ? 'domains' : usage);
-      const source = `${stem}.json`, srs = `${stem}.srs`;
-      await writeFile(join(directory, source), json);
-      for (const args of nativeArtifactCommands(source, srs)) await run(args);
-      for (const [file, format] of [[source, 'source'], [srs, 'binary']] as const) {
-        const content = await readFile(join(directory, file));
-        const metadata = { file, sha256: sha256(content), bytes: content.length, requiredCapabilities: [] as [], content };
-        artifacts.push(format === 'source' ? { ...metadata, format, termCount: projected.length } : { ...metadata, format });
-      }
-      const files = [source, srs];
-      filesByContent.set(json, files);
-      usages[usage] = { artifactFiles: files };
+  const compile = async (json: string, stem: string, termCount: number) => {
+    const source = `${stem}.json`, srs = `${stem}.srs`;
+    await writeFile(join(directory, source), json);
+    for (const args of nativeArtifactCommands(source, srs)) await run(args);
+    for (const [file, format] of [[source, 'source'], [srs, 'binary']] as const) {
+      const content = await readFile(join(directory, file));
+      const metadata = { file, sha256: sha256(content), bytes: content.length, requiredCapabilities: [] as [], content };
+      artifacts.push(format === 'source' ? { ...metadata, format, termCount } : { ...metadata, format });
     }
-    // Guard against a binary replaced during validation; no passed record on drift.
+    return [source, srs];
+  };
+  try {
+    let usages: NativeBuild['usages'] | undefined;
+    if ('terms' in layout) await compile(renderRuleJson(layout.terms), layout.artifact, layout.terms.length);
+    else usages = await buildProjections(layout, compile);
+    // Guard against a binary replaced during validation.
     if (sha256(await readFile(tool.path)) !== tool.sha256) throw new NativeBuildError('Binary changed during build', steps);
-    return { status: 'built-validated', tool, buildId, artifacts, usages,
+    return { status: 'built-validated', tool, buildId, artifacts, ...(usages && { usages }),
       validation: { status: 'passed', policy: NATIVE_VALIDATION_POLICY, steps } };
   } finally { await rm(directory, { recursive: true, force: true }); }
+}
+
+async function buildProjections({ projections, artifact }: Extract<NativeLayout, { projections: unknown }>,
+  compile: (json: string, stem: string, termCount: number) => Promise<string[]>) {
+  const usages = {} as NativeBuild['usages'];
+  const filesByContent = new Map<string, string[]>();
+  for (const usage of USAGES) {
+    const projected = projections[usage];
+    if (!projected.length) { usages[usage] = { status: 'unavailable', reason: 'empty' }; continue; }
+    const json = renderRuleJson(projected);
+    let files = filesByContent.get(json);
+    if (!files) {
+      const stem = artifact ?? (usage === 'route' && projected.every(term => term.type !== 'ip_cidr') ? 'domains' : usage);
+      files = await compile(json, stem, projected.length);
+      filesByContent.set(json, files);
+    }
+    usages[usage] = { artifactFiles: files };
+  }
+  return usages;
 }

@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": 3 },
+    "id": { "type": "string", "minLength": 1 },
+    "revision": { "type": "string", "minLength": 1 },
+    "targetVersion": { "const": "1.14.4" },
+    "sourceFormatVersion": { "const": 4 },
+    "artifacts": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "allOf": [{ "$ref": "./artifact-manifest.schema.json#/properties/artifacts" }]
+    }
+  },
+  "required": ["schemaVersion", "id", "revision", "targetVersion", "sourceFormatVersion", "artifacts"]
+}

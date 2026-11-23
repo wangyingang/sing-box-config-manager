@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { activationSubscription, candidateStableFiles } from './activation.js';
-import { configuredSubscriptions, type RuleDefinition } from './configuration.js';
+import { artifactSubscription, configuredSubscription, type RuleDefinition } from './configuration.js';
 import { immutableUrl } from './publication.js';
 import { PublicationWriteError, type PublicationSnapshot } from './publication-repository.js';
 import { sha256 } from './release.js';
@@ -17,8 +17,10 @@ export async function readRuleDeliveries(session: RulesSession, snapshot: Public
 }
 
 export function ruleSubscription(session: RulesSession, rule: Pick<ManagedRule, 'definition'>, current?: RuleDelivery) {
-  const configuration = { ...session.loaded.configuration, ruleSets: [rule.definition] };
-  const subscription = activationSubscription(configuredSubscriptions(configuration)[rule.definition.id], session.loaded.context.targetBranch, rule.definition);
+  const { definition } = rule;
+  const branch = session.loaded.context.targetBranch;
+  const subscription = 'artifact' in definition ? artifactSubscription(definition, branch)
+    : activationSubscription(configuredSubscription(definition, branch), branch, definition);
   if (current && !isDeepStrictEqual(current.subscription, subscription)) throw new Error('Existing subscription contract cannot change during delivery');
   return subscription;
 }

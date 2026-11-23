@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { cacheImmutableGitReads } from '../src/immutable-github.js';
+import { candidateInputSnapshot } from '../src/rule-source-adapters.js';
+import { sha256 } from '../src/release.js';
 import { readCurrentRulesConfiguration } from '../src/rules-context.js';
 import { githubRulesRepository } from '../src/rules-repository.js';
 import type { ghJson } from '../src/publication.js';
@@ -40,7 +42,7 @@ test('每次确认配置均重读分支，只有同修订的配置正文复用',
   assert.deepEqual({ heads, contents }, { heads: 3, contents: 2 });
 });
 
-function remote() {
+function remote(target = 'main') {
   let head = 'a'.repeat(40), privateRepo = false;
   const calls: { path: string; input?: any }[] = [];
   const request: typeof ghJson = async (args, input) => {
@@ -56,7 +58,7 @@ function remote() {
     if (path.startsWith('/git/refs/heads/')) { head = (input as { sha: string }).sha; return {}; }
     throw new Error(`Unexpected ${path}`);
   };
-  return { repository: githubRulesRepository('main', request), calls,
+  return { repository: githubRulesRepository(target, request), calls,
     move() { head = '9'.repeat(40); }, makePrivate() { privateRepo = true; } };
 }
 
@@ -109,6 +111,25 @@ test('GitHub 写入按分支保留自定义候选和稳定文件名', async () =
       { [path]: Buffer.from('{}') }, 'invalid file path', async () => {}), /Invalid rules write path/);
     assert.ok(env.calls.every(call => call.input === undefined));
   }
+});
+
+test('固定 URL 输入快照能与候选登记一起写入 GitHub 隔离目标', async () => {
+  const target = 'acceptance-issue-168';
+  const env = remote(target);
+  const input = Buffer.from('{"version":4,"rules":[{"ip_cidr":["192.0.2.0/24"]}]}');
+  const url = 'https://rules.example.test/mixed.json';
+  const snapshot = candidateInputSnapshot({
+    id: '12345678-1234-4123-8123-123456789abc',
+    sourceInput: { version: 'url', input: { format: 'sing-box-source-json', url } },
+    source: { kind: 'fixed-url', url, inputSha256: sha256(input), inputBytes: input.length },
+  });
+  assert.ok(snapshot);
+  const paths = ['pipeline/state.json', snapshot.path];
+  await env.repository.commit(target, 'a'.repeat(40), { [paths[0]]: Buffer.from('{}'), [paths[1]]: input },
+    'register candidate and snapshot', async () => {});
+  const tree = env.calls.find(call => call.path === '/git/trees')!.input.tree;
+  assert.deepEqual(tree.map((entry: { path: string }) => entry.path), paths);
+  assert.equal(env.calls.at(-1)!.path, `/git/refs/heads/${target}`);
 });
 
 for (const at of [1, 2]) test(`第 ${at} 次 guard 拒绝新意图或维护隔离时不移动 ref`, async () => {

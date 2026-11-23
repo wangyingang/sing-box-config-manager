@@ -2,13 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { saveActivationReceipt } from './activation-receipt.js';
 import { configuredBuildIdentity, CONFIGURED_BUILD_RECORD } from './configured-build.js';
-import { configuredUsages, configuredProjections, parseBuildConfiguration, parseRuleDefinition, type RuleDefinition } from './configuration.js';
+import { artifactSubscription, configuredUsages, configuredProjections, nativeTargetForRule, parseProjectedConfiguration, parseStoredRuleDefinition, type RuleDefinition } from './configuration.js';
 import { Ajv } from 'ajv';
 import manifestSchema from '../contracts/artifact-manifest.schema.json' with { type: 'json' };
+import singleArtifactManifestSchema from '../contracts/artifact-manifest-v3.schema.json' with { type: 'json' };
 import subscriptionV2Schema from '../contracts/rule-subscription-v2.schema.json' with { type: 'json' };
 import { validCommitSource } from './github-commit.js';
-import { buildNative, nativeArtifactCommands, nativeBuildIdentity, NATIVE_VALIDATION_POLICY, type NativeBuildOptions } from './native.js';
-import { ARTIFACT_MANIFEST_VERSION, CANDIDATE_READBACK_VERSION, LEGACY_BUILD_RECORD, RULE_READBACK_VERSION, candidateArtifactFiles, type RuleReadback } from './candidate-publication.js';
+import { buildRuleArtifacts, nativeArtifactCommands, nativeBuildIdentity, NATIVE_VALIDATION_POLICY, type NativeBuildOptions } from './native.js';
+import { ARTIFACT_MANIFEST_VERSION, SINGLE_ARTIFACT_MANIFEST_VERSION, CANDIDATE_READBACK_VERSION, LEGACY_BUILD_RECORD, RULE_READBACK_VERSION, candidateArtifactFiles, type RuleReadback } from './candidate-publication.js';
 import { readSourceTerms, USAGES } from './projection.js';
 import { sha256, V2FLY_RELEASE_INPUT } from './release.js';
 import { validReleaseSource } from './release-source-fact.js';
@@ -22,7 +23,9 @@ import { activationRecord } from './remote-status.js';
 import { ActivationWriteError, githubActivation, type ActivationTransport } from './activation-transport.js';
 
 const ajv = new Ajv({ strict: true });
-const validateManifest = ajv.compile(manifestSchema);
+ajv.addSchema(manifestSchema, 'artifact-manifest.schema.json');
+const validateManifest = ajv.getSchema('artifact-manifest.schema.json')!;
+const validateSingleArtifactManifest = ajv.compile(singleArtifactManifestSchema);
 const validateSubscriptionV2 = ajv.compile(subscriptionV2Schema);
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
 const equal = isDeepStrictEqual;
@@ -100,8 +103,10 @@ export async function verifyCandidateEvidence(options: Partial<NativeBuildOption
     }
     return bytes;
   };
+  const singleArtifact = definition !== undefined && 'artifact' in definition;
+  const manifestVersion = singleArtifact ? SINGLE_ARTIFACT_MANIFEST_VERSION : ARTIFACT_MANIFEST_VERSION;
   const manifest = JSON.parse((await remote('manifest.json', evidence.metadataCommit, legacyAudit)).toString());
-  requireThat(validateManifest(manifest) as boolean, 'Invalid Artifact Manifest');
+  requireThat((singleArtifact ? validateSingleArtifactManifest : validateManifest)(manifest) as boolean, 'Invalid Artifact Manifest');
   requireThat(manifest.id === (definition?.id ?? 'v2fly:category-ai-!cn') && manifest.revision === location.id, 'Candidate identity mismatch');
   const build = JSON.parse((await remote('build.json', evidence.metadataCommit, legacyAudit)).toString());
   const source = candidate?.source ?? (rulesOnly ? build.source : JSON.parse((await remote('source.json', evidence.metadataCommit)).toString()));
@@ -109,9 +114,9 @@ export async function verifyCandidateEvidence(options: Partial<NativeBuildOption
   if (legacyAudit) requireThat(report && typeof report === 'object', 'Invalid conversion report');
   // Managed evidence binds the expected rule type to its registered source.
   // Older evidence has only a recorded definition, so use its DNS usage.
-  const format = candidate?.sourceInput.input.format ?? (build.definition?.usages?.['dns-response']?.artifact ? 'cidr-text' : 'plain-yaml');
-  const layout = configuredUsages(format);
-  const isCidr = layout.dns === 'dns-response';
+  const projectedFormat = singleArtifact ? undefined : candidate?.sourceInput.input.format
+    ?? (build.definition?.usages?.['dns-response']?.artifact ? 'cidr-text' : 'plain-yaml');
+  const layout = projectedFormat === undefined || projectedFormat === 'sing-box-source-json' ? undefined : configuredUsages(projectedFormat);
   if (candidate) {
     requireThat(validRuleSource(candidate.source, candidate.sourceInput), 'Candidate source binding mismatch');
   } else if (source.kind === 'github-commit') {
@@ -122,7 +127,8 @@ export async function verifyCandidateEvidence(options: Partial<NativeBuildOption
   } else {
     requireThat(validReleaseSource(source), 'Incomplete official Release source or asset identity');
   }
-  const recordedDefinition = candidate?.definition ?? (definition && operation === 'rollback' ? parseRuleDefinition(build.definition, format) : definition);
+  const recordedDefinition = candidate?.definition ?? (definition && operation === 'rollback'
+    ? parseStoredRuleDefinition(build.definition, projectedFormat ?? 'sing-box-source-json') : definition);
   const files = candidateArtifactFiles(recordedDefinition);
   const expectedSteps = nativeArtifactCommands(files.source, files.binary);
   const completedNativeSteps = (record: any) => record?.status === 'passed' && record.policy === NATIVE_VALIDATION_POLICY
@@ -131,10 +137,10 @@ export async function verifyCandidateEvidence(options: Partial<NativeBuildOption
       && typeof record.steps[index]?.stdout === 'string' && typeof record.steps[index]?.stderr === 'string');
   const buildPassed = build.status === 'built-validated' && build.validation?.status === 'passed'
     && build.validation.policy === NATIVE_VALIDATION_POLICY && build.tool?.version === '1.14.4' && /^[a-f0-9]{64}$/.test(build.tool.sha256);
-  requireThat(buildPassed && (!legacyAudit || equal(build.source, source)
-    && completedNativeSteps(build.validation) && completedNativeSteps(evidence.native)
-    && evidence.tool?.version === build.tool.version && evidence.tool.sha256 === build.tool.sha256), 'Incomplete native validation record');
-  requireThat(equal(build.contracts, { artifactManifest: ARTIFACT_MANIFEST_VERSION, sourceFormat: 4,
+  requireThat(buildPassed && (!singleArtifact || equal(build.source, source) && completedNativeSteps(build.validation))
+    && (!legacyAudit || equal(build.source, source) && completedNativeSteps(build.validation) && completedNativeSteps(evidence.native)
+      && evidence.tool?.version === build.tool.version && evidence.tool.sha256 === build.tool.sha256), 'Incomplete native validation record');
+  requireThat(equal(build.contracts, { artifactManifest: manifestVersion, sourceFormat: 4,
     buildRecord: definition ? CONFIGURED_BUILD_RECORD : LEGACY_BUILD_RECORD }), 'Unsupported build contracts');
   const identity = { source, tools: build.tools, nativeBuildId: build.nativeBuildId, contracts: build.contracts };
   if (definition) {
@@ -160,10 +166,11 @@ export async function verifyCandidateEvidence(options: Partial<NativeBuildOption
       && report.invalidCount === 0 && report.unsupportedCount === 0 && report.diagnostics?.length === 0
       && report.outputTermCount === report.convertedCount - report.duplicateCount, 'Incomplete conversion record');
   }
-  requireThat(manifest.artifacts.length === 2, 'Unsupported candidate projections');
+  if (!singleArtifact) requireThat(manifest.artifacts.length === 2, 'Unsupported candidate projections');
   const artifactIds = manifest.artifacts.map((artifact: any) => artifact.id);
   requireThat(new Set(artifactIds).size === artifactIds.length, 'Duplicate artifact identity');
-  if (legacyAudit) requireThat(build.artifacts?.length === 2, 'Unexpected build artifact set');
+  const verifyBuildFiles = legacyAudit || singleArtifact;
+  if (verifyBuildFiles) requireThat(Array.isArray(build.artifacts) && build.artifacts.length === 2, 'Unexpected build artifact set');
   const sourceBytes = await remote(files.source, evidence.filesCommit);
   const srsBytes = await remote(files.binary, evidence.filesCommit);
   if (retained) {
@@ -178,7 +185,8 @@ export async function verifyCandidateEvidence(options: Partial<NativeBuildOption
   const json = JSON.parse(sourceBytes.toString());
   requireThat(json.version === 4, 'Candidate Source Format mismatch');
   const terms = readSourceTerms(json);
-  requireThat(terms.length > 0 && terms.every(term => (term.type === 'ip_cidr') === isCidr), 'Candidate has empty or incompatible usage content');
+  if (layout) requireThat(terms.every(term => (term.type === 'ip_cidr') === (layout.dns === 'dns-response')),
+    'Candidate has incompatible usage content');
   requireThat(!report || report.outputTermCount === terms.length, 'Conversion term count mismatch');
   requireThat(build.nativeBuildId === nativeBuildIdentity(build.tool.sha256, terms), 'Native build identity mismatch');
   const bytesByFormat = { source: sourceBytes, binary: srsBytes };
@@ -190,14 +198,14 @@ export async function verifyCandidateEvidence(options: Partial<NativeBuildOption
       && a.byteLength === bytes.length && a.sha256 === sha256(bytes)
       && (format === 'binary' || a.termCount === terms.length)
       && a.requiredCapabilities.length === 0, `Artifact integrity or capability mismatch: ${file}`);
-    if (legacyAudit) {
+    if (verifyBuildFiles) {
       const stored = build.artifacts?.filter((entry: any) => entry.file === file);
       requireThat(stored?.length === 1 && stored[0].sha256 === a.sha256 && stored[0].bytes === a.byteLength
         && (format === 'source' ? stored[0].termCount === a.termCount : !Object.hasOwn(stored[0], 'termCount'))
-        && stored[0].format === format && equal(stored[0].requiredCapabilities, []), 'Build artifact mismatch');
+        && stored[0].format === format && equal(stored[0].requiredCapabilities, []), `Build artifact mismatch: ${file}`);
     }
   }
-  for (const usage of USAGES) {
+  if (layout) for (const usage of USAGES) {
     if (usage === layout.unavailable) {
       requireThat(equal(manifest.projections[usage], { unavailable: 'empty' }), 'Projection availability mismatch');
       continue;
@@ -205,7 +213,8 @@ export async function verifyCandidateEvidence(options: Partial<NativeBuildOption
     const ids = manifest.projections[usage].artifactIds;
     requireThat(Array.isArray(ids) && ids.length === 2 && new Set(ids).size === 2 && manifest.artifacts.every((entry: any) => ids.includes(entry.id)), 'Projection mapping mismatch');
   }
-  const native = options.binary === undefined ? undefined : await (options.nativeBuild ?? buildNative)(terms, options.binary, recordedDefinition?.usages.route.artifact);
+  const native = options.binary === undefined ? undefined : await (options.nativeBuild ?? buildRuleArtifacts)(
+    terms, options.binary, recordedDefinition && nativeTargetForRule(recordedDefinition));
   if (native) for (const format of ['source', 'binary'] as const) {
     const file = files[format];
     const reproduced = native.artifacts.find(entry => entry.file === file);
@@ -231,7 +240,7 @@ export interface RollbackOptions extends Omit<ActivationOptions, 'candidateEvide
 
 function activationContext(options: Pick<ActivationOptions, 'configuration' | 'logicalId'>, transport: ActivationTransport) {
   requireThat(options.configuration && options.logicalId, 'Activation requires a configuration and a logical ID (Rule Subscription v2)');
-  const configuration = parseBuildConfiguration(options.configuration);
+  const configuration = parseProjectedConfiguration(options.configuration);
   const definition = configuration.ruleSets.find(rule => rule.id === options.logicalId);
   requireThat(definition && configuration.target.branch === transport.branch, 'Unknown logical ID or activation target mismatch');
   const git = configuration.sources[definition.source].version === 'git-branch';
@@ -249,6 +258,11 @@ export async function activateRules(options: ActivationOptions) {
 }
 
 export function activationSubscription(input: unknown, branch: string, definition: RuleDefinition) {
+  if ('artifact' in definition) {
+    const expected = artifactSubscription(definition, branch);
+    requireThat(equal(input, expected), 'Subscription stable files or version mismatch');
+    return expected;
+  }
   requireThat(validateSubscriptionV2(input) as boolean, 'Invalid Rule Subscription');
   const subscription = input as any;
   requireThat(subscription.systemRuleSetId === definition.id, 'System rule set identity mismatch');
@@ -272,6 +286,13 @@ export function activationSubscription(input: unknown, branch: string, definitio
 }
 
 export function candidateStableFiles(candidate: Awaited<ReturnType<typeof verifyCandidateEvidence>>, subscription: any, definition: RuleDefinition, branch: string) {
+  if ('artifact' in definition) {
+    const checked = artifactSubscription(definition, branch);
+    requireThat(equal(subscription, checked) && candidate.manifest.schemaVersion === SINGLE_ARTIFACT_MANIFEST_VERSION,
+      'Candidate or subscription does not describe a single artifact');
+    const path = `${definition.stablePath}/${definition.artifact}`;
+    return { [`${path}.json`]: candidate.bytesByFormat.source, [`${path}.srs`]: candidate.bytesByFormat.binary };
+  }
   const recordPath = `${definition.stablePath}/activation.json`;
   const files: Record<string, Buffer> = {};
   const endpointSignatures = new Map<string, string>();

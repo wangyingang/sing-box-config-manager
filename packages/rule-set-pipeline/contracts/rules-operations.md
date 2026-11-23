@@ -89,17 +89,17 @@ status 只读取，不登记操作、更新检查时间、恢复维护或发送�
 
 `pipeline/state.json` 使用 schema 2。`rules` 保存每集已接受定义、输入绑定、定义修订、配置修订、规则代次、lifecycle、控制、最近失败及可选的 `successfulInput`。`candidates` 保存构建、固定来源、证据及发布身份。`pendingDelivery` 登记一次未完成稳定写入，包含操作身份、配置修订、预期 stable head、目标规则事实与具体文件摘要/删除路径。状态写入还保存 `writeId`，以核实响应丢失的同一次提交。
 
-输入绑定依据规范化来源与所选列表计算。它不含 source 别名或上游随后出现的新版本；定义修订另包含稳定路径与用途。控制只有 auto/pinned，不再由旧激活记录的双暂停布尔值与 resumes 叠加判定。
+输入绑定依据规范化来源与所选列表计算。它不含 source 别名或上游随后出现的新版本；定义修订另包含稳定路径，以及 v3 的用途或 v4 的文件基名。控制只有 auto/pinned，不再由旧激活记录的双暂停布尔值与 resumes 叠加判定。
 
 候选文件位于 `candidates/<id>/`，仍使用固定 commit 地址、Manifest、构建记录与 readback 证据。候选首次成功发布保存 UTC ISO 8601 `publishedAt`，并以时间和候选稳定短身份组成 `versionId`，例如 `2026-11-16T12:34:56.789Z~1234abcd`。时间相同的候选仍由完整身份区分，短身份冲突时延长；不覆盖旧候选。pin、resume、重试和再次交付不刷新原版本身份或时间。有效内容与构建条件未变时，完整的当前交付可继续使用。
 
-`successfulInput` 保存已核实的 Git、Release 或官方 ChatGPT Voice 来源身份及输入摘要，绑定 `inputBindingRevision`、`definitionRevision`、`definitionGeneration`、`toolSha256`、`buildToolsSha256`、`validationPolicy`、`nativeBuildId`、`candidateId` 和 `buildId`。定义包括用途，因此规范化内容身份与定义一起约束实际用途投影。版本来源仍取自生成候选的原输入。
+`successfulInput` 保存已核实的 Git、Release、官方 ChatGPT Voice 或固定 HTTPS URL 的来源身份及输入摘要，绑定 `inputBindingRevision`、`definitionRevision`、`definitionGeneration`、`toolSha256`、`buildToolsSha256`、`validationPolicy`、`nativeBuildId`、`candidateId` 和 `buildId`。规范化内容身份与定义一起约束实际产物。版本来源仍取自生成候选的原输入。
 
 同步和恢复只在稳定规则文件的固定 commit 正文回读通过，或本次从 Git 核实完整现有交付可复用后推进该集的成功记录。共享来源的失败项保留各自此前适用的记录。同一成功事实没有观测时间字段，重复处理无需提交。缺少记录、上次失败、工具或策略变化、当前候选不匹配或候选证据不足时走常规构建和验证。共享稳定文件缺失或摘要不符时仍停止写入。实质定义变化与删除会清除旧记录。同一来源的别名变更沿用有效定义判断。
 
 正式配置状态先单独保存。每集正常首次交付采用以下 7 个持久阶段，沿用现有 schema、分支与稳定 URL，不重写历史：
 
-1. 登记候选，固定来源及 buildId，状态为 building。ChatGPT Voice 的 `candidates/<id>/chatgpt-voice.json` 原始快照与登记写在同一次提交。
+1. 登记候选，固定来源及 buildId，状态为 building。从固定 HTTPS URL 获取的原始快照与登记写在同一次提交。初版 v4 使用 `candidates/<id>/input.source.json`，ChatGPT Voice 使用 `candidates/<id>/chatgpt-voice.json`。
 2. 上传 JSON/SRS，同时保存 publishing 状态。
 3. 上传 Manifest、构建记录及追溯文件，同时保存规则文件所在 commit。
 4. 固定 commit 的 JSON 和 SRS 正文校验通过后保存回读记录，同时保存元数据 commit、地址和已确定的版本身份。
@@ -117,13 +117,13 @@ Git 对象读取优化只复用完整 Git SHA 指定的不可变内容，缓存�
 
 历史候选可作为完整非当前版本保留；多候选的遍历顺序不选择版本，也不依次交付每个候选。unchanged 不跳过在途收尾；任一候选无法恢复时，结果包含该 candidateId、具体错误及 sync 继续入口，不能因当前字节相同返回整体 success。已删除定义、换源、新控制修订和 pin 仍约束迟到任务；查询、预览和 pinned 跳过不会恢复旧意图。本边界不新增选择状态或 schema；它以已有 current 时的最新输入检查，避免 A 当前、B 中断而上游已回到 A 时误交付残留 B。
 
-`<stablePath>/activation.json` 是 schema 2 交付记录，保存逻辑 ID、candidateId、版本身份、真实来源、订阅和当前文件摘要。它描述实际交付，不承载更新控制。生产状态/候选位于 candidates 分支，稳定记录/文件位于 main；隔离目标共用同一 acceptance 分支。
+`<stablePath>/activation.json` 是 schema 2 交付记录，保存逻辑 ID、candidateId、版本身份、真实来源、订阅和当前文件摘要。v4 交付中的 `subscription.schemaVersion: 3` 通过 `formats.source.url` 和 `formats.binary.url` 描述稳定入口。更新控制记录在 journal。生产状态/候选位于 candidates 分支，稳定记录/文件位于 main；隔离目标共用同一 acceptance 分支。
 
 稳定写入先登记操作，再核对配置、日志 head 和维护状态，按预期 parent 非强制更新目标 ref，并读回验证。响应丢失时先识别同一次操作；不明确时返回 pending。删除移除当前受管路径及候选，并保留最小代次记录防止旧任务复活。有稳定文件或候选被删除时，结案状态提交同时设置 `deletedHistoryPending: true`。该标记汇总仍需回收的受管历史，即使当前树和候选索引均已移除对应内容。
 
 ## 证据回读
 
-构建记录（`buildRecord: 3`）保存通过的编译和加载、工具 SHA-256、`native-compile-load-v1` 及构建身份。`readback.json`（`schemaVersion: 3`）记录候选身份、版本、首次发布时间、文件和元数据 commit，以及固定 JSON/SRS 地址的两条正文长度、SHA-256 和逐字节校验记录。清理重写物理地址并记录复验工具。Artifact Manifest v2 仍描述产物格式、用途、能力和摘要，Compiler 继续消费内存数据。从空目标启用的步骤见 [Pipeline README](../README.md#从空产物状态启用新验证策略)。
+构建记录（`buildRecord: 3`）保存通过的编译和加载、工具 SHA-256、`native-compile-load-v1` 及构建身份。`readback.json`（`schemaVersion: 3`）记录候选身份、版本、首次发布时间、文件和元数据 commit，以及固定 JSON/SRS 地址的两条正文长度、SHA-256 和逐字节校验记录。清理重写物理地址并记录复验工具。Artifact Manifest v2 描述 v3 产物格式、用途、能力和摘要，Compiler 继续消费该契约。v4 的 Artifact Manifest v3 直接描述成对文件的固定地址、格式、长度和摘要。从空目标启用的步骤见 [Pipeline README](../README.md#从空产物状态启用新验证策略)。
 
 | 操作 | 产物仓库 Raw HTTP 正文核验 |
 | --- | --- |
@@ -133,13 +133,13 @@ Git 对象读取优化只复用完整 Git SHA 指定的不可变内容，缓存�
 | cleanup 重建 | 每个保留候选在新 commit 的 JSON 与 SRS，切换后每组当前稳定分支入口的 JSON 与 SRS |
 | 恢复 | 按所处阶段补齐未完成的规则回读，已提交的稳定写入先核对原回执 |
 
-Git 中的候选登记和回读完成记录约束规则归属、来源绑定、版本和发布阶段。固定地址的 commit 由该阶段的 Git 路径历史核对。Manifest 和实际 JSON/SRS 约束字节、格式及用途。构建记录约束工具、策略和构建身份。稳定交付、保留关系和写入控制取自实际 Git 状态。候选资格无需读取 `source.json` 或 `conversion-report.json` 的正文。人工 status 通过路径盘点报告已发现的 `missingTraceFiles`，候选可选性仍由核心事实和产物决定。现有稳定文件仍可核实时，查询会展示当前交付并用 `deliveryIssue` 报告缺失或损坏的候选关联。已存在的纯追溯文件在重建时原样复制。已知文件读取或复制失败时，维护计划保持可恢复状态。
+Git 中的候选登记和回读完成记录约束规则归属、来源绑定、版本和发布阶段。固定地址的 commit 由该阶段的 Git 路径历史核对。Manifest 和实际 JSON/SRS 约束字节、格式及 v3 用途。构建记录约束工具、策略和构建身份。稳定交付、保留关系和写入控制取自实际 Git 状态。候选资格无需读取 `source.json` 或 `conversion-report.json` 的正文。人工 status 通过路径盘点报告已发现的 `missingTraceFiles`，候选可选性仍由核心事实和产物决定。现有稳定文件仍可核实时，查询会展示当前交付并用 `deliveryIssue` 报告缺失或损坏的候选关联。已存在的纯追溯文件在重建时原样复制。已知文件读取或复制失败时，维护计划保持可恢复状态。
 
 每次操作单独建立 HTTPS 字节缓存。只复用可信产物仓库中由完整 commit SHA 与路径定位、已经通过校验的字节。该操作要求校验的新规则地址首次真实 GET，即使内容摘要相同。稳定分支地址在 cleanup 切换后直接 GET。缓存最多保留 128 个地址及 64 MiB 字节，达到任一上限时按写入顺序淘汰，超限单文件直接校验。失败可重试，返回字节与缓存相互隔离。
 
 操作结果的 `readbackRequests` 记录该次调用在产物 Raw 传输边界实际发起的地址，包含失败尝试。`verified` 描述本次核验，`reliedOn` 描述所依赖的历史成功事实。固定地址校验通过后，同次缓存命中期间可以复用该观察。Git 检查和历史事实均有各自的证据范围。
 
-每次调用 `sync`、`pin`、`resume` 或 `cleanup` 时，首次成功的原生验证建立内存证明。后续阶段重新探测工具身份。验证策略、格式、用途投影和工具 SHA-256 相同，且阶段核对的 JSON/SRS 与通过验证的文件逐字节相同时，可以沿用这组实际命令。字节、工具或策略变化会触发新验证或拒绝。原生命令失败或执行中检测到工具变化时，本次验证不产生证明，后续仍可重试。
+每次调用 `sync`、`pin`、`resume` 或 `cleanup` 时，首次成功的原生验证建立内存证明。后续阶段重新探测工具身份。验证策略、文件名、产物布局和工具 SHA-256 相同，且阶段核对的 JSON/SRS 与通过验证的文件逐字节相同时，可以沿用这组实际命令。字节、工具或策略变化会触发新验证或拒绝。原生命令失败或执行中检测到工具变化时，本次验证不产生证明，后续仍可重试。
 
 发布、复验和恢复仍按各自阶段检查正式配置、更新控制、候选证据、当前保留树、订阅兼容性和 Git 写入条件。每次调用各自建立证明，即使复用同一个 Node context，或继续此前中断的操作。远端证据用于核对已保存的操作事实；恢复到需要原生验证的阶段时，使用本次调用的证明。
 
