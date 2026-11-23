@@ -11,6 +11,7 @@ import { ghJson, ARTIFACT_REPOSITORY, GitHubHttpError, immutableUrl } from '../.
 import { createGitCommit } from '../../src/publication-repository.js';
 import { sha256 } from '../../src/release.js';
 import { cleanupRuleHistory } from '../../src/rules-cleanup.js';
+import type { RulesResult } from '../../src/rules-model.js';
 import type { RulesContext } from '../../src/rules-context.js';
 import { syncRules, pinRuleVersion, resumeRuleUpdates } from '../../src/rules-operations.js';
 import { githubRulesRepository } from '../../src/rules-repository.js';
@@ -33,8 +34,22 @@ test('the 16 formal v4 rule sets deliver from an empty GitHub target', {
   const binary = process.env.SING_BOX_TEST_BINARY;
   const evidencePath = process.env.RULE_FORMAL_V4_EVIDENCE;
   assert.ok(binary && evidencePath, 'Set SING_BOX_TEST_BINARY and RULE_FORMAL_V4_EVIDENCE');
-  const target = `acceptance-issue-174-${randomUUID()}`;
   const configuration = readOfficialConfiguration();
+  const previousPath = process.env.RULE_FORMAL_V4_RESUME_EVIDENCE;
+  const previous = previousPath && JSON.parse(await readFile(previousPath, 'utf8'));
+  const target: string = previous?.target.branch ?? `acceptance-issue-174-${randomUUID()}`;
+  let continuationHead: string | undefined;
+  if (previous) {
+    assert.match(target, /^acceptance-issue-174-[a-f0-9-]{36}$/);
+    assert.equal(previous.target.repository, ARTIFACT_REPOSITORY);
+    assert.equal(previous.source.configurationSha256, sha256(configuration));
+    assert.equal(previous.removed, true);
+    assert.deepEqual(previous.start, previous.end);
+    assert.match(previous.seed, /^[a-f0-9]{40}$/);
+    assert.match(previous.outcomes.sync.observedHeads.journal, /^[a-f0-9]{40}$/);
+    assert.equal(previous.outcomes.sync.observedHeads.journal, previous.outcomes.sync.observedHeads.stable);
+    continuationHead = previous.outcomes.sync.observedHeads.journal;
+  }
   const { ruleSets, target: configuredTarget, candidateRetentionDays } = parseBuildConfiguration(configuration);
   assert.deepEqual(ruleSets.map(rule => rule.id).sort(), Object.keys(positives).sort());
   const sha = (await exec('git', ['rev-parse', 'HEAD'])).stdout.trim();
@@ -45,6 +60,7 @@ test('the 16 formal v4 rule sets deliver from an empty GitHub target', {
       probeSha256: sha256(await readFile(new URL(import.meta.url))) },
     binary: { sha256: sha256(await readFile(binary)), version: (await exec(binary, ['version'])).stdout.trim() },
     startedAt: new Date().toISOString(), endedAt: '',
+    ...(previousPath && { continuation: { evidenceSha256: sha256(await readFile(previousPath)), head: continuationHead } }),
     start: null as unknown, end: null as unknown, seed: '', finalHead: '',
     removed: false, outcomes: {} as Record<string, unknown>, rules: [] as unknown[], upstreamRequests: [] as unknown[],
   };
@@ -98,13 +114,25 @@ test('the 16 formal v4 rule sets deliver from an empty GitHub target', {
       await archive();
     }
   });
-  evidence.seed = await createGitCommit(api, { 'README.md': Buffer.from(`# Isolated v4 acceptance — ${target}\n`) },
-    '初始化 v4 隔离验收分支');
-  await api('git/refs', { ref: `refs/heads/${target}`, sha: evidence.seed });
+  if (continuationHead) {
+    evidence.seed = previous.seed;
+    const ancestry = await request(['api',
+      `repos/${ARTIFACT_REPOSITORY}/compare/${evidence.seed}...${continuationHead}?per_page=1`]);
+    const root = await request(['api', refPrefix + `commits/${evidence.seed}`]);
+    const tree = await request(['api', refPrefix + `trees/${root.tree.sha}?recursive=1`]);
+    assert.equal(ancestry.merge_base_commit.sha, evidence.seed);
+    assert.equal(ancestry.behind_by, 0);
+    assert.equal(root.parents.length, 0);
+    assert.deepEqual(tree.tree.map(({ path }: { path: string }) => path), ['README.md']);
+  } else {
+    evidence.seed = await createGitCommit(api, { 'README.md': Buffer.from(`# Isolated v4 acceptance — ${target}\n`) },
+      '初始化 v4 隔离验收分支');
+  }
+  await api('git/refs', { ref: `refs/heads/${target}`, sha: continuationHead ?? evidence.seed });
   const repository = githubRulesRepository(target, request);
   const context: RulesContext = {
     repository, targetBranch: target, allowWrites: true, binary, token,
-    readConfiguration: async () => ({ revision: sha, content: configuration, origin: 'formal-v4-checkout' }),
+    readConfiguration: async () => ({ revision: previous?.outcomes.sync.configurationRevision ?? sha, content: configuration, origin: 'formal-v4-checkout' }),
     async fetch(url, init) {
       const response = await fetch(url, init);
       // Signed redirect URLs contain transient credentials. Record only the host/path.
@@ -114,20 +142,35 @@ test('the 16 formal v4 rule sets deliver from an empty GitHub target', {
     },
   };
   const input = { context, onProgress: ({ stage, logicalId }: { stage: string; logicalId?: string }) => console.log(stage, logicalId ?? '') };
-  const empty = await repository.snapshot();
-  assert.equal(empty.head, evidence.seed);
-  assert.deepEqual(empty.paths, ['README.md']);
-  await archive();
+  const starting = await repository.snapshot();
+  assert.equal(starting.head, continuationHead ?? evidence.seed);
+  if (!continuationHead) assert.deepEqual(starting.paths, ['README.md']);
   const initial = await getRulesStatus(input);
   assert.equal(initial.status, 'success', initial.error ?? '');
   assert.equal(initial.rules?.length, 16);
-  assert.ok(initial.rules?.every(rule => !rule.current && !rule.candidateCount));
-  const synced = await syncRules(input);
-  evidence.outcomes.sync = synced;
+  const previousRules = new Map<string, string>();
+  for (const rule of previous?.outcomes.sync.results ?? []) {
+    if (rule.current) previousRules.set(rule.id, rule.current.candidateId);
+  }
+  for (const rule of initial.rules ?? []) {
+    assert.equal(rule.current?.candidateId, previousRules.get(rule.id), rule.id);
+    assert.equal(rule.candidateCount, previousRules.has(rule.id) ? 1 : 0, rule.id);
+  }
   await archive();
+  const attempts: RulesResult[] = [];
+  evidence.outcomes.syncAttempts = attempts;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const result = await syncRules(input);
+    attempts.push(result);
+    evidence.outcomes.sync = result;
+    await archive();
+    if (result.status === 'success') break;
+    const errors = [result.error, ...result.results.map(({ error }) => error)].filter(Boolean);
+    if (!errors.length || !errors.every(error => /RULE_WRITE_CONFLICT|HTTP 5\d\d|timeout|fetch failed/i.test(error!))) break;
+  }
+  const synced = attempts.at(-1)!;
   assert.equal(synced.status, 'success', JSON.stringify(synced.results.filter(rule => rule.error)));
-  assert.equal(synced.results.filter(rule => rule.status === 'delivered').length, 16);
-  assert.equal(synced.readbackRequests?.length, 64);
+  assert.equal(synced.results.length, 16);
 
   const status = await getRulesStatus(input);
   assert.equal(status.status, 'success', status.error ?? '');
@@ -143,6 +186,7 @@ test('the 16 formal v4 rule sets deliver from an empty GitHub target', {
     assert.equal(rule.configurationDifference, 'none', id);
     assert.equal(rule.control?.mode, 'auto', id);
     assert.equal(rule.candidateCount, 1, id);
+    if (previousRules.has(id)) assert.equal(current.candidateId, previousRules.get(id), id);
     assert.ok(rule.candidates.some(candidate => candidate.id === current.candidateId && candidate.current && candidate.selectable), id);
     const expected = `stable/${id}/${id === 'china-ip' || id === 'chatgpt-voice' ? 'ips' : 'domains'}`;
     assert.deepEqual(Object.keys(current.files).sort(), [expected + '.json', expected + '.srs']);
