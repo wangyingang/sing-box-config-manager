@@ -9,6 +9,7 @@ import { promisify } from 'node:util';
 import { githubBaselineTransport } from '../../src/maintenance-baseline-transport.js';
 import { gitMaintenanceRefs } from '../../src/maintenance-refs.js';
 import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
+import { readPublishedFile } from '../../src/delivery-readback.js';
 import { ghJson, ARTIFACT_REPOSITORY, GitHubHttpError, immutableUrl } from '../../src/publication.js';
 import { createGitCommit } from '../../src/publication-repository.js';
 import { sha256 } from '../../src/release.js';
@@ -248,10 +249,8 @@ test('the 16 formal v4 rule sets deliver from an empty GitHub target', {
       assert.equal(artifact.byteLength, checked.byteLength);
       const bytes = await snapshot.read(path);
       assert.ok(bytes);
-      for (const url of [artifact.url, fixedDelivery, stablePrefix + path]) {
-        const readback = await repository.download(url);
-        assert.deepEqual(readback, bytes, url);
-      }
+      const reads = await readPublishedFile({ candidate: artifact.url, fixedDelivery, stable: stablePrefix + path }, checked, retryProbeRead);
+      for (const read of Object.values(reads)) assert.ok(read.ok, JSON.stringify(read));
       if (format === 'source') {
         sourceVerification = await verifySource({ id, candidateId: current.candidateId, source: current.source, artifactUrl: artifact.url, artifact: bytes });
       }
