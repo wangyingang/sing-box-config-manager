@@ -2,7 +2,7 @@
 
 ## Contexts
 
-- [规则生产](packages/rule-set-pipeline/GLOSSARY.md)：系统规则源、转换、投影与规则产物。
+- [规则生产](packages/rule-set-pipeline/GLOSSARY.md)：系统规则源、规则转换与规则产物交付。
 - [配置编译](packages/config-compiler/GLOSSARY.md)：模板、Recipe、策略、客户端能力与配置编译。
 - [配置管理](apps/web/GLOSSARY.md)：用户的配置草稿、发布版本与订阅。
 
