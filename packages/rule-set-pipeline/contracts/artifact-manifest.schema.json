@@ -3,6 +3,7 @@
   "type": "object",
   "additionalProperties": false,
   "allOf": [{
+    "$comment": "Projected v2 artifacts require a positive term count. V3 reuses the artifact entries and accepts an empty rule set.",
     "properties": {
       "artifacts": {
         "type": "array",

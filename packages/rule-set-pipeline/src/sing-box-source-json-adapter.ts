@@ -14,6 +14,8 @@ const stringLists = new Set([
 ]);
 const flags = new Set(['network_is_expensive', 'network_is_constrained']);
 const logicalFields = new Set(['type', 'mode', 'rules', 'invert']);
+// The v1.14.4 SRS reader rejects a rule below depth 100.
+const MAX_LOGICAL_RULE_DEPTH = 100;
 
 class SourceRuleError extends Error {
   constructor(path: string, readonly field: string, reason: string, readonly unsupported = false) {
@@ -63,17 +65,20 @@ function defaultCondition(field: string, value: unknown, path: string): unknown 
   throw new SourceRuleError(path, field, 'invalid condition value');
 }
 
-function readRule(value: unknown, path: string): Record<string, unknown> {
+function readRule(value: unknown, path: string, depth = 0): Record<string, unknown> {
   if (!isObject(value)) throw new SourceRuleError(path, 'type', 'expected a rule object');
   const { type, invert } = value;
   if (invert != null && typeof invert !== 'boolean') throw new SourceRuleError(path, 'invert', 'expected a boolean');
   if (type === 'logical') {
+    if (depth >= MAX_LOGICAL_RULE_DEPTH) {
+      throw new SourceRuleError(path, 'logical', `SRS supports at most ${MAX_LOGICAL_RULE_DEPTH} logical levels`, true);
+    }
     for (const field of Object.keys(value)) {
       if (!logicalFields.has(field)) throw new SourceRuleError(path, field, 'not supported in a logical rule', true);
     }
     if (value.mode !== 'and' && value.mode !== 'or') throw new SourceRuleError(path, 'mode', 'expected and or or');
     if (!Array.isArray(value.rules) || !value.rules.length) throw new SourceRuleError(path, 'rules', 'expected nonempty child rules');
-    return { type, mode: value.mode, rules: value.rules.map((rule, index) => readRule(rule, `${path}.rules[${index}]`)), ...(invert && { invert }) };
+    return { type, mode: value.mode, rules: value.rules.map((rule, index) => readRule(rule, `${path}.rules[${index}]`, depth + 1)), ...(invert && { invert }) };
   }
   if (type != null && type !== '' && type !== 'default') throw new SourceRuleError(path, 'type', 'unsupported rule type', true);
 

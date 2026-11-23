@@ -61,10 +61,17 @@ export function nativeArtifactCommands(source: string, srs: string): string[][] 
  */
 export async function invalidNativeSourceRules(rules: readonly BuildRule[], binary: string) {
   const tool = await inspectBinary(binary);
+  const invalid = new Map<number, string>();
+  const unique = new Map<string, { rule: BuildRule; indices: number[] }>();
+  for (const [index, rule] of rules.entries()) {
+    const key = JSON.stringify(rule);
+    const entry = unique.get(key);
+    if (entry) entry.indices.push(index);
+    else unique.set(key, { rule, indices: [index] });
+  }
+  const pending = [[...unique.values()]];
   const directory = await mkdtemp(join(tmpdir(), 'rule-native-source-'));
   const path = join(directory, 'rules.json');
-  const invalid = new Map<number, string>();
-  const pending = [rules.map((rule, index) => ({ rule, index }))];
   try {
     while (pending.length) {
       const group = pending.pop()!;
@@ -80,8 +87,9 @@ export async function invalidNativeSourceRules(rules: readonly BuildRule[], bina
         const position = Number(match?.[1] ?? match?.[2]);
         if (failure.code !== 1 || !match || !group[position]) throw error;
         // Confirm individual rules before skipping. The CLI also prints the text of earlier matches.
-        if (group.length === 1) invalid.set(group[0].index, match[3]);
-        else {
+        if (group.length === 1) {
+          for (const index of group[0].indices) invalid.set(index, match[3]);
+        } else {
           const middle = Math.ceil(group.length / 2);
           pending.push(group.slice(middle), group.slice(0, middle));
         }

@@ -205,7 +205,7 @@ test('v4 sync preserves separate top-level rules and prevents newly merging with
 test('v4 sync reports a native-invalid rule when rebuilding a candidate from its original snapshot', async () => {
   const env = fixture({
     version: 4,
-    rules: [{ domain: 'native-validation.invalid' }, { domain_regex: '[' }],
+    rules: [{ domain: 'native-validation.invalid' }, { domain_regex: '[' }, { domain_regex: '[' }],
   });
   env.beforeWrite(async files => {
     if (Object.keys(files).some(file => /^candidates\/[^/]+\/combined.json$/.test(file))) {
@@ -218,9 +218,30 @@ test('v4 sync reports a native-invalid rule when rebuilding a candidate from its
   env.updateInput({ version: 5, rules: [] });
   const recovered = await syncRules(env.request);
   assert.equal(recovered.results[0].status, 'delivered', JSON.stringify(recovered));
-  assert.deepEqual(recovered.results[0].conversionReport?.skippedRuleTypeCounts, { domain_regex: 1 });
+  assert.deepEqual(recovered.results[0].conversionReport?.skippedRuleTypeCounts, { domain_regex: 2 });
+  assert.deepEqual(recovered.results[0].conversionReport?.diagnostics.map(item => item.index), [1, 2]);
   const snapshot = await env.context.repository.snapshot();
   assert.deepEqual(JSON.parse((await snapshot.read(`${path}.json`))!.toString()).rules, [
     { type: 'logical', mode: 'or', rules: [{ domain: ['native-validation.invalid'] }] },
   ]);
+});
+
+test('v4 sync skips a rule beyond native SRS depth while retaining a rule at the limit', async () => {
+  const nested = (depth: number, domain: string) => {
+    let rule: Record<string, unknown> = { domain };
+    for (let level = 0; level < depth; level++) rule = { type: 'logical', mode: 'and', rules: [rule] };
+    return rule;
+  };
+  const env = fixture({ version: 4, rules: [nested(100, 'limit.example'), nested(101, 'too-deep.example'), { domain: 'ordinary.example' }] });
+  const delivered = await syncRules(env.request);
+  assert.equal(delivered.results[0].status, 'delivered', JSON.stringify(delivered));
+  const report = delivered.results[0].conversionReport!;
+  assert.deepEqual(report.skippedRuleTypeCounts, { logical: 1 });
+  assert.equal(report.diagnostics[0].index, 1);
+  assert.match(report.diagnostics[0].message, /SRS.*100/);
+  const snapshot = await env.context.repository.snapshot();
+  const { rules } = JSON.parse((await snapshot.read(`${path}.json`))!.toString());
+  assert.equal(rules.length, 2);
+  assert.match(JSON.stringify(rules[0]), /limit\.example/);
+  assert.deepEqual(rules[1], { domain: ['ordinary.example'] });
 });
