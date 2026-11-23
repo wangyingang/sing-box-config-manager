@@ -146,7 +146,9 @@ function parseSingleArtifactDefinition(input: unknown, format: SourceFormat): Si
   const named = format === 'v2fly-dlc-yaml';
   const clash = format === 'clash-rule-list';
   const label = 'rule definition';
-  if (!named && !clash && Object.hasOwn(mapping(input, label), 'filter')) throw new Error(`filter is not supported for ${format}`);
+  if (!named && !clash && Object.hasOwn(mapping(input, label), 'filter')) {
+    throw new Error(`${label} fields are invalid: filter is not supported for ${format}`);
+  }
   const definition = exact(input, ['id', 'source', 'stablePath', 'artifact', ...(named ? ['list'] : [])],
     label, named || clash ? ['filter'] : []);
   const location = ruleLocation(definition, 'publishPath');
