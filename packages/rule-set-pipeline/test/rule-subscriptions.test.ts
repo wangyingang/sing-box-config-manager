@@ -1,10 +1,11 @@
+import { readV3Fixture } from './fixtures/baseline-configuration.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { configuredSubscriptions, parseProjectedConfiguration, readOfficialConfiguration } from '../src/configuration.js';
+import { configuredSubscriptions, parseProjectedConfiguration } from '../src/configuration.js';
 
 test('official configuration provides stable subscriptions and reuses files across compatible usages', () => {
   for (const branch of ['main', 'acceptance-subscriptions']) {
-    const official = parseProjectedConfiguration(readOfficialConfiguration());
+    const official = parseProjectedConfiguration(readV3Fixture());
     const configuration = parseProjectedConfiguration(JSON.stringify({ ...official, target: { ...official.target, branch } }));
     const subscriptions = configuredSubscriptions(configuration);
     assert.deepEqual(Object.keys(subscriptions), ['openai', 'anthropic', 'google-deepmind', 'china-ip', 'chatgpt-voice',

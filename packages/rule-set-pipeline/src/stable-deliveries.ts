@@ -15,6 +15,7 @@ export async function verifyStableDeliveries(snapshot: PublicationSnapshot): Pro
   for (const path of snapshot.paths) {
     const location = stableRecordLocation(path);
     if (!location || snapshot.isDirectory?.(path)) continue;
+    if (location.artifact === undefined) throw new Error('RULE_STATE_MIGRATION_REQUIRED: v4 requires an empty artifact target');
     const bytes = await snapshot.read(path);
     const record = bytes && JSON.parse(bytes.toString());
     if (record?.schemaVersion !== 2 || typeof record.id !== 'string' || typeof record.logicalId !== 'string'
@@ -23,8 +24,8 @@ export async function verifyStableDeliveries(snapshot: PublicationSnapshot): Pro
     }
     if (records.has(record.logicalId)) throw new Error('RULE_DELIVERY_CORRUPT: duplicate logical ID');
     const files = Object.entries(record.files) as [string, FileEvidence][];
-    if (location.artifact !== undefined && (files.length !== 2
-      || !singleArtifactPaths(location.directory, location.artifact).every(file => Object.hasOwn(record.files, file)))) {
+    if (files.length !== 2
+      || !singleArtifactPaths(location.directory, location.artifact).every(file => Object.hasOwn(record.files, file))) {
       throw new Error(`RULE_DELIVERY_CORRUPT: unexpected files for ${path}`);
     }
     for (const [file, evidence] of files) {

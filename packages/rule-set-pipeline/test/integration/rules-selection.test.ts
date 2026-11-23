@@ -33,8 +33,7 @@ async function prepareVersions(target: string) {
   const config = env.config();
   config.sources.cidr = { repository: 'gaoyifan/china-operator-ip', version: 'git-branch', branch: 'ip-lists',
     input: { format: 'cidr-text', path: 'china46.txt' } };
-  config.ruleSets[1] = { id: 'china-ip', source: 'cidr', list: 'all', stablePath: 'stable/china-ip',
-    usages: { route: { artifact: 'route' }, 'dns-query': { unavailable: 'empty' }, 'dns-response': { artifact: 'route' } } };
+  config.ruleSets[1] = { id: 'china-ip', source: 'cidr', stablePath: 'stable/china-ip', artifact: 'route' };
   env.configure(config);
   const first = await syncRules({ context: env.context });
   assert.equal(first.status, 'success', JSON.stringify(first));
@@ -85,6 +84,10 @@ async function replaceSrs(env: Parameters<typeof damage>[0], candidate: RuleCand
   const record = d.evidence.readback.find((r: any) => r.url.endsWith(`/${stem}.srs`));
   record.sha256 = sha256(invalid); record.byteLength = invalid.length;
   await d.change('manifest.json', m => { const a = m.artifacts.find((a: any) => a.format === 'binary'); a.sha256 = sha256(invalid); a.byteLength = invalid.length; });
+  await d.change('build.json', b => {
+    const artifact = b.artifacts.find((entry: { format: string }) => entry.format === 'binary');
+    Object.assign(artifact, { sha256: record.sha256, bytes: record.byteLength });
+  });
   d.saveEvidence();
 }
 
@@ -93,13 +96,13 @@ test('候选证据边界逐项拒绝损坏；status 只读且 pin 保留当前�
   const cases: [string, RegExp, Corruption][] = [
     ['wrong-rule', /identity mismatch/, d => d.change('manifest.json', m => { m.id = 'china-ip'; })],
     ['duplicate-artifact', /Duplicate artifact identity/, d => d.change('manifest.json', m => { m.artifacts[1].id = m.artifacts[0].id; })],
-    ['extra-artifact', /Unsupported candidate projections/, d => d.change('manifest.json', m => { m.artifacts.push({ ...m.artifacts[0], id: 'extra' }); })],
+    ['extra-artifact', /Invalid Artifact Manifest/, d => d.change('manifest.json', m => { m.artifacts.push({ ...m.artifacts[0], id: 'extra' }); })],
     ...['domains.json', 'domains.srs', 'manifest.json', 'build.json', 'readback.json']
       .map(file => [`missing-${file}`, /Missing retained file/, (d: Awaited<ReturnType<typeof damage>>) => d.replace(file)] as typeof cases[number]),
     ['missing-readback', /Missing complete readback/, async d => { d.evidence.readback.pop(); await d.saveEvidence(); }],
     ['readback-digest', /Readback integrity mismatch/, d => d.replace('domains.srs', Buffer.from('tampered'))],
     ['readback-length', /Readback integrity mismatch/, async d => { d.evidence.readback.find((r: any) => r.url.endsWith('/domains.srs')).byteLength++; await d.saveEvidence(); }],
-    ['wrong-content-type', /incompatible usage content/, async d => {
+    ['wrong-content-type', /Native build identity mismatch/, async d => {
       const wrong = encodeRecord({ version: 4, rules: [{ ip_cidr: ['192.0.2.0/24'] }] });
       const checksum = { sha256: sha256(wrong), byteLength: wrong.length };
       d.replace('domains.json', wrong);
@@ -109,9 +112,8 @@ test('候选证据边界逐项拒绝损坏；status 只读且 pin 保留当前�
     }],
     ['manifest-digest', /Artifact integrity/, d => d.change('manifest.json', m => { m.artifacts[1].sha256 = 'f'.repeat(64); })],
     ['manifest-length', /Artifact integrity/, d => d.change('manifest.json', m => { m.artifacts[1].byteLength++; })],
-    ['usage', /Projection availability/, d => d.change('manifest.json', m => { m.projections['dns-response'] = m.projections.route; })],
+    ['projection-metadata', /Invalid Artifact Manifest/, d => d.change('manifest.json', m => { m.projections = {}; })],
     ['capability', /Artifact integrity or capability/, d => d.change('manifest.json', m => { m.artifacts[1].requiredCapabilities = ['processMatching']; })],
-    ['projection-mapping', /Projection mapping/, d => d.change('manifest.json', m => { m.projections['dns-query'].artifactIds = ['missing', m.artifacts[0].id]; })],
     ['build-policy', /Incomplete native validation record/, d => d.change('build.json', b => { b.validation.policy = 'old-policy'; })],
     ['binary-term-count', /Invalid Artifact Manifest/, d => d.change('manifest.json', m => { m.artifacts[1].termCount = 1; })],
     ['version', /stage or version differs/, d => d.change('readback.json', r => { r.versionId = 'other'; })],
@@ -120,7 +122,7 @@ test('候选证据边界逐项拒绝损坏；status 只读且 pin 保留当前�
       c.evidenceCommit = 'a'.repeat(40);
       c.evidenceUrl = immutableUrl(c.evidenceCommit, `candidates/${c.id}/readback.json`);
     })],
-    ['source-binding', /source binding mismatch/, d => d.changeCandidate(c => { assert.ok('repository' in c.source); c.source.repository = 'other/repo'; })],
+    ['source-binding', /Incomplete native validation record/, d => d.change('build.json', b => { b.source.url = 'https://other.example.test/rules'; })],
     ['tools', /Build identity mismatch/, d => d.change('build.json', b => { b.tools.yaml = 'wrong'; })],
     ['build-identity', /Configured build identity/, d => d.change('build.json', b => { b.id = 'china-ip'; })],
     ['build-target', /Configured build identity/, d => d.change('build.json', b => { b.target.branch = 'other'; })],
@@ -160,10 +162,7 @@ test('纯追溯异常与辅助 JSON 重排不阻断 status、成功输入复用�
     d.replace('source.json');
     d.replace('conversion-report.json', Buffer.from('incomplete diagnostic output'));
     await d.change('build.json', b => {
-      b.source = { diagnostic: 'stale source display' };
-      delete b.artifacts;
       b.tool.path = '/some/other/path';
-      b.validation.steps = [];
       b.tools = Object.fromEntries(Object.entries(b.tools).reverse());
     });
     for (const file of ['manifest.json', 'readback.json']) {
@@ -193,7 +192,7 @@ test('纯追溯异常与辅助 JSON 重排不阻断 status、成功输入复用�
   const pin = await pinRuleVersion({ ...request, version: previous.versionId! });
   assert.equal(pin.status, 'success', JSON.stringify(pin));
   assert.equal(pin.results[0].current?.candidateId, previous.candidateId);
-  const stableHead = await repo.lastChange(env.heads.get(env.context.targetBranch)!, `stable/${current.logicalId}/activation.json`);
+  const stableHead = await repo.lastChange(env.heads.get(env.context.targetBranch)!, `stable/${current.logicalId}/_delivery/domains.json`);
   assert.deepEqual(raw.map(url => new URL(url).pathname).sort(), ['domains.json', 'domains.srs'].map(file =>
     `/wangyingang/sing-box-rule-artifacts/${stableHead}/stable/${current.logicalId}/${file}`));
   assert.deepEqual(pin.readbackRequests, raw);
@@ -207,7 +206,7 @@ test('status 报告悬空交付，重复 pin 修正已固定版本的交付记�
   const request = { context: env.context, id: current.logicalId };
   const pin = () => pinRuleVersion({ ...request, version: current.versionId! });
   assert.equal((await pin()).status, 'success');
-  const path = `stable/${current.logicalId}/activation.json`;
+  const path = `stable/${current.logicalId}/_delivery/domains.json`;
   const snapshot = await env.context.repository.snapshot();
   const bytes = (await snapshot.read(path))!;
   const record = JSON.parse(bytes.toString());
@@ -277,7 +276,7 @@ test('域名与 CIDR 按版本重选只改变目标；重复 pin 幂等且停止
     const after = await stableBytes(env);
     for (const [path, bytes] of after) {
       if (!path.startsWith(`stable/${old.logicalId}/`)) assert.deepEqual(bytes, before.get(path), path);
-      else if (!path.endsWith('/activation.json')) { assert.deepEqual(bytes, env.original.get(path), path); assert.notDeepEqual(bytes, before.get(path), path); }
+      else if (!path.includes('/_delivery/')) { assert.deepEqual(bytes, env.original.get(path), path); assert.notDeepEqual(bytes, before.get(path), path); }
     }
     const writes = env.writes.length, heads = new Map(env.heads);
     assert.deepEqual((await pinRuleVersion({ context: env.context, id: old.logicalId, version: old.versionId! })).results[0].control, pin.results[0].control);
@@ -308,29 +307,29 @@ test('候选不在保留登记中时，旧不可变地址仍能下载也不能�
 });
 
 test('当前订阅或交付损坏时拒绝 pin；订阅字段顺序不改变契约', async t => {
-  const path = 'stable/openai/activation.json';
-  for (const fault of ['missing', 'schema', 'identity', 'repository', 'branch', 'path', 'file-set', 'mapping', 'usage', 'capability', 'reuse', 'record', 'bytes', 'binary']) {
+  const path = 'stable/openai/_delivery/domains.json';
+  for (const fault of ['missing', 'schema', 'identity', 'repository', 'branch', 'path', 'file-set', 'missing-format', 'projection', 'extra-endpoint-field', 'format-swap', 'record', 'bytes', 'binary']) {
     await t.test(fault, async () => {
       const env = await versions('main');
       const old = env.first.results[0].current!;
       const tree = env.trees.get(env.heads.get('main')!)!;
-      const record = JSON.parse(tree.get(path)!.toString()), p = record.subscription.projections;
+      const record = JSON.parse(tree.get(path)!.toString()), formats = record.subscription.formats;
       if (fault === 'missing') delete record.subscription;
       if (fault === 'schema') record.subscription.schemaVersion = 1;
       if (fault === 'identity') record.subscription.systemRuleSetId = 'china-ip';
-      if (fault === 'repository') p.route.formats.binary.url = p.route.formats.binary.url.replace('sing-box-rule-artifacts', 'untrusted');
-      if (fault === 'branch') p.route.formats.binary.url = p.route.formats.binary.url.replace('/main/', '/other/');
-      if (fault === 'path') p.route.formats.binary.url = p.route.formats.binary.url.replace('/stable/', '/stable/../');
+      if (fault === 'repository') formats.binary.url = formats.binary.url.replace('sing-box-rule-artifacts', 'untrusted');
+      if (fault === 'branch') formats.binary.url = formats.binary.url.replace('/main/', '/other/');
+      if (fault === 'path') formats.binary.url = formats.binary.url.replace('/stable/', '/stable/../');
       if (fault === 'file-set') delete record.files['stable/openai/domains.srs'];
-      if (fault === 'mapping') delete p['dns-query'].formats.source;
-      if (fault === 'usage') p['dns-response'] = p.route;
-      if (fault === 'capability') p.route.formats.binary.requiredCapabilities.push('processMatching');
-      if (fault === 'reuse') p['dns-query'].formats.binary.url = p.route.formats.source.url;
+      if (fault === 'missing-format') delete formats.source;
+      if (fault === 'projection') record.subscription.projections = {};
+      if (fault === 'extra-endpoint-field') formats.binary.requiredCapabilities = ['processMatching'];
+      if (fault === 'format-swap') formats.binary.url = formats.source.url;
       tree.set(path, fault === 'record' ? Buffer.from('{}') : encodeRecord(record));
       if (fault === 'bytes') tree.set('stable/openai/domains.srs', Buffer.from('corrupt current bytes'));
       const before = await stableBytes(env), writes = env.writes.length, heads = new Map(env.heads);
       const status = await getRulesStatus({ context: env.context });
-      if (fault === 'record' || fault === 'bytes') assert.equal(status.status, 'failed');
+      if (['record', 'bytes', 'file-set'].includes(fault)) assert.equal(status.status, 'failed');
       else if (fault !== 'binary') assert.equal(status.rules!.find(rule => rule.id === 'openai')!.candidateCount, 0);
       const result = await pinRuleVersion({ context: { ...env.context, ...(fault === 'binary' ? { binary: '/missing/sing-box' } : {}) },
         id: 'openai', version: old.versionId! });
@@ -342,10 +341,8 @@ test('当前订阅或交付损坏时拒绝 pin；订阅字段顺序不改变契�
   const old = env.first.results[0].current!;
   const tree = env.trees.get(env.heads.get('main')!)!;
   const record = JSON.parse(tree.get(path)!.toString());
-  for (const usage of ['route', 'dns-query']) {
-    const formats = record.subscription.projections[usage].formats;
-    record.subscription.projections[usage].formats = { source: formats.source, binary: formats.binary };
-  }
+  const { source, binary } = record.subscription.formats;
+  record.subscription.formats = { binary, source };
   tree.set(path, encodeRecord(record));
   assert.equal((await pinRuleVersion({ context: env.context, id: 'openai', version: old.versionId! })).status, 'success');
 });

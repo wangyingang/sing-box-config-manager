@@ -191,6 +191,13 @@ function validSuccessfulInput(value: unknown, source: SourceInput, definition: R
 }
 
 export function parseRulesJournal(bytes: Buffer): RulesJournal {
+  function storedDefinition(input: unknown, source: SourceInput) {
+    const definition = parseStoredRuleDefinition(input, source.input.format);
+    if (!('artifact' in definition) || source.version !== 'url' && source.version !== 'git-branch') {
+      throw new Error('RULE_STATE_MIGRATION_REQUIRED: v4 requires an empty artifact target');
+    }
+    return definition;
+  }
   const value: unknown = JSON.parse(bytes.toString());
   if (object(value) && value.schemaVersion === 1) throw new Error('RULE_STATE_MIGRATION_REQUIRED: the current native policy requires an empty artifact target');
   if (!object(value) || value.schemaVersion !== 2 || !uuid(value.id) || !Number.isSafeInteger(value.generation)
@@ -200,7 +207,7 @@ export function parseRulesJournal(bytes: Buffer): RulesJournal {
     if (!object(rule) || !object(rule.control) || !uuid(rule.generation) || !uuid(rule.control.revision)
       || !['present', 'deleting', 'deleted'].includes(rule.lifecycle) || !['auto', 'pinned'].includes(rule.control.mode)
       || typeof rule.configurationRevision !== 'string' || !rule.configurationRevision) throw new Error('RULE_STATE_CORRUPT: rule');
-    const source = parseSource(rule.source), definition = parseStoredRuleDefinition(rule.definition, source.input.format);
+    const source = parseSource(rule.source), definition = storedDefinition(rule.definition, source);
     const pinned = rule.control.mode === 'pinned' ? value.candidates[rule.control.candidateId] : undefined;
     if (definition.id !== id || inputBindingRevision(source, definition) !== rule.inputBindingRevision
       || definitionRevision(source, definition) !== rule.definitionRevision || rule.control.inputBindingRevision !== rule.inputBindingRevision
@@ -224,7 +231,7 @@ export function parseRulesJournal(bytes: Buffer): RulesJournal {
       || !uuid(candidate.definitionGeneration) || !['building', 'publishing', 'verified', 'failed'].includes(candidate.status)
       || !object(candidate.source) || !digest(candidate.inputBindingRevision)
       || candidate.operation === 'sync' && !uuid(candidate.controlRevision)) throw new Error('RULE_STATE_CORRUPT: candidate');
-    const source = parseSource(candidate.sourceInput), definition = parseStoredRuleDefinition(candidate.definition, source.input.format);
+    const source = parseSource(candidate.sourceInput), definition = storedDefinition(candidate.definition, source);
     if (candidate.logicalId !== definition.id || inputBindingRevision(source, definition) !== candidate.inputBindingRevision
       || (source.version === 'url' || source.version === 'openai-voice') && !validRuleSource(candidate.source, source, definition)) throw new Error('RULE_STATE_CORRUPT: candidate binding');
     if (candidate.publishedAt !== undefined || candidate.versionId !== undefined) {
@@ -250,7 +257,7 @@ export function parseRulesJournal(bytes: Buffer): RulesJournal {
       || pending.kind === 'pin' && (pending.afterRule.control?.mode !== 'pinned' || pending.afterRule.control.candidateId !== candidate.id)) {
       throw new Error('RULE_STATE_CORRUPT: pending delivery record');
     }
-    const activationPath = ruleDeliveryRecordPath(parseStoredRuleDefinition(definition, parseSource(pending.afterRule.source).input.format));
+    const activationPath = ruleDeliveryRecordPath(storedDefinition(definition, parseSource(pending.afterRule.source)));
     const activation = encodeRecord(record);
     if (!isDeepStrictEqual(pending.changes, { ...record.files, [activationPath]: { sha256: sha256(activation), byteLength: activation.length } })) {
       throw new Error('RULE_STATE_CORRUPT: pending delivery changes');

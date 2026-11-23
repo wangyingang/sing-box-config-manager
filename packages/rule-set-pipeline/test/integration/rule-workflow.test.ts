@@ -66,8 +66,8 @@ test('自动编排沿用固定与恢复控制，续做清理后才访问上游�
   assert.equal((await env.journal()).maintenance, 'open');
 
   const config = env.config();
-  const dlc = config.sources.dlc; assert.equal(dlc.version, 'latest-release');
-  config.sources.failing = { ...dlc, repository: 'failing/source' };
+  const dlc = config.sources.dlc; assert.equal(dlc.version, 'url');
+  config.sources.failing = { ...dlc, input: { ...dlc.input, url: 'https://rules.example.test/failing/source/dlc.dat_plain.yml' } };
   config.ruleSets.find(rule => rule.id === 'anthropic')!.source = 'failing';
   env.configure(config);
   env.failSource('failing/source');

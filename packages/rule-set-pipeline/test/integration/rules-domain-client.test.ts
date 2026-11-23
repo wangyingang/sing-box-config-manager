@@ -1,3 +1,4 @@
+import { artifactSubscription } from '../../src/configuration.js';
 import assert from 'node:assert/strict';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { createSocket } from 'node:dgram';
@@ -91,7 +92,15 @@ test('只发布一次 v2 Recipe，同一进程通过原 URL 观察 sync、pin、
     assert.equal(first.status, 'success', JSON.stringify(first));
     assert.equal(first.results[0].status, 'delivered');
     const activeA = first.results[0].current!;
-    const subscription = activeA.subscription as RuleSubscription;
+    const currentSubscription = artifactSubscription(env.config().ruleSets[0], branch);
+    assert.deepEqual(activeA.subscription, currentSubscription);
+    const { formats, systemRuleSetId } = currentSubscription;
+    const clientFormats = {
+      source: { ...formats.source, requiredCapabilities: [] },
+      binary: { ...formats.binary, requiredCapabilities: [] },
+    };
+    const subscription: RuleSubscription = { schemaVersion: 2, systemRuleSetId, sourceFormatVersion: 4, targetVersion: '1.14.4',
+      projections: { route: { formats: clientFormats }, 'dns-query': { formats: clientFormats }, 'dns-response': { unavailable: 'empty' } } };
     const inputBytesA = await env.context.repository.download(url);
     await writeFile(join(directory, 'openssl.cnf'), '[req]\nprompt=no\ndistinguished_name=dn\nx509_extensions=ext\n[dn]\nCN=raw.githubusercontent.com\n[ext]\nsubjectAltName=DNS:raw.githubusercontent.com\nbasicConstraints=critical,CA:TRUE\nkeyUsage=critical,digitalSignature,keyEncipherment,keyCertSign\n');
     await exec('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-config', join(directory, 'openssl.cnf'),
@@ -226,7 +235,7 @@ test('只发布一次 v2 Recipe，同一进程通过原 URL 观察 sync、pin、
     const status = await getRulesStatus(request);
     assert.equal(status.status, 'success', JSON.stringify(status));
     assert.equal(status.rules?.[0].current?.versionId, activeB.versionId);
-    assert.deepEqual(status.rules?.[0].current?.subscription, subscription);
+    assert.deepEqual(status.rules?.[0].current?.subscription, activeA.subscription);
     assert.ok(downloads.every(entry => entry.url === url));
     const deliveredHashes = downloads.map(entry => entry.sha256).filter((hash, i, all) => i === 0 || hash !== all[i - 1]);
     const binaryPath = 'stable/openai/domains.srs';

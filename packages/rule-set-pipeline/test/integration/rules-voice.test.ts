@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { configuredBuildTools } from '../../src/configured-build.js';
-import { parseProjectedConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
-import { OPENAI_VOICE_URL, openAiVoiceSnapshotPath, probeOpenAiVoiceInput } from '../../src/openai-voice-source.js';
+import { formalConfiguration } from '../fixtures/formal-configuration.js';
+import { OPENAI_VOICE_URL, probeOpenAiVoiceInput } from '../../src/openai-voice-source.js';
 import { sha256 } from '../../src/release.js';
 import { cleanupRuleHistory } from '../../src/rules-cleanup.js';
 import { parseRulesJournal, RULE_STATE_PATH } from '../../src/rules-model.js';
@@ -16,9 +16,11 @@ if (!binary) throw new Error('Set SING_BOX_TEST_BINARY to an absolute 1.14.4 bin
 const first = '{ "prefixes": [{ "ipv4Prefix": "192.0.2.0/24" }, { "ipv6Prefix": "2001:db8:1::/48" }] }\n';
 const second = JSON.stringify({ prefixes: [{ ipv4Prefix: '198.51.100.0/24' }] });
 
+const voiceSnapshotPath = (id: string) => `candidates/${id}/input.source.json`;
+
 function fixture() {
   const env = cleanupEnvironment(binary!, 'acceptance-chatgpt-voice');
-  const config = parseProjectedConfiguration(readOfficialConfiguration());
+  const config = formalConfiguration();
   config.target.branch = env.context.targetBranch;
   config.ruleSets = config.ruleSets.filter(rule => rule.id === 'chatgpt-voice');
   env.configure(config);
@@ -28,7 +30,7 @@ function fixture() {
   env.context.token = 'github-test-token';
   env.context.fetch = async (url, init) => {
     assert.equal(String(url), OPENAI_VOICE_URL);
-    assert.equal(init?.redirect, 'error');
+    assert.equal(init?.redirect, 'manual');
     const headers = new Headers(init?.headers);
     assert.equal(headers.has('Authorization'), false);
     const condition = headers.get('If-None-Match');
@@ -50,7 +52,7 @@ test('ChatGPT Voice 恢复原始快照，损坏时拒绝使用新上游替代', 
   assert.deepEqual(validators, [null]);
   const [registered] = Object.values((await env.journal()).candidates);
   assert.ok(registered);
-  const path = openAiVoiceSnapshotPath(registered.id);
+  const path = `candidates/${registered.id}/input.source.json`;
   const snapshot = await env.context.repository.snapshot();
   assert.equal(registered.source.inputSha256, sha256(first));
   assert.equal(registered.source.inputBytes, Buffer.byteLength(first));
@@ -92,7 +94,7 @@ test('ChatGPT Voice 发布回读已登记时仍核对原始快照，恢复沿用
   const [candidate] = Object.values((await env.journal()).candidates);
   assert.ok(candidate);
   const prefix = `candidates/${candidate.id}/`;
-  const path = prefix + 'chatgpt-voice.json';
+  const path = prefix + 'input.source.json';
   const snapshot = await env.context.repository.snapshot();
   const readback = await snapshot.read(prefix + 'readback.json');
   assert.ok(readback);
@@ -149,7 +151,7 @@ test('ChatGPT Voice 输入校验、无验证器重读及历史清理保留原始
   assert.notEqual(current.candidateId, firstCandidate);
   const fetches = validators.length;
   const beforeCleanup = await env.context.repository.snapshot();
-  const currentPath = openAiVoiceSnapshotPath(current.candidateId);
+  const currentPath = voiceSnapshotPath(current.candidateId);
   const currentTree = env.trees.get(beforeCleanup.head)!;
   currentTree.delete(currentPath);
   const blocked = await cleanupRuleHistory({ context: { ...env.context } });
@@ -162,8 +164,8 @@ test('ChatGPT Voice 输入校验、无验证器重读及历史清理保留原始
   assert.equal(clean.cleanup?.phase, 'completed');
   assert.equal(clean.readbackRequests?.length, 4);
   const retained = await env.context.repository.snapshot();
-  assert.equal(await retained.read(openAiVoiceSnapshotPath(firstCandidate)), undefined);
-  assert.deepEqual(await retained.read(openAiVoiceSnapshotPath(current.candidateId)), Buffer.from(second));
+  assert.equal(await retained.read(voiceSnapshotPath(firstCandidate)), undefined);
+  assert.deepEqual(await retained.read(voiceSnapshotPath(current.candidateId)), Buffer.from(second));
   const pinned = await pinRuleVersion({ ...req, id: 'chatgpt-voice', version: current.versionId! });
   assert.equal(pinned.status, 'success', JSON.stringify(pinned));
   assert.equal(pinned.results[0].current?.source.inputSha256, sha256(second));

@@ -153,7 +153,7 @@ test('v4 sync keeps the previous pair when all rules are skipped or the version 
   assert.deepEqual(unchanged.results[0].conversionReport?.skippedRuleTypeCounts, { asn: 1 });
   for (const [input, reason] of [
     [{ version: 4, rules: badRules }, /No rules could be converted/],
-    [{ version: 5, rules: [{ domain: 'previous.example' }] }, /Expected Source Format version 4/],
+    [{ version: 5, rules: [{ domain: 'previous.example' }] }, /Expected Source Format version 2 or 4/],
   ] as const) {
     env.updateInput(input);
     const refused = await syncRules(env.request);

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import test from 'node:test';
-import { readOfficialConfiguration } from '../../src/configuration.js';
+import { readV3Fixture } from '../fixtures/baseline-configuration.js';
 import { buildConfiguredCommit } from '../../src/configured-build.js';
 import { buildNative, NATIVE_VALIDATION_POLICY, type NativeBuild } from '../../src/native.js';
 import { convertRules } from '../../src/convert.js';
@@ -88,7 +88,7 @@ test('fixed official sample independently builds identical JSON/SRS and actual b
 });
 
 test('固定 china46.txt 构建可重复的双栈规则，Route 与 DNS Response 共用文件', async () => {
-  const configuration = await readFile(new URL('../../config/china-ip.yml', import.meta.url), 'utf8');
+  const configuration = await readFile(new URL('../fixtures/china-ip-v3.yml', import.meta.url), 'utf8');
   const commit = 'a'.repeat(40);
   const branchUrl = 'https://api.github.com/repos/gaoyifan/china-operator-ip/branches/ip-lists';
   const rawUrl = `https://raw.githubusercontent.com/gaoyifan/china-operator-ip/${commit}/china46.txt`;
@@ -135,7 +135,7 @@ test('正式 gfw 从固定 Git 文件构建，JSON/SRS 后缀匹配保留标签�
   const input = 'Example.TEST\r\nother.example.\r\nexample.test\r\nbücher.example\r\n';
   const url = `https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/${commit}/gfw.txt`;
   const built = await buildConfiguredCommit({
-    configuration: readOfficialConfiguration(), selectedIds: ['gfw'], binary,
+    configuration: readV3Fixture(), selectedIds: ['gfw'], binary,
     github: { commit, fetch: async address => {
       if (String(address) === 'https://api.github.com/repos/Loyalsoldier/v2ray-rules-dat/branches/release') {
         return Response.json({ name: 'release', commit: { sha: commit } });
@@ -172,7 +172,7 @@ test('正式 onedrive 从固定 Git 文件构建，保留后缀和关键词并�
     + 'DOMAIN-SUFFIX,sharepoint.example\nDOMAIN-KEYWORD,Cloud-Drive\nDOMAIN-KEYWORD,cloud-drive\n'
     + 'DOMAIN-KEYWORD,SharePoint.Example\nPROCESS-NAME,OneDriveUpdater\n';
   const built = await buildConfiguredCommit({
-    configuration: readOfficialConfiguration(), selectedIds: ['onedrive'], binary,
+    configuration: readV3Fixture(), selectedIds: ['onedrive'], binary,
     github: { commit, fetch: async address => {
       if (String(address) === `https://api.github.com/repos/${repository}/branches/master`) {
         return Response.json({ name: 'master', commit: { sha: commit } });
@@ -216,7 +216,7 @@ test('正式 stream 保留同一 v2 规则内三个域名字段的 OR 匹配和�
     domain_keyword: ['needle'],
   }, { domain_keyword: ['needle'] }] }, null, '\t').replace(/\n/g, '\r') + '\r';
   const built = await buildConfiguredCommit({
-    configuration: readOfficialConfiguration(), selectedIds: ['stream'], binary,
+    configuration: readV3Fixture(), selectedIds: ['stream'], binary,
     github: { commit, fetch: async address => {
       if (String(address) === `https://api.github.com/repos/${repository}/branches/master`) {
         return Response.json({ name: 'master', commit: { sha: commit } });

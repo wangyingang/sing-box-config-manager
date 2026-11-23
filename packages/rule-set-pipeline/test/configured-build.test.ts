@@ -1,9 +1,10 @@
-import { parseProjectedConfiguration, readOfficialConfiguration } from '../src/configuration.js';
+import { readV3Fixture } from './fixtures/baseline-configuration.js';
+import { parseProjectedConfiguration } from '../src/configuration.js';
 import { releaseConfiguration } from './fixtures/release-configuration.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { sha256 } from '../src/release.js';
-import { buildConfiguredCommit, buildConfiguredRelease, parseBuildConfiguration } from '../src/configured-build.js';
+import { buildConfiguredCommit, buildConfiguredRelease } from '../src/configured-build.js';
 
 const tag = '20261104112839';
 const configuration = releaseConfiguration();
@@ -29,8 +30,8 @@ function upstream(input = yaml, checksum = sha256(input)) {
 }
 
 test('配置在写入前拒绝旧格式、无效来源、用途、身份和目标', () => {
-  const configuration = readOfficialConfiguration();
-  assert.throws(() => parseBuildConfiguration('schemaVersion: 1\nsource: v2fly/domain-list-community\ntarget: {}\nruleSets: []'));
+  const configuration = readV3Fixture();
+  assert.throws(() => parseProjectedConfiguration('schemaVersion: 1\nsource: v2fly/domain-list-community\ntarget: {}\nruleSets: []'));
   for (const invalid of [
     configuration.replace('format: plain-yaml', 'format: unknown'),
     configuration.replace('source: dlc', 'source: missing'),
@@ -41,7 +42,7 @@ test('配置在写入前拒绝旧格式、无效来源、用途、身份和目�
     configuration.replace('stable/anthropic', 'stable/../outside'),
     configuration.replace('branch: main', 'branch: other'),
     configuration.replace('wangyingang/sing-box-rule-artifacts', 'other/repository'),
-  ]) assert.throws(() => parseBuildConfiguration(invalid));
+  ]) assert.throws(() => parseProjectedConfiguration(invalid));
 });
 
 test('非法产物名、记录冲突及共用用途错误在读取上游前拒绝', async () => {
@@ -54,7 +55,7 @@ test('非法产物名、记录冲突及共用用途错误在读取上游前拒�
     ['china-ip', 'office-networks', 'other', /dns-response must share the route artifact basename/] as const,
   ];
   for (const [id, route, response, error] of cases) {
-    const configuration = parseProjectedConfiguration(readOfficialConfiguration());
+    const configuration = parseProjectedConfiguration(readV3Fixture());
     const rule = configuration.ruleSets.find(entry => entry.id === id)!;
     rule.usages.route = { artifact: route };
     rule.usages['dns-response'] = { artifact: response };
@@ -114,7 +115,7 @@ test('新增列表缺失或非法时报告列表位置，共用来源的兄弟�
     { name: 'google', length: 1, rules: ['full:bad..example'] },
     { name: 'youtube', length: 1, rules: ['domain:youtube.example'] },
   ] }));
-  const built = await buildConfiguredRelease({ configuration: readOfficialConfiguration(),
+  const built = await buildConfiguredRelease({ configuration: readV3Fixture(),
     selectedIds: ['china-domains', 'global', 'google', 'youtube'], release: { tag, fetch: remote.fetcher },
     binary: process.env.SING_BOX_TEST_BINARY! });
   assert.deepEqual(built.results.map(({ id, status }) => [id, status]), [
@@ -128,7 +129,7 @@ test('新增列表缺失或非法时报告列表位置，共用来源的兄弟�
 });
 
 test('gfw 用途错误在获取输入前定位到规则集和文件', async () => {
-  const config = parseProjectedConfiguration(readOfficialConfiguration());
+  const config = parseProjectedConfiguration(readV3Fixture());
   const gfw = config.ruleSets.find(rule => rule.id === 'gfw')!;
   gfw.usages['dns-query'] = { unavailable: 'empty' };
   await assert.rejects(buildConfiguredCommit({
@@ -140,7 +141,7 @@ test('gfw 用途错误在获取输入前定位到规则集和文件', async () =
 test('gfw 缺失、非法或空输入的诊断包含固定文件', async () => {
   const commit = 'a'.repeat(40);
   const build = (input: Response) => buildConfiguredCommit({
-    configuration: readOfficialConfiguration(), selectedIds: ['gfw'], binary: '/unused',
+    configuration: readV3Fixture(), selectedIds: ['gfw'], binary: '/unused',
     github: { commit, fetch: async url => String(url).includes('/branches/')
       ? Response.json({ name: 'release', commit: { sha: commit } }) : input },
   });
@@ -160,7 +161,7 @@ test('gfw 缺失、非法或空输入的诊断包含固定文件', async () => {
 });
 
 test('onedrive 拒绝非法条件和用途，过滤后为空时保留进程过滤记录', async () => {
-  const configuration = readOfficialConfiguration();
+  const configuration = readV3Fixture();
   const commit = 'c'.repeat(40);
   const path = 'rule/Clash/OneDrive/OneDrive.list';
   const branchUrl = 'https://api.github.com/repos/blackmatrix7/ios_rule_script/branches/master';
@@ -206,7 +207,7 @@ test('onedrive 拒绝非法条件和用途，过滤后为空时保留进程过�
 });
 
 test('stream 拒绝不支持的 Source Format、规则结构、字段和值，并定位到输入', async () => {
-  const configuration = readOfficialConfiguration();
+  const configuration = readV3Fixture();
   const commit = 'd'.repeat(40);
   const path = 'sing-box/non_ip/stream.json';
   const url = `https://raw.githubusercontent.com/SukkaLab/ruleset.skk.moe/${commit}/${path}`;

@@ -2,17 +2,17 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { syncRules, pinRuleVersion, resumeRuleUpdates } from '../../src/rules-operations.js';
 import { getRulesStatus, type RuleStatus } from '../../src/rules-status.js';
-import { parseProjectedConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
+import { formalConfiguration } from '../fixtures/formal-configuration.js';
 import { sha256 } from '../../src/release.js';
 import { rulesEnvironment } from '../fixtures/rules-environment.js';
-import { baselineConfiguration } from '../fixtures/baseline-configuration.js';
+import { baselineV4Configuration } from '../fixtures/formal-configuration.js';
 
 const binary = process.env.SING_BOX_TEST_BINARY;
 if (!binary) throw new Error('Set SING_BOX_TEST_BINARY to an absolute 1.14.4 binary path');
 
 function fourSources() {
   const env = rulesEnvironment(binary!);
-  const config = baselineConfiguration(false);
+  const config = baselineV4Configuration(false);
   config.target.branch = env.context.targetBranch;
   env.configure(config);
   const releaseFetch = env.context.fetch!;
@@ -35,7 +35,7 @@ test('四集共享各自来源；仅 CIDR 变化只交付 CIDR，新 commit 同�
   const first = await syncRules(request);
   assert.equal(first.status, 'success', JSON.stringify(first));
   assert.deepEqual(first.results.map(x => x.status), ['delivered', 'delivered', 'delivered', 'delivered']);
-  for (const suffix of ['/latest', '/assets/11', '/assets/12', '/branches/ip-lists', '/china46.txt']) {
+  for (const suffix of ['/dlc.dat_plain.yml', '/dlc.dat_plain.yml.sha256sum', '/branches/ip-lists', '/china46.txt']) {
     assert.equal(env.requests.filter(url => url.endsWith(suffix)).length, 1, suffix);
   }
   const old = await getRulesStatus(request);
@@ -71,13 +71,13 @@ for (const fault of ['release-offline', 'checksum', 'yaml', 'missing-list', 'inv
     env.context.fetch = async (url, init) => {
       const address = String(url);
       if (fault === 'release-offline' && address.includes('v2fly/')) throw new Error('Source offline');
-      if (fault === 'checksum' && address.endsWith('/assets/22')) return new Response('0'.repeat(64) + '  dlc.dat_plain.yml\n');
-      if (['yaml', 'missing-list', 'invalid-list'].includes(fault) && /\/assets\/2[12]$/.test(address)) {
+      if (fault === 'checksum' && address.endsWith('/dlc.dat_plain.yml.sha256sum')) return new Response('0'.repeat(64) + '  dlc.dat_plain.yml\n');
+      if (['yaml', 'missing-list', 'invalid-list'].includes(fault) && /\/dlc\.dat_plain\.yml(?:\.sha256sum)?$/.test(address)) {
         const lists = [{ name: 'anthropic', length: 1, rules: ['domain:anthropic-next.example'] },
           { name: 'google-deepmind', length: 1, rules: ['domain:google-deepmind.example'] }];
         if (fault === 'invalid-list') lists.push({ name: 'openai', length: 1, rules: ['unsupported:bad.example'] });
         const body = fault === 'yaml' ? 'lists: [' : JSON.stringify({ lists });
-        return new Response(address.endsWith('/assets/22') ? `${sha256(body)}  dlc.dat_plain.yml\n` : body);
+        return new Response(address.endsWith('/dlc.dat_plain.yml.sha256sum') ? `${sha256(body)}  dlc.dat_plain.yml\n` : body);
       }
       return fetcher(url, init);
     };
@@ -103,7 +103,8 @@ for (const fault of ['release-offline', 'checksum', 'yaml', 'missing-list', 'inv
       } else if (entry.id === 'china-ip') {
         assert.ok(successful && 'commit' in successful); assert.equal(successful.commit, '2'.repeat(40));
       } else {
-        assert.equal(successful && 'releaseId' in successful && successful.releaseId, 2);
+        assert.ok(successful && 'kind' in successful && successful.kind === 'fixed-url');
+        assert.notEqual(successful.inputSha256, first.results[i].successfulInput?.source.inputSha256);
       }
       if (entry.status === 'failed' || entry.status === 'unchanged') {
         assert.deepEqual(entry.current, first.results[i].current);
@@ -123,13 +124,11 @@ for (const fault of ['release-offline', 'checksum', 'yaml', 'missing-list', 'inv
 test('YAML 自定义名称随两类规则交付，内容复用与稳定订阅各自保留名称', async () => {
   const env = rulesEnvironment(binary!, 'acceptance-artifact-names');
   const config = env.config();
-  config.sources.cidr = parseProjectedConfiguration(readOfficialConfiguration()).sources['china-operator-ip'];
+  config.sources.cidr = formalConfiguration().sources['china-operator-ip'];
   const domain = config.ruleSets[0];
-  domain.usages.route = { artifact: 'ips' };
-  domain.usages['dns-query'] = { artifact: 'ips' };
+  domain.artifact = 'ips';
   const ip = (id: string, artifact: string) => ({
-    id, source: 'cidr', list: 'all', stablePath: `stable/${id}`,
-    usages: { route: { artifact }, 'dns-query': { unavailable: 'empty' as const }, 'dns-response': { artifact } },
+    id, source: 'cidr', stablePath: `stable/${id}`, artifact,
   });
   config.ruleSets = [domain, ip('china-ip', 'office-networks'), ip('ip-copy', 'branch-networks')];
   env.configure(config);
@@ -143,7 +142,7 @@ test('YAML 自定义名称随两类规则交付，内容复用与稳定订阅各
   assert.equal(status.rules?.length, 3);
   const snapshot = await env.context.repository.snapshot();
   for (const rule of config.ruleSets) {
-    const { artifact } = rule.usages.route;
+    const { artifact } = rule;
     const item: RuleStatus = status.rules!.find(row => row.id === rule.id)!;
     const current = item.current!;
     assert.equal(item.deliveryState, 'delivered');
@@ -152,10 +151,7 @@ test('YAML 自定义名称随两类规则交付，内容复用与稳定订阅各
     const candidatePath = `candidates/${current.candidateId}/`;
     const manifest = JSON.parse((await snapshot.read(candidatePath + 'manifest.json'))!.toString());
     const evidence = JSON.parse((await snapshot.read(candidatePath + 'readback.json'))!.toString());
-    const dns = rule.id === domain.id ? 'dns-query' : 'dns-response';
-    const unavailable = dns === 'dns-query' ? 'dns-response' : 'dns-query';
-    assert.deepEqual(manifest.projections[dns], manifest.projections.route);
-    assert.deepEqual(manifest.projections[unavailable], { unavailable: 'empty' });
+    assert.equal(Object.hasOwn(manifest, 'projections'), false);
     assert.deepEqual(item.stableUrls.map(url => url.split('/').at(-1)).sort(), [artifact + '.json', artifact + '.srs']);
     assert.equal(manifest.artifacts.length, 2);
     for (const entry of manifest.artifacts) {
@@ -197,7 +193,7 @@ test('YAML 自定义名称随两类规则交付，内容复用与稳定订阅各
 test('gfw 经 sync 交付并可核验，非法 Git 更新保留 gfw 且不阻断独立规则集', async () => {
   const env = rulesEnvironment(binary!, 'acceptance-gfw');
   const request = { context: env.context };
-  const config = parseProjectedConfiguration(readOfficialConfiguration());
+  const config = formalConfiguration();
   config.target.branch = env.context.targetBranch;
   config.ruleSets = config.ruleSets.filter(rule => ['openai', 'gfw'].includes(rule.id));
   env.configure(config);
@@ -230,13 +226,13 @@ test('gfw 经 sync 交付并可核验，非法 Git 更新保留 gfw 且不阻断
 
   const stablePrefix = 'https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/acceptance-gfw/stable/gfw/';
   const formats = {
-    source: { url: stablePrefix + 'domains.json', requiredCapabilities: [] },
-    binary: { url: stablePrefix + 'domains.srs', requiredCapabilities: [] },
+    source: { url: stablePrefix + 'domains.json' },
+    binary: { url: stablePrefix + 'domains.srs' },
   };
   assert.deepEqual(visible.stableUrls.sort(), Object.values(formats).map(x => x.url).sort());
   assert.deepEqual(current.subscription, {
-    schemaVersion: 2, systemRuleSetId: 'gfw', targetVersion: '1.14.4', sourceFormatVersion: 4,
-    projections: { route: { formats }, 'dns-query': { formats }, 'dns-response': { unavailable: 'empty' } },
+    schemaVersion: 3, systemRuleSetId: 'gfw', targetVersion: '1.14.4', sourceFormatVersion: 4,
+    formats,
   });
   const prefix = `candidates/${current.candidateId}/`;
   const snapshot = await env.context.repository.snapshot();
@@ -245,10 +241,7 @@ test('gfw 经 sync 交付并可核验，非法 Git 更新保留 gfw 且不阻断
   const evidence = JSON.parse((await env.context.repository.download(current.candidateEvidenceUrl)).toString());
   assert.equal(manifest.id, 'gfw');
   assert.equal(manifest.revision, current.candidateId);
-  assert.deepEqual(manifest.projections, {
-    route: { artifactIds: manifest.artifacts.map((a: { id: string }) => a.id) },
-    'dns-query': manifest.projections.route, 'dns-response': { unavailable: 'empty' },
-  });
+  assert.equal(Object.hasOwn(manifest, 'projections'), false);
   assert.equal(build.buildId, evidence.buildId);
   assert.equal(build.buildId, first.results[1].successfulInput?.buildId);
   assert.equal(build.tool.version, '1.14.4');
@@ -286,8 +279,8 @@ test('首次同步缺少单列表时该集未交付且无候选，其他三集�
     { name: 'anthropic', length: 1, rules: ['domain:anthropic.example'] },
     { name: 'google-deepmind', length: 1, rules: ['domain:deepmind.example'] },
   ] });
-  env.context.fetch = async (url, init) => String(url).endsWith('/assets/11') ? new Response(body)
-    : String(url).endsWith('/assets/12') ? new Response(`${sha256(body)}  dlc.dat_plain.yml\n`) : fetcher(url, init);
+  env.context.fetch = async (url, init) => String(url).endsWith('/dlc.dat_plain.yml') ? new Response(body)
+    : String(url).endsWith('/dlc.dat_plain.yml.sha256sum') ? new Response(`${sha256(body)}  dlc.dat_plain.yml\n`) : fetcher(url, init);
   const result = await syncRules(request);
   assert.equal(result.status, 'partial', JSON.stringify(result)); assert.equal(result.exitCode, 1);
   assert.deepEqual(result.results.map(x => x.status), ['failed', 'delivered', 'delivered', 'delivered']);
@@ -340,37 +333,40 @@ test('合法 ID constructor 经 sync、独立会话 status、pin 和 resume 保�
   assert.equal(resumed.results[0].current?.candidateId, current.candidateId);
   assert.deepEqual(resumed.results[0].current?.files, current.files);
 });
-for (const mechanism of ['latest-release', 'git-branch'] as const) for (const format of ['plain-yaml', 'cidr-text'] as const) {
-  test(`配置新增任意仓库：${mechanism} + ${format} 完成交付、证据复验及 pin`, { skip: !binary }, async () => {
-    const env = rulesEnvironment(binary!); const config = env.config();
-    const repo = 'another-owner/another-repo'; const commit = 'b'.repeat(40), tag = 'v2.3.0';
-    const body = format === 'plain-yaml' ? JSON.stringify({ lists: [{ name: 'other', length: 1, rules: ['domain:example.org'] }] }) : '192.0.2.0/24\n2001:db8::/32\n';
-    const rule = { ...config.ruleSets[0], id: 'custom', list: format === 'plain-yaml' ? 'other' : 'all', source: 'custom', stablePath: 'stable/custom' };
-    if (format === 'cidr-text') rule.usages = { route: { artifact: 'route' }, 'dns-query': { unavailable: 'empty' }, 'dns-response': { artifact: 'route' } };
-    config.ruleSets = [rule]; config.sources = { custom: mechanism === 'latest-release'
-      ? { repository: repo, version: mechanism, input: { format, asset: 'rules.data', checksum: 'rules.sha256' } }
-      : { repository: repo, version: mechanism, branch: 'data/rules', input: { format, path: 'lists/rules.data' } } };
+for (const mechanism of ['url', 'git-branch'] as const) {
+  test(`配置新增任意仓库：${mechanism} 完成交付、证据复验及 pin`, async () => {
+    const env = rulesEnvironment(binary!);
+    const config = env.config();
+    const repo = 'another-owner/another-repo', commit = 'b'.repeat(40);
+    const address = `https://github.com/${repo}/releases/latest/download/rules.data`;
+    const body = mechanism === 'url'
+      ? JSON.stringify({ lists: [{ name: 'other', length: 1, rules: ['domain:example.org'] }] })
+      : '192.0.2.0/24\n2001:db8::/32\n';
+    config.ruleSets = [{ id: 'custom', source: 'custom', stablePath: 'stable/custom', artifact: 'rules',
+      ...(mechanism === 'url' && { list: 'other' }) }];
+    config.sources = { custom: mechanism === 'url'
+      ? { version: 'url', input: { format: 'v2fly-dlc-yaml', url: address, sha256Url: address + '.sha256' } }
+      : { repository: repo, version: mechanism, branch: 'data/rules', input: { format: 'cidr-text', path: 'lists/rules.data' } } };
     env.configure(config);
     const requests: string[] = [];
-    env.context.fetch = async address => {
-      const url = String(address); requests.push(url);
+    env.context.fetch = async addressInput => {
+      const url = String(addressInput);
+      requests.push(url);
       assert.ok(url.includes(repo), url);
-      if (url.includes('/branches/')) { assert.ok(url.endsWith('data%2Frules')); return Response.json({ name: 'data/rules', commit: { sha: commit } }); }
-      if (url.includes('raw.githubusercontent.com/')) { assert.ok(url.endsWith(`/${commit}/lists/rules.data`)); return new Response(body); }
-      if (url.includes('/git/ref/tags/')) return Response.json({ object: { type: 'commit', sha: commit } });
-      if (url.endsWith('/assets/10')) return new Response(body);
-      if (url.endsWith('/assets/11')) return new Response(`${sha256(body)}  rules.data\n`);
-      if (url.includes('/releases/')) return Response.json({ id: 3, tag_name: tag, assets: ['rules.data', 'rules.sha256'].map((name, i) =>
-        ({ id: i + 10, name, browser_download_url: `https://github.com/${repo}/releases/download/${tag}/${name}` })) });
+      if (url.endsWith('/branches/data%2Frules')) return Response.json({ name: 'data/rules', commit: { sha: commit } });
+      if (url.endsWith(`/${commit}/lists/rules.data`) || url === address) return new Response(body);
+      if (url === address + '.sha256') return new Response(sha256(body));
       throw new Error(`Unexpected request ${url}`);
     };
-    const first = await syncRules({ context: env.context }); assert.equal(first.status, 'success', JSON.stringify(first));
-    const acquired = first.results[0].current?.source;
-    assert.ok(acquired && 'repository' in acquired); assert.equal(acquired.repository, repo);
-    const status = await getRulesStatus({ context: env.context }); assert.equal(status.rules?.[0].candidateCount, 1);
+    const first = await syncRules({ context: env.context });
+    assert.equal(first.status, 'success', JSON.stringify(first));
+    assert.equal(first.results[0].current?.source.inputSha256, sha256(body));
+    const status = await getRulesStatus({ context: env.context });
+    assert.equal(status.rules?.[0].candidateCount, 1);
     const before = requests.length;
     const pinned = await pinRuleVersion({ context: env.context, id: 'custom', version: first.results[0].current!.versionId! });
-    assert.equal(pinned.status, 'success', JSON.stringify(pinned)); assert.equal(requests.length, before);
+    assert.equal(pinned.status, 'success', JSON.stringify(pinned));
+    assert.equal(requests.length, before);
   });
 }
 
@@ -378,18 +374,18 @@ const gitDomainDeliveries = [
   {
     id: 'onedrive', repository: 'blackmatrix7/ios_rule_script', path: 'rule/Clash/OneDrive/OneDrive.list',
     input: 'DOMAIN-SUFFIX,sharepoint.example\nDOMAIN-KEYWORD,onedrive\nPROCESS-NAME,OneDrive\n',
-    policy: 'typed-domain-text-v1', filtered: [{ type: 'PROCESS-NAME', value: 'OneDrive', line: 3 }], terms: 2,
+    policy: 'clash-rule-list-v1', terms: 2,
   },
   {
     id: 'stream', repository: 'SukkaLab/ruleset.skk.moe', path: 'sing-box/non_ip/stream.json',
     input: JSON.stringify({ version: 2, rules: [{ domain: ['exact.example'],
       domain_suffix: ['suffix.example'], domain_keyword: ['needle'] }] }),
-    policy: 'sing-box-domain-json-v1', filtered: undefined, terms: 3,
+    policy: 'sing-box-source-json-v2', terms: 1,
   },
 ];
-for (const { id, repository, path, input, policy, filtered, terms } of gitDomainDeliveries) test(`${id} 经 sync 交付两种域名格式并保留转换报告及固定来源`, async () => {
+for (const { id, repository, path, input, policy, terms } of gitDomainDeliveries) test(`${id} 经 sync 交付两种域名格式并保留转换报告及固定来源`, async () => {
   const env = rulesEnvironment(binary!, `acceptance-${id}`);
-  const configuration = parseProjectedConfiguration(readOfficialConfiguration());
+  const configuration = formalConfiguration();
   configuration.target.branch = env.context.targetBranch;
   configuration.ruleSets = configuration.ruleSets.filter(rule => rule.id === id);
   env.configure(configuration);
@@ -417,12 +413,12 @@ for (const { id, repository, path, input, policy, filtered, terms } of gitDomain
   assert.deepEqual(status.rules?.[0].current, current);
   const stablePrefix = `https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/${env.context.targetBranch}/stable/${id}/`;
   const formats = {
-    source: { url: stablePrefix + 'domains.json', requiredCapabilities: [] },
-    binary: { url: stablePrefix + 'domains.srs', requiredCapabilities: [] },
+    source: { url: stablePrefix + 'domains.json' },
+    binary: { url: stablePrefix + 'domains.srs' },
   };
   assert.deepEqual(current.subscription, {
-    schemaVersion: 2, systemRuleSetId: id, targetVersion: '1.14.4', sourceFormatVersion: 4,
-    projections: { route: { formats }, 'dns-query': { formats }, 'dns-response': { unavailable: 'empty' } },
+    schemaVersion: 3, systemRuleSetId: id, targetVersion: '1.14.4', sourceFormatVersion: 4,
+    formats,
   });
 
   const snapshot = await env.context.repository.snapshot();
@@ -432,19 +428,18 @@ for (const { id, repository, path, input, policy, filtered, terms } of gitDomain
   const report = JSON.parse((await snapshot.read(prefix + 'conversion-report.json'))!.toString());
   assert.equal(manifest.id, id);
   assert.equal(manifest.revision, current.candidateId);
-  assert.deepEqual(manifest.projections['dns-query'], manifest.projections.route);
-  assert.deepEqual(manifest.projections['dns-response'], { unavailable: 'empty' });
+  assert.equal(Object.hasOwn(manifest, 'projections'), false);
   assert.equal(build.tools.conversionPolicy, policy);
   assert.equal(build.tool.version, '1.14.4');
-  assert.deepEqual(report.filteredRules, filtered);
+  assert.equal(report.unsupportedCount, 0);
+  assert.equal(report.inputCount, id === 'onedrive' ? 2 : 1);
   assert.equal(report.outputTermCount, terms);
   for (const format of ['source', 'binary'] as const) {
     const artifact = manifest.artifacts.find((entry: { format: string }) => entry.format === format);
     assert.ok(artifact);
-    assert.ok(manifest.projections.route.artifactIds.includes(artifact.id));
     const stable = await env.context.repository.download(formats[format].url);
     assert.equal(sha256(stable), artifact.sha256);
     assert.deepEqual(stable, await env.context.repository.download(artifact.url));
   }
-  console.log(JSON.stringify({ gitDomainDelivery: { id, current, manifest, buildId: build.buildId, filtered, terms } }));
+  console.log(JSON.stringify({ gitDomainDelivery: { id, current, manifest, buildId: build.buildId, terms } }));
 });

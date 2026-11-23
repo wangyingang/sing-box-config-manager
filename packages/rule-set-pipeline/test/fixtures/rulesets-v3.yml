@@ -1,0 +1,176 @@
+schemaVersion: 3
+# 候选保留策略为 30 天，由 cleanup 执行；当前交付不受保留期限制。
+candidateRetentionDays: 30
+target:
+  repository: wangyingang/sing-box-rule-artifacts
+  branch: main
+sources:
+  dlc:
+    repository: v2fly/domain-list-community
+    version: latest-release
+    input:
+      format: plain-yaml
+      asset: dlc.dat_plain.yml
+      checksum: dlc.dat_plain.yml.sha256sum
+  china-operator-ip:
+    repository: gaoyifan/china-operator-ip
+    version: git-branch
+    branch: ip-lists
+    input:
+      format: cidr-text
+      path: china46.txt
+  openai-voice:
+    version: openai-voice
+    input:
+      format: openai-voice-json
+      url: https://openai.com/chatgpt-voice.json
+  loyalsoldier:
+    repository: Loyalsoldier/v2ray-rules-dat
+    version: git-branch
+    branch: release
+    input:
+      format: domain-suffix-text
+      path: gfw.txt
+  blackmatrix7:
+    repository: blackmatrix7/ios_rule_script
+    version: git-branch
+    branch: master
+    input:
+      format: typed-domain-text
+      path: rule/Clash/OneDrive/OneDrive.list
+  sukka:
+    repository: SukkaLab/ruleset.skk.moe
+    version: git-branch
+    branch: master
+    input:
+      format: sing-box-domain-json
+      path: sing-box/non_ip/stream.json
+ruleSets:
+  - id: openai
+    source: dlc
+    list: openai
+    stablePath: stable/openai
+    usages:
+      route: { artifact: domains }
+      dns-query: { artifact: domains }
+      dns-response: { unavailable: empty }
+  - id: anthropic
+    source: dlc
+    list: anthropic
+    stablePath: stable/anthropic
+    usages:
+      route: { artifact: domains }
+      dns-query: { artifact: domains }
+      dns-response: { unavailable: empty }
+  - id: google-deepmind
+    source: dlc
+    list: google-deepmind
+    stablePath: stable/google-deepmind
+    usages:
+      route: { artifact: domains }
+      dns-query: { artifact: domains }
+      dns-response: { unavailable: empty }
+  - id: china-ip
+    source: china-operator-ip
+    list: all
+    stablePath: stable/china-ip
+    usages:
+      route: { artifact: ips }
+      dns-query: { unavailable: empty }
+      dns-response: { artifact: ips }
+  - id: chatgpt-voice
+    source: openai-voice
+    list: all
+    stablePath: stable/chatgpt-voice
+    usages:
+      route: { artifact: ips }
+      dns-query: { unavailable: empty }
+      dns-response: { artifact: ips }
+  - id: china-domains
+    source: dlc
+    list: geolocation-cn
+    stablePath: stable/china-domains
+    usages:
+      route: { artifact: domains }
+      dns-query: { artifact: domains }
+      dns-response: { unavailable: empty }
+  - id: global
+    source: dlc
+    list: geolocation-!cn
+    stablePath: stable/global
+    usages:
+      route: { artifact: domains }
+      dns-query: { artifact: domains }
+      dns-response: { unavailable: empty }
+  - id: apple
+    source: dlc
+    list: apple
+    stablePath: stable/apple
+    usages:
+      route: { artifact: domains }
+      dns-query: { artifact: domains }
+      dns-response: { unavailable: empty }
+  - id: microsoft
+    source: dlc
+    list: microsoft
+    stablePath: stable/microsoft
+    usages:
+      route: { artifact: domains }
+      dns-query: { artifact: domains }
+      dns-response: { unavailable: empty }
+  - id: docker
+    source: dlc
+    list: docker
+    stablePath: stable/docker
+    usages:
+      route: { artifact: domains }
+      dns-query: { artifact: domains }
+      dns-response: { unavailable: empty }
+  - id: github
+    source: dlc
+    list: github
+    stablePath: stable/github
+    usages:
+      route: { artifact: domains }
+      dns-query: { artifact: domains }
+      dns-response: { unavailable: empty }
+  - id: google
+    source: dlc
+    list: google
+    stablePath: stable/google
+    usages:
+      route: { artifact: domains }
+      dns-query: { artifact: domains }
+      dns-response: { unavailable: empty }
+  - id: youtube
+    source: dlc
+    list: youtube
+    stablePath: stable/youtube
+    usages:
+      route: { artifact: domains }
+      dns-query: { artifact: domains }
+      dns-response: { unavailable: empty }
+  - id: gfw
+    source: loyalsoldier
+    list: all
+    stablePath: stable/gfw
+    usages:
+      route: { artifact: domains }
+      dns-query: { artifact: domains }
+      dns-response: { unavailable: empty }
+  - id: onedrive
+    source: blackmatrix7
+    list: all
+    stablePath: stable/onedrive
+    usages:
+      route: { artifact: domains }
+      dns-query: { artifact: domains }
+      dns-response: { unavailable: empty }
+  - id: stream
+    source: sukka
+    list: all
+    stablePath: stable/stream
+    usages:
+      route: { artifact: domains }
+      dns-query: { artifact: domains }
+      dns-response: { unavailable: empty }

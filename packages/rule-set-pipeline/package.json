@@ -13,7 +13,7 @@
     "rules": "node --import tsx src/cli.ts",
     "test:acceptance:cleanup": "node --import tsx --test test/acceptance/rules-cleanup.test.ts",
     "test:acceptance:transport": "node --import tsx --test test/acceptance/maintenance-refs.test.ts",
-    "test:acceptance:rules": "node --import tsx --test test/acceptance/rules-operations.test.ts",
+    "test:acceptance:rules": "node --import tsx --test test/acceptance/formal-v4.test.ts",
     "test:acceptance:automation": "node --import tsx --test test/acceptance/rules-automation.test.ts"
   },
   "exports": {

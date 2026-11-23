@@ -18,7 +18,7 @@ const baselineJsonSha256 = [
 ];
 
 test('固定官方 Release 一次读取三集，分别原生验证且重复构建字节一致', { timeout: 180_000 }, async () => {
-  const configuration = await readFile(new URL('../../config/rulesets.yml', import.meta.url), 'utf8');
+  const configuration = await readFile(new URL('../fixtures/rulesets-v3.yml', import.meta.url), 'utf8');
   const requests: string[] = [];
   const fetcher: typeof fetch = async (input, init) => {
     requests.push(String(input));
@@ -91,7 +91,7 @@ const releaseCases: Record<string, {
 };
 
 test('固定官方 Release 共用一份校验输入构建八个新增域名集，JSON/SRS 保留匹配类型', { timeout: 180_000 }, async t => {
-  const configuration = await readFile(new URL('../../config/rulesets.yml', import.meta.url), 'utf8');
+  const configuration = await readFile(new URL('../fixtures/rulesets-v3.yml', import.meta.url), 'utf8');
   const binary = process.env.SING_BOX_TEST_BINARY ?? '';
   const requests: string[] = [];
   const result = await buildConfiguredRelease({ configuration, binary, selectedIds: Object.keys(releaseCases),

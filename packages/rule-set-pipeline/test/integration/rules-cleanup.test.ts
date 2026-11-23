@@ -16,7 +16,7 @@ const current = (result: RulesResult, id = 'openai') => result.results.find(rule
 
 async function stableBytes(env: Environment) {
   const snapshot = await env.context.repository.snapshot(env.context.targetBranch);
-  return Object.fromEntries(await Promise.all(snapshot.paths.filter(path => path.startsWith('stable/') && !path.endsWith('/activation.json'))
+  return Object.fromEntries(await Promise.all(snapshot.paths.filter(path => path.startsWith('stable/') && !path.includes('/_delivery/'))
     .map(async path => [path, await snapshot.read(path)])));
 }
 
@@ -36,8 +36,7 @@ async function prepareRetainedHistory(target: string) {
   const env = fourSetCleanupEnvironment(binary!, target);
   const config = env.config();
   const cidrDefinition = config.ruleSets.find(rule => rule.id === 'china-ip')!;
-  cidrDefinition.usages.route = { artifact: 'office-networks' };
-  cidrDefinition.usages['dns-response'] = cidrDefinition.usages.route;
+  cidrDefinition.artifact = 'office-networks';
   env.configure(config);
   env.clock('2026-09-01T00:00:00.000Z');
   const first = success(await syncRules(request(env)));
@@ -204,7 +203,7 @@ for (const target of ['acceptance-issue-85', 'main']) {
       const candidate = kept.candidates[version.candidateId];
       const snapshot = await env.context.repository.snapshot();
       const files = snapshot.paths.filter(path => path.startsWith(`candidates/${candidate.id}/`));
-      assert.equal(files.length, 7);
+      assert.equal(files.length, candidate.sourceInput.version === 'url' ? 8 : 7);
       for (const path of files) assert.ok((await snapshot.read(path))!.length, path);
       const proof = JSON.parse((await snapshot.read(`candidates/${candidate.id}/readback.json`))!.toString());
       assert.equal(proof.candidateId, candidate.id);
@@ -363,8 +362,8 @@ test('cleanup 原样复制已有追溯文件，读取未完成时保留计划并
 test('换源失败的旧交付按当前版本保护，未知发布时间及未完成候选阻塞年龄清理', { skip: !binary, timeout: 90_000 }, async () => {
   const { env, expired, latest } = await retainedFixture('acceptance-issue-85');
   const configuration = env.config();
-  const dlc = configuration.sources.dlc; assert.equal(dlc.version, 'latest-release');
-  configuration.sources.other = { ...dlc, repository: 'failing/source' };
+  const dlc = configuration.sources.dlc; assert.equal(dlc.version, 'url');
+  configuration.sources.other = { ...dlc, input: { ...dlc.input, url: 'https://rules.example.test/failing/source/dlc.dat_plain.yml' } };
   configuration.ruleSets[0].source = 'other'; env.configure(configuration); env.failSource('failing/source');
   assert.equal((await syncRules(request(env))).status, 'partial');
   env.clock('2027-01-01T00:00:00.000Z');
@@ -383,6 +382,8 @@ test('换源失败的旧交付按当前版本保护，未知发布时间及未�
   const owner = journal.rules[old.logicalId];
   old.controlRevision = owner.control.revision; old.definitionGeneration = owner.generation;
   old.definition = owner.definition; old.sourceInput = owner.source; old.inputBindingRevision = owner.inputBindingRevision;
+  assert.ok(owner.source.version === 'url' && 'kind' in old.source && old.source.kind === 'fixed-url');
+  old.source.url = owner.source.input.url;
   env.trees.get(env.heads.get(env.context.repository.branch)!)!.set(RULE_STATE_PATH, encodeRecord(journal));
   const incomplete = await cleanupRuleHistory(request(env));
   assert.notEqual(incomplete.status, 'success'); assert.ok(incomplete.cleanup?.plan.blockers.length);
@@ -430,11 +431,11 @@ test('保留历史的场景各自拥有 Git、上游、时钟、故障与记录'
   const journal = await right.journal();
   const revision = await right.context.readConfiguration!();
   const upstream = right.context.fetch!;
-  const release = 'https://api.github.com/repos/v2fly/domain-list-community/releases/latest';
+  const checksum = 'https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat_plain.yml.sha256sum';
   const branch = 'https://api.github.com/repos/gaoyifan/china-operator-ip/branches/ip-lists';
-  const releaseBefore = await (await upstream(release)).json();
+  const checksumBefore = await (await upstream(checksum)).text();
   const branchBefore = await (await upstream(branch)).json();
-  const originalRelease = 'https://api.github.com/repos/v2fly/domain-list-community/releases/assets/11';
+  const originalRelease = checksum.replace('.sha256sum', '');
   const originalCidr = 'https://raw.githubusercontent.com/gaoyifan/china-operator-ip/' + '1'.repeat(40) + '/china46.txt';
   const releaseBody = await (await upstream(originalRelease)).text();
   const cidrBody = await (await upstream(originalCidr)).text();
@@ -467,13 +468,13 @@ test('保留历史的场景各自拥有 Git、上游、时钟、故障与记录'
   assert.equal(reset.head, original.head);
   assert.deepEqual(reset.parents, originalParents);
   assert.deepEqual(await reset.read(path), bytes);
-  assert.deepEqual(await (await fresh.context.fetch!(release)).json(), releaseBefore);
+  assert.equal(await (await fresh.context.fetch!(checksum)).text(), checksumBefore);
   assert.deepEqual(await (await fresh.context.fetch!(branch)).json(), branchBefore);
   assert.equal(await (await fresh.context.fetch!(originalRelease)).text(), releaseBody);
   assert.equal(await (await fresh.context.fetch!(originalCidr)).text(), cidrBody);
   const nextCidr = originalCidr.replace('1'.repeat(40), String(Number(branchBefore.commit.sha[0]) + 1).repeat(40));
   await assert.rejects(fresh.context.fetch!(nextCidr), /Unknown CIDR fixture revision/);
-  await assert.rejects(left.context.fetch!(release), /Upstream unavailable/);
+  await assert.rejects(left.context.fetch!(checksum), /Upstream unavailable/);
   assert.deepEqual(await fresh.context.repository.download(`https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/main/${path}`), bytes);
 
   const commit = async (env: Environment) => env.context.repository.commit('main', original.head,

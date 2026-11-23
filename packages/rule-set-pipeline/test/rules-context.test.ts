@@ -8,7 +8,7 @@ import { createGitHubRulesContext, guardRulesConfiguration, loadRulesRequest, re
 import { cleanupRuleHistory } from '../src/rules-cleanup.js';
 import { syncRules, pinRuleVersion, resumeRuleUpdates } from '../src/rules-operations.js';
 import { runRulesCli } from '../src/cli.js';
-import { getRulesStatus } from '../src/rules-status.js';
+import { getRulesStatus, readSchedulePreflight } from '../src/rules-status.js';
 import { rulesEnvironment } from './fixtures/rules-environment.js';
 import { cleanupEnvironment } from './fixtures/cleanup-environment.js';
 
@@ -143,5 +143,29 @@ test('artifact access failure keeps the configuration revision already observed 
     assert.equal(result.configurationOrigin, 'isolated-fixture');
     assert.match(result.error!, /credential rejected/);
   }
+  assert.equal(env.writes.length, 0);
+});
+
+test('all management commands and the schedule preflight reject v3 before artifact or upstream access', async () => {
+  const env = rulesEnvironment('/unused');
+  env.context.readConfiguration = async () => ({
+    revision: 'v3', origin: 'isolated-fixture',
+    content: 'schemaVersion: 3\ncandidateRetentionDays: 30\ntarget: {repository: wangyingang/sing-box-rule-artifacts, branch: main}\nsources: {}\nruleSets: []\n',
+  });
+  let accesses = 0;
+  const unexpected = async () => { accesses++; throw new Error('Unexpected network access'); };
+  env.context.fetch = unexpected;
+  env.context.repository.snapshot = unexpected;
+  env.context.repository.download = unexpected;
+  for (const args of [['status'], ['sync'], ['sync', '--dry-run'], ['pin', 'openai', 'retained'],
+    ['resume', 'openai'], ['cleanup'], ['cleanup', '--dry-run']]) {
+    let output = '';
+    assert.equal(await runRulesCli([...args, '--json'], value => { output = value; }, env.context, () => {}), 1, args.join(' '));
+    assert.match(JSON.parse(output).error, /schemaVersion.*expected 4/, args.join(' '));
+  }
+  const preflight = await readSchedulePreflight({ context: env.context });
+  assert.equal(preflight.status, 'failed');
+  assert.match(preflight.error!, /schemaVersion.*expected 4/);
+  assert.equal(accesses, 0);
   assert.equal(env.writes.length, 0);
 });

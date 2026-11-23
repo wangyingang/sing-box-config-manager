@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { stringify } from 'yaml';
-import { parseBuildConfiguration } from '../../src/configuration.js';
+import { fixtureConfigurationYaml, type FixtureConfiguration } from './formal-configuration.js';
 import { sha256 } from '../../src/release.js';
 import type { RulesContext } from '../../src/rules-context.js';
 import type { RuleWrites, RulesRepository } from '../../src/rules-repository.js';
@@ -68,8 +67,10 @@ export async function historicalEnvironment(name: 'shared' | 'split' | 'srs-only
   const context: RulesContext = { binary, targetBranch: capture.target, allowWrites: true, repository,
     readConfiguration: async () => ({ revision: String(revision).padStart(40, '0'), origin: 'captured-history', content }),
     fetch: async () => { throw new Error('Historical conversion must not read upstream'); } };
-  return { context, heads, writes, config: () => parseBuildConfiguration(content),
-    configure(configuration: ReturnType<typeof parseBuildConfiguration>) { content = stringify(configuration); revision++; },
+  return { context, heads, writes, configure(configuration: FixtureConfiguration) {
+    content = fixtureConfigurationYaml({ ...configuration, target: { ...configuration.target, branch: capture.target } });
+    revision++;
+  },
     legacyRepository: { branch: repository.branch, snapshot: repository.snapshot, commit: async () => { throw new Error('Historical reader must not write'); } },
     beforeWrite(hook?: typeof beforeWrite) { beforeWrite = hook; } };
 }

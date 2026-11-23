@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
-import { activationSubscription, candidateStableFiles } from './activation.js';
+import { candidateStableFiles } from './activation.js';
 import { candidateArtifactFiles, candidateTraceFiles, candidateCoreFiles, RULE_READBACK_VERSION, verifyRuleFile } from './candidate-publication.js';
 import { filePaths, stageRef, type BaselineStage, type BaselineStages, type BaselineTransport, type PreparedBaseline } from './maintenance-baseline-transport.js';
 import { verifyWithoutEvidenceCache, type VerifyEvidence } from './evidence-download.js';
@@ -136,8 +136,7 @@ export async function verifyRulesBaseline(options: RulesBaselineVerification, st
       || !isDeepStrictEqual(JSON.parse((await required(stable, recordPath)).toString()), expected)) {
       throw new Error(`Baseline changed current version: ${recordPath}`);
     }
-    const subscription = activationSubscription(record.subscription, targetBranch, candidate.definition);
-    const files = candidateStableFiles(verified.get(candidate.id)!, subscription, candidate.definition, targetBranch);
+    const files = candidateStableFiles(verified.get(candidate.id)!, record.subscription, candidate.definition, targetBranch);
     if (!isDeepStrictEqual(new Set(Object.keys(files)), new Set(Object.keys(record.files)))) {
       throw new Error(`Baseline stable file set changed: ${recordPath}`);
     }

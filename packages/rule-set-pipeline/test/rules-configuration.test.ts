@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { configuredRuleInput, parseBuildConfiguration, parseProjectedConfiguration, readOfficialConfiguration } from '../src/configuration.js';
+import { readV3Fixture } from './fixtures/baseline-configuration.js';
 import { syncRules } from '../src/rules-operations.js';
 import { rulesEnvironment } from './fixtures/rules-environment.js';
 
@@ -107,3 +109,39 @@ for (const [scenario, input, expected] of [
     assert.deepEqual([downloads, snapshots, writes.length], [0, 0, 0]);
   });
 }
+
+
+test('the formal v4 YAML preserves every v3 publication path and selected input', () => {
+  const yaml = readOfficialConfiguration();
+  assert.match(yaml, /^# yaml-language-server: \$schema=\.\/rulesets\.schema\.json$/m);
+  const current = parseBuildConfiguration(yaml);
+  const baseline = parseProjectedConfiguration(readV3Fixture());
+  assert.equal(current.candidateRetentionDays, 30);
+  assert.equal(current.candidateRetentionDays, baseline.candidateRetentionDays);
+  assert.deepEqual(current.target, baseline.target);
+  assert.equal(current.ruleSets.length, 16);
+  assert.deepEqual(current.ruleSets.map(({ id, stablePath, artifact }) => [id, stablePath, artifact]),
+    baseline.ruleSets.map(rule => [rule.id, rule.stablePath, rule.usages.route.artifact]));
+
+  for (const rule of current.ruleSets) {
+    const previousRule = baseline.ruleSets.find(({ id }) => id === rule.id)!;
+    assert.equal(rule.source, previousRule.source);
+    const previousInput = baseline.sources[previousRule.source];
+    const acquired = configuredRuleInput(current, rule);
+    if (previousInput.version === 'latest-release') {
+      const prefix = `https://github.com/${previousInput.repository}/releases/latest/download/`;
+      assert.deepEqual(acquired, { version: 'url', input: { format: 'v2fly-dlc-yaml',
+        url: prefix + previousInput.input.asset, sha256Url: prefix + previousInput.input.checksum } });
+      assert.equal(rule.list, previousRule.list);
+    } else if (previousInput.version === 'openai-voice') {
+      assert.deepEqual(acquired, { version: 'url', input: previousInput.input });
+      assert.equal(rule.list, undefined);
+    } else {
+      const format = previousInput.input.format === 'typed-domain-text' ? 'clash-rule-list'
+        : previousInput.input.format === 'sing-box-domain-json' ? 'sing-box-source-json' : previousInput.input.format;
+      assert.deepEqual(acquired, { ...previousInput, input: { ...previousInput.input, format } });
+      assert.equal(rule.list, undefined);
+    }
+    assert.deepEqual(rule.filter, rule.id === 'onedrive' ? { include: { type: { anyOf: ['DOMAIN-KEYWORD', 'DOMAIN-SUFFIX'] } } } : undefined);
+  }
+});
