@@ -82,7 +82,7 @@ export async function reuseVerifiedInput(session: RulesSession, rule: ManagedRul
 export async function reuseSuccessfulInput(session: RulesSession, rule: ManagedRule, current: RuleDelivery | undefined,
   input: PreparedRulesInput) {
   const baseline = reusableInputBaseline(rule, current);
-  const converted = input.lists.get(rule.definition.id);
+  const converted = input.conversionsByRuleId.get(rule.definition.id);
   if (!baseline || !converted?.ok) return;
   const terms = normalizeTerms(converted.terms);
   if (nativeBuildIdentity(baseline.toolSha256, terms) !== baseline.nativeBuildId) return;

@@ -28,7 +28,7 @@ function fixture(ruleSets: Record<string, object>, lists: Record<string, string[
     const url = String(address);
     requests.push(url);
     assert.equal(new Headers(init?.headers).has('Authorization'), false);
-    const body = JSON.stringify({ lists: Object.entries(upstream.lists).map(([name, rules]) => ({
+    const body = stringify({ lists: Object.entries(upstream.lists).map(([name, rules]) => ({
       name, length: rules?.length ?? 0, rules,
     })) });
     if (url === dlcUrl) return new Response(null, { status: 302, headers: { Location: assetUrl } });
@@ -120,7 +120,10 @@ test('DLC filters match exact tags per entry and track normalized content change
     'exclude-any': dlcRule('exclude-any', 'a', { exclude: { tags: { anyOf: ['cn', 'video'] } } }),
     all: dlcRule('all', 'all'),
   }, {
-    a: ['domain:both.example:@cn,@video', 'full:one.example:@cn', 'domain:neither.example', 'full:literal.example:@!cn'],
+    a: [
+      'domain:both.example:@cn,@video', 'full:one.example:@cn', 'domain:neither.example', 'full:literal.example:@!cn',
+      String.raw`regexp:^regex[0-9]+\.example$:@cn,@video`,
+    ],
     all: ['domain:actual-all.example:@video'],
   });
   const sync = async () => {
@@ -130,13 +133,13 @@ test('DLC filters match exact tags per entry and track normalized content change
   };
   const first = await sync();
   await checkMatches(t, env, 'include-all/domains', {
-    'both.example': true, 'one.example': false, 'neither.example': false, 'literal.example': false,
+    'both.example': true, 'one.example': false, 'neither.example': false, 'literal.example': false, 'regex42.example': true,
   });
   await checkMatches(t, env, 'include-any/domains', {
     'both.example': true, 'one.example': true, 'neither.example': false, 'literal.example': true,
   });
   await checkMatches(t, env, 'exclude-all/domains', {
-    'both.example': false, 'one.example': true, 'neither.example': true, 'literal.example': true,
+    'both.example': false, 'one.example': true, 'neither.example': true, 'literal.example': true, 'regex42.example': false,
   });
   await checkMatches(t, env, 'exclude-any/domains', {
     'both.example': false, 'one.example': false, 'neither.example': true, 'literal.example': true,
@@ -216,6 +219,10 @@ test('empty DLC results publish valid empty artifacts while a missing list prese
   assert.equal(failed.status, 'failed');
   assert.match(failed.error!, /asn/);
   assert.deepEqual(failed.current, sibling.current);
+
+  env.upstream.lists.sibling = ['asn:64512', 'domain:valid.example', 'domain:bad..example'];
+  const malformed = await env.sync();
+  assert.match(malformed.results.find(rule => rule.id === 'sibling')!.error!, /at line \d+: 域名匹配值非法/);
 });
 
 test('v4 rejects invalid DLC and whole-file selections before downloading', async () => {
@@ -229,6 +236,7 @@ test('v4 rejects invalid DLC and whole-file selections before downloading', asyn
     const env = fixture({ invalid: rule }, { a: ['domain:example.com'] });
     const result = await env.sync();
     assert.equal(result.status, 'failed', JSON.stringify(rule));
+    assert.match(result.error!, /Rule set invalid, source (dlc|voice)/);
     assert.match(result.error!, /DLC tag filter|tag condition|rule definition fields/);
     assert.deepEqual(env.requests, []);
     assert.deepEqual(env.writes, []);

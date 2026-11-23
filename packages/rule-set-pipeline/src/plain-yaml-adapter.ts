@@ -12,8 +12,12 @@ function convertList(parsed: ReadResult, list: string, selection?: { filter?: Dl
     report: { ...emptyReport(), inputCount: parsed.inputCount, diagnostics: selection ? parsed.diagnostics.map(entry => ({ ...entry, file: selection.file })) : parsed.diagnostics } };
   const converted = convertRules(parsed.rules, selection);
   converted.report.diagnostics = converted.report.diagnostics.map(entry => ({ ...entry, list, ...(selection && { file: selection.file }) }));
-  return converted.ok ? converted : { ...converted, error: selection
-    ? `DLC list ${list} conversion failed: ${converted.report.diagnostics[0]?.message}` : 'Rule conversion failed' };
+  if (converted.ok) return converted;
+  if (!selection) return { ...converted, error: 'Rule conversion failed' };
+  const diagnostics = converted.report.diagnostics;
+  const blocking = diagnostics.find(entry => entry.code !== 'UNSUPPORTED_TYPE') ?? diagnostics[0];
+  const location = blocking?.line === undefined ? '' : ` at line ${blocking.line}`;
+  return { ...converted, error: `DLC list ${list} conversion failed${location}: ${blocking?.message ?? 'No convertible rules'}` };
 }
 
 /** Parse shared bytes once. Invalid individual lists do not block sibling lists. */

@@ -154,6 +154,8 @@ ruleSets:
 
 `v2fly-dlc-yaml` 必须用 `data.list` 选择真实列表。`all` 也按名称查找。各规则集可独立设置 `filter.include` 或 `filter.exclude`。同一条目上 `tags.allOf` 要求所有指定标签，`tags.anyOf` 要求任一指定标签。标签精确匹配，配置中省略 `@`，`'!cn'` 是完整标签名。两种发布格式均移除属性标签。存在空列表或过滤结果为空时发布空规则集。指定列表缺失时只阻止该规则集更新。ChatGPT Voice 按整份文件读取 IPv4 和 IPv6 CIDR，省略 `data.list`。
 
+DLC 的 [YAML 导出程序](https://github.com/v2fly/domain-list-community/blob/master/cmd/datdump/main.go) 直接在正则值后拼接属性。无法从文本区分的尾部沿用现有解析约定。符合标签语法且未转义的小写尾部按属性处理。
+
 ## 环境与远端状态
 
 环境须已配置 GitHub 身份，拥有源码读取与产物仓库所需权限。产物仓库固定为 `wangyingang/sing-box-rule-artifacts`，目标分支须已存在且有初始提交。工具不创建仓库、凭据或目标分支；`cleanup` 仅创建、核验并清理本次维护拥有的临时分支。GitHub 写入使用现有 `gh` 身份；来源读取可使用 `GITHUB_TOKEN` 或 `GH_TOKEN`。

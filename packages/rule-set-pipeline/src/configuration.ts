@@ -240,20 +240,23 @@ export function parseBuildConfiguration(input: string): BuildConfiguration {
     const { data, publishPath, artifact, filter } = exact(entry, ['data', 'publishPath', 'artifact'], `rule set ${id}`, ['filter']);
     const { source, list } = exact(data, ['source'], `rule set ${id} data`, ['list']);
     return { id, source, stablePath: publishPath, artifact, ...(list !== undefined && { list }),
-      ...(filter !== undefined && { filter: parseTagFilter(filter) }) };
+      ...(filter !== undefined && { filter }) };
   }) : raw.ruleSets;
   if (!Array.isArray(entries)) throw new Error('ruleSets must be an explicit sequence');
   const ids = new Set<string>(), paths = new Set<string>();
   const ruleSets = entries.map(entry => {
-    const { id, source } = mapping(entry, 'rule definition');
+    const declaration = mapping(entry, 'rule definition');
+    const { id, source, filter } = declaration;
     if (typeof source !== 'string' || !Object.hasOwn(sources, source)) {
       throw new Error(`Rule set ${String(id)}: unknown source ${String(source)}`);
     }
     const input = sources[source].input;
     let rule: RuleDefinition;
     try {
-      if (raw.schemaVersion === 4) rule = parseSingleArtifactDefinition(entry, input.format);
-      else {
+      if (raw.schemaVersion === 4) {
+        const definition = filter === undefined ? declaration : { ...declaration, filter: parseTagFilter(filter) };
+        rule = parseSingleArtifactDefinition(definition, input.format);
+      } else {
         if (!isProjectedFormat(input.format)) throw new Error(`${input.format} requires configuration v4`);
         rule = parseRuleDefinition(entry, input.format);
       }
