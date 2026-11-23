@@ -133,7 +133,7 @@ import { compileRecipe, inspectRecipeComposition, prepareRecipePublication,
 import { publishRecipe } from '@sing-box-config-manager/config-compiler/publisher';
 
 // fixedInput 是可信宿主加载的 Recipe、固定 Template/NodeRevision，
-// 以及对应契约的 Rule Subscription（v2）或 Manifest（v1）。
+// Recipe v2 的稳定绑定使用 Rule Subscription v2，Recipe v1 的固定绑定使用 Artifact Manifest v2。
 const compiled = compileRecipe(fixedInput);
 const prepared = await prepareRecipePublication(fixedInput, trustedNativeChecker);
 const published = await publishRecipe(fixedInput, {
@@ -167,8 +167,7 @@ ECS 校验参数和订阅时允许的修改见 [ECS 与订阅渲染](#ecs-与订
 保留本地 `tag` 与可选 `httpClient`。多个用途共用一个 tag 时，必须引用同一个 sing-box 二进制规则文件（SRS）入口。
 不接受固定规则产物版本、任意 URL、摘要、格式或能力覆盖。
 
-可信宿主在 `dependencies.subscriptions` 提供 Pipeline 拥有的
-[Rule Subscription v2](../rule-set-pipeline/contracts/rule-subscription-v2.md)。
+可信宿主在 `dependencies.subscriptions` 中提供 Rule Subscription v2。宿主为每个可用用途声明稳定地址和所需客户端能力。Pipeline 交付记录中的 `subscription.schemaVersion: 3` 提供 JSON 和 SRS 地址，用途声明由宿主补充。[Compiler 订阅输入](contracts/rule-subscription-v2.md) · [Pipeline 交付记录](../rule-set-pipeline/contracts/README.md)
 导出 `RuleSubscription`、`ruleSubscriptionSchema`；已解析 `CompileInput`
 与编译输出使用独立 `subscriptions` 字段，稳定入口不转换成带伪造摘要的 `RuleArtifact`。
 Compiler 仍为纯函数，默认生成 binary SRS 远程配置，保留用途、响应上下文、
@@ -184,17 +183,17 @@ Node 端 `publishRecipe` 同时支持 Recipe／Template v1 和 v2。发布继续
 v2 不接受该绑定。迁移需要新 Recipe／Template 修订、显式改绑和重新发布。
 节点、模板和 Client Profile 的固定引用规则不变。
 
-正式配置中，`openai`、`anthropic` 和 `google-deepmind` 支持 Route 和 DNS Query。
-`china-ip` 支持 Route 和 DNS Response。需要在两个位置使用同一个 `china-ip` tag 时，
+在三集示例中，宿主为 `openai`、`anthropic` 和 `google-deepmind` 声明 Route 和 DNS Query。
+双栈客户端测试为 `china-ip` 声明 Route 和 DNS Response。需要在两个位置使用同一个 `china-ip` tag 时，
 绑定可写为 `subscriptionRef: { systemRuleSetId: 'china-ip', usages: ['route', 'dns-response'] }`。
 两种用途共用稳定 SRS，DNS 响应匹配仍须引用已经执行 `evaluate` 的响应。
-绑定 `china-ip` 的 `dns-query` 会导致编译失败。参见 [三集可编译示例](examples/three-rule-subscriptions-v2.json)
+在这份声明下，绑定 `china-ip` 的 `dns-query` 会导致编译失败。参见 [三集可编译示例](examples/three-rule-subscriptions-v2.json)
 和 [双栈客户端集成测试](../rule-set-pipeline/test/integration/rules-cidr-client.test.ts)。
 单集订阅的初次交付范围见 [#17 验证记录](docs/verification/issue-17.md)。
 
 ### 固定规则产物
 
-`dependencies.manifests` 接受 Pipeline 维护的[Manifest v2](../rule-set-pipeline/contracts/README.md)。
+`dependencies.manifests` 接受可信宿主提供的 Artifact Manifest v2，供 Recipe／Template v1 按修订绑定固定产物。当前 Pipeline 候选使用 Manifest v3。[Compiler 固定产物输入](../rule-set-pipeline/contracts/artifact-manifest-v2.md) · [Pipeline 候选清单](../rule-set-pipeline/contracts/README.md)
 核心入口导出 `ArtifactManifest` 和 `artifactManifestSchema`。依赖可省略。JSON 条目需要正整数 `termCount`，SRS 条目只提供格式、地址、字节元数据和能力。
 Recipe 和 Template 的 `resources.ruleSets` 支持
 `{ kind: 'curated', tag, artifactRef: { id, revision, usage }, httpClient? }`。

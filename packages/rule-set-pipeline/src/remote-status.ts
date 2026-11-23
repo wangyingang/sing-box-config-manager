@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { Ajv } from 'ajv';
 import manifestSchema from '../contracts/artifact-manifest.schema.json' with { type: 'json' };
-import subscriptionV2Schema from '../contracts/rule-subscription-v2.schema.json' with { type: 'json' };
+import subscriptionV2Schema from '#rule-subscription-v2' with { type: 'json' };
 import { CANDIDATE_READBACK_VERSION, candidateFiles } from './candidate-publication.js';
 import { verifyActivationCandidate, verifyCandidateEvidence } from './activation.js';
 import { githubActivation, type ActivationTransport } from './activation-transport.js';

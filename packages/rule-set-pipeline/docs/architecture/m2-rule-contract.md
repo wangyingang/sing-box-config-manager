@@ -4,7 +4,7 @@
 
 本文保留 2026-11-02 更广泛的规则生产设计草案，不作为当前调用说明。后续确认的[首个完整交付](../../../../docs/architecture/rule-set-pipeline-first-delivery.md)采用 V2Fly 官方 Release 的 `dlc.dat_plain.yml`，不自行解析原始 Include、attribute 筛选或 affiliation。下文关于更广泛规则类型、Warning 跳过和原始 Include 解析的内容，不适用于当前 Release YAML 流程：当前目标列表含未知、非法或歧义记录时，整个构建失败。首个纯域名切片已实现远程回读、实际摘要验证和激活门禁，范围与证据见 [Pipeline README](../../README.md)；其他来源及更广泛 Parser 能力不能据此视为已实现。
 
-设计日期：2026-11-02。状态更新：2026-11-03，Compiler 消费所需的[最小固定产物 Manifest v1 契约](../../contracts/README.md)及其结构、固定版本、用途和能力校验已实现。2026-11-04，#17 新增 [Rule Subscription v1](../../contracts/rule-subscription.md) 及 Recipe／Compiler v2 消费路径，与不可变 Manifest 分别管理。本文保留更完整的 Rule IR、Parser、产物生产与发布设计草案；这些后续契约尚未全部定稿，旧 Pipeline 尚未迁移。上层计划见 [M2 契约与实施计划](../../../../docs/architecture/m2-contract-plan.md)。
+设计日期：2026-11-02。状态更新：2026-11-03，Compiler 消费所需的[最小固定产物 Manifest v1 契约](https://github.com/wangyingang/sing-box-config-manager/blob/805ad0d40cbd93e7a3caedca8633ba7b42522c05/packages/rule-set-pipeline/contracts/README.md)及其结构、固定版本、用途和能力校验已实现。2026-11-04，#17 新增 [Rule Subscription v1](../../../../docs/history/rule-subscription-v1/rule-subscription.md) 及 Recipe／Compiler v2 消费路径，与不可变 Manifest 分别管理。本文保留更完整的 Rule IR、Parser、产物生产与发布设计草案；这些后续契约尚未全部定稿，旧 Pipeline 尚未迁移。上层计划见 [M2 契约与实施计划](../../../../docs/architecture/m2-contract-plan.md)。
 
 ## Rule Source 与规则集身份
 

@@ -1,6 +1,6 @@
 # 配置驱动操作、状态与版本契约
 
-本页描述 [#128 无变化同步](https://github.com/wangyingang/sing-box-config-manager/issues/128)、[Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84)、[Spec #85](https://github.com/wangyingang/sing-box-config-manager/issues/85)、[Spec #86](https://github.com/wangyingang/sing-box-config-manager/issues/86) 及 [Spec #90 恢复修复](https://github.com/wangyingang/sing-box-config-manager/issues/90) 的应用服务结果、自动运行边界及远端持久事实。它不是 Compiler 的输入契约；Compiler 继续消费 [Rule Subscription v2](rule-subscription-v2.md) 或固定 [Artifact Manifest v2](README.md)。
+本页描述 [#128 无变化同步](https://github.com/wangyingang/sing-box-config-manager/issues/128)、[Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84)、[Spec #85](https://github.com/wangyingang/sing-box-config-manager/issues/85)、[Spec #86](https://github.com/wangyingang/sing-box-config-manager/issues/86) 及 [Spec #90 恢复修复](https://github.com/wangyingang/sing-box-config-manager/issues/90) 的应用服务结果、自动运行边界及远端持久事实。Compiler 的稳定订阅绑定与固定产物绑定分别接收宿主提供的 Rule Subscription v2 和 Artifact Manifest v2。[Compiler 订阅输入](../../config-compiler/contracts/rule-subscription-v2.md) · [固定产物输入](artifact-manifest-v2.md)
 
 ## 配置
 
@@ -34,7 +34,7 @@ Node 请求可选传入 `onProgress(event)`，事件为 `RulesProgress`（`stage
 
 进度事件的 `source-identity` 阶段表示探测上游文件身份，`source` 表示读取和转换正文，`build` 表示开始构建及验证。
 
-预览结果可以包含 `verified` 和 `unverified`，例如已验证来源、原生规则与订阅契约，但尚未验证远端发布及 HTTPS 回读。四种写操作的 dry-run 不持久保存任何状态，也不补做 pending 恢复。草稿仅允许 sync 预览；pin/resume/cleanup 始终按正式配置核对。
+预览结果可以包含 `verified` 和 `unverified`。其中 `subscription` 指交付记录的 v3 订阅元数据，包括两种格式的稳定地址。预览可完成来源、原生规则与订阅元数据的核对，远端发布及 HTTPS 回读仍待实际执行。四种写操作的 dry-run 不持久保存任何状态，也不补做 pending 恢复。草稿仅允许 sync 预览；pin/resume/cleanup 始终按正式配置核对。
 
 ## 环境门禁与自动运行
 

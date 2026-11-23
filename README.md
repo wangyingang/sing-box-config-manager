@@ -18,7 +18,7 @@
 
 调用 Compiler 的应用或脚本称为**宿主**。宿主负责取得可信依赖、检查管理权限和保存数据。Compiler 只处理传入的内存对象，不查询数据库、不下载规则，也不自行执行 Pipeline。真实 `sing-box check` 由宿主提供的执行器完成；仓库已有 Node 本地执行器。
 
-Pipeline 通过规则文件和元数据对接 Compiler，两者没有源码或运行时依赖。Web App 通过 Compiler 的公开包入口调用功能。各模块分别声明依赖；根目录管理工作区和统一命令。
+Pipeline 将每个规则集以 JSON 和 SRS 两种格式交付，并在交付记录中列出稳定地址。宿主为 Recipe 的系统规则订阅提供这些地址，并声明适用的 DNS 或 Route 用途和所需客户端能力。Compiler 据此生成远程规则配置。两个包的构建产物可以独立运行。Web App 目前只有工作区骨架。[Pipeline 交付契约](packages/rule-set-pipeline/contracts/README.md) · [Compiler 订阅输入](packages/config-compiler/contracts/rule-subscription-v2.md)
 
 ## 配置发布与规则更新
 
@@ -27,7 +27,7 @@ Pipeline 通过规则文件和元数据对接 Compiler，两者没有源码或�
 - **配置发布**：固定 Recipe、模板、节点和校验结果，生成可交付的配置快照。继续编辑草稿不会改变已经发布的快照。
 - **规则交付**：管理者提交正式配置，用 `pnpm rules sync` 统一处理新增、换源、删除与最新输入。`pin` 交付选定版本并停止该集全部自动处理，`resume` 恢复 auto 并立即更新。客户端按自身机制从稳定入口获取规则。部分失败保留独立成功及失败集的原交付。详见 [CLI 操作](packages/rule-set-pipeline/README.md#操作分别产生什么结果)。`cleanup` 每日评估保留期，只在有过期且不受保护的候选、已确认失效的残留或已删除的受管历史需要回收时重建。当前和 pin 目标受保护，中断后重跑同一命令继续。配置 push 会触发完整 sync，每日任务组合更新和历史清理；生产写入分别受更新与清理开关控制，默认关闭。失败详情保存在 Actions 摘要与结果文件，通知使用 GitHub 原生失败邮件。详见 [自动运行与通知](packages/rule-set-pipeline/README.md#actions-自动与手工运行)。代码合并不等于生产转换或启用。
 
-当前 Recipe／Template v2 使用 Rule Subscription v2 跟随已激活的规则版本。**配置快照固定，不代表客户端以后加载的规则内容固定**。模板和节点仍采用固定修订。Recipe／Template v1 继续支持固定产物绑定。见 [规则订阅决策](docs/adr/0006-follow-active-rule-subscriptions.md)和[固定产物契约](packages/rule-set-pipeline/contracts/README.md)。
+Recipe／Template v2 使用 Rule Subscription v2 绑定稳定入口。配置发布时，快照保存选中的订阅声明；此后客户端按自身更新机制从稳定地址获取规则。模板和节点使用固定修订。Recipe／Template v1 通过 Artifact Manifest v2 绑定固定产物。[规则订阅决策](docs/adr/0006-follow-active-rule-subscriptions.md) · [固定产物契约](packages/rule-set-pipeline/contracts/artifact-manifest-v2.md)
 
 ## 第一次阅读
 
@@ -73,7 +73,7 @@ node scripts/check-spec-delivery.mjs --spec 66 --out .verification/spec-report -
 | `pnpm typecheck` | 执行已实现模块的类型检查 |
 | `pnpm test` | 执行常规测试，并用固定预期输出检查回归 |
 | `pnpm build` | 生成模块构建产物和 TypeScript 声明 |
-| `pnpm smoke:workspace` | 构建后，从 Web App 工作区验证包引用、类型和浏览器打包 |
+| `pnpm smoke:workspace` | 加载 Pipeline 构建产物并核对随包 Schema，再从 Web App 工作区验证 Compiler 包引用、类型和浏览器打包 |
 | `pnpm check` | 顺序执行 test:tools、typecheck、test、build、smoke:workspace |
 | `pnpm test:integration` | 原生 sing-box 集成测试，必须显式指定 binary |
 

@@ -68,7 +68,7 @@ pnpm rules sync --config /path/to/rulesets-draft.yml --dry-run --json
 
 正式配置和样例使用 `schemaVersion: 4` 并关联[通用 Schema](config/rulesets.schema.json)。`candidateRetentionDays` 必须为正整数，正式值为 30 天。`ruleSets` 按规则集 ID 声明，显式的 `ruleSets: {}` 表示删除全部受管规则。旧配置、未知字段、重复键、无效来源引用及重叠的最终文件路径会在上游获取和写入前被拒绝。错误包含 YAML 行列号和字段路径。
 
-每集从一个来源选择整份文件或命名列表，可按格式筛选。构建将结果写到 `publishPath/artifact.json` 和 `publishPath/artifact.srs`，基名最多 250 个字符，可使用小写 ASCII 字母、数字、连字符和下划线。已有交付的稳定地址受订阅契约保护。
+每集从一个来源选择整份文件或命名列表，可按格式筛选。构建将结果写到 `publishPath/artifact.json` 和 `publishPath/artifact.srs`，基名最多 250 个字符，可使用小写 ASCII 字母、数字、连字符和下划线。更新已有交付时，Pipeline 核对这两个稳定地址与当前交付记录一致。
 
 正式配置保留 16 个独立的 `stable/<id>` 目录。`china-ip` 与 `chatgpt-voice` 的基名为 `ips`，其余 14 集为 `domains`。`china-domains` 选择 V2Fly 的 `geolocation-cn`，`global` 选择 `geolocation-!cn`，其余 V2Fly 集选择同名列表。客户端配置决定规则的用途和匹配顺序。
 
@@ -318,7 +318,9 @@ const cleanupPreview = await cleanupRuleHistory({ dryRun: true });
 
 Pipeline 的交付记录通过 `subscription.formats` 提供当前版本的两个稳定地址，记录路径为 `<publishPath>/_delivery/<artifact>.json`。每次交付前核对候选、稳定地址和实际规则字节。
 
-已生成的客户端配置继续按原有稳定地址取得 JSON 或 SRS。Recipe／Template v2 继续消费可信宿主提供的独立 Compiler 契约，管理者 pin 会影响引用该规则集的订阅使用者。配置快照固定时，规则字节仍可随稳定地址更新。[Rule Subscription v2](contracts/rule-subscription-v2.md) · [Artifact Manifest v2](contracts/README.md)
+客户端按配置中的稳定地址获取 JSON 或 SRS。v4 切换后，14 个域名集沿用原地址。`china-ip` 和 `chatgpt-voice` 的旧 `route.json`、`route.srs` 已退役，引用这两个集时使用各自目录下的 `ips.json`、`ips.srs`。[两个 IP 集的订阅文件改名](#两个-ip-集的订阅文件改名)
+
+Recipe／Template v2 通过宿主提供的 Rule Subscription v2 选择规则集及用途。配置快照保存选中的订阅声明，客户端按自身更新机制获取稳定地址上的版本，包括管理者通过 `pin` 选定的版本。[Compiler 订阅输入](../config-compiler/contracts/rule-subscription-v2.md)
 
 ## 客户端更新失败与缓存恢复
 

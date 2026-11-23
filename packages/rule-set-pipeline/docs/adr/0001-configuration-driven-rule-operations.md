@@ -14,6 +14,8 @@ status: accepted
 
 ## 保留的跨模块边界
 
+2026-11-23 更新：正式配置 v4 启用后，Pipeline 核对当前候选、规则文件与两种格式的稳定地址。Recipe 使用规则的用途由可信宿主声明，Compiler 负责校验。下文保留早期操作模型的决策记录。
+
 本决策替代 [ADR 0006](../../../../docs/adr/0006-follow-active-rule-subscriptions.md) 及 Spec [#47](https://github.com/wangyingang/sing-box-config-manager/issues/47)/[#66](https://github.com/wangyingang/sing-box-config-manager/issues/66) 中旧公开操作和双暂停安排。稳定 Rule Subscription、Recipe 跟随当前交付、订阅兼容检查、Compiler 纯内存边界和 sing-box 原生更新机制继续有效。管理者 pin 影响该集所有订阅使用者，Recipe 不增加固定版本选项。
 
 ## 成本与交付边界
