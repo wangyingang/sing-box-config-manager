@@ -43,9 +43,15 @@ export function rulesEnvironment(binary: string, target = 'acceptance-issue-84',
   const parents = persisted?.parents ?? new Map<string, string>();
   const writes: { branch: string; files: RuleWrites }[] = [];
   const requests: string[] = [];
-  const official = parseProjectedConfiguration(readOfficialConfiguration());
-  let config: ProjectedConfiguration = state?.config ?? { ...official, target: { ...official.target, branch: target }, sources: { dlc: official.sources.dlc },
-    ruleSets: official.ruleSets.filter(rule => ['openai', 'anthropic'].includes(rule.id)) };
+  let config = state?.config;
+  function configuration(): ProjectedConfiguration {
+    if (!config) {
+      const official = parseProjectedConfiguration(readOfficialConfiguration());
+      config = { ...official, target: { ...official.target, branch: target }, sources: { dlc: official.sources.dlc },
+        ruleSets: official.ruleSets.filter(rule => ['openai', 'anthropic'].includes(rule.id)) };
+    }
+    return config;
+  }
   let revision = state?.revision ?? 1;
   let upstreamRevision = state?.upstreamRevision ?? 1;
   let cidrRevision = state?.cidrRevision ?? 1;
@@ -125,16 +131,16 @@ export function rulesEnvironment(binary: string, target = 'acceptance-issue-84',
   };
   const context: RulesContext = { repository, targetBranch: target, allowWrites: true, binary, fetch: fetcher,
     now: () => new Date('2026-11-16T08:15:30.123Z'),
-    readConfiguration: async () => ({ revision: String(revision).padStart(40, '0'), content: stringify(config, { aliasDuplicateObjects: false }), origin: 'isolated-fixture' }) };
+    readConfiguration: async () => ({ revision: String(revision).padStart(40, '0'), content: stringify(configuration(), { aliasDuplicateObjects: false }), origin: 'isolated-fixture' }) };
   return { context, writes, requests, heads, trees, parents,
     checkpoint() {
       return checkpointFixture<RulesFixtureHistory>({ heads, trees, parents, state: {
-        sequence, config, revision, upstreamRevision, contents, history, cidrRevision, cidrInputs,
+        sequence, config: configuration(), revision, upstreamRevision, contents, history, cidrRevision, cidrInputs,
       } });
     },
     changeCidr(input: string) { cidrInputs.set(++cidrRevision, input); },
-    config: () => structuredClone(config),
-    configure(next: typeof config) { config = next; revision++; },
+    config: () => structuredClone(configuration()),
+    configure(next: ProjectedConfiguration) { config = next; revision++; },
     upstream(rules: Record<string, string>) { Object.assign(contents, rules); upstreamRevision++; history.set(upstreamRevision, { ...contents }); },
     failSource(value: boolean | string) { sourceFailure = value; },
     beforeWrite(callback?: typeof beforeWrite) { beforeWrite = callback; },
