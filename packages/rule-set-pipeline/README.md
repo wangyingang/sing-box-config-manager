@@ -94,9 +94,12 @@ pnpm rules sync --config /path/to/rulesets-draft.yml --dry-run --json
 
 ### 在隔离目标同步混合规则集
 
-`sync` 支持最小 v4 配置。使用 `fetch.method: url` 从固定 HTTPS 地址读取整份 `sing-box-source-json`，在 `publishPath` 下发布以 `artifact` 命名的 JSON 和 SRS。将下例中的 URL 换成实际端点，并按下节配置同名的隔离目标。
+将下面的编辑器指令与 [v4 Schema](config/rulesets.schema.json) 一起使用。示例适用于配置与 Schema 同目录的情况。支持 YAML Language Server 的编辑器会补全固定字段和枚举，并提示结构错误。`sync` 使用同一份 Schema，同步前继续检查 source 引用、实际输入格式和最终文件路径。诊断包含 YAML 行列号和字段路径。
+
+使用 `fetch.method: url` 从固定 HTTPS 地址读取整份 `sing-box-source-json`，在 `publishPath` 下发布以 `artifact` 命名的 JSON 和 SRS。将下例中的 URL 换成实际端点，并按下节配置同名的隔离目标。
 
 ```yaml
+# yaml-language-server: $schema=./rulesets.schema.json
 schemaVersion: 4
 candidateRetentionDays: 30
 target:
@@ -116,7 +119,11 @@ ruleSets:
     artifact: mixed
 ```
 
-初版 reader 支持 sing-box Source Format v4 中的独立域名和 CIDR 条件，例如 `{"version":4,"rules":[{"domain_suffix":["example.test"]},{"ip_cidr":["192.0.2.0/24"]}]}`。每个规则对象只接受一个匹配字段，组合规则由 [#173](https://github.com/wangyingang/sing-box-config-manager/issues/173) 跟踪。源端点须直接返回 JSON，上限为 8 MiB。候选保留原始输入字节，重试按记录的摘要和长度核对快照。
+规则集可以共用 `publishPath`，各集使用不同的 `artifact`。例如将 `domains` 和 `ips` 发布到 `stable/shared`，订阅地址分别以 `domains.json`、`domains.srs`、`ips.json` 和 `ips.srs` 结尾。移除一集只撤销该集的文件和交付记录。
+
+当前 v4 reader 支持从固定 HTTPS 地址读取整份 `sing-box-source-json`。其他固定 URL 输入及摘要校验由 [#171](https://github.com/wangyingang/sing-box-config-manager/issues/171) 跟踪，GitHub 分支输入由 [#172](https://github.com/wangyingang/sing-box-config-manager/issues/172) 跟踪。现阶段为规则集选用尚未接通的输入会在同步前报错。
+
+当前 reader 支持 sing-box Source Format v4 中的独立域名和 CIDR 条件，例如 `{"version":4,"rules":[{"domain_suffix":["example.test"]},{"ip_cidr":["192.0.2.0/24"]}]}`。每个规则对象只接受一个匹配字段，组合规则由 [#173](https://github.com/wangyingang/sing-box-config-manager/issues/173) 跟踪。源端点须直接返回 JSON，上限为 8 MiB。候选保留原始输入字节，重试按记录的摘要和长度核对快照。
 
 新候选的 [Artifact Manifest v3](contracts/artifact-manifest-v3.schema.json) 直接列出两种格式的固定 URL、字节数和 SHA-256。交付记录的 `subscription.formats` 列出两种格式的稳定 URL，`files` 记录实际发布文件的摘要和长度。正式配置迁移见 [#174](https://github.com/wangyingang/sing-box-config-manager/issues/174)。
 

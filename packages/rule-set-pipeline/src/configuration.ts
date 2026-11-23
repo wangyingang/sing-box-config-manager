@@ -2,13 +2,15 @@ import { readFileSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
 import { reservedArtifactBasename, validArtifactBasename } from './artifact-path.js';
 import { validRepository, validBranch, validInputPath, validInputFile } from './source-input.js';
-import { isMap, parseDocument, visit } from 'yaml';
+import { isMap, LineCounter, parseDocument, visit } from 'yaml';
 import { USAGES, type Usage } from './projection.js';
 import { ARTIFACT_REPOSITORY } from './publication.js';
 import { CHINA_IP_INPUT, isCommitInputFormat, type CommitInput } from './github-commit.js';
 import { OPENAI_VOICE_FILE, OPENAI_VOICE_URL, type OpenAiVoiceInput } from './openai-voice-source.js';
 import { V2FLY_RELEASE_INPUT, type ReleaseInput } from './release.js';
 import { validFixedUrl, type FixedUrlInput } from './fixed-url-source.js';
+import { parseRulesConfigurationV4 } from './rules-configuration-v4.js';
+import { singleArtifactPaths } from './stable-rule-paths.js';
 
 export type SourceInput = ReleaseInput | CommitInput | OpenAiVoiceInput | FixedUrlInput;
 export type SourceFormat = SourceInput['input']['format'];
@@ -160,13 +162,22 @@ export function parseSource(input: unknown): SourceInput {
 
 /** Validate every definition before source access or output directory creation. */
 export function parseBuildConfiguration(input: string): BuildConfiguration {
-  const document = parseDocument(input, { uniqueKeys: true, stringKeys: true });
-  if (document.errors.length || document.warnings.length) throw new Error(`Invalid build configuration YAML: ${document.errors[0]?.message ?? document.warnings[0]?.message}`);
-  let alias = false;
-  visit(document, { Alias() { alias = true; } });
-  if (alias || !isMap(document.contents)) throw new Error('Invalid build configuration YAML');
-  const raw = exact(document.toJS(), ['schemaVersion', 'candidateRetentionDays', 'sources', 'target', 'ruleSets'], 'configuration');
-  if (raw.schemaVersion !== 3 && raw.schemaVersion !== 4) throw new Error('Unsupported configuration version');
+  const lines = new LineCounter();
+  const document = parseDocument(input, { uniqueKeys: true, stringKeys: true, lineCounter: lines, prettyErrors: false });
+  const yamlDiagnostics = [...document.errors, ...document.warnings].map(error => {
+    const { line, col } = lines.linePos(error.pos[0]);
+    return `${line}:${col} ${error.message}`;
+  });
+  visit(document, { Alias(_key, node) {
+    const { line, col } = lines.linePos(node.range?.[0] ?? 0);
+    yamlDiagnostics.push(`${line}:${col} YAML aliases are not allowed`);
+  } });
+  if (yamlDiagnostics.length) throw new Error(`Invalid build configuration YAML:\n${yamlDiagnostics.join('\n')}`);
+  const value = document.toJS();
+  if (!isMap(document.contents) || document.get('schemaVersion') !== 3) {
+    return parseRulesConfigurationV4(document, lines, value);
+  }
+  const raw = exact(value, ['schemaVersion', 'candidateRetentionDays', 'sources', 'target', 'ruleSets'], 'configuration');
   if (!Number.isSafeInteger(raw.candidateRetentionDays) || Number(raw.candidateRetentionDays) <= 0) throw new Error('candidateRetentionDays must be a positive integer');
   const target = exact(raw.target, ['repository', 'branch'], 'target');
   if (target.repository !== ARTIFACT_REPOSITORY || typeof target.branch !== 'string'
@@ -176,21 +187,11 @@ export function parseBuildConfiguration(input: string): BuildConfiguration {
   const declarations = Object.entries(mapping(raw.sources, 'sources'));
   const sources = Object.fromEntries(declarations.map(([id, source]) => {
     if (!logicalId.test(id)) throw new Error(`Invalid source ID: ${id}`);
-    if (raw.schemaVersion === 4) {
-      const { fetch, format } = exact(source, ['fetch', 'format'], `source ${id}`);
-      const { method, url } = exact(fetch, ['method', 'url'], `source ${id} fetch`);
-      if (method !== 'url') throw new Error(`Unsupported source acquisition method: ${String(method)}`);
-      return [id, parseSource({ version: 'url', input: { format, url } })];
-    }
     const parsed = parseSource(source);
     if (parsed.version === 'url') throw new Error('URL sources require configuration v4');
     return [id, parsed];
   }));
-  const entries = raw.schemaVersion === 4 ? Object.entries(mapping(raw.ruleSets, 'ruleSets')).map(([id, entry]) => {
-    const { data, publishPath, artifact } = exact(entry, ['data', 'publishPath', 'artifact'], `rule set ${id}`);
-    const { source } = exact(data, ['source'], `rule set ${id} data`);
-    return { id, source, stablePath: publishPath, artifact };
-  }) : raw.ruleSets;
+  const entries = raw.ruleSets;
   if (!Array.isArray(entries)) throw new Error('ruleSets must be an explicit sequence');
   const ids = new Set<string>(), paths = new Set<string>();
   const ruleSets = entries.map(entry => {
@@ -200,13 +201,7 @@ export function parseBuildConfiguration(input: string): BuildConfiguration {
     }
     const input = sources[source].input;
     let rule: RuleDefinition;
-    try {
-      if (raw.schemaVersion === 4) rule = parseSingleArtifactDefinition(entry);
-      else {
-        if (input.format === 'sing-box-source-json') throw new Error('sing-box-source-json requires configuration v4');
-        rule = parseRuleDefinition(entry, input.format);
-      }
-    }
+    try { rule = parseRuleDefinition(entry, input.format); }
     catch (error) {
       const file = 'path' in input ? input.path : 'asset' in input ? input.asset : input.url;
       throw new Error(`Rule set ${String(id)}, source ${source} (${file}): ${(error as Error).message}`, { cause: error });
@@ -219,7 +214,7 @@ export function parseBuildConfiguration(input: string): BuildConfiguration {
     ids.add(rule.id); paths.add(path);
     return rule;
   });
-  return { schemaVersion: raw.schemaVersion, candidateRetentionDays: Number(raw.candidateRetentionDays), sources, target: { repository: target.repository, branch: target.branch }, ruleSets };
+  return { schemaVersion: 3, candidateRetentionDays: Number(raw.candidateRetentionDays), sources, target: { repository: target.repository, branch: target.branch }, ruleSets };
 }
 
 export function configuredInput<Input extends SourceInput>(configuration: { sources: Record<string, Input> }, definitions: readonly RuleDefinition[]) {
@@ -266,9 +261,10 @@ export function configuredProjections({ stablePath, usages }: ProjectedRuleDefin
 }
 
 export function artifactSubscription(definition: SingleArtifactDefinition, branch: string) {
-  const prefix = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${branch}/${definition.stablePath}/${definition.artifact}`;
+  const prefix = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${branch}/`;
+  const [source, binary] = singleArtifactPaths(definition.stablePath, definition.artifact);
   return { schemaVersion: 3, systemRuleSetId: definition.id, targetVersion: '1.14.4', sourceFormatVersion: 4,
-    formats: { source: { url: `${prefix}.json` }, binary: { url: `${prefix}.srs` } } };
+    formats: { source: { url: prefix + source }, binary: { url: prefix + binary } } };
 }
 
 export function configuredSubscription(rule: ProjectedRuleDefinition, branch: string) {

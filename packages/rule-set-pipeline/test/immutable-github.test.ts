@@ -90,6 +90,8 @@ test('GitHub 写入按分支保留自定义候选和稳定文件名', async () =
   for (const [branch, files] of [
     ['candidates', { ...filesFor(candidate), [`${candidate}/manifest.json`]: Buffer.from('{}') }],
     ['main', { ...filesFor(stable), [`${stable}/activation.json`]: Buffer.from('{}') }],
+    ['main', { ...filesFor(stable), [`${stable}/_delivery/office-networks.json`]: Buffer.from('{}'),
+      [`${stable}/_delivery/custom_domains.json`]: null }],
   ] as const) {
     const env = remote();
     const head = await env.repository.commit(branch, 'a'.repeat(40), files, 'custom filenames', async () => {});
@@ -100,6 +102,8 @@ test('GitHub 写入按分支保留自定义候选和稳定文件名', async () =
 
   for (const [branch, path] of [
     ['candidates', `${stable}/office-networks.srs`],
+    ['candidates', `${stable}/_delivery/office-networks.json`],
+    ['main', `${stable}/_delivery/manifest.json`],
     ['main', `${candidate}/custom_domains.json`],
     ['main', `${stable}/../../office-networks.srs`],
     ['main', `${stable}/office-networks.txt`],

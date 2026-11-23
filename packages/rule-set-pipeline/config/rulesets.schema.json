@@ -1,0 +1,217 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Rule Set Pipeline 配置 v4",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "candidateRetentionDays", "target", "sources", "ruleSets"],
+  "properties": {
+    "schemaVersion": {
+      "description": "配置格式版本。",
+      "const": 4
+    },
+    "candidateRetentionDays": {
+      "description": "候选从首次发布起至少保留的天数。",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "target": {
+      "description": "发布规则产物的仓库和分支。",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "branch"],
+      "properties": {
+        "repository": { "description": "正式规则产物仓库。", "const": "wangyingang/sing-box-rule-artifacts" },
+        "branch": {
+          "description": "正式分支 main 或已准备的 acceptance-* 隔离分支。",
+          "type": "string",
+          "pattern": "^(main|acceptance-[a-zA-Z0-9._-]+)$",
+          "examples": ["main", "acceptance-example"]
+        }
+      }
+    },
+    "sources": {
+      "description": "按自定义名称声明规则来源。",
+      "type": "object",
+      "propertyNames": { "$ref": "#/definitions/logicalId" },
+      "additionalProperties": { "$ref": "#/definitions/source" }
+    },
+    "ruleSets": {
+      "description": "以全局唯一 ID 定义各规则集。",
+      "type": "object",
+      "propertyNames": { "$ref": "#/definitions/logicalId" },
+      "additionalProperties": { "$ref": "#/definitions/ruleSet" }
+    }
+  },
+  "definitions": {
+    "logicalId": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "format": {
+      "description": "读取所选文件时使用的输入格式。",
+      "type": "string",
+      "enum": ["v2fly-dlc-yaml", "clash-rule-list", "openai-voice-json", "cidr-text", "domain-suffix-text", "sing-box-source-json"]
+    },
+    "httpsUrl": { "type": "string", "pattern": "^[Hh][Tt][Tt][Pp][Ss]://[^/\\s\\\\#?@]+(?:[/?][^\\s\\\\#]*)?$" },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fetch"],
+      "properties": {
+        "fetch": {
+          "description": "获取规则输入的方式和地址。",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["method"],
+          "properties": {
+            "method": {
+              "description": "通过固定 HTTPS 地址或 GitHub 仓库分支获取规则。",
+              "enum": ["url", "github-branch"]
+            },
+            "url": { "description": "输入文件的固定 HTTPS 地址。", "$ref": "#/definitions/httpsUrl" },
+            "sha256Url": { "description": "可选的 SHA-256 摘要文件 HTTPS 地址。", "$ref": "#/definitions/httpsUrl" },
+            "repository": {
+              "description": "GitHub 仓库，格式为 owner/repository。",
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*$"
+            },
+            "branch": {
+              "description": "GitHub 来源分支。",
+              "type": "string",
+              "pattern": "^(?!.*\\.\\.)(?!.*(?:\\.|\\.lock)$)[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$"
+            }
+          },
+          "allOf": [
+            {
+              "if": { "required": ["method"], "properties": { "method": { "const": "url" } } },
+              "then": { "required": ["url"], "properties": { "repository": false, "branch": false } }
+            },
+            {
+              "if": { "required": ["method"], "properties": { "method": { "const": "github-branch" } } },
+              "then": { "required": ["repository", "branch"], "properties": { "url": false, "sha256Url": false } }
+            }
+          ]
+        },
+        "format": { "$ref": "#/definitions/format" }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["fetch"], "properties": { "fetch": { "type": "object", "required": ["method"], "properties": { "method": { "const": "url" } } } } },
+          "then": { "required": ["format"] }
+        },
+        {
+          "if": { "required": ["fetch"], "properties": { "fetch": { "type": "object", "required": ["method"], "properties": { "method": { "const": "github-branch" } } } } },
+          "then": { "properties": { "format": false } }
+        }
+      ]
+    },
+    "ruleSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["data", "publishPath", "artifact"],
+      "properties": {
+        "data": {
+          "description": "为该规则集选择一个文件或命名列表。",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source"],
+          "dependencies": { "file": ["format"], "format": ["file"] },
+          "properties": {
+            "source": {
+              "description": "填入 sources 中已声明的名称。同步时核对实际引用。",
+              "$ref": "#/definitions/logicalId"
+            },
+            "file": {
+              "description": "相对于来源仓库根目录的文件。用于 GitHub 分支来源。",
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*(?:/[A-Za-z0-9][A-Za-z0-9._+-]*)*$"
+            },
+            "format": { "$ref": "#/definitions/format" },
+            "list": {
+              "description": "DLC 文件中的真实列表名。读取整份文件时省略。",
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9!._-]*$"
+            }
+          },
+          "if": { "required": ["format"], "properties": { "format": { "const": "v2fly-dlc-yaml" } } },
+          "then": { "required": ["list"] },
+          "else": {
+            "if": { "required": ["format"] },
+            "then": { "properties": { "list": false } }
+          }
+        },
+        "filter": {
+          "description": "按同一条目上的条件保留或排除规则。",
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "maxProperties": 1,
+          "properties": {
+            "include": { "$ref": "#/definitions/condition" },
+            "exclude": { "$ref": "#/definitions/condition" }
+          }
+        },
+        "publishPath": {
+          "description": "stable/ 下的发布目录。不同规则集可以共用。",
+          "type": "string",
+          "pattern": "^stable/[a-z0-9][a-z0-9._-]*(?:/[a-z0-9][a-z0-9._-]*)*$"
+        },
+        "artifact": {
+          "description": "JSON 和 SRS 共用的文件基名，不含扩展名。",
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,249}$",
+          "not": { "enum": ["activation", "manifest", "build", "readback", "source", "conversion-report"] }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["data"], "properties": { "data": { "type": "object", "required": ["format"], "properties": { "format": { "enum": ["openai-voice-json", "cidr-text", "domain-suffix-text", "sing-box-source-json"] } } } } },
+          "then": { "properties": { "filter": false } }
+        },
+        {
+          "if": { "required": ["data"], "properties": { "data": { "type": "object", "required": ["format"], "properties": { "format": { "const": "v2fly-dlc-yaml" } } } } },
+          "then": { "properties": { "filter": { "type": "object", "properties": { "include": { "type": "object", "properties": { "type": false } }, "exclude": { "type": "object", "properties": { "type": false } } } } } }
+        },
+        {
+          "if": { "required": ["data"], "properties": { "data": { "type": "object", "required": ["format"], "properties": { "format": { "const": "clash-rule-list" } } } } },
+          "then": { "properties": { "filter": { "type": "object", "properties": { "include": { "type": "object", "properties": { "tags": false } }, "exclude": { "type": "object", "properties": { "tags": false } } } } } }
+        }
+      ]
+    },
+    "condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "maxProperties": 1,
+      "properties": {
+        "tags": {
+          "description": "精确匹配 DLC 标签。省略 @，! 是标签名的一部分。",
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "maxProperties": 1,
+          "properties": {
+            "allOf": { "$ref": "#/definitions/tags" },
+            "anyOf": { "$ref": "#/definitions/tags" }
+          }
+        },
+        "type": {
+          "description": "匹配 Clash 上游条目的规则类型。",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["anyOf"],
+          "properties": {
+            "anyOf": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1, "pattern": "^\\S+$" }
+            }
+          }
+        }
+      }
+    },
+    "tags": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1, "pattern": "^[^@\\s]+$" }
+    }
+  }
+}

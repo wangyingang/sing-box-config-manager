@@ -12,7 +12,7 @@ import { candidateInputSnapshot } from './rule-source-adapters.js';
 export async function planRulesCleanup(session: RulesSession, refs: Ref[], frozen?: CleanupPlan): Promise<CleanupPlan> {
   const { journal, snapshot, loaded } = session;
   const stable = await session.stable();
-  const { records: deliveries } = await verifyStableDeliveries(stable);
+  const { records: deliveries, recordPaths } = await verifyStableDeliveries(stable);
   const candidateRetentionDays = frozen?.candidateRetentionDays ?? loaded.configuration.candidateRetentionDays;
   const observed = frozen?.cleanupObservedAt ?? (loaded.context.now?.() ?? new Date()).toISOString();
   const cutoff = new Date(Date.parse(observed) - candidateRetentionDays * 86_400_000).toISOString();
@@ -20,9 +20,7 @@ export async function planRulesCleanup(session: RulesSession, refs: Ref[], froze
   const active: CleanupPlan['retain']['active'] = [];
   const knownStable = new Set<string>();
   for (const record of deliveries.values()) {
-    const recordPath = stable.paths.find(path => path.endsWith('/activation.json')
-      && Object.keys(record.files).some(file => file.startsWith(path.slice(0, -'activation.json'.length))));
-    if (!recordPath) throw new Error('RULE_CLEANUP_PENDING: current delivery has no stable path');
+    const recordPath = recordPaths.get(record.logicalId)!;
     active.push({ recordPath, record });
     knownStable.add(recordPath);
     Object.keys(record.files).forEach(path => knownStable.add(path));
