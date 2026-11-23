@@ -100,13 +100,16 @@ test('the 16 formal v4 rule sets deliver from an empty GitHub target', {
 
   evidence.start = await production();
   assert.deepEqual(await matching(), []);
+  let ownsTarget = false;
   t.after(async () => {
     try {
-      if ((await matching()).some(({ ref }: { ref: string }) => ref === `refs/heads/${target}`)) {
-        await api(`git/refs/heads/${target}`, undefined, 'DELETE');
+      if (ownsTarget) {
+        if ((await matching()).some(({ ref }: { ref: string }) => ref === `refs/heads/${target}`)) {
+          await api(`git/refs/heads/${target}`, undefined, 'DELETE');
+        }
+        assert.deepEqual(await matching(), []);
+        evidence.removed = true;
       }
-      assert.deepEqual(await matching(), []);
-      evidence.removed = true;
       evidence.end = await production();
       assert.deepEqual(evidence.end, evidence.start);
     } finally {
@@ -129,6 +132,7 @@ test('the 16 formal v4 rule sets deliver from an empty GitHub target', {
       '初始化 v4 隔离验收分支');
   }
   await api('git/refs', { ref: `refs/heads/${target}`, sha: continuationHead ?? evidence.seed });
+  ownsTarget = true;
   const repository = githubRulesRepository(target, request);
   const context: RulesContext = {
     repository, targetBranch: target, allowWrites: true, binary, token,

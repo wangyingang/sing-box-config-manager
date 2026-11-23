@@ -394,6 +394,8 @@ pnpm --dir packages/rule-set-pipeline test:acceptance:rules
 
 探针用正式 v4 配置和实时上游首次同步，逐集核对固定上游内容和全部匹配谓词，再验证当前候选、Git 中的交付记录及固定候选、固定交付和稳定分支地址。两种格式均通过真实加载和正反例匹配。探针在隔离目标执行 pin、resume 及清理预览，结束时删除隔离分支并核对生产 refs 与门禁。旧验收的来源和范围保留在 [#96](../../docs/verification/issue-96.md) 与 [#164](../../docs/verification/issue-164/README.md) 的历史记录。
 
+若同步中断且原探针已清理分支，可通过 `RULE_FORMAL_V4_RESUME_EVIDENCE` 指向该次证据，并为续跑另设证据路径。探针会核对配置摘要、初始空提交及上一轮记录的隔离 head，再从同一提交链继续。已交付候选需要保留原身份。
+
 cleanup 的真实隔离验收使用单独入口，四集包含域名与 CIDR，验证首次发布时间窗口、当前/pin 豁免、切换中断、HTTPS 回读失败恢复及两轮清理后版本选择：
 
 ```sh
