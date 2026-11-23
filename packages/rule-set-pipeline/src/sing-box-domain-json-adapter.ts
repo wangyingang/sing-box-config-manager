@@ -85,7 +85,7 @@ export function convertSingBoxDomainJson(bytes: Uint8Array, file: string, list: 
   // Native domain, suffix and keyword fields in one rule are alternatives.
   const output = normalizeTerms(terms);
   for (const term of output) {
-    if (term.type !== 'ip_cidr') report.typeCounts[term.type].output++;
+    report.typeCounts[term.type].output++;
   }
   report.status = 'converted';
   report.duplicateCount = terms.length - output.length;

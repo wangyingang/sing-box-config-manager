@@ -108,7 +108,7 @@ export async function publishCandidate(options: NativeBuildOptions & {
   const source = native.artifacts.find(artifact => artifact.format === 'source');
   const json = source && downloaded.get(`${prefix}/${source.file}`);
   if (!json) throw new Error('Remote native JSON is missing');
-  const terms = readSourceTerms(JSON.parse(json.toString('utf8')), { allowEmpty: typeof options.target === 'object' });
+  const terms = readSourceTerms(JSON.parse(json.toString('utf8')), typeof options.target === 'object');
   const remoteNative = await nativeBuild(terms, binary, options.target);
   if (remoteNative.tool.sha256 !== native.tool.sha256) throw new Error('Binary changed between build and readback');
   if (remoteNative.artifacts.length !== native.artifacts.length || remoteNative.artifacts.some(artifact =>

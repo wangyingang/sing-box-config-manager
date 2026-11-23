@@ -99,7 +99,7 @@ export async function loadRulesRequest(request: RulesRequest, writeKind: 'update
     return context.repository.download(url);
   };
   return { context, observed, configuration, readbackRequests, downloadEvidence, dryRun: Boolean(request.dryRun), allowWrites, writeKind,
-    nativeBuild: createOperationNativeBuilder(),
+    nativeBuild: createOperationNativeBuilder(), branchHeads: new Map<string, Promise<string>>(),
     readStableDeliveries: createStableDeliveryReader(),
     verifyEvidence: createOperationEvidenceVerifier(downloadEvidence),
     progress: (stage: RulesProgress['stage'], id?: string) => reportRulesProgress(request.onProgress, stage, id) };

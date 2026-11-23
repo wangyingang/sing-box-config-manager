@@ -156,6 +156,44 @@ ruleSets:
 
 DLC 的 [YAML 导出程序](https://github.com/v2fly/domain-list-community/blob/master/cmd/datdump/main.go) 直接在正则值后拼接属性。无法从文本区分的尾部沿用现有解析约定。符合标签语法且未转义的小写尾部按属性处理。
 
+### 在同一 GitHub 分支选择不同文件
+
+在 v4 配置中，`fetch.method: github-branch` 声明上游仓库及分支。每个规则集用 `data.file` 指定一个仓库内文件，用 `data.format` 选择 `clash-rule-list`、`cidr-text` 或 `domain-suffix-text`。这些格式均读取整份文件，省略 `list`。一次同步为同一仓库和分支固定一个 commit，各规则集按该 commit 读取各自的文件。
+
+例如，下列配置片段从同一分支选择一份 Clash 清单和一份 CIDR 文本。仓库和文件路径为示例值。
+
+```yaml
+sources:
+  example:
+    fetch:
+      method: github-branch
+      repository: example/rule-lists
+      branch: main
+ruleSets:
+  example-domains:
+    data:
+      source: example
+      file: rules/services.list
+      format: clash-rule-list
+    filter:
+      include:
+        type:
+          anyOf: [DOMAIN-SUFFIX, DOMAIN-KEYWORD]
+    publishPath: stable/example-domains
+    artifact: domains
+  example-networks:
+    data:
+      source: example
+      file: rules/networks.txt
+      format: cidr-text
+    publishPath: stable/example-networks
+    artifact: ips
+```
+
+`clash-rule-list` 读取 UTF-8 Classical 文本清单，转换 `DOMAIN`、`DOMAIN-SUFFIX`、`DOMAIN-KEYWORD`、`IP-CIDR`、`IP-CIDR6`、`SRC-IP-CIDR`、`SRC-PORT` 和 `DST-PORT`。地址规则按原类型匹配传入的源或目标 IP，客户端配置负责域名解析。可省略 `filter`，也可使用 `include.type.anyOf` 或 `exclude.type.anyOf` 选择上游类型。类型名称区分大小写，`IP-CIDR` 和 `IP-CIDR6` 分别筛选。其他类型和无法表达的修饰项按上游类型计入 `unsupportedTypeCounts`。 [Mihomo Classical 文本示例](https://wiki.metacubex.one/en/config/rule-providers/content/) · [Mihomo 匹配类型与修饰项](https://wiki.metacubex.one/en/config/rules/)
+
+三种格式均可发布空文件对应的空规则集。Clash 过滤结果为空时同样发布空规则集。选中项全部因不受支持被跳过时，本次构建失败。已有的两种订阅仍提供上一版，首次构建则等待后续成功，一次同步中的独立文件可继续交付。
+
 ## 环境与远端状态
 
 环境须已配置 GitHub 身份，拥有源码读取与产物仓库所需权限。产物仓库固定为 `wangyingang/sing-box-rule-artifacts`，目标分支须已存在且有初始提交。工具不创建仓库、凭据或目标分支；`cleanup` 仅创建、核验并清理本次维护拥有的临时分支。GitHub 写入使用现有 `gh` 身份；来源读取可使用 `GITHUB_TOKEN` 或 `GH_TOKEN`。

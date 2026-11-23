@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { verifyCandidateEvidence } from './activation.js';
 import { buildConfigured, convertInput } from './configured-build.js';
 import { publishConfiguredCandidate } from './configured-update.js';
-import type { RuleDefinition, SourceInput } from './configuration.js';
+import { configuredRuleInput, type RuleDefinition, type SourceInput } from './configuration.js';
 import { candidateInputSnapshot, ruleSourceAdapter } from './rule-source-adapters.js';
 import type { RulesRepository } from './rules-repository.js';
 import type { PublicationSnapshot } from './publication-repository.js';
@@ -31,12 +31,12 @@ export interface PreparedRulesInput {
 
 /** Pin a shared source once, then read and convert only the lists that need its body. */
 export async function resolveRulesInput(loaded: LoadedRules, definitions: RuleDefinition[], fixed?: FixedRuleInput) {
-  const input = fixed?.candidate.sourceInput ?? loaded.configuration.sources[definitions[0].source];
+  const input = fixed?.candidate.sourceInput ?? configuredRuleInput(loaded.configuration, definitions[0]);
   const adapter = ruleSourceAdapter(input);
   const network = { fetch: loaded.context.fetch, token: loaded.context.token };
   const probe = fixed
     ? await adapter.openFixed(network, fixed.candidate, fixed.snapshot)
-    : await adapter.probe(network);
+    : await adapter.probe(network, loaded.branchHeads);
   const format = input.input.format;
   const { file } = adapter;
   return {
@@ -108,7 +108,7 @@ export async function recoverPublishedRuleCandidate(session: RulesSession, candi
 
 export async function publishRuleBuild(session: RulesSession, built: RuleBuild, result: ValidRuleBuild, rule: ManagedRule, recovering?: RuleCandidate) {
   session.loaded.progress('candidate', result.id);
-  const input = session.loaded.configuration.sources[result.definition.source];
+  const input = rule.source;
   const candidate: RuleCandidate = recovering ?? { id: randomUUID(), logicalId: result.id, definition: result.definition,
     sourceInput: input, inputBindingRevision: inputBindingRevision(input, result.definition), definitionGeneration: rule.generation,
     source: built.source, buildId: result.buildId, status: 'building', operation: 'sync', controlRevision: rule.control.revision };

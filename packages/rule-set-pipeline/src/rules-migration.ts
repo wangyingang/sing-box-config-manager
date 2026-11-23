@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { activationSubscription, candidateStableFiles, verifyCandidateEvidence } from './activation.js';
-import { configuredSubscription, parseHistoricalConfiguration, parseRuleDefinition, parseSource, type ProjectedRuleDefinition, type RuleDefinition, type SourceInput } from './configuration.js';
+import { configuredRuleInput, configuredSubscription, parseHistoricalConfiguration, parseRuleDefinition, parseSource, type ProjectedRuleDefinition, type RuleDefinition, type SourceInput } from './configuration.js';
 import { effectiveControl } from './manual-activation.js';
 import { immutableUrl } from './publication.js';
 import { retainedCandidateDownload, type PublicationRepository, type PublicationSnapshot } from './publication-repository.js';
@@ -91,7 +91,7 @@ async function prepareMigration(loaded: LoadedRules, journal: RemoteJournal, sna
       const current = loaded.configuration.ruleSets.find(definition => definition.id === registered?.logicalId);
       if (current) {
         owner = current.id;
-        quarantinedDefinitions.set(owner, { definition: current, source: loaded.configuration.sources[current.source] });
+        quarantinedDefinitions.set(owner, { definition: current, source: configuredRuleInput(loaded.configuration, current) });
       } else if (registered?.logicalId && registered.definition) {
         const operation = [journal.state.pendingOperation, ...(journal.parkedOperations ?? [])]
           .find(operation => operation?.id === registered.operationId);
@@ -142,7 +142,7 @@ async function prepareMigration(loaded: LoadedRules, journal: RemoteJournal, sna
     const active = oldActive.get(id);
     const previous = active ? next.candidates[active.candidateId] : Object.values(next.candidates).find(candidate => candidate.logicalId === id);
     const definition = definitions.get(id) ?? previous?.definition ?? quarantinedDefinitions.get(id)!.definition;
-    const source = definitions.has(id) ? loaded.configuration.sources[definition.source] : previous?.sourceInput ?? quarantinedDefinitions.get(id)!.source;
+    const source = definitions.has(id) ? configuredRuleInput(loaded.configuration, definition) : previous?.sourceInput ?? quarantinedDefinitions.get(id)!.source;
     const binding = inputBindingRevision(source, definition);
     if (active && definitions.has(id)) {
       if (!('usages' in definition)) throw new Error('RULE_MIGRATION_BLOCKED: historical migration requires configuration v3');

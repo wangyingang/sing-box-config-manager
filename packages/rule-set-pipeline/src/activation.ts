@@ -118,7 +118,7 @@ export async function verifyCandidateEvidence(options: Partial<NativeBuildOption
     ?? (build.definition?.usages?.['dns-response']?.artifact ? 'cidr-text' : 'plain-yaml');
   const layout = projectedFormat !== undefined && isProjectedFormat(projectedFormat) ? configuredUsages(projectedFormat) : undefined;
   if (candidate) {
-    requireThat(validRuleSource(candidate.source, candidate.sourceInput), 'Candidate source binding mismatch');
+    requireThat(validRuleSource(candidate.source, candidate.sourceInput, candidate.definition), 'Candidate source binding mismatch');
   } else if (source.kind === 'github-commit') {
     requireThat(definition && validCommitSource(source) && source.inputBytes > 0, 'Incomplete official Git source');
   } else if (source.kind === 'synthetic') {
@@ -184,7 +184,7 @@ export async function verifyCandidateEvidence(options: Partial<NativeBuildOption
   }
   const json = JSON.parse(sourceBytes.toString());
   requireThat(json.version === 4, 'Candidate Source Format mismatch');
-  const terms = readSourceTerms(json, { allowEmpty: singleArtifact });
+  const terms = readSourceTerms(json, singleArtifact);
   if (layout) requireThat(terms.every(term => (term.type === 'ip_cidr') === (layout.dns === 'dns-response')),
     'Candidate has incompatible usage content');
   requireThat(!report || report.outputTermCount === terms.length, 'Conversion term count mismatch');

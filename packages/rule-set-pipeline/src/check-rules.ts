@@ -1,3 +1,4 @@
+import { parseProjectedConfiguration as parseBuildConfiguration } from './configuration.js';
 import { randomUUID } from 'node:crypto';
 import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -6,7 +7,7 @@ import { activateAutomatically, activationSubscription, verifyActivationCandidat
 import { githubActivation, type ActivationTransport } from './activation-transport.js';
 import { verifyRetainedCandidate } from './candidate-recovery.js';
 import { commitSourceKey, resolveCommit, withCommitCheckpoint } from './github-commit.js';
-import { buildConfiguredCommit, buildConfiguredRelease, configuredBuildTools, parseBuildConfiguration, type RuleDefinition } from './configured-build.js';
+import { buildConfiguredCommit, buildConfiguredRelease, configuredBuildTools, type RuleDefinition } from './configured-build.js';
 import { publishConfiguredCandidate, type ConfiguredUpdateOptions } from './configured-update.js';
 import { applicableResume, effectiveControl, readActivationOperationResults, type ObservedActivation } from './manual-activation.js';
 import { inspectBinary } from './native.js';
