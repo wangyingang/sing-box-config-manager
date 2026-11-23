@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { candidateStableFiles } from './activation.js';
-import { conversionKey } from './configured-build.js';
 import { configuredRuleInput, type RuleDefinition } from './configuration.js';
 import { guardRulesConfiguration, loadRulesRequest, rulesBinary, type LoadedRules, type RulesRequest } from './rules-context.js';
 import { buildPreparedRules, buildRulesInput, resolveRulesInput, publishRuleBuild, recoverPublishedRuleCandidate, verifyRuleCandidate } from './rules-build.js';
@@ -176,7 +175,7 @@ async function updateSelectedRules(session: RulesSession, definitions: RuleDefin
       const current = deliveries.get(id);
       try {
         const input = await (body ??= source.read(bodyNeeded));
-        const counts = input.lists.get(conversionKey(definition))?.report.unsupportedTypeCounts;
+        const counts = input.conversionFor(definition).report.unsupportedTypeCounts;
         if (counts) skippedByRule.set(id, counts);
         const reused = !session.loaded.dryRun && await reuseSuccessfulInput(session, rule, current, input);
         if (reused) {

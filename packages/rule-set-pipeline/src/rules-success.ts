@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { candidateStableFiles } from './activation.js';
 import { matchesRuleDelivery } from './rules-delivery.js';
-import { configuredBuildIdentity, configuredBuildTools, conversionKey } from './configured-build.js';
+import { configuredBuildIdentity, configuredBuildTools } from './configured-build.js';
 import { inspectBinary, nativeBuildIdentity, NATIVE_VALIDATION_POLICY, type NativeTool } from './native.js';
 import { normalizeTerms } from './projection.js';
 import type { PublicationSnapshot } from './publication-repository.js';
@@ -82,8 +82,8 @@ export async function reuseVerifiedInput(session: RulesSession, rule: ManagedRul
 export async function reuseSuccessfulInput(session: RulesSession, rule: ManagedRule, current: RuleDelivery | undefined,
   input: PreparedRulesInput) {
   const baseline = reusableInputBaseline(rule, current);
-  const converted = input.lists.get(conversionKey(rule.definition));
-  if (!baseline || !converted?.ok) return;
+  const converted = input.conversionFor(rule.definition);
+  if (!baseline || !converted.ok) return;
   const terms = normalizeTerms(converted.terms);
   if (nativeBuildIdentity(baseline.toolSha256, terms) !== baseline.nativeBuildId) return;
   return reuseVerifiedInput(session, rule, current, baseline, input.source);

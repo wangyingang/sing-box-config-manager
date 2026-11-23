@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test, { type TestContext } from 'node:test';
@@ -117,6 +117,7 @@ const mixed = `# A classical text provider
 DOMAIN,exact.example
 DOMAIN-SUFFIX,Boundary.Example
 DOMAIN-KEYWORD,Needle
+DOMAIN-KEYWORD,Foo_Bar
 IP-CIDR,198.51.100.19/24,no-resolve
 IP-CIDR6,2001:db8:4::/48
 IP-ASN,64500,no-resolve
@@ -143,7 +144,7 @@ test('v4 filters the same Clash file by upstream type and delivers native matche
   await matches(t, env, unfiltered.current!, 'mixed', [
     ['exact.example', true], ['child.exact.example', false],
     ['boundary.example', true], ['child.boundary.example', true], ['notboundary.example', false],
-    ['myneedle.example', true], ['plain.example', false],
+    ['myneedle.example', true], ['myfoo_bar.example', true], ['myfoobar.example', false], ['plain.example', false],
     ['198.51.100.1', true], ['198.51.101.1', false], ['2001:db8:4::1', true], ['2001:db8:5::1', false],
   ]);
   await matches(t, env, included.current!, 'included', [
@@ -240,4 +241,32 @@ test('v4 keeps a missing branch file failure local to consumers of that file', a
   assert.equal(missing.current, undefined);
   assert.equal(present.status, 'delivered');
   await matches(t, env, present.current!, 'present', [['203.0.113.1', true], ['203.0.114.1', false]]);
+});
+
+test('v4 preserves the source CIDR and port directions from a Clash list', async t => {
+  const env = fixture({ transport: rule('transport', clashFile, 'clash-rule-list') }, {
+    [clashFile]: 'SRC-IP-CIDR,192.0.2.15/24\nSRC-PORT,1234\nDST-PORT,80/8443-8445\n',
+  });
+  const result = await syncRules(env.request);
+  assert.equal(result.status, 'success', JSON.stringify(result));
+  assert.equal(result.results[0].unsupportedTypeCounts, undefined);
+  const directory = await mkdtemp(join(tmpdir(), 'rules-issue-172-transport-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const url = `https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/${target}/stable/transport/transport`;
+  const source = await env.context.repository.download(url + '.json');
+  const srs = await env.context.repository.download(url + '.srs');
+  const srsPath = join(directory, 'transport.srs');
+  const decodedPath = join(directory, 'transport-decoded.json');
+  await writeFile(srsPath, srs);
+  await exec(binary!, ['rule-set', 'decompile', srsPath, '-o', decodedPath]);
+  assert.equal(JSON.parse(source.toString()).version, 4);
+  for (const bytes of [source, await readFile(decodedPath)]) {
+    const doc = JSON.parse(bytes.toString()) as { rules: Record<string, unknown>[] };
+    assert.equal(doc.rules.length, 4);
+    assert.deepEqual(Object.fromEntries(doc.rules.flatMap(entry => Object.entries(entry))
+      .map(([key, value]) => [key, Array.isArray(value) ? value : [value]])), {
+      source_ip_cidr: ['192.0.2.0/24'], source_port: [1234], port: [80], port_range: ['8443:8445'],
+    });
+    assert.ok(doc.rules.every(entry => Object.keys(entry).length === 1));
+  }
 });

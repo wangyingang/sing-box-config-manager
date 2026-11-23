@@ -70,8 +70,8 @@ export async function buildConfiguredRelease(options: BuildOptions & { release: 
   const definitions = selectDefinitions(configuration, options.selectedIds);
   const input = configuredReleaseInput(configuration, definitions);
   const { bytes, source } = await readReleaseInput(options.release, input);
-  const lists = convertInput(bytes, definitions, input.input.format, input.input.asset);
-  return buildProjectedConfiguration(configuration, definitions, { binary: options.binary }, source, lists, input.input.format, input.input.asset);
+  const conversionFor = convertInput(bytes, definitions, input.input.format, input.input.asset);
+  return buildProjectedConfiguration(configuration, definitions, { binary: options.binary }, source, conversionFor, input.input.format, input.input.asset);
 }
 
 export async function buildConfiguredCommit(options: BuildOptions & { github: CommitOptions }) {
@@ -84,8 +84,8 @@ export async function buildConfiguredCommit(options: BuildOptions & { github: Co
     const ids = definitions.map(rule => rule.id).join(', ');
     throw new SourceError(error.code, `Rule set(s) ${ids}, Git input ${input.input.path}: ${error.message}`);
   });
-  const lists = convertInput(bytes, definitions, input.input.format, input.input.path);
-  return buildProjectedConfiguration(configuration, definitions, { binary: options.binary }, source, lists, input.input.format, input.input.path);
+  const conversionFor = convertInput(bytes, definitions, input.input.format, input.input.path);
+  return buildProjectedConfiguration(configuration, definitions, { binary: options.binary }, source, conversionFor, input.input.format, input.input.path);
 }
 
 const wholeFileConverters = {
@@ -96,11 +96,22 @@ const wholeFileConverters = {
   'openai-voice-json': convertOpenAiVoice,
 };
 
-export function conversionKey(rule: RuleDefinition) {
+function conversionKey(rule: RuleDefinition) {
   return 'filter' in rule && rule.filter ? JSON.stringify(rule.filter) : rule.list;
 }
 
-export function convertInput(bytes: Uint8Array, definitions: RuleDefinition[], format: SourceFormat, file: string): ReadonlyMap<string | undefined, Converted> {
+type ConversionLookup = (rule: RuleDefinition) => Converted;
+
+export function convertInput(bytes: Uint8Array, definitions: RuleDefinition[], format: SourceFormat, file: string): ConversionLookup {
+  const conversions = convertSelections(bytes, definitions, format, file);
+  return rule => {
+    const result = conversions.get(conversionKey(rule));
+    if (!result) throw new Error(`Missing conversion for rule set ${rule.id}`);
+    return result;
+  };
+}
+
+function convertSelections(bytes: Uint8Array, definitions: RuleDefinition[], format: SourceFormat, file: string): ReadonlyMap<string | undefined, Converted> {
   if (format === 'sing-box-source-json') return new Map([[undefined, convertSingBoxSourceJson(bytes, file)]]);
   if (format === 'clash-rule-list') {
     const converted = new Map<string | undefined, Converted>();
@@ -126,9 +137,9 @@ export function convertInput(bytes: Uint8Array, definitions: RuleDefinition[], f
 
 async function buildProjectedConfiguration<Source extends RuleSource>(
   configuration: BuildConfiguration, definitions: ProjectedRuleDefinition[], options: NativeBuildOptions,
-  source: Source, lists: ReadonlyMap<string | undefined, Converted>, format: SourceFormat, file: string,
+  source: Source, conversionFor: ConversionLookup, format: SourceFormat, file: string,
 ) {
-  const built = await buildConfigured(configuration, definitions, options, source, lists, format, file);
+  const built = await buildConfigured(configuration, definitions, options, source, conversionFor, format, file);
   const results = built.results.map((result): ConfiguredResult<ProjectedRuleDefinition, NativeBuild, ConversionReport> => {
     if (!('usageCounts' in result.report)) throw new Error('Missing legacy conversion usage counts');
     const report = result.report as ConversionReport;
@@ -139,12 +150,12 @@ async function buildProjectedConfiguration<Source extends RuleSource>(
 
 export async function buildConfigured<Source extends RuleSource, Definition extends RuleDefinition>(
   configuration: BuildConfiguration, definitions: Definition[], { binary, nativeBuild = buildRuleArtifacts }: NativeBuildOptions,
-  source: Source, lists: ReadonlyMap<string | undefined, Converted>, format: SourceFormat, file: string,
+  source: Source, conversionFor: ConversionLookup, format: SourceFormat, file: string,
 ) {
   const tools = await configuredBuildTools(format);
   const results: ConfiguredResult<Definition>[] = [];
   for (const definition of definitions) {
-    const converted = lists.get(conversionKey(definition))!;
+    const converted = conversionFor(definition);
     const report = structuredClone(converted.report);
     if (!converted.ok) {
       results.push({ id: definition.id, definition, status: 'failed', report, error: converted.error });

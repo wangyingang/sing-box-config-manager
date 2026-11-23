@@ -1,5 +1,5 @@
 import { normalizeCidr } from './cidr-text-adapter.js';
-import { isDomainKeyword, normalizeBareDomain } from './convert.js';
+import { normalizeBareDomain } from './convert.js';
 import { normalizeTerms, type BuildTerm } from './projection.js';
 import { diagnostic, emptyRuleReport } from './types.js';
 
@@ -9,16 +9,53 @@ export type ClashTypeFilter = { include: TypeCondition } | { exclude: TypeCondit
 export const validClashRuleType = (value: unknown): value is string =>
   typeof value === 'string' && /^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*$/.test(value);
 
-function termType(type: string, options: string[]): BuildTerm['type'] | undefined {
-  // no-resolve controls Clash DNS resolution. Both formats match the same supplied destination IP.
+type ClashTermType = Exclude<BuildTerm['type'], 'source_port_range' | 'port_range' | 'domain_regex'>;
+
+function termType(type: string, options: string[]): ClashTermType | undefined {
+  // no-resolve controls Clash DNS resolution. Both formats match the supplied destination IP.
   if (type === 'IP-CIDR' || type === 'IP-CIDR6') {
-    if (!options.length || options.length === 1 && options[0] === 'no-resolve') return 'ip_cidr';
+    const flags = new Set(options);
+    if ([...flags].every(flag => flag === 'no-resolve' || flag === 'src')) {
+      return flags.has('src') ? 'source_ip_cidr' : 'ip_cidr';
+    }
     return;
   }
   if (options.length) return;
   if (type === 'DOMAIN') return 'domain';
   if (type === 'DOMAIN-SUFFIX') return 'domain_suffix';
   if (type === 'DOMAIN-KEYWORD') return 'domain_keyword';
+  if (type === 'SRC-IP-CIDR') return 'source_ip_cidr';
+  if (type === 'DST-PORT') return 'port';
+  if (type === 'SRC-PORT') return 'source_port';
+}
+
+function portTerms(type: 'port' | 'source_port', value: string): BuildTerm[] | undefined {
+  const rangeType = type === 'port' ? 'port_range' : 'source_port_range';
+  const terms: BuildTerm[] = [];
+  for (const part of value.split('/')) {
+    if (!part) continue;
+    const match = /^(\d+)(?: *- *(\d+))?$/.exec(part.trim());
+    if (!match) return;
+    const first = Number(match[1]);
+    const last = Number(match[2] ?? match[1]);
+    if (first > 65535 || last > 65535) return;
+    if (first === last) terms.push({ type, value: first });
+    else terms.push({ type: rangeType, value: `${Math.min(first, last)}:${Math.max(first, last)}` });
+  }
+  return terms.length ? terms : undefined;
+}
+
+function convertPayload(type: ClashTermType, value: string): BuildTerm[] | undefined {
+  if (type === 'port' || type === 'source_port') return portTerms(type, value);
+  if (type === 'ip_cidr' || type === 'source_ip_cidr') {
+    const cidr = normalizeCidr(value);
+    return cidr ? [{ type, value: cidr }] : undefined;
+  }
+  if (type === 'domain_keyword') {
+    return /[\x00-\x1f\x7f]/u.test(value) ? undefined : [{ type, value: value.toLowerCase() }];
+  }
+  const domain = normalizeBareDomain(value);
+  return domain ? [{ type, value: domain }] : undefined;
 }
 
 export function convertClashRuleList(bytes: Uint8Array, file: string, filter?: ClashTypeFilter) {
@@ -56,23 +93,21 @@ export function convertClashRuleList(bytes: Uint8Array, file: string, filter?: C
     }
     const counts = report.typeCounts[type] ??= { input: 0, converted: 0, output: 0 };
     counts.input++;
-    const normalized = type === 'ip_cidr' ? normalizeCidr(value)
-      : type === 'domain_keyword' ? (isDomainKeyword(value) ? value.toLowerCase() : undefined)
-      : normalizeBareDomain(value);
-    if (!normalized) { invalid(`Invalid payload for ${sourceType}`); continue; }
+    const converted = convertPayload(type, value);
+    if (!converted) { invalid(`Invalid payload for ${sourceType}`); continue; }
     counts.converted++;
-    terms.push({ type, value: normalized });
+    report.convertedCount++;
+    terms.push(...converted);
   }
 
   if (unsupported.size) report.unsupportedTypeCounts = Object.fromEntries([...unsupported.entries()].sort(([a], [b]) => a.localeCompare(b)));
-  report.convertedCount = terms.length;
   if (report.invalidCount) return { ok: false as const, report, error: `${file}:${report.diagnostics[0].line}: ${report.diagnostics[0].message}` };
   if (!terms.length && report.unsupportedCount) {
     const summary = Object.entries(report.unsupportedTypeCounts!).map(([type, count]) => `${type}=${count}`).join(', ');
     return { ok: false as const, report, error: `${file}: all selected Clash rules are unsupported (${summary})` };
   }
   const output = normalizeTerms(terms);
-  for (const { type } of output) report.typeCounts[type]!.output++;
+  for (const { type } of output) (report.typeCounts[type] ??= { input: 0, converted: 0, output: 0 }).output++;
   report.status = 'converted';
   report.duplicateCount = terms.length - output.length;
   report.outputTermCount = output.length;

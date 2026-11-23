@@ -14,6 +14,8 @@
 
 `sing-box-domain-json` 读取 UTF-8 的 Source Format v2 JSON。顶层包含 `version` 和 `rules`，规则对象仅接受 `domain`、`domain_suffix` 和 `domain_keyword` 的字符串数组，且须有可用的匹配值。每个值都是独立匹配条件，保留原值，按类型和值去重。重复字段、其他字段、非法结构或非法值使构建失败，诊断标明输入文件和对应规则或字段。生成的候选继续使用 Source Format v4。
 
+隔离 v4 配置的文件选择、格式和 Clash 类型条件见[从同一 GitHub 分支选取文件的示例](../README.md#在同一-github-分支选择不同文件)。分支文件的来源记录仍包含仓库、分支、固定 commit、路径、摘要与字节数。Clash 类型条件参与规则集的输入绑定。
+
 ## 共同结果
 
 五个服务返回 `RulesResult`，CLI `--json` 直接呈现相同业务结果：
@@ -27,6 +29,7 @@ Node 请求可选传入 `onProgress(event)`，事件为 `RulesProgress`（`stage
 | `target` | 本次受限产物仓库与分支 |
 | `status`、`exitCode` | success/disabled/partial/failed/pending；success 与 disabled 为 0，disabled 表示未应用 |
 | `results[]` | 每集的 `id`、结果、`changes`、`error`、`current`、`control`、`expectedSource` 和需要时的 `continueWith` |
+| `results[].unsupportedTypeCounts` | 读取并转换 Clash 正文时按上游类型汇总被跳过的选中条目。有跳过时返回。新候选的转换报告同时保留此计数。 |
 | `observedHeads` | 能读到时返回日志与稳定分支的观察 head，不作为后续执行凭证 |
 | `error` | 无法分配到单集的失败，或交付事实尚不能完成核实 |
 | `cleanup` | cleanup 的阶段、固化计划、保留/移除数量、其他引用与继续入口；无法盘点时可缺省 |

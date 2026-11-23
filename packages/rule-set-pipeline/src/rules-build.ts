@@ -23,7 +23,7 @@ interface FixedRuleInput {
 
 export interface PreparedRulesInput {
   source: RuleSource;
-  lists: ReturnType<typeof convertInput>;
+  conversionFor: ReturnType<typeof convertInput>;
   inputSnapshot?: Uint8Array;
   format: SourceInput['input']['format'];
   file: string;
@@ -44,7 +44,7 @@ export async function resolveRulesInput(loaded: LoadedRules, definitions: RuleDe
     async read(selected: RuleDefinition[]): Promise<PreparedRulesInput> {
       loaded.progress('source', selected.map(rule => rule.id).join(', '));
       const acquired = await probe.read();
-      return { source: acquired.source, lists: convertInput(acquired.bytes, selected, format, file), format, file,
+      return { source: acquired.source, conversionFor: convertInput(acquired.bytes, selected, format, file), format, file,
         ...(adapter.snapshotRequirement && { inputSnapshot: acquired.bytes }) };
     },
   };
@@ -53,7 +53,7 @@ export async function resolveRulesInput(loaded: LoadedRules, definitions: RuleDe
 export async function buildPreparedRules(loaded: LoadedRules, definitions: RuleDefinition[], input: PreparedRulesInput) {
   loaded.progress('build', definitions.map(rule => rule.id).join(', '));
   const built = await buildConfigured(loaded.configuration, definitions, { binary: rulesBinary(loaded.context), nativeBuild: loaded.nativeBuild },
-    input.source, input.lists, input.format, input.file);
+    input.source, input.conversionFor, input.format, input.file);
   return { ...built, inputSnapshot: input.inputSnapshot };
 }
 
