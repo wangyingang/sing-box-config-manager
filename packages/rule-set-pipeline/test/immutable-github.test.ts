@@ -89,7 +89,7 @@ test('GitHub 写入按分支保留自定义候选和稳定文件名', async () =
   });
   for (const [branch, files] of [
     ['candidates', { ...filesFor(candidate), [`${candidate}/manifest.json`]: Buffer.from('{}') }],
-    ['main', { ...filesFor(stable), [`${stable}/activation.json`]: Buffer.from('{}') }],
+    ['main', { ...filesFor(stable), [`${stable}/_delivery/office-networks.json`]: Buffer.from('{}') }],
     ['main', { ...filesFor(stable), [`${stable}/_delivery/office-networks.json`]: Buffer.from('{}'),
       [`${stable}/_delivery/custom_domains.json`]: null }],
   ] as const) {

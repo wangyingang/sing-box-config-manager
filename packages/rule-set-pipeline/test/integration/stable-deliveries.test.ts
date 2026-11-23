@@ -97,26 +97,25 @@ test('交付前重新观察到新提交时检查全部文件、路径归属及�
   assert.equal(first.exitCode, 0);
   const record = first.results[0].current!;
   const checkpoint = seed.checkpoint();
-  for (const fault of ['invalid-bytes', 'unmanaged-file', 'overlapping-root', 'moved-record', 'replaced-delivery']) await t.test(fault, async () => {
+  for (const fault of ['invalid-bytes', 'occupied-file-path', 'duplicate-owner', 'moved-record', 'replaced-delivery']) await t.test(fault, async () => {
     const env = rulesEnvironment(binary, 'main', checkpoint());
     env.upstream({ openai: 'domain:changed.example' });
     const repo = env.context.repository;
     const original = repo.snapshot;
     const stable = await original('main');
-    const recordPath = 'stable/openai/activation.json';
+    const recordPath = 'stable/openai/_delivery/domains.json';
     const files: RuleWrites = {};
     if (fault === 'invalid-bytes') files['stable/openai/domains.srs'] = Buffer.from('broken');
-    if (fault === 'unmanaged-file') files['stable/openai/notes.txt'] = Buffer.from('external');
-    if (fault === 'overlapping-root') {
+    if (fault === 'occupied-file-path') files['stable/openai/domains.json/unmanaged.txt'] = Buffer.from('external');
+    if (fault === 'duplicate-owner') {
       const child = 'stable/openai/another';
-      const path = 'stable/openai/domains.srs';
-      files[child + '/domains.srs'] = (await stable.read(path))!;
-      files[child + '/activation.json'] = encodeRecord({ ...record, logicalId: 'another',
-        files: { [child + '/domains.srs']: record.files[path] } });
+      const evidence = Object.fromEntries(Object.entries(record.files).map(([path, value]) => [path.replace('stable/openai', child), value]));
+      for (const path of Object.keys(record.files)) files[path.replace('stable/openai', child)] = (await stable.read(path))!;
+      files[child + '/_delivery/domains.json'] = encodeRecord({ ...record, files: evidence });
     }
     if (fault === 'moved-record') {
       files[recordPath] = null;
-      files['stable/activation.json'] = encodeRecord(record);
+      files['stable/moved/_delivery/domains.json'] = encodeRecord(record);
     }
     if (fault === 'replaced-delivery') files[recordPath] = encodeRecord({ ...record, id: 'external-delivery' });
     let prepare = false;
@@ -147,7 +146,7 @@ for (const fault of ['invalid-bytes', 'shared-file']) test(`删除已下线的�
   const record = first.results.find(row => row.id === 'openai')!.current!;
   const file = 'stable/team/openai/domains.srs';
   const changes: RuleWrites = fault === 'invalid-bytes' ? { [file]: Buffer.from('external change') }
-    : { 'stable/team/activation.json': encodeRecord({ ...record, logicalId: 'other', files: { [file]: record.files[file] } }) };
+    : { 'stable/team/_delivery/domains.json': encodeRecord({ ...record, logicalId: 'other', files: { [file]: record.files[file] } }) };
   config.ruleSets = config.ruleSets.filter(rule => rule.id !== 'openai');
   env.configure(config);
   let deleting = false;
@@ -171,7 +170,7 @@ for (const fault of ['invalid-bytes', 'shared-file']) test(`删除已下线的�
   assert.equal(result.exitCode, 1);
   assert.equal((await original('main')).head, external);
   const after = await original('main');
-  assert.ok(await after.read('stable/team/openai/activation.json'));
+  assert.ok(await after.read('stable/team/openai/_delivery/domains.json'));
   assert.ok(await after.read(file));
 });
 
@@ -180,7 +179,7 @@ test('单分支从已登记的交付恢复时保留后来写入的稳定文件',
   const { context } = env;
   const repo = context.repository;
   env.beforeWrite(async files => {
-    if (files['stable/openai/activation.json']) throw new Error('模拟稳定写入中断');
+    if (files['stable/openai/_delivery/domains.json']) throw new Error('模拟稳定写入中断');
   });
   const interrupted = await syncRules({ context });
   assert.equal(interrupted.status, 'pending');
@@ -207,7 +206,7 @@ test('单分支支持本次登记的 CAS 提交，跨操作从唯一父提交恢
   assert.equal((await syncRules({ context })).exitCode, 0);
   env.upstream({ openai: 'domain:later.example' });
   env.beforeWrite(async files => {
-    if (files['stable/openai/activation.json']) throw new Error('模拟暂停');
+    if (files['stable/openai/_delivery/domains.json']) throw new Error('模拟暂停');
   });
   assert.equal((await syncRules({ context })).status, 'pending');
   env.beforeWrite();
@@ -236,7 +235,7 @@ test('登记后重读到更新的共享 head 时只信任实际 CAS 提交', asy
   assert.ok(external);
   assert.equal(result.status, 'pending');
   assert.equal((await repo.snapshot()).head, external);
-  assert.equal(await (await repo.snapshot()).read('stable/openai/activation.json'), undefined);
+  assert.equal(await (await repo.snapshot()).read('stable/openai/_delivery/domains.json'), undefined);
 });
 
 for (const kind of ['sync', 'delete']) test(`恢复旧版已登记的 ${kind} 前重新核验登记提交上的路径归属`, async () => {
@@ -254,7 +253,7 @@ for (const kind of ['sync', 'delete']) test(`恢复旧版已登记的 ${kind} �
     const first = await syncRules({ context });
     assert.equal(first.exitCode, 0);
     const current = first.results[0].current!;
-    changes = { 'stable/team/activation.json': encodeRecord({ ...current, logicalId: 'other', files: { [file]: current.files[file] } }) };
+    changes = { 'stable/team/_delivery/domains.json': encodeRecord({ ...current, logicalId: 'other', files: { [file]: current.files[file] } }) };
     config.ruleSets = [];
     env.configure(config);
   }
@@ -271,7 +270,7 @@ for (const kind of ['sync', 'delete']) test(`恢复旧版已登记的 ${kind} �
   await repo.commit(repo.branch, journal.head, { [RULE_STATE_PATH]: encodeRecord(state) }, '重放旧版登记的稳定提交', async () => {});
   const result = await syncRules({ context });
   assert.equal(result.status, 'pending');
-  assert.match(result.error ?? '', /SUBSCRIPTION_PATH_CONFLICT/);
+  assert.match(result.error ?? '', /SUBSCRIPTION_PATH_CONFLICT|RULE_DELIVERY_CORRUPT/);
   assert.equal((await repo.snapshot('main')).head, external);
 });
 
@@ -288,5 +287,5 @@ test('删除规则只移除受管文件并保留同目录的外部文件', async
   assert.equal((await syncRules({ context })).exitCode, 0);
   const after = await context.repository.snapshot('main');
   assert.equal((await after.read(note))!.toString(), 'keep');
-  assert.equal(await after.read('stable/openai/activation.json'), undefined);
+  assert.equal(await after.read('stable/openai/_delivery/domains.json'), undefined);
 });

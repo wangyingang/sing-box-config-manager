@@ -1,8 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import { deserialize, serialize } from 'node:v8';
-import type { ProjectedConfiguration } from '../../src/configuration.js';
-import { stringify } from 'yaml';
-import { parseProjectedConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
+import { fixtureConfigurationYaml, formalConfiguration, type FixtureConfiguration } from './formal-configuration.js';
 import { sha256 } from '../../src/release.js';
 import type { RulesContext } from '../../src/rules-context.js';
 import type { RulesRepository, RuleWrites } from '../../src/rules-repository.js';
@@ -13,7 +11,7 @@ interface RulesFixtureHistory {
   parents: Map<string, string>;
   state?: {
     sequence: number;
-    config: ProjectedConfiguration;
+    config: FixtureConfiguration;
     revision: number;
     upstreamRevision: number;
     contents: Record<string, string>;
@@ -44,9 +42,9 @@ export function rulesEnvironment(binary: string, target = 'acceptance-issue-84',
   const writes: { branch: string; files: RuleWrites }[] = [];
   const requests: string[] = [];
   let config = state?.config;
-  function configuration(): ProjectedConfiguration {
+  function configuration(): FixtureConfiguration {
     if (!config) {
-      const official = parseProjectedConfiguration(readOfficialConfiguration());
+      const official = formalConfiguration();
       config = { ...official, target: { ...official.target, branch: target }, sources: { dlc: official.sources.dlc },
         ruleSets: official.ruleSets.filter(rule => ['openai', 'anthropic'].includes(rule.id)) };
     }
@@ -93,6 +91,12 @@ export function rulesEnvironment(binary: string, target = 'acceptance-issue-84',
       return bytes;
     },
   };
+  function dlcInput() {
+    const retained = history.get(upstreamRevision)!;
+    const lists = ['openai', 'anthropic', 'google-deepmind', 'other'].map(name =>
+      ({ name, length: 1, rules: [retained[name] ?? `domain:${name}.example`] }));
+    return `# input revision ${upstreamRevision}\n${JSON.stringify({ lists })}`;
+  }
   const fetcher: typeof fetch = async address => {
     const url = String(address);
     requests.push(url);
@@ -110,29 +114,15 @@ export function rulesEnvironment(binary: string, target = 'acceptance-issue-84',
       if (commit !== commit[0].repeat(40) || input === undefined) throw new Error(`Unknown CIDR fixture revision: ${commit}`);
       return new Response(input);
     }
-    const match = /repos\/([^/]+\/[^/]+)\//.exec(url);
-    const repository = match?.[1] ?? 'v2fly/domain-list-community';
-    const requested = /\/releases\/(\d+)$/.exec(url)?.[1];
-    const asset = /\/assets\/(\d+)$/.exec(url)?.[1];
-    const version = requested ? Number(requested) : asset ? Math.floor(Number(asset) / 10) : upstreamRevision;
-    const tag = `release-${version}`;
-    const retained = history.get(version)!;
-    const input = JSON.stringify({ lists: ['openai', 'anthropic', 'google-deepmind', 'other'].map(name =>
-      ({ name, length: 1, rules: [retained[name] ?? `domain:${name}.example`] })) });
-    const checksum = `${sha256(input)}  dlc.dat_plain.yml\n`;
-    if (url.includes('/releases/') && !url.includes('/assets/')) return Response.json({ id: version, tag_name: tag,
-      assets: ['dlc.dat_plain.yml', 'dlc.dat_plain.yml.sha256sum'].map((name, index) => ({ id: version * 10 + 1 + index, name,
-        state: 'uploaded', digest: `sha256:${sha256(index === 0 ? input : checksum)}`,
-        browser_download_url: `https://github.com/${repository}/releases/download/${tag}/${name}` })) });
-    if (url.includes('/git/ref/tags/')) return Response.json({ object: { type: 'commit', sha: 'a'.repeat(40) } });
-    if (asset && Number(asset) % 10 === 1) return new Response(input);
-    if (asset && Number(asset) % 10 === 2) return new Response(checksum);
+    const input = dlcInput();
+    if (url.endsWith('/dlc.dat_plain.yml.sha256sum')) return new Response(`${sha256(input)}  dlc.dat_plain.yml\n`);
+    if (url.endsWith('/dlc.dat_plain.yml')) return new Response(input);
     throw new Error(`Unexpected input: ${url}`);
   };
   const context: RulesContext = { repository, targetBranch: target, allowWrites: true, binary, fetch: fetcher,
     now: () => new Date('2026-11-16T08:15:30.123Z'),
-    readConfiguration: async () => ({ revision: String(revision).padStart(40, '0'), content: stringify(configuration(), { aliasDuplicateObjects: false }), origin: 'isolated-fixture' }) };
-  return { context, writes, requests, heads, trees, parents,
+    readConfiguration: async () => ({ revision: String(revision).padStart(40, '0'), content: fixtureConfigurationYaml(configuration()), origin: 'isolated-fixture' }) };
+  return { context, writes, requests, heads, trees, parents, dlcInput,
     checkpoint() {
       return checkpointFixture<RulesFixtureHistory>({ heads, trees, parents, state: {
         sequence, config: configuration(), revision, upstreamRevision, contents, history, cidrRevision, cidrInputs,
@@ -140,7 +130,7 @@ export function rulesEnvironment(binary: string, target = 'acceptance-issue-84',
     },
     changeCidr(input: string) { cidrInputs.set(++cidrRevision, input); },
     config: () => structuredClone(configuration()),
-    configure(next: ProjectedConfiguration) { config = next; revision++; },
+    configure(next: FixtureConfiguration) { config = next; revision++; },
     upstream(rules: Record<string, string>) { Object.assign(contents, rules); upstreamRevision++; history.set(upstreamRevision, { ...contents }); },
     failSource(value: boolean | string) { sourceFailure = value; },
     beforeWrite(callback?: typeof beforeWrite) { beforeWrite = callback; },

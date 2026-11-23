@@ -7,7 +7,7 @@ import type { PublicationSnapshot } from '../../src/publication-repository.js';
 import { parseRulesJournal, RULE_STATE_PATH } from '../../src/rules-model.js';
 import { syncRules } from '../../src/rules-operations.js';
 import type { RulesRepository } from '../../src/rules-repository.js';
-import { baselineConfiguration } from './baseline-configuration.js';
+import { baselineV4Configuration } from './formal-configuration.js';
 import { checkpointFixture, rulesEnvironment } from './rules-environment.js';
 
 /** The ordinary rules fixture plus immutable roots and atomic, leased ref updates. */
@@ -131,10 +131,10 @@ export function cleanupEnvironment(binary: string, target = 'acceptance-issue-85
   };
 }
 
-/** Four curated sets, real native builds, deterministic Release and Git/CIDR inputs. */
+/** Four curated sets, real native builds, deterministic URL and Git/CIDR inputs. */
 export function fourSetCleanupEnvironment(binary: string, target: string) {
   const env = cleanupEnvironment(binary, target);
-  const config = baselineConfiguration(false);
+  const config = baselineV4Configuration(false);
   config.target.branch = target;
   env.configure(config);
   return env;

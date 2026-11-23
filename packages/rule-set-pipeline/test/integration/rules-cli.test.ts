@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { stringify } from 'yaml';
+import { fixtureConfigurationYaml } from '../fixtures/formal-configuration.js';
 import { runRulesCli } from '../../src/cli.js';
 import { runRuleWorkflow } from '../../src/rule-workflow.js';
 import { getRulesStatus, cleanupRuleHistory } from '../../src/index.js';
@@ -77,7 +77,7 @@ test('五个 CLI 操作使用同一服务：预览零写入，pin/resume 和 Act
   config.ruleSets = [];
   config.sources = {} as typeof config.sources;
   const path = join(draftDirectory, 'rules.yml');
-  await writeFile(path, stringify(config));
+  await writeFile(path, fixtureConfigurationYaml(config));
   const beforeDraft = env.writes.length;
   const deleted = await run('sync', '--dry-run', '--config', path);
   assert.equal(deleted.code, 0, JSON.stringify(deleted.result));

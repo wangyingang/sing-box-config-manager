@@ -1,3 +1,4 @@
+import { sha256 } from '../../src/release.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { syncRules, pinRuleVersion, resumeRuleUpdates } from '../../src/rules-operations.js';
@@ -53,16 +54,16 @@ test('换源失败保留交付但撤销 pin；别名保持 pin；旧来源可明
   config.ruleSets[0].source = 'alias'; env.configure(config);
   assert.equal((await syncRules(request)).results.find(x => x.id === 'openai')?.status, 'pinned-skipped');
   config = env.config();
-  const alias = config.sources.alias; assert.equal(alias.version, 'latest-release');
-  config.sources.alias = { ...alias, repository: 'another/rules' }; env.configure(config);
+  const alias = config.sources.alias; assert.equal(alias.version, 'url');
+  config.sources.alias = { ...alias, input: { ...alias.input, url: 'https://rules.example.test/another/rules/dlc.dat_plain.yml' } }; env.configure(config);
   env.failSource('another/rules'); const changed = await syncRules(request);
   assert.equal(changed.status, 'partial', JSON.stringify(changed));
   const failed = changed.results.find(x => x.id === 'openai')!;
   assert.equal(failed.control?.mode, 'auto'); assert.equal(failed.current?.versionId, old.versionId);
-  assert.ok(failed.expectedSource?.version === 'latest-release'); assert.equal(failed.expectedSource.repository, 'another/rules');
+  assert.ok(failed.expectedSource?.version === 'url');
+  assert.match(failed.expectedSource.input.url, /another\/rules/);
   const selectedSource = (await getRulesStatus({ ...request, id: 'openai' })).rules?.[0].current?.source;
-  assert.ok(selectedSource && 'repository' in selectedSource && 'repository' in old.source);
-  assert.equal(selectedSource.repository, old.source.repository);
+  assert.deepEqual(selectedSource, old.source);
   env.failSource(false); assert.equal((await syncRules(request)).status, 'success');
   const repin = await pinRuleVersion({ ...request, id: 'openai', version: old.versionId! });
   assert.equal(repin.status, 'success', JSON.stringify(repin)); const count = env.writes.length;
@@ -77,10 +78,10 @@ test('混合新增换源删除独立完成；空集合删除全部；重加不�
   const env = rulesEnvironment(binary!); const request = { context: env.context };
   const first = await syncRules(request);
   await pinRuleVersion({ ...request, id: 'openai', version: first.results[0].current!.versionId! });
-  const config = env.config(); const dlc = config.sources.dlc; assert.equal(dlc.version, 'latest-release');
-  config.sources.failing = { ...dlc, repository: 'failing/source' };
+  const config = env.config(); const dlc = config.sources.dlc; assert.equal(dlc.version, 'url');
+  config.sources.failing = { ...dlc, input: { ...dlc.input, url: 'https://rules.example.test/failing/source/dlc.dat_plain.yml' } };
   config.ruleSets = [{ ...config.ruleSets[0], source: 'failing' },
-    { ...config.ruleSets[1], id: 'new-rule', list: 'other', stablePath: 'stable/new-rule' }];
+    { ...config.ruleSets[1], filter: undefined, id: 'new-rule', list: 'other', stablePath: 'stable/new-rule' }];
   env.configure(config); env.failSource('failing/source'); const mixed = await syncRules(request);
   assert.equal(mixed.status, 'partial', JSON.stringify(mixed));
   assert.deepEqual(Object.fromEntries(mixed.results.map(x => [x.id, x.status])), { anthropic: 'deleted', openai: 'failed', 'new-rule': 'delivered' });
@@ -114,8 +115,8 @@ test('查询、三个 dry-run 和无效 pin 零写入；草稿不能写；首次
 
 test('固定目标不请求其独立上游，其他集继续；旧配置在写前失效', { skip: !binary }, async () => {
   const env = rulesEnvironment(binary!); const request = { context: env.context };
-  const config = env.config(); const dlc = config.sources.dlc; assert.equal(dlc.version, 'latest-release');
-  config.sources.independent = { ...dlc, repository: 'separate/rules' };
+  const config = env.config(); const dlc = config.sources.dlc; assert.equal(dlc.version, 'url');
+  config.sources.independent = { ...dlc, input: { ...dlc.input, url: 'https://rules.example.test/separate/rules/dlc.dat_plain.yml' } };
   config.ruleSets[0].source = 'independent'; env.configure(config);
   const first = await syncRules(request);
   await pinRuleVersion({ ...request, id: 'openai', version: first.results[0].current!.versionId! });
@@ -175,7 +176,7 @@ test('新定义不能占用兼容性失败后仍交付的旧路径；pinned也�
   const first = await syncRules(request); const original = first.results.find(x => x.id === 'openai')!.current!;
   await pinRuleVersion({ ...request, id: 'openai', version: original.versionId! });
   const config = env.config(); config.ruleSets[0].stablePath = 'stable/moved-openai';
-  config.ruleSets.push({ ...config.ruleSets[0], id: 'other', list: 'other', stablePath: 'stable/openai' }); env.configure(config);
+  config.ruleSets.push({ ...config.ruleSets[0], filter: undefined, id: 'other', list: 'other', stablePath: 'stable/openai' }); env.configure(config);
   const result = await syncRules(request); assert.equal(result.status, 'partial');
   assert.equal(result.results.find(x => x.id === 'openai')?.status, 'failed');
   assert.equal(result.results.find(x => x.id === 'other')?.status, 'failed');
@@ -184,7 +185,7 @@ test('新定义不能占用兼容性失败后仍交付的旧路径；pinned也�
   assert.equal(actual.current?.versionId, original.versionId); assert.equal(actual.candidateCount, 0);
   assert.equal(status.rules!.find(x => x.id === 'other')?.deliveryState, 'not-delivered');
   const snapshot = await env.context.repository.snapshot();
-  const record = JSON.parse((await snapshot.read('stable/openai/activation.json'))!.toString());
+  const record = JSON.parse((await snapshot.read('stable/openai/_delivery/domains.json'))!.toString());
   assert.equal(record.logicalId, 'openai');
 });
 
@@ -199,8 +200,8 @@ test('pin和resume改变控制修订后，不恢复被取代的旧候选任务',
   env.upstream({ openai: 'domain:v3.example' }); env.requests.length = 0;
   const resumed = await resumeRuleUpdates({ ...request, id: 'openai' });
   assert.equal(resumed.status, 'success', JSON.stringify(resumed));
-  assert.equal((resumed.results[0].current!.source as { releaseId: number }).releaseId, 3);
-  assert.ok(!env.requests.some(url => /\/releases\/2$/.test(url)));
+  assert.equal(resumed.results[0].current!.source.inputSha256, sha256(env.dlcInput()));
+  assert.equal(env.requests.filter(url => url.endsWith('/dlc.dat_plain.yml')).length, 1);
 });
 
 test('稳定字节损坏时，sync与resume不得先接受换源或解除固定', { skip: !binary }, async () => {

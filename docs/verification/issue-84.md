@@ -31,7 +31,7 @@
 
 ## 真实 GitHub 隔离探针
 
-运行 [rules-operations.test.ts](../../packages/rule-set-pipeline/test/acceptance/rules-operations.test.ts)，启用 `RULE_OPERATIONS_PROBE=1` 和真实 sing-box 1.14.4。使用真实 GitHub 发布及 HTTPS 回读；来源发现固定到官方 `20261104112839` Release，来源字节和摘要均从 GitHub 读取。正式配置通过受限测试上下文提供，不用本地文件授权生产写入。
+运行 [rules-operations.test.ts](https://github.com/wangyingang/sing-box-config-manager/blob/4a2e936/packages/rule-set-pipeline/test/acceptance/rules-operations.test.ts)，启用 `RULE_OPERATIONS_PROBE=1` 和真实 sing-box 1.14.4。使用真实 GitHub 发布及 HTTPS 回读；来源发现固定到官方 `20261104112839` Release，来源字节和摘要均从 GitHub 读取。正式配置通过受限测试上下文提供，不用本地文件授权生产写入。
 
 成功目标：`acceptance-issue-84-729e4167-7f57-41b8-95a2-6a129894d0dc`，结束时间 `2026-11-16T14:32:35.646Z`。1 项通过，0 失败，0 跳过，约 435 秒。
 

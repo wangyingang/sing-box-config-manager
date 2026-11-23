@@ -190,10 +190,10 @@ function validSuccessfulInput(value: unknown, source: SourceInput, definition: R
   return validRuleSource(value.source, source, definition);
 }
 
-export function parseRulesJournal(bytes: Buffer, historical = false): RulesJournal {
+export function parseRulesJournal(bytes: Buffer): RulesJournal {
   function storedDefinition(input: unknown, source: SourceInput) {
     const definition = parseStoredRuleDefinition(input, source.input.format);
-    if (!historical && (!('artifact' in definition) || source.version !== 'url' && source.version !== 'git-branch')) {
+    if (!('artifact' in definition) || source.version !== 'url' && source.version !== 'git-branch') {
       throw new Error('RULE_STATE_MIGRATION_REQUIRED: v4 requires an empty artifact target');
     }
     return definition;

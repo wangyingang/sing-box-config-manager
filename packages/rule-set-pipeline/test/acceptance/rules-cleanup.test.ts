@@ -4,8 +4,8 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { readFile, writeFile } from 'node:fs/promises';
 import test from 'node:test';
-import { stringify } from 'yaml';
-import { baselineConfiguration } from '../fixtures/baseline-configuration.js';
+import { baselineV4Configuration, fixtureConfigurationYaml } from '../fixtures/formal-configuration.js';
+import { ruleDeliveryRecordPath } from '../../src/stable-rule-paths.js';
 import { createGitCommit } from '../../src/publication-repository.js';
 import { ARTIFACT_REPOSITORY, GitHubHttpError, ghJson } from '../../src/publication.js';
 import { githubRulesRepository } from '../../src/rules-repository.js';
@@ -164,15 +164,18 @@ test('GitHub 四集 cleanup：保留窗口、切换中断、HTTPS 失败恢复�
         assert.equal(compare.merge_base_commit.sha, commit);
         return Response.json({ name: 'ip-lists', commit: { sha: commit } });
       }
-      return upstream(address.replace(/\/releases\/latest$/, `/releases/tags/${tag}`), init);
+      if (address.includes('/releases/latest/download/')) {
+        return fetch(address.replace('/latest/download/', `/download/${tag}/`), { ...init, redirect: 'follow' });
+      }
+      return upstream(address, init);
     };
-    const config = baselineConfiguration(false); config.target.branch = target;
+    const config = baselineV4Configuration(false); config.target.branch = target;
     // The isolated application clock supplies candidate age; upstream bytes,
     // Git history, reference transactions and HTTPS delivery are all real.
     let revision = 1, now = '2026-09-01T00:00:00.000Z';
     const context: RulesContext = { repository, targetBranch: target, allowWrites: true, binary, token, fetch: sourceFetch,
       now: () => new Date(now),
-      readConfiguration: async () => ({ revision: String(revision).padStart(40, '0'), origin: 'isolated-github-cleanup-probe', content: stringify(config) }),
+      readConfiguration: async () => ({ revision: String(revision).padStart(40, '0'), origin: 'isolated-github-cleanup-probe', content: fixtureConfigurationYaml(config) }),
       cleanup: { refs, baseline: { ...baseline, async stage(ref, parent, files, message) {
         const match = /^maintenance-([a-f0-9-]{36})-(?:files|metadata|evidence|journal)$/.exec(ref); assert.ok(match);
         const snapshot = await repository.snapshot();
@@ -217,13 +220,13 @@ test('GitHub 四集 cleanup：保留窗口、切换中断、HTTPS 失败恢复�
     const expired = currentOf(first, 'openai'), expiredCidr = currentOf(first, 'china-ip');
     const pinned = currentOf(first, 'anthropic'), protectedCurrent = currentOf(first, 'google-deepmind');
     await check('pin-old-anthropic', () => pinRuleVersion({ ...input, id: 'anthropic', version: pinned.versionId! }));
-    config.ruleSets[0] = { ...config.ruleSets[0], list: 'anthropic' }; revision++; now = '2026-10-17T00:00:00.000Z';
+    config.ruleSets[0] = { ...config.ruleSets[0], filter: undefined, list: 'anthropic' }; revision++; now = '2026-10-17T00:00:00.000Z';
     commit = updatedCommit;
     const boundaryResult = await check('publish-boundary', () => syncRules(input));
     const boundary = currentOf(boundaryResult, 'openai'), cidr = currentOf(boundaryResult, 'china-ip');
-    config.ruleSets[0] = { ...config.ruleSets[0], list: 'google-deepmind' }; revision++; now = '2026-11-01T00:00:00.000Z';
+    config.ruleSets[0] = { ...config.ruleSets[0], filter: undefined, list: 'google-deepmind' }; revision++; now = '2026-11-01T00:00:00.000Z';
     const recent = currentOf(await check('publish-recent', () => syncRules(input)), 'openai');
-    config.ruleSets[0] = { ...config.ruleSets[0], list: 'anthropic' }; revision++; now = '2026-11-16T00:00:00.000Z'; tag = updatedTag;
+    config.ruleSets[0] = { ...config.ruleSets[0], filter: undefined, list: 'anthropic' }; revision++; now = '2026-11-16T00:00:00.000Z'; tag = updatedTag;
     const current = currentOf(await check('publish-current', () => syncRules(input)), 'openai');
     assert.notEqual(current.candidateId, boundary.candidateId);
     const retained = [pinned, protectedCurrent, boundary, recent, current, cidr];
@@ -278,7 +281,7 @@ test('GitHub 四集 cleanup：保留窗口、切换中断、HTTPS 失败恢复�
         assert.deepEqual(newIdentity, oldIdentity); assert.deepEqual(actual.control, expected.control);
         assert.notEqual(newAddress, oldAddress);
         assert.equal(newAddress, journal.candidates[actual.current!.candidateId].evidenceUrl);
-        const path = `${journal.rules[expected.id].definition.stablePath}/activation.json`;
+        const path = ruleDeliveryRecordPath(journal.rules[expected.id].definition);
         await readBytes(`https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${snapshot.head}/${path}`, (await snapshot.read(path))!);
       }
       for (const version of expectedVersions) {

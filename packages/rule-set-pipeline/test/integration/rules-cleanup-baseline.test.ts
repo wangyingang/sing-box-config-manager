@@ -32,7 +32,7 @@ test('清理保留迁移恢复的发布时间和版本，不要求旧证据已�
   candidate.versionId = `${candidate.publishedAt}~${candidate.id.replaceAll('-', '')}`;
   candidate.evidenceSha256 = sha256(evidence);
   const record = { ...current, versionId: candidate.versionId };
-  const recordPath = `${candidate.definition.stablePath}/activation.json`;
+  const recordPath = `${candidate.definition.stablePath}/_delivery/domains.json`;
   env.trees.get(snapshot.head)!.set(RULE_STATE_PATH, encodeRecord(journal));
   env.trees.get(snapshot.head)!.set(recordPath, encodeRecord(record));
   const plan: CleanupPlan = { candidateRetentionDays: 30, cleanupObservedAt: '2026-11-16T00:00:00.000Z',

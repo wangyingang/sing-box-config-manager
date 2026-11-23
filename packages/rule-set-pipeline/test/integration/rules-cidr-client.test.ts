@@ -15,7 +15,7 @@ import { join } from 'node:path';
 import test, { type TestContext } from 'node:test';
 import { syncRules, pinRuleVersion, resumeRuleUpdates } from '../../src/rules-operations.js';
 import { getRulesStatus } from '../../src/rules-status.js';
-import { parseProjectedConfiguration } from '../../src/configuration.js';
+import { formalConfiguration } from '../fixtures/formal-configuration.js';
 import { publishRecipe, readPublication } from '../../../config-compiler/src/publisher.js';
 import { ARTIFACT_REPOSITORY } from '../../src/publication.js';
 import { sha256 } from '../../src/release.js';
@@ -28,14 +28,15 @@ const id = 'china-ip';
 const path = 'stable/china-ip';
 const ruleUrl = (ref: string, file: string) => `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${ref}/${path}/${file}`;
 const format = (file: string) => ({ url: ruleUrl(branch, file), requiredCapabilities: [] });
-const formats = { binary: format('route.srs'), source: format('route.json') };
+const formats = { binary: format('ips.srs'), source: format('ips.json') };
 const subscription = { schemaVersion: 2 as const, systemRuleSetId: id, targetVersion: '1.14.4' as const, sourceFormatVersion: 4 as const,
   projections: { route: { formats }, 'dns-query': { unavailable: 'empty' as const }, 'dns-response': { formats } } };
 const versionInputs = ['192.0.2.0/25\n2001:db8:1::/48\n', '192.0.2.128/25\n2001:db8:2::/48\n'];
 
 async function fixture() {
   const env = rulesEnvironment(binary!, branch);
-  const configuration = parseProjectedConfiguration(await readFile(new URL('../../config/china-ip.yml', import.meta.url), 'utf8'));
+  const configuration = formalConfiguration();
+  configuration.ruleSets = configuration.ruleSets.filter(rule => rule.id === id);
   env.configure({ ...configuration, target: { ...configuration.target, branch } });
   let revision = 0;
   const requests: string[] = [];
@@ -118,7 +119,8 @@ test('同一真实客户端观察 china-ip sync、pin、resume 和缓存恢复',
   assert.equal(first.status, 'success', JSON.stringify(first));
   assert.equal(first.results[0].status, 'delivered');
   const activeA = first.results[0].current!;
-  assert.deepEqual(activeA.subscription, subscription);
+  assert.deepEqual(activeA.subscription, { schemaVersion: 3, systemRuleSetId: id, targetVersion: '1.14.4', sourceFormatVersion: 4,
+    formats: { binary: { url: formats.binary.url }, source: { url: formats.source.url } } });
 
   const clientDir = await mkdtemp(join(tmpdir(), 'china-ip-client-'));
   const servers: Server[] = [], sockets = new Set<Duplex>();
@@ -208,7 +210,7 @@ test('同一真实客户端观察 china-ip sync、pin、resume 和缓存恢复',
       dnsServers: [{ type: 'udp', tag: 'loopback', server: '127.0.0.1', server_port: dnsPort }],
     }, platformDnsServers: {}, routePresets: {}, dnsPresets: {}, ecsResponseTags: [],
   } satisfies RecipeCompileInput['dependencies']['templates'][number];
-  const input = { params: { ecs: null }, dependencies: { templates: [template], nodes: [], subscriptions: [activeA.subscription] },
+  const input = { params: { ecs: null }, dependencies: { templates: [template], nodes: [], subscriptions: [subscription] },
     recipe: { schemaVersion: 2, id: template.id, revision: '1', profile: 'macos-standalone', templateRef: { id: template.id, revision: '1' },
       resources: { ruleSets: [{ kind: 'subscription', tag: 'china-ip', subscriptionRef: { systemRuleSetId: id, usages: ['route', 'dns-response'] } }] },
       routeSteps: [
@@ -361,7 +363,7 @@ test('同一真实客户端观察 china-ip sync、pin、resume 和缓存恢复',
   const status = await getRulesStatus(request);
   assert.equal(status.status, 'success', JSON.stringify(status));
   assert.equal(status.rules?.[0].current?.versionId, activeB.versionId);
-  assert.deepEqual(status.rules?.[0].current?.subscription, subscription);
+  assert.deepEqual(status.rules?.[0].current?.subscription, activeA.subscription);
   const evidence = {
     source: 'controlled CIDR inputs and in-memory Git; real sing-box and loopback HTTPS',
     operations: { first, automatic, fixed, paused, pinnedA, rolledBack, resumed },
@@ -369,7 +371,7 @@ test('同一真实客户端观察 china-ip sync、pin、resume 和缓存恢复',
     publicationId: retained.id, publicationSha256: sha256(publicationBytes),
     client: { pid, restartedPid, binary, sameProcessUntilCacheRestart: true },
     srs: [activeA, activeB].map(record => ({ commit: 'commit' in record.source ? record.source.commit : undefined,
-      inputSha256: record.source.inputSha256, artifact: record.files[`${path}/route.srs`] })),
+      inputSha256: record.source.inputSha256, artifact: record.files[`${path}/ips.srs`] })),
     probes: addresses.map(({ literal }) => literal),
     observed: ['A', 'sync-B', 'pin-B', 'pinned-sync-B', 'pin-A', 'pinned-sync-A', 'resume-B', 'HTTP-503-retains-B', 'invalid-SRS-retains-B', 'offline-cache-restores-B'],
     observations, faults, offlineFailureLog: log.slice(offline),

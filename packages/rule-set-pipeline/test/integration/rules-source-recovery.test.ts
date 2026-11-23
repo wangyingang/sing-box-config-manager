@@ -30,66 +30,47 @@ function checkpoint(env: Environment) {
   };
 }
 
-test('Release 恢复逐字段拒绝固定身份或输入变化，保留原候选与当前交付', async t => {
+test('固定 URL 恢复拒绝变更后的输入快照，保留原候选与当前交付', async () => {
   const env = cleanupEnvironment(binary!, 'main');
   const config = env.config(); config.ruleSets = [config.ruleSets[0]]; env.configure(config);
-  const first = await syncRules({ context: env.context }); assert.equal(first.status, 'success');
+  const first = await syncRules({ context: env.context });
+  assert.equal(first.status, 'success');
   env.upstream({ openai: 'domain:fixed-v2.example' });
-  env.beforeWrite(async files => { if (Object.keys(files).some(path => path.endsWith('/manifest.json'))) throw new Error('metadata interrupted'); });
-  assert.equal((await syncRules({ context: env.context })).status, 'failed'); env.beforeWrite();
+  env.beforeWrite(async files => {
+    if (Object.keys(files).some(path => path.endsWith('/manifest.json'))) throw new Error('metadata interrupted');
+  });
+  assert.equal((await syncRules({ context: env.context })).status, 'failed');
+  env.beforeWrite();
   const before = await env.journal();
   const candidate = Object.values(before.candidates).find(candidate => candidate.status === 'publishing')!;
   assert.ok(candidate.filesCommit);
-  const originalBytes = await bytesUnder(env, `candidates/${candidate.id}/`);
   const stable = await bytesUnder(env, 'stable/', 'main');
-  const restore = checkpoint(env), fetcher = env.context.fetch!;
-  const changedInput = JSON.stringify({ lists: [{ name: 'openai', length: 1, rules: ['domain:replacement.example'] }] });
-  for (const field of ['release-id', 'input-asset-id', 'checksum-asset-id', 'tag', 'commit', 'input-bytes', 'checksum-bytes']) {
-    await t.test(field, async () => {
-      restore();
-      env.context.fetch = async (address, init) => {
-        const url = String(address);
-        // Serve valid original bytes at a replacement asset ID so rejection
-        // proves the identity guard rather than a broken fixture download.
-        const response = await fetcher(url.replace('/assets/91', '/assets/21').replace('/assets/92', '/assets/22'), init);
-        if (url.endsWith('/releases/2')) {
-          const metadata = await response.json();
-          if (field === 'release-id') metadata.id = 99;
-          if (field === 'input-asset-id') metadata.assets[0].id = 91;
-          if (field === 'checksum-asset-id') metadata.assets[1].id = 92;
-          if (field === 'tag') {
-            metadata.tag_name = 'replacement-tag';
-            for (const asset of metadata.assets) asset.browser_download_url = asset.browser_download_url.replace('release-2', metadata.tag_name);
-          }
-          return Response.json(metadata);
-        }
-        if (field === 'commit' && url.includes('/git/ref/tags/')) return Response.json({ object: { type: 'commit', sha: 'b'.repeat(40) } });
-        if (field === 'input-bytes' && url.endsWith('/assets/21')) return new Response(changedInput);
-        if (field === 'input-bytes' && url.endsWith('/assets/22')) return new Response(`${sha256(changedInput)}  dlc.dat_plain.yml\n`);
-        if (field === 'checksum-bytes' && url.endsWith('/assets/22')) return new Response((await response.text()).replace('\n', '\r\n'));
-        return response;
-      };
-      const writes = env.writes.length;
-      const failed = await syncRules({ context: { ...env.context } });
-      assert.equal(failed.status, 'failed', JSON.stringify(failed));
-      assert.match(failed.results[0].error!, /已固定输入身份或内容发生变化/);
-      assert.deepEqual(failed.results[0].current, first.results[0].current);
-      assert.deepEqual((await env.journal()).candidates, before.candidates);
-      assert.deepEqual(await bytesUnder(env, `candidates/${candidate.id}/`), originalBytes);
-      assert.deepEqual(await bytesUnder(env, 'stable/', 'main'), stable);
-      assert.ok(env.writes.slice(writes).every(write => Object.keys(write.files).every(path => path === 'pipeline/state.json')));
-      assert.ok(env.requests.some(url => url.endsWith('/releases/2')));
-      assert.ok(!env.requests.some(url => url.endsWith('/releases/latest')));
-    });
-  }
+  const fixedInput = `candidates/${candidate.id}/input.source.yml`;
+  const head = env.heads.get(env.context.repository.branch)!;
+  const tree = env.trees.get(head)!;
+  const original = tree.get(fixedInput);
+  assert.ok(original);
+  tree.set(fixedInput, Buffer.from('broken retained input'));
+  env.requests.length = 0;
+  const failed = await syncRules({ context: env.context });
+  assert.equal(failed.status, 'failed');
+  assert.match(failed.results[0].error!, /recorded digest or length/);
+  assert.deepEqual(failed.results[0].current, first.results[0].current);
+  assert.deepEqual((await env.journal()).candidates, before.candidates);
+  assert.deepEqual(await bytesUnder(env, 'stable/', 'main'), stable);
+  assert.equal(env.requests.length, 0);
+  env.trees.get(env.heads.get(env.context.repository.branch)!)!.set(fixedInput, original);
+  const recovered = await syncRules({ context: env.context });
+  assert.equal(recovered.status, 'success');
+  assert.equal(recovered.results[0].current?.candidateId, candidate.id);
+  assert.deepEqual(env.requests.map(url => url.split('/').at(-1)), ['dlc.dat_plain.yml.sha256sum', 'dlc.dat_plain.yml']);
 });
 
 function gitEnvironment(artifact = 'route') {
   const env = cleanupEnvironment(binary!, 'main'), config = env.config();
   config.sources = { cidr: { repository: 'gaoyifan/china-operator-ip', version: 'git-branch', branch: 'ip-lists',
     input: { format: 'cidr-text', path: 'china46.txt' } } };
-  config.ruleSets = [{ id: 'china-ip', source: 'cidr', list: 'all', stablePath: 'stable/china-ip',
-    usages: { route: { artifact }, 'dns-query': { unavailable: 'empty' }, 'dns-response': { artifact } } }];
+  config.ruleSets = [{ id: 'china-ip', source: 'cidr', stablePath: 'stable/china-ip', artifact }];
   env.configure(config);
   const fixed = 'a'.repeat(40), latest = 'b'.repeat(40);
   const original = '192.0.2.0/24\n2001:db8::/32\n';

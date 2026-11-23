@@ -4,19 +4,11 @@
 
 ## 配置
 
-正式配置为源码 main 当前 commit 的 `packages/rule-set-pipeline/config/rulesets.yml`。完整结构使用 `schemaVersion: 3`，字段为 `candidateRetentionDays`、`sources`、`target`、`ruleSets`。各层拒绝未知字段；`candidateRetentionDays` 必须为显式正整数，正式值为已确认的 30 天，由 cleanup 执行年龄保留策略。
+正常入口读取源码 main 当前 commit 的 `config/rulesets.yml`，只接受 `schemaVersion: 4`。正式配置和编辑器共用 [Schema](../config/rulesets.schema.json)。`candidateRetentionDays` 是显式正整数，正式值为 30 天。YAML 及配置结构错误、无效来源引用或最终文件路径冲突在获取上游和写入前拒绝。
 
-`target.repository` 固定为 `wangyingang/sing-box-rule-artifacts`；分支只能是 `main` 或受限 `acceptance-*`。`ruleSets` 中 ID 唯一，`source` 必须存在，`stablePath` 为互不重叠的 `stable/` 路径。显式空集合表示删除全部；缺少集合、读取失败或解析错误不能解释为删除。
+`target.repository` 固定为 `wangyingang/sing-box-rule-artifacts`，分支为 `main` 或受限的 `acceptance-*`。`ruleSets` 按唯一 ID 声明。各集可共享 `publishPath`，`artifact.json` 和 `artifact.srs` 的最终路径必须唯一。`ruleSets: {}` 表示删除全部，配置缺失或解析失败时停止操作。
 
-获取机制与解析语义分别声明：GitHub Release 资产使用 `version: latest-release` 和 asset/checksum；固定 Git 分支输入使用 `version: git-branch`、branch/path。两者都接受已有的 `plain-yaml` 规则列表或 `cidr-text` 语义。Git 分支输入还接受 `domain-suffix-text`、`typed-domain-text` 和 `sing-box-domain-json`，使用 `list: all` 选择整个文件并生成域名产物。配置按格式的域名或地址产物校验 Route、DNS query 和 DNS response 的用途声明。来源记录保存真实仓库、Release/commit 身份、输入文件、摘要和字节数。官方 ChatGPT Voice 使用 `version: openai-voice`、`format: openai-voice-json` 和固定 `https://openai.com/chatgpt-voice.json`，读取非空 `prefixes` 列表中的 `ipv4Prefix` 或 `ipv6Prefix`，使用现有 CIDR 规则处理。其来源记录保存 URL、原始字节的 SHA-256 和长度，以及可用的强 ETag。恢复使用登记的固定输入。
-
-`typed-domain-text` 读取 UTF-8 的 `类型,值`，忽略空行和以 `#` 开头的注释行。域名后缀使用裸域名的规范化方式，关键词转为小写，保留子串匹配语义。转换报告的 `filteredRules` 记录按用途过滤的 `PROCESS-NAME` 类型、值和行号。`inputCount` 包含已过滤条目。其他类型、格式错误和没有可用域名的输入使本次构建失败。
-
-`sing-box-domain-json` 读取 UTF-8 的 Source Format v2 JSON。顶层包含 `version` 和 `rules`，规则对象仅接受 `domain`、`domain_suffix` 和 `domain_keyword` 的字符串数组，且须有可用的匹配值。每个值都是独立匹配条件，保留原值，按类型和值去重。重复字段、其他字段、非法结构或非法值使构建失败，诊断标明输入文件和对应规则或字段。生成的候选继续使用 Source Format v4。
-
-隔离 v4 配置的文件选择、格式和 Clash 类型条件见[从同一 GitHub 分支选取文件的示例](../README.md#在同一-github-分支选择不同文件)。分支文件的来源记录仍包含仓库、分支、固定 commit、路径、摘要与字节数。Clash 类型条件参与规则集的输入绑定。
-
-隔离目标可使用 [v4 配置 Schema](../config/rulesets.schema.json)。同步使用同一份 Schema，并额外核对 `data.source` 和对应获取方式、格式及最终路径。配置错误会在上游获取或产物写入前停止整次同步。v4 可共用 `publishPath`，但 `publishPath/artifact.json` 和 `publishPath/artifact.srs` 必须由一集独占。
+来源和规则集的数据选择分别声明。固定 URL 声明 HTTPS 地址、格式及可选 SHA-256 地址。GitHub 分支声明仓库和分支，规则集选择文件和格式。只有 DLC 格式选择命名列表，整文件格式省略 `list`。DLC 标签或 Clash 类型过滤条件参与输入绑定。详见[正式配置与草稿](../README.md#正式配置与草稿)。
 
 ## 共同结果
 
@@ -82,13 +74,9 @@ status 只读取，不登记操作、更新检查时间、恢复维护或发送�
 真实更新在规则集有适用的 `successfulInput` 时，可以用上游证据确认文件未变。候选、订阅和稳定文件必须完整，当前工具与处理策略必须符合成功记录。先处理已登记的待恢复事项。涉及恢复、上次失败、换源或证据不足的规则集回到正文处理，固定的规则集跳过上游。
 
 - **Git** 同一实际仓库、文件路径和完整 commit 可以直接确认。分支移动时，系统从 GitHub 的固定 commit 逐级核对树，在两个 commit 的同一路径查找普通文件。只有完整树中的 blob SHA 一致且大小与已成功处理的字节相符时才省略正文。分支名、大小、符号链接和截断的树本身不能证明文件未变。缺少可信 blob 时读取当前固定 commit 的正文。
-- **Release** 先解析实际 Release、tag、源码 commit 和两个附件的身份。GitHub 上传完成的正文附件 SHA-256 与已验证正文相符时，继续核对校验附件。摘要绑定本次探测得到的实际附件 ID、名称与地址，附件 ID 变化时也要重新核对摘要。校验附件可通过 GitHub 的 SHA-256 或重新读取小校验附件来确认。正文摘要缺失或任一附件的摘要无法确认相同时，进入正文处理。首次、回退和固定输入恢复时仍按附件 ID 下载，并校验校验附件的格式、目标文件和正文 SHA-256。tag、名称、源码 commit、修改时间和大小都不足以替代附件证据。
+- **固定 URL** 每次读取正文和已配置的 SHA-256 附件。正文和校验附件的摘要绑定本次来源记录。候选保留正文快照，恢复核对其实际长度及 SHA-256。快照缺失或被修改时，本次恢复失败并保留当前交付。
 
-- **ChatGPT Voice** 用已成功输入的强 ETag 发起条件 GET。可信的 304 可沿用成功事实；304 未回显相同强 ETag 时退回无条件 GET。200 的正文以实际 SHA-256 核对。缺少强 ETag 时读取正文，同一操作复用本次已下载字节。恢复从候选的原始快照核对长度和 SHA-256，快照缺失或损坏时报告候选失败。
-
-规则源适配器决定如何读取已登记的固定输入，以及恢复是否需要保留候选原始文件。候选流程按该要求登记、核验和保留快照。来源记录和候选文件路径保持原样，现有候选继续按原身份恢复。
-
-同源规则集合并最新身份探测和必要的正文下载。各集独立核对前提并保存成功事实。当前交付可以沿用时，新 Git commit 或新 Release 的成功记录只影响下次探测，保留候选的来源、版本和首次发布时间仍取自最初交付。正式配置修订、成功事实和正文均未变时，正常同步只读取必要证据，`compile`、JSON/SRS 原生加载及 Git 提交均为 0。上游证据足以确认字节一致时，规则正文下载也为 0。
+同源规则集合并本次获取和必要的正文下载，各集独立核对并登记成功事实。已验证的规范化匹配条件、选定工具和完整交付一致时，可保存新的成功来源而保留当前候选、版本和首次发布时间。正式修订、成功事实和输入内容均未变时，复用现有原生证明和交付，省略编译、JSON/SRS 加载及 Git 提交。可信 Git 身份还能省略正文下载。
 
 ## 远端事实与版本身份
 
@@ -122,13 +110,13 @@ Git 对象读取优化只复用完整 Git SHA 指定的不可变内容，缓存�
 
 历史候选可作为完整非当前版本保留；多候选的遍历顺序不选择版本，也不依次交付每个候选。unchanged 不跳过在途收尾；任一候选无法恢复时，结果包含该 candidateId、具体错误及 sync 继续入口，不能因当前字节相同返回整体 success。已删除定义、换源、新控制修订和 pin 仍约束迟到任务；查询、预览和 pinned 跳过不会恢复旧意图。本边界不新增选择状态或 schema；它以已有 current 时的最新输入检查，避免 A 当前、B 中断而上游已回到 A 时误交付残留 B。
 
-Schema 2 交付记录保存逻辑 ID、candidateId、版本身份、真实来源、订阅和当前文件摘要。v3 将记录写到 `<stablePath>/activation.json`。v4 按产物写到 `<publishPath>/_delivery/<artifact>.json`，删除该集时只移除这一条记录及它登记的 JSON/SRS。v4 交付中的 `subscription.schemaVersion: 3` 通过 `formats.source.url` 和 `formats.binary.url` 描述稳定入口。更新控制记录在 journal。生产状态/候选位于 candidates 分支，稳定记录/文件位于 main；隔离目标共用同一 acceptance 分支。
+Schema 2 交付记录保存逻辑 ID、candidateId、版本身份、真实来源、订阅和当前文件摘要。记录按产物写到 `<publishPath>/_delivery/<artifact>.json`，删除该集时只移除这一条记录及它登记的 JSON/SRS。交付中的 `subscription.schemaVersion: 3` 通过 `formats.source.url` 和 `formats.binary.url` 描述稳定入口。更新控制记录在 journal。生产状态/候选位于 candidates 分支，稳定记录/文件位于 main；隔离目标共用同一 acceptance 分支。
 
 稳定写入先登记操作，再核对配置、日志 head 和维护状态，按预期 parent 非强制更新目标 ref，并读回验证。响应丢失时先识别同一次操作；不明确时返回 pending。删除移除当前受管路径及候选，并保留最小代次记录防止旧任务复活。有稳定文件或候选被删除时，结案状态提交同时设置 `deletedHistoryPending: true`。该标记汇总仍需回收的受管历史，即使当前树和候选索引均已移除对应内容。
 
 ## 证据回读
 
-构建记录（`buildRecord: 3`）保存通过的编译和加载、工具 SHA-256、`native-compile-load-v1` 及构建身份。`readback.json`（`schemaVersion: 3`）记录候选身份、版本、首次发布时间、文件和元数据 commit，以及固定 JSON/SRS 地址的两条正文长度、SHA-256 和逐字节校验记录。清理重写物理地址并记录复验工具。Artifact Manifest v2 描述 v3 产物格式、用途、能力和摘要，Compiler 继续消费该契约。v4 的 Artifact Manifest v3 直接描述成对文件的固定地址、格式、长度和摘要。从空目标启用的步骤见 [Pipeline README](../README.md#从空产物状态启用新验证策略)。
+构建记录（`buildRecord: 3`）保存通过的编译和加载、工具 SHA-256、`native-compile-load-v1` 及构建身份。`readback.json`（`schemaVersion: 3`）记录候选身份、版本、首次发布时间、文件和元数据 commit，以及固定 JSON/SRS 地址的两条正文长度、SHA-256 和逐字节校验记录。清理重写物理地址并记录复验工具。Artifact Manifest v3 直接描述成对文件的固定地址、格式、长度和摘要。从空目标启用的步骤见 [Pipeline README](../README.md#从空产物状态启用新验证策略)。
 
 | 操作 | 产物仓库 Raw HTTP 正文核验 |
 | --- | --- |
@@ -176,13 +164,13 @@ Git 中的候选登记和回读完成记录约束规则归属、来源绑定、�
 
 ## 一次性转换
 
-以下为早期操作契约的历史转换。原生验证策略切换按上文从空状态启用。
+v4 使用空产物目标重建产物和操作状态。以下段落记录早期操作契约的历史转换，转换入口已随 v4 切换退役。
 
 schema 1 旧状态不能直接交给新编排，也不以缺失状态覆盖已有文件。内部转换须先核实旧状态、稳定交付和候选证据，再生成新模型；未知 schema 或无法安全归属的状态必须明确拒绝。转换预览只读，生产执行另行授权。
 
 转换保留稳定 URL、规则字节、摘要和真实来源。有效人工固定映射为 pinned；已发生实质换源时旧固定不能复活。
 
-本轮内部入口为 `src/rules-migration.ts` 的 `migrateRulesState({ context?, dryRun? })`，不从包入口或 CLI 导出，不接受草稿。单分支布局一次受控提交转换；双分支布局先保存旧日志维护检查点，再转换稳定交付元数据和回执，最后保存 schema 2 日志。稳定 JSON/SRS 字节不重写。
+早期内部入口为 `migrateRulesState`。单分支布局一次受控提交转换；双分支布局先保存旧日志维护检查点，再转换稳定交付元数据和回执，最后保存 schema 2 日志。稳定 JSON/SRS 字节不重写。
 
 历史发布时间只从原不可变 `readback.json.publishedAt` 的有效 UTC ISO 值恢复，并在 `migration.timeEvidence` 记录证据地址。无法恢复时标记 `migrationPending`，保留现有交付与证据，不编造时间，也不把该候选当作正常可按年龄清理或选择的版本。
 

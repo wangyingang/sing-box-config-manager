@@ -1,6 +1,6 @@
 # Rule Set Pipeline
 
-包名：`@sing-box-config-manager/rule-set-pipeline`。管理者通过正式配置维护规则集的来源和用途，再用 `sync` 完成新增、更新与删除。合格规则通过稳定 URL 交付给订阅使用者；构建成功、候选发布、稳定入口切换和客户端加载完成是不同的状态。
+包名：`@sing-box-config-manager/rule-set-pipeline`。管理者通过正式配置维护规则集的来源、筛选条件与发布路径，再用 `sync` 完成新增、更新与删除。合格规则通过稳定 URL 交付给订阅使用者；构建成功、候选发布、稳定入口切换和客户端加载完成是不同的状态。
 
 [Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84) 将日常操作收敛为 `status`、`sync`、`pin`、`resume`。[Spec #85](https://github.com/wangyingang/sing-box-config-manager/issues/85) 增加一个 `cleanup` 入口，按保留期重建受管历史并保留可选版本。[Spec #86](https://github.com/wangyingang/sing-box-config-manager/issues/86) 将配置 push、定时运行和手工 Actions 接到同一应用服务，并使用 GitHub 原生失败通知。首次切换见下文的[空产物状态](#从空产物状态启用新验证策略)。操作决定见 [配置驱动操作 ADR](docs/adr/0001-configuration-driven-rule-operations.md)。
 
@@ -66,31 +66,19 @@ pnpm rules sync --config /path/to/rulesets-draft.yml --dry-run --json
 
 草稿可从 [`config/rulesets.yml`](config/rulesets.yml) 复制并编辑。隔离样例 [`samples/rulesets.example.yml`](samples/rulesets.example.yml) 的目标是 `acceptance-example`，须使用匹配的已准备隔离环境，不能据此写生产目标。
 
-正式配置使用 `schemaVersion: 3`，必须显式声明正整数 `candidateRetentionDays`。正式配置和样例采用已确定的 30 天策略；`cleanup` 读取正式值，不自行设置默认保留期。`ruleSets` 必须显式存在。`ruleSets: []` 与空 `sources: {}` 可以表达删除全部受管规则；配置缺失、无法读取、未知字段、无效引用、重复 ID 或重叠稳定路径均在写入前拒绝。
+正式配置和样例使用 `schemaVersion: 4` 并关联[通用 Schema](config/rulesets.schema.json)。`candidateRetentionDays` 必须为正整数，正式值为 30 天。`ruleSets` 按规则集 ID 声明，显式的 `ruleSets: {}` 表示删除全部受管规则。旧配置、未知字段、重复键、无效来源引用及重叠的最终文件路径会在上游获取和写入前被拒绝。错误包含 YAML 行列号和字段路径。
 
-每个可用用途用 `artifact` 声明规则文件基名，构建和交付追加 `.json` 或 `.srs`。基名最多 250 个字符，以小写 ASCII 字母或数字开头，可继续使用这些字符、连字符和下划线。保留的候选、交付记录或输入快照文件名不能用作规则产物。每个纯域名集或纯 IP 集的两个可用用途声明相同的基名，共用这组文件。已交付的稳定订阅地址受现有兼容性检查保护。
+每集从一个来源选择整份文件或命名列表，可按格式筛选。构建将结果写到 `publishPath/artifact.json` 和 `publishPath/artifact.srs`，基名最多 250 个字符，可使用小写 ASCII 字母、数字、连字符和下划线。已有交付的稳定地址受订阅契约保护。
 
-正式配置为域名集 `openai`、`anthropic`、`google-deepmind`、`china-domains`、`global`、`apple`、`microsoft`、`docker`、`github`、`google`、`youtube`、`gfw`、`onedrive` 和 `stream` 定义 Route 与 DNS query 共用的 `domains.json` 和 `domains.srs`。`china-domains` 选择 V2Fly 的 `geolocation-cn`，`global` 选择 `geolocation-!cn`，其余 V2Fly 规则集选择与 ID 同名的列表。DNS response 对这些域名集不可用。规则集保留上游重叠，匹配优先级由客户端配置中的规则顺序决定。
+正式配置保留 16 个独立的 `stable/<id>` 目录。`china-ip` 与 `chatgpt-voice` 的基名为 `ips`，其余 14 集为 `domains`。`china-domains` 选择 V2Fly 的 `geolocation-cn`，`global` 选择 `geolocation-!cn`，其余 V2Fly 集选择同名列表。客户端配置决定规则的用途和匹配顺序。
 
-`gfw` 使用独立的上游域名分类。[Loyalsoldier 的 `release:gfw.txt`](https://github.com/Loyalsoldier/v2ray-rules-dat/blob/release/gfw.txt)
+- `gfw` 从 GitHub 分支读取逐行域名后缀。[Loyalsoldier 的 `release:gfw.txt`](https://github.com/Loyalsoldier/v2ray-rules-dat/blob/release/gfw.txt)
+- `onedrive` 从 Clash 清单选择 `DOMAIN-SUFFIX` 和 `DOMAIN-KEYWORD`。[blackmatrix7 的 `master:rule/Clash/OneDrive/OneDrive.list`](https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/OneDrive/OneDrive.list)
+- `stream` 从 GitHub 分支读取 sing-box Source Format v2，保留精确域名、后缀和关键词的原生匹配结构。[Sukka 的 `master:sing-box/non_ip/stream.json`](https://github.com/SukkaLab/ruleset.skk.moe/blob/master/sing-box/non_ip/stream.json)
+- `china-ip` 从 GitHub 分支读取逐行 IPv4/IPv6 CIDR。[gaoyifan 的 `ip-lists:china46.txt`](https://github.com/gaoyifan/china-operator-ip/blob/ip-lists/china46.txt)
+- `chatgpt-voice` 从固定 URL 读取 IPv4/IPv6 CIDR。客户端策略可另按 OpenAI 网络说明约束 UDP 3478 或 TCP 443。[OpenAI 官方输入](https://openai.com/chatgpt-voice.json) · [OpenAI 网络说明](https://help.openai.com/en/articles/9247338-network-recommendations-for-chatgpt-errors-on-web-and-apps#chatgpt-voice-firewall-settings)
 
-`onedrive` 读取完整上游清单。保留域名后缀和子串关键词匹配，转换报告记录过滤的进程条件。[blackmatrix7 的 `master:rule/Clash/OneDrive/OneDrive.list`](https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/OneDrive/OneDrive.list)
-
-`stream` 使用 Sukka 的海外流媒体分类。上游 Source Format v2 普通规则中的精确域名、后缀和关键词独立匹配，任一命中即匹配。[Sukka 的 `master:sing-box/non_ip/stream.json`](https://github.com/SukkaLab/ruleset.skk.moe/blob/master/sing-box/non_ip/stream.json)
-
-`china-ip` 和 `chatgpt-voice` 为地址集，可用于 Route 与 DNS response。各集使用独立的 `stable/<id>`，实际交付以产物清单和稳定入口为准。GitHub 来源可以更换仓库、资产、路径或列表。
-
-| 获取方式 | 必填输入 | 支持的解析语义 |
-| --- | --- | --- |
-| `latest-release` | GitHub `repository`、`input.asset`、`input.checksum` | `plain-yaml` 或 `cidr-text` |
-| `git-branch` | GitHub `repository`、`branch`、`input.path` | `plain-yaml`、`cidr-text`、`domain-suffix-text`、`typed-domain-text` 或 `sing-box-domain-json` |
-| `openai-voice` | `input.url: https://openai.com/chatgpt-voice.json` | `openai-voice-json` |
-
-`plain-yaml` 专指现有规则列表语义，不接受任意 YAML；`cidr-text` 为逐行 IPv4/IPv6 CIDR，`list` 固定为 `all`。`domain-suffix-text` 同样使用 `list: all`，跳过空行，将每行一个裸域名转换为 `domain_suffix`。转换使用小写 DNS 名称，国际化域名使用 ASCII A-label，并移除末尾的根域点。非法条目或空输入使该规则集本次构建失败。未知获取方式和格式拒绝，新增能力须经开发接入。来源内容的分类和覆盖范围由上游维护，本模块不做多源合并、质量评分或 IP 地理归属验证。
-
-`chatgpt-voice` 使用 `list: all`，发布到 `stable/chatgpt-voice`。流水线直接读取 [OpenAI 官方 JSON](https://openai.com/chatgpt-voice.json) 的 IPv4/IPv6 CIDR。规则集匹配地址，客户端策略可另按 [OpenAI 的网络说明](https://help.openai.com/en/articles/9247338-network-recommendations-for-chatgpt-errors-on-web-and-apps#chatgpt-voice-firewall-settings) 约束 UDP 3478 或 TCP 443。适用的强 ETag 可用条件 GET 取得 304；否则读取正文并比较 SHA-256。同一候选的原始 JSON 与登记原子保存，恢复按登记的字节数和 SHA-256 读回原始输入，历史清理保留仍被保留候选引用的快照。
-
-输入绑定由来源位置、获取方式、格式、所选列表及 DLC 标签过滤条件决定。实质变化表示换源，接受新定义时撤销旧 pin。source 别名、注释、排列和保留期调整不会解除固定；上游新 Release/commit 是正常更新。稳定路径与用途变化另做订阅兼容检查，不能借换源更改已交付契约。
+输入绑定取决于获取方式、来源地址、文件路径、格式、命名列表和过滤条件。实质换源会在接受新定义时撤销旧 pin。别名、注释、排列和保留期调整保持控制状态，Git 分支或固定 URL 内容变化按常规同步处理。稳定路径另做交付兼容检查。
 
 ### 在隔离目标同步混合规则集
 
@@ -121,7 +109,7 @@ ruleSets:
 
 规则集可以共用 `publishPath`，各集使用不同的 `artifact`。例如将 `domains` 和 `ips` 发布到 `stable/shared`，订阅地址分别以 `domains.json`、`domains.srs`、`ips.json` 和 `ips.srs` 结尾。移除一集只撤销该集的文件和交付记录。
 
-reader 接受 UTF-8 JSON 格式的 sing-box Source Format v4。顶层必须包含整数 `version: 4` 和 `rules` 数组，所有对象的键必须唯一。规则可使用 v4 的原生匹配字段，包括域名、源与目标 IP、端口、DNS query type、网络、进程、包名和接口条件。默认规则保留原有字段分组和顶层条目边界。逻辑规则保留嵌套的 `and`、`or` 和 `invert`。例如，以下规则要求后缀和关键词同时匹配。
+reader 接受 UTF-8 JSON 格式的 sing-box Source Format v2 和 v4。顶层须包含整数 `version` 和 `rules` 数组，所有对象的键必须唯一。交付统一生成 Source Format v4。规则可使用 v4 的原生匹配字段，包括域名、源与目标 IP、端口、DNS query type、网络、进程、包名和接口条件。默认规则保留原有字段分组和顶层条目边界。逻辑规则保留嵌套的 `and`、`or` 和 `invert`。例如，以下规则要求后缀和关键词同时匹配。
 
 ```json
 {
@@ -142,9 +130,9 @@ reader 接受 UTF-8 JSON 格式的 sing-box Source Format v4。顶层必须包�
 
 遇到不支持的字段、无效的条件结构，或原生解析器能定位到的无效值时，reader 跳过该顶层规则。原本有多条规则时，跳过后剩下的单条默认规则维持原有匹配范围，避免新触发 sing-box 对外层条件的分组合并。转换报告给出源文件、从 0 开始的规则下标、出错子条件路径及按字段汇总的数量。同步重新读取上游并发现跳过项时，`sync --json` 返回本次转换报告，即使当前交付版本可复用。候选的转换报告随其构建证据保留。空 `rules` 数组可发布为空规则集。非空输入若全部跳过，或通过结构检查的内容未能通过原生编译及任一格式的加载，构建失败并保留已有交付。[`sing-box` 1.14.4 的 SRS 字段定义](https://github.com/SagerNet/sing-box/blob/v1.14.4/common/srs/binary.go)
 
-源文件上限为 8 MiB。候选保留原始输入字节，重试按记录的摘要和长度核对快照。
+固定 URL 输入上限为 8 MiB。候选保留原始输入字节，重试按记录的摘要和长度核对快照。GitHub 分支输入通过固定 commit 重读。
 
-新候选的 [Artifact Manifest v3](contracts/artifact-manifest-v3.schema.json) 直接列出两种格式的固定 URL、字节数和 SHA-256。交付记录的 `subscription.formats` 列出两种格式的稳定 URL，`files` 记录实际发布文件的摘要和长度。正式配置迁移见 [#174](https://github.com/wangyingang/sing-box-config-manager/issues/174)。
+新候选的 [Artifact Manifest v3](contracts/artifact-manifest-v3.schema.json) 直接列出两种格式的固定 URL、字节数和 SHA-256。交付记录的 `subscription.formats` 列出两种格式的稳定 URL，`files` 记录实际发布文件的摘要和长度。正式配置与空目标验收见 [#174](https://github.com/wangyingang/sing-box-config-manager/issues/174)。
 
 ### 从固定 HTTPS URL 读取 DLC 和 ChatGPT Voice
 
@@ -235,7 +223,7 @@ ruleSets:
 
 隔离目标仅限 `acceptance-*`，不会写产物 main/candidates。默认 CLI/API 仍读取源码 main 当前配置；可信隔离宿主可通过 `RULE_CONFIG_BRANCH` 选择与目标同名的 acceptance 分支，不能用隔离配置授权生产写入。Actions 的隔离运行固定使用同名配置分支。源码配置分支和产物目标须事先准备，配置修订每次从当前 head 解析。环境变量和凭据属于宿主部署配置，不是日常命令参数；启用生产开关、转换生产旧状态及实际运行都需要对应授权。
 
-`sync` 可以为没有受管内容的目标建立缺失状态；发现未知 schema 或未管理的已有内容时拒绝覆盖。正式状态完全保存在远端，换机器不依赖本地缓存。早期操作升级的一次性转换见[历史状态契约](contracts/rules-operations.md#一次性转换)。原生验证策略切换采用下文的空状态流程。
+`sync` 可以为没有受管内容的目标建立缺失状态；发现未知 schema 或未管理的已有内容时拒绝覆盖。正式状态完全保存在远端，换机器不依赖本地缓存。v4 从空状态开始，早期状态转换见[历史记录](contracts/rules-operations.md#一次性转换)。
 
 每次写入绑定配置修订、输入绑定、控制 revision、规则代次和预期 Git head。并发变更或新配置会使旧操作失效。未知提交先核实原操作；共享写入结果不明时停止相关写入，不用另发一次操作掩盖未知结果。
 
@@ -328,9 +316,9 @@ const cleanupPreview = await cleanupRuleHistory({ dryRun: true });
 
 ## 稳定订阅与客户端
 
-Rule Subscription v2 保持逻辑 ID、稳定 URL、用途、格式、目标版本与能力约束。正式配置中，14 个域名集的 Route 和 DNS Query 共用 `domains.json` 与 `domains.srs`，DNS Response 不可用。`china-ip` 和 `chatgpt-voice` 的 Route 和 DNS Response 共用 `ips.json` 与 `ips.srs`，DNS Query 不可用。每次交付前都复验候选、来源、实际规则字节和订阅兼容性。
+Pipeline 的交付记录通过 `subscription.formats` 提供当前版本的两个稳定地址，记录路径为 `<publishPath>/_delivery/<artifact>.json`。每次交付前核对候选、稳定地址和实际规则字节。
 
-Recipe／Template v2 跟随稳定入口，管理者 pin 会影响所有引用该集的订阅使用者，但不更改 Recipe。配置快照固定不表示规则字节固定。Compiler 只消费可信宿主提供的内存契约，不下载规则、不调用 Pipeline。详见 [Rule Subscription v2](contracts/rule-subscription-v2.md) 和 [Artifact Manifest v2](contracts/README.md)。
+已生成的客户端配置继续按原有稳定地址取得 JSON 或 SRS。Recipe／Template v2 继续消费可信宿主提供的独立 Compiler 契约，管理者 pin 会影响引用该规则集的订阅使用者。配置快照固定时，规则字节仍可随稳定地址更新。[Rule Subscription v2](contracts/rule-subscription-v2.md) · [Artifact Manifest v2](contracts/README.md)
 
 ## 客户端更新失败与缓存恢复
 
@@ -364,11 +352,11 @@ CIDR 输入使用固定 `ipaddr.js 2.5.0` 解析 IPv4／IPv6 并规范化地址�
 
 YAML 解析使用固定版本的 [yaml](https://eemeli.org/yaml/)，拒绝语法错误、重复 key、未知 tag、多个文档和 alias。记录级诊断包含文件、列表、从零开始的记录 index，以及从一开始的 line／column。列表级诊断以文件与目标列表定位。
 
-v3 构建中，每个非空用途分别生成 JSON／SRS，内容相同的用途复用同一组物理文件。纯域名文件同时供 Route 和 DNS 请求复用。纯 IP 的 Route／DNS 响应同样复用，混合 IR 分别输出三组文件。当前官方纯域名列表的 DNS 响应用途为 `{ status: "unavailable", reason: "empty" }`，不生成空匹配文件。`build.json` 记录构建工具内容摘要、验证策略和实际命令。[固定产物 Manifest v2](contracts/README.md) 为 Compiler 定义独立的内存契约。输入和转换报告保留逻辑计数，JSON 的 `termCount` 按投影条目计数。SRS 记录格式、字节长度、摘要与能力。
+每集构建一份逻辑产物。`build.json` 记录工具内容摘要、验证策略、实际命令和两个文件的摘要。Artifact Manifest v3 记录文件格式、固定地址、字节数和 SHA-256。空列表或筛选后为空的输入可以生成空产物，所有条目因不支持而被跳过的输入使本次构建失败。
 
 ## 从空产物状态启用新验证策略
 
-[#125](https://github.com/wangyingang/sing-box-config-manager/issues/125) 从空状态启用新策略。`main` 和 `candidates` 的开发期候选、订阅、证据、版本编号、pin 和未完成操作可以一并清除，旧订阅在切换期间可能不可用。切换是独立操作。先停用生产更新和清理门禁，再准备两个没有 `pipeline/`、`candidates/`、`stable/` 内容的受管分支。必要时可重新初始化产物仓库。
+[#174](https://github.com/wangyingang/sing-box-config-manager/issues/174) 在隔离目标从空状态启用 v4。`main` 和 `candidates` 的开发期候选、订阅、证据、版本编号、pin 和未完成操作可以一并清除，旧订阅在切换期间可能不可用。切换是独立操作。先停用生产更新和清理门禁，再准备两个没有 `pipeline/`、`candidates/`、`stable/` 内容的受管分支。必要时可重新初始化产物仓库。
 
 新版从正式配置运行首次 `sync`，初始化远端状态并构建正式配置声明的规则集。在更新门禁授权的环境执行后，用 `status --json` 核对每集已交付且有可选候选。按回读记录核对候选和稳定交付 commit 上 JSON/SRS 正文的长度及 SHA-256。新策略建立的候选可继续 pin、恢复和 cleanup。首次建立状态后，在没有回收对象时，cleanup 只评估保留期并返回 `unchanged`。此后删除产生的待回收历史随删除结案登记。清理重写物理证据地址时保留业务版本、构建身份、首次发布时间、来源和稳定订阅字节。
 
@@ -380,7 +368,7 @@ v3 构建中，每个非空用途分别生成 JSON／SRS，内容相同的用途
 
 ## 自动化验证
 
-常规检查与完整本地验证使用[根 README 的统一入口](../../README.md#开发检查分别证明什么)。原生集成测试使用真实 sing-box；Git/上游 fixture 只替换外部边界，不意味着执行了真实 GitHub 写入。旧 writer 的固定样本继续验证历史读取、拒绝跨策略写入及未完成历史文件隔离。原转换验收的样本和范围见 [#99 历史记录](../../docs/verification/issue-99.md)。
+常规检查与完整本地验证使用[根 README 的统一入口](../../README.md#开发检查分别证明什么)。原生集成测试使用真实 sing-box；Git/上游 fixture 只替换外部边界，不意味着执行了真实 GitHub 写入。固定的历史样本用于验证 v4 拒绝覆盖或继续处理旧产物状态。原转换验收的样本和范围见 [#99 历史记录](../../docs/verification/issue-99.md)。
 
 版本选择和保留历史集成测试按测试文件、配置与分支布局共享真实构建的基础状态。每个场景恢复独立的 Git 与上游环境，再通过公开操作验证保存、选择、回收和故障恢复。同一场景内的竞争者仍访问相同环境。运行时操作计数、准备次数和完整测试耗时见 [#132 联合验收](../../docs/verification/issue-132.md)。
 
@@ -395,21 +383,16 @@ SING_BOX_TEST_BINARY=/absolute/path/to/sing-box-1.14.4 pnpm --dir packages/rule-
 
 真实客户端覆盖位于 `test/integration/rules-domain-client.test.ts` 与 `rules-cidr-client.test.ts`：当前 sync/pin/resume 驱动同一进程从原稳定 URL 更新域名 DNS/Route 与双栈 CIDR，Recipe、发布快照和配置文件不变。CIDR 场景保留 503、无效 SRS 和有效缓存断网重启；独立 `client-failure-recovery.test.ts` 继续覆盖域名下载／加载故障及持久缓存恢复。它们均由原生集成通配入口执行，隔离 harness 的轮询和缓存设置不修改生产客户端。[#97 映射及证据](../../docs/verification/issue-97.md)记录迁移与退役依据。
 
-真实 GitHub 交付验收使用独立入口；命令不会自动启用门禁。显式启用后必须提供真实 binary、可写隔离分支的 `gh` 登录和一个尚不存在的证据文件路径：
+正式 16 集的真实 GitHub 验收使用尚不存在的隔离分支、具有该分支写权限的 `gh` 登录、原生编译器和新证据路径。
 
 ```sh
-pnpm --filter @sing-box-config-manager/config-compiler generate:validator
-RULE_OPERATIONS_PROBE=1 \
-RULE_OPERATIONS_EVIDENCE=/absolute/path/to/new-evidence.json \
+RULE_FORMAL_V4_PROBE=1 \
+RULE_FORMAL_V4_EVIDENCE=/absolute/path/to/new-evidence.json \
 SING_BOX_TEST_BINARY=/absolute/path/to/sing-box-1.14.4 \
 pnpm --dir packages/rule-set-pipeline test:acceptance:rules
 ```
 
-设置 `RULE_OPERATIONS_FIRST_ONLY=1` 可验收空状态初始化与原有五集首次交付。探针直连 OpenAI，核实 ChatGPT Voice 候选保存的原始 JSON 与上游响应逐字节一致。它计数实际编译和两种格式的加载，并用 Compiler 读取 HTTPS 回读的 Manifest。
-
-设置 `RULE_OPERATIONS_FORMAL_FIRST=1` 使用正式 16 集定义，从随机的 `acceptance-issue-164-*` 空分支执行首次 `sync`。复用固定 V2Fly Release 和 Git commit 的真实上游正文，ChatGPT Voice 使用受控双栈输入。检查新旧 IP 文件名、16 集 `status`、Manifest、固定候选和稳定交付的 HTTPS 正文，并用 1.14.4 对照改名前后的匹配。探针仅写入自己的隔离分支，结束时删除该分支并复核生产 refs 与门禁。逐集证据见 [#164 验收记录](../../docs/verification/issue-164/README.md)。
-
-完整探针从空的 `acceptance-issue-96-*` 分支执行四集新增、两类来源独立更新、换列表、逐集 pin/resume 和删除。来源发现固定到官方 Release 与 Git commit，字节仍从真实上游获取；候选和稳定规则文件通过真实 HTTPS 回读，辅助记录通过 Git 核对。探针另行观测稳定分支入口及兄弟集。每轮保存受测源码、操作和回读记录、生产 refs/Actions variables 前后对照，以及成功或失败后的隔离目标清理结果。门禁开启时缺少前提会失败，不能将默认跳过视为完成验收；默认 CI 和统一本地检查不运行该远端写入入口。
+探针用正式 v4 配置和实时上游首次同步，逐集验证当前候选、Git 中的交付记录及固定候选、固定交付和稳定分支地址。两种格式均通过真实加载和正反例匹配。探针在隔离目标执行 pin、resume 及清理预览，结束时删除隔离分支并核对生产 refs 与门禁。旧验收的来源和范围保留在 [#96](../../docs/verification/issue-96.md) 与 [#164](../../docs/verification/issue-164/README.md) 的历史记录。
 
 cleanup 的真实隔离验收使用单独入口，四集包含域名与 CIDR，验证首次发布时间窗口、当前/pin 豁免、切换中断、HTTPS 回读失败恢复及两轮清理后版本选择：
 

@@ -5,8 +5,8 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import test from 'node:test';
-import { stringify } from 'yaml';
-import { parseBuildConfiguration, readOfficialConfiguration, type BuildConfiguration } from '../../src/configuration.js';
+import { parseBuildConfiguration } from '../../src/configuration.js';
+import { fixtureConfigurationYaml, formalConfiguration, type FixtureConfiguration } from '../fixtures/formal-configuration.js';
 import { createGitCommit } from '../../src/publication-repository.js';
 import { ARTIFACT_REPOSITORY, ghJson } from '../../src/publication.js';
 import type { RulesResult } from '../../src/rules-model.js';
@@ -156,9 +156,9 @@ test('GitHub 自动生命周期：真实配置 push、五操作共享语义、�
   };
   let sourceHead = implementation;
   const sourceApi = (path: string, input?: unknown) => request(sourceRepository, path, input);
-  const publish = async (configuration: BuildConfiguration, files: Record<string, Buffer>, label: string, conclusion: 'success' | 'failure' = 'success') => {
+  const publish = async (configuration: FixtureConfiguration, files: Record<string, Buffer>, label: string, conclusion: 'success' | 'failure' = 'success') => {
     await checkImplementation();
-    const content = stringify(configuration, { aliasDuplicateObjects: false });
+    const content = fixtureConfigurationYaml(configuration);
     parseBuildConfiguration(content);
     const parent = await request(sourceRepository, `git/commits/${sourceHead}`);
     const commit = await createGitCommit(sourceApi, { ...files, [configurationPath]: Buffer.from(content) },
@@ -198,12 +198,12 @@ test('GitHub 自动生命周期：真实配置 push、五操作共享语义、�
       { 'README.md': Buffer.from(`Disposable automation probe ${target}\n`) }, 'test(rules): 初始化隔离自动流程');
     await request(ARTIFACT_REPOSITORY, 'git/refs', { ref: `refs/heads/${target}`, sha: artifactHead });
     ownedRefs.add(ARTIFACT_REPOSITORY);
-    const official = parseBuildConfiguration(readOfficialConfiguration());
+    const official = formalConfiguration();
     const template = official.ruleSets.find(rule => rule.id === 'china-ip')!;
     const rule = (id: string) => ({ ...template, id, source: id, stablePath: `stable/${id}` });
     const source = (path: string) => ({ repository: sourceRepository, version: 'git-branch' as const, branch: target,
       input: { format: 'cidr-text' as const, path: `test-input/${path}.txt` } });
-    let configuration: BuildConfiguration = { ...official, target: { ...official.target, branch: target },
+    let configuration: FixtureConfiguration = { ...official, target: { ...official.target, branch: target },
       sources: { changing: source('old'), deleting: source('delete'), fixed: source('fixed') },
       ruleSets: ['changing', 'deleting', 'fixed'].map(rule) };
     const initial = await publish(configuration, {
