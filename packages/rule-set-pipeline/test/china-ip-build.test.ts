@@ -29,7 +29,7 @@ function fixture(bytes: Uint8Array) {
 }
 
 test('内部 china-ip 构建失败保留固定来源和可定位诊断', async () => {
-  const configuration = await readFile('config/china-ip.yml', 'utf8');
+  const configuration = await readFile('test/fixtures/china-ip-v3.yml', 'utf8');
   const cases = [
     { bytes: Buffer.from('# comment\r\n192.0.2.0/24\r\n2001:db8::/129\r\n'), code: 'INVALID_CIDR', line: 3 },
     { bytes: Buffer.from('192.0.2.1'), code: 'INVALID_CIDR', line: 1 },
@@ -50,6 +50,6 @@ test('内部 china-ip 构建失败保留固定来源和可定位诊断', async (
 });
 
 test('内部 china-ip 构建拒绝可信分支历史之外的 commit', async () => {
-  await assert.rejects(buildConfiguredCommit({ configuration: await readFile('config/china-ip.yml', 'utf8'), binary: '/unused',
+  await assert.rejects(buildConfiguredCommit({ configuration: await readFile('test/fixtures/china-ip-v3.yml', 'utf8'), binary: '/unused',
     github: { fetch: fixture(Buffer.from('192.0.2.0/24')), commit: forkCommit } }), /outside .*ip-lists history/);
 });

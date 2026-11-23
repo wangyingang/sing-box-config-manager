@@ -88,7 +88,7 @@ test('fixed official sample independently builds identical JSON/SRS and actual b
 });
 
 test('固定 china46.txt 构建可重复的双栈规则，Route 与 DNS Response 共用文件', async () => {
-  const configuration = await readFile(new URL('../../config/china-ip.yml', import.meta.url), 'utf8');
+  const configuration = await readFile(new URL('../fixtures/china-ip-v3.yml', import.meta.url), 'utf8');
   const commit = 'a'.repeat(40);
   const branchUrl = 'https://api.github.com/repos/gaoyifan/china-operator-ip/branches/ip-lists';
   const rawUrl = `https://raw.githubusercontent.com/gaoyifan/china-operator-ip/${commit}/china46.txt`;
