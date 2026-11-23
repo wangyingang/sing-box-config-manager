@@ -15,6 +15,7 @@ import type { RulesContext } from '../../src/rules-context.js';
 import { syncRules, pinRuleVersion, resumeRuleUpdates } from '../../src/rules-operations.js';
 import { githubRulesRepository } from '../../src/rules-repository.js';
 import { getRulesStatus, readSchedulePreflight } from '../../src/rules-status.js';
+import { formalSourceVerifier } from './formal-v4-sources.js';
 
 const exec = promisify(execFile);
 const positives: Record<string, string[]> = {
@@ -52,8 +53,7 @@ test('the 16 formal v4 rule sets deliver from an empty GitHub target', {
   const local = await mkdtemp(join(tmpdir(), 'rule-formal-v4-'));
   t.after(() => rm(local, { recursive: true, force: true }));
   const token = process.env.GH_TOKEN ?? (await exec('gh', ['auth', 'token'])).stdout.trim();
-  const immutable = new Map<string, Promise<any>>();
-  const request: typeof ghJson = (args, input) => {
+  const request: typeof ghJson = async (args, input) => {
     const endpoint = args[1];
     const method = args.includes('--method') ? args[args.indexOf('--method') + 1] : 'GET';
     assert.ok(endpoint === `repos/${ARTIFACT_REPOSITORY}` || endpoint.startsWith(`repos/${ARTIFACT_REPOSITORY}/`));
@@ -61,23 +61,12 @@ test('the 16 formal v4 rule sets deliver from an empty GitHub target', {
       if (endpoint.endsWith('/git/refs')) assert.equal((input as { ref: string }).ref, `refs/heads/${target}`);
       else assert.ok(endpoint.endsWith(`/refs/heads/${target}`) || /\/git\/(blobs|trees|commits)$/.test(endpoint), endpoint);
     }
-    const cacheable = method === 'GET' && (endpoint === `repos/${ARTIFACT_REPOSITORY}`
-      || /\/git\/(?:trees|commits|blobs)\/[a-f0-9]{40}(?:\?recursive=1)?$/.test(endpoint)
-      || /\/commits\?sha=[a-f0-9]{40}&path=/.test(endpoint));
-    if (cacheable && immutable.has(endpoint)) return immutable.get(endpoint)!;
-    const response = (async () => {
-      const res = await fetch(`https://api.github.com/${endpoint}`, { method,
-        headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
-        body: input === undefined ? undefined : JSON.stringify(input), signal: AbortSignal.timeout(120_000) });
-      const body = await res.text();
-      if (!res.ok) throw new GitHubHttpError(res.status, `${method} ${endpoint}: HTTP ${res.status}`);
-      return body ? JSON.parse(body) : null;
-    })();
-    if (cacheable) {
-      immutable.set(endpoint, response);
-      response.catch(() => immutable.delete(endpoint));
-    }
-    return response;
+    const response = await fetch(`https://api.github.com/${endpoint}`, { method,
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
+      body: input === undefined ? undefined : JSON.stringify(input), signal: AbortSignal.timeout(120_000) });
+    const body = await response.text();
+    if (!response.ok) throw new GitHubHttpError(response.status, `${method} ${endpoint}: HTTP ${response.status}`);
+    return body ? JSON.parse(body) : null;
   };
   const api = (path: string, input?: unknown, method = 'POST') => request(
     ['api', `repos/${ARTIFACT_REPOSITORY}/${path}`, '--method', method, ...(input === undefined ? [] : ['--input', '-'])], input);
@@ -145,6 +134,7 @@ test('the 16 formal v4 rule sets deliver from an empty GitHub target', {
   evidence.outcomes.status = status;
   const snapshot = await repository.snapshot();
   evidence.finalHead = snapshot.head;
+  const verifySource = formalSourceVerifier(snapshot.head);
   for (const definition of ruleSets) {
     const rule = status.rules?.find(({ id }) => id === definition.id);
     assert.ok(rule?.current, definition.id);
@@ -178,6 +168,7 @@ test('the 16 formal v4 rule sets deliver from an empty GitHub target', {
     assert.deepEqual(build.source, current.source);
     assert.ok(report.outputTermCount > 0, id);
     const files = [];
+    let sourceVerification;
     for (const format of ['source', 'binary'] as const) {
       const extension = format === 'source' ? 'json' : 'srs';
       const path = `${expected}.${extension}`;
@@ -192,6 +183,9 @@ test('the 16 formal v4 rule sets deliver from an empty GitHub target', {
       for (const url of [artifact.url, fixedDelivery, stablePrefix + path]) {
         const readback = await repository.download(url);
         assert.deepEqual(readback, bytes, url);
+      }
+      if (format === 'source') {
+        sourceVerification = await verifySource({ id, candidateId: current.candidateId, source: current.source, artifactUrl: artifact.url, artifact: bytes });
       }
       assert.equal(sha256(bytes), checked.sha256);
       assert.equal(bytes.length, checked.byteLength);
@@ -209,7 +203,7 @@ test('the 16 formal v4 rule sets deliver from an empty GitHub target', {
         fixedDelivery, stableUrl: stablePrefix + path, matches });
     }
     evidence.rules.push({ id, definition, source: current.source, input: rule.expectedSource, version: current.versionId,
-      selectable: true, terms: report.outputTermCount, unsupported: report.unsupportedTypeCounts, native: build.validation, files });
+      selectable: true, sourceVerification, terms: report.outputTermCount, unsupported: report.unsupportedTypeCounts, native: build.validation, files });
     console.log('verified', id);
     await archive();
   }
