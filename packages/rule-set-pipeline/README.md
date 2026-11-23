@@ -360,6 +360,19 @@ YAML 解析使用固定版本的 [yaml](https://eemeli.org/yaml/)，拒绝语法
 
 新版从正式配置运行首次 `sync`，初始化远端状态并构建正式配置声明的规则集。在更新门禁授权的环境执行后，用 `status --json` 核对每集已交付且有可选候选。按回读记录核对候选和稳定交付 commit 上 JSON/SRS 正文的长度及 SHA-256。新策略建立的候选可继续 pin、恢复和 cleanup。首次建立状态后，在没有回收对象时，cleanup 只评估保留期并返回 `unchanged`。此后删除产生的待回收历史随删除结案登记。清理重写物理证据地址时保留业务版本、构建身份、首次发布时间、来源和稳定订阅字节。
 
+### 发布后只读核对订阅文件
+
+在仓库根目录运行。先保存 `pnpm --silent rules status --json` 的完整 JSON 输出，或直接使用生产 Actions 的 `status` 运行归档中的 `rule-result.json`。
+
+```bash
+pnpm --silent rules:verify-delivery --status rule-result.json \
+  --retired https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/main/stable/china-ip/route.json \
+  --retired https://raw.githubusercontent.com/wangyingang/sing-box-rule-artifacts/main/stable/china-ip/route.srs \
+  > delivery-readback.json
+```
+
+每个 `--retired` 指定一个预期已退役的生产订阅 URL。核对当前文件时可以省略此参数。命令以状态记录中的生产提交为基线，实际 GET 固定候选、固定交付和公开稳定地址，核对文件长度与 SHA-256，并检查退役地址返回 HTTP 404。标准输出是可归档的 JSON，退出码 0 表示核对通过。执行使用只读 GitHub 访问，生产更新和清理门禁可以保持关闭。
+
 ### 两个 IP 集的订阅文件改名
 
 [#164](https://github.com/wangyingang/sing-box-config-manager/issues/164) 的源码交付以空隔离目标的 16 集验收为准。获生产切换授权后，先记录原有生产 refs 及更新、清理门禁状态，再在暂停自动写入后准备空的生产 `main` 与 `candidates`。用已核对的正式配置执行首次 `sync`。逐集核对 `status`、当前可选候选、Manifest 与固定候选和交付地址回读。单集失败时保留已成功的交付，按 `status` 的诊断恢复并重跑 `sync`。
