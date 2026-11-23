@@ -2,9 +2,9 @@ import { execFile } from 'node:child_process';
 import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
-import { promisify } from 'node:util';
+import { promisify, stripVTControlCharacters } from 'node:util';
 import { sha256 } from './release.js';
-import { normalizeTerms, projectTerms, renderRuleJson, USAGES, type BuildTerm, type Usage } from './projection.js';
+import { normalizeBuildRules, projectTerms, renderRuleJson, renderRules, USAGES, type BuildRule, type BuildTerm, type Usage } from './projection.js';
 
 const exec = promisify(execFile);
 export interface NativeTool { path: string; version: '1.14.4'; identity: string; sha256: string }
@@ -24,9 +24,9 @@ export interface NativeBuild extends ValidatedNativeBuild {
 }
 
 export type NativeTarget = string | { kind: 'single-artifact'; artifact: string };
-type NativeLayout = { artifact: string; terms: BuildTerm[] }
+type NativeLayout = { artifact: string; terms: BuildRule[] }
   | { artifact?: string; projections: ReturnType<typeof projectTerms> };
-export type NativeBuilder = (terms: readonly BuildTerm[], binary: string, target?: NativeTarget) => Promise<ValidatedNativeBuild>;
+export type NativeBuilder = (terms: readonly BuildRule[], binary: string, target?: NativeTarget) => Promise<ValidatedNativeBuild>;
 
 export class NativeBuildError extends Error {
   constructor(message: string, public readonly steps: NativeStep[] = []) { super(message); }
@@ -42,7 +42,7 @@ export async function inspectBinary(binary: string): Promise<NativeTool> {
   } catch (error) { throw new NativeBuildError(`Binary validation failed: ${error instanceof Error ? error.message : error}`); }
 }
 
-export function nativeBuildIdentity(toolSha256: string, terms: readonly BuildTerm[]) {
+export function nativeBuildIdentity(toolSha256: string, terms: readonly BuildRule[]) {
   return sha256(JSON.stringify({ policy: NATIVE_VALIDATION_POLICY, sourceFormat: 4, tool: toolSha256, terms }));
 }
 
@@ -53,6 +53,50 @@ export function nativeArtifactCommands(source: string, srs: string): string[][] 
     ['rule-set', 'match', source, 'native-validation.invalid', '--format', 'source'],
     ['rule-set', 'match', srs, 'native-validation.invalid', '--format', 'binary'],
   ];
+}
+
+/**
+ * Attribute a source-load failure to its top-level rule, then check the others.
+ * Only indexed input errors from the pinned native parser qualify for skipping.
+ */
+export async function invalidNativeSourceRules(rules: readonly BuildRule[], binary: string) {
+  const tool = await inspectBinary(binary);
+  const invalid = new Map<number, string>();
+  const unique = new Map<string, { rule: BuildRule; indices: number[] }>();
+  for (const [index, rule] of rules.entries()) {
+    const key = JSON.stringify(rule);
+    const entry = unique.get(key);
+    if (entry) entry.indices.push(index);
+    else unique.set(key, { rule, indices: [index] });
+  }
+  const pending = [[...unique.values()]];
+  const directory = await mkdtemp(join(tmpdir(), 'rule-native-source-'));
+  const path = join(directory, 'rules.json');
+  try {
+    while (pending.length) {
+      const group = pending.pop()!;
+      if (!group.length) continue;
+      await writeFile(path, renderRules(group.map(entry => entry.rule)));
+      try {
+        await exec(tool.path, ['rule-set', 'match', path, 'native-validation.invalid', '--format', 'source'],
+          { timeout: 30_000, maxBuffer: 8 * 1024 * 1024 });
+      } catch (error) {
+        const failure = error as { code?: unknown; stderr?: string };
+        const stderr = stripVTControlCharacters(failure.stderr ?? '').trim();
+        const match = /(?:^|\n)FATAL\[\d+\] (?:parse rule_set\.rules\.\[(\d+)\]: |rules\[(\d+)\](?:\.|: ))([\s\S]+)$/.exec(stderr);
+        const position = Number(match?.[1] ?? match?.[2]);
+        if (failure.code !== 1 || !match || !group[position]) throw error;
+        // Confirm individual rules before skipping. The CLI also prints the text of earlier matches.
+        if (group.length === 1) {
+          for (const index of group[0].indices) invalid.set(index, match[3]);
+        } else {
+          const middle = Math.ceil(group.length / 2);
+          pending.push(group.slice(middle), group.slice(0, middle));
+        }
+      }
+    }
+    return invalid;
+  } finally { await rm(directory, { recursive: true, force: true }); }
 }
 
 /** Local validated bytes only: no remote URLs, publication or activation state. */
@@ -80,10 +124,13 @@ export function createOperationNativeBuilder(): NativeBuilder {
   return (terms, binary, target) => validateNative(terms, binary, target, passed);
 }
 
-async function validateNative(terms: readonly BuildTerm[], binary: string, target?: NativeTarget, passed?: Map<string, ValidatedNativeBuild>) {
-  const layout: NativeLayout = typeof target === 'object'
-    ? { artifact: target.artifact, terms: normalizeTerms(terms) }
-    : { artifact: target, projections: projectTerms(terms) };
+async function validateNative(terms: readonly BuildRule[], binary: string, target?: NativeTarget, passed?: Map<string, ValidatedNativeBuild>) {
+  let layout: NativeLayout;
+  if (typeof target === 'object') layout = { artifact: target.artifact, terms: normalizeBuildRules(terms) };
+  else {
+    if (!terms.every(term => term.type !== 'headless')) throw new NativeBuildError('Headless rules require a single artifact');
+    layout = { artifact: target, projections: projectTerms(terms) };
+  }
   if ('projections' in layout && layout.artifact !== undefined
     && layout.projections['dns-query'].length && layout.projections['dns-response'].length) {
     throw new NativeBuildError('A shared artifact name requires a pure domain or pure IP rule set');
@@ -125,7 +172,7 @@ async function buildWithTool(layout: NativeLayout, tool: NativeTool, buildId: st
   };
   try {
     let usages: NativeBuild['usages'] | undefined;
-    if ('terms' in layout) await compile(renderRuleJson(layout.terms), layout.artifact, layout.terms.length);
+    if ('terms' in layout) await compile(renderRules(layout.terms), layout.artifact, layout.terms.length);
     else usages = await buildProjections(layout, compile);
     // Guard against a binary replaced during validation.
     if (sha256(await readFile(tool.path)) !== tool.sha256) throw new NativeBuildError('Binary changed during build', steps);

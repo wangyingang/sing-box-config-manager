@@ -26,7 +26,7 @@ type InputSnapshot = {
 
 interface RuleSourceAdapter {
   file: string;
-  probe(network: Network): InputProbe | Promise<InputProbe>;
+  probe(network: Network, branchHeads?: Map<string, Promise<string>>): InputProbe | Promise<InputProbe>;
   openFixed(network: Network, candidate: CandidateSource, snapshot: SnapshotReader): InputProbe | Promise<InputProbe>;
   snapshotRequirement?(candidate: CandidateSource): InputSnapshot;
 }
@@ -62,7 +62,8 @@ export function ruleSourceAdapter(input: SourceInput): RuleSourceAdapter {
     const snapshotRequirement = (candidate: CandidateSource): InputSnapshot => {
       const source = candidate.source;
       if (!validFixedUrlSource(source, input)) throw new Error('Invalid recorded URL input identity');
-      return { path: `candidates/${candidate.id}/input.source.json`, verify: bytes => verifyFixedUrlSnapshot(source, bytes) };
+      const extension = input.input.format === 'v2fly-dlc-yaml' ? 'yml' : 'json';
+      return { path: `candidates/${candidate.id}/input.source.${extension}`, verify: bytes => verifyFixedUrlSnapshot(source, bytes) };
     };
     return {
       file: input.input.url,
@@ -76,8 +77,8 @@ export function ruleSourceAdapter(input: SourceInput): RuleSourceAdapter {
   if (input.version === 'openai-voice') return voiceAdapter;
   if (input.version === 'git-branch') return {
     file: input.input.path,
-    async probe(network) {
-      const probe = await probeCommitInput(input, network);
+    async probe(network, branchHeads) {
+      const probe = await probeCommitInput(input, network, branchHeads);
       return { read: probe.read, unchanged: async previous => 'kind' in previous && previous.kind === 'github-commit' ? probe.unchanged(previous) : undefined };
     },
     openFixed(network, candidate) {

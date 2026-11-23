@@ -14,6 +14,8 @@
 
 `sing-box-domain-json` 读取 UTF-8 的 Source Format v2 JSON。顶层包含 `version` 和 `rules`，规则对象仅接受 `domain`、`domain_suffix` 和 `domain_keyword` 的字符串数组，且须有可用的匹配值。每个值都是独立匹配条件，保留原值，按类型和值去重。重复字段、其他字段、非法结构或非法值使构建失败，诊断标明输入文件和对应规则或字段。生成的候选继续使用 Source Format v4。
 
+隔离 v4 配置的文件选择、格式和 Clash 类型条件见[从同一 GitHub 分支选取文件的示例](../README.md#在同一-github-分支选择不同文件)。分支文件的来源记录仍包含仓库、分支、固定 commit、路径、摘要与字节数。Clash 类型条件参与规则集的输入绑定。
+
 隔离目标可使用 [v4 配置 Schema](../config/rulesets.schema.json)。同步使用同一份 Schema，并额外核对 `data.source` 和对应获取方式、格式及最终路径。配置错误会在上游获取或产物写入前停止整次同步。v4 可共用 `publishPath`，但 `publishPath/artifact.json` 和 `publishPath/artifact.srs` 必须由一集独占。
 
 ## 共同结果
@@ -29,6 +31,7 @@ Node 请求可选传入 `onProgress(event)`，事件为 `RulesProgress`（`stage
 | `target` | 本次受限产物仓库与分支 |
 | `status`、`exitCode` | success/disabled/partial/failed/pending；success 与 disabled 为 0，disabled 表示未应用 |
 | `results[]` | 每集的 `id`、结果、`changes`、`error`、`current`、`control`、`expectedSource` 和需要时的 `continueWith` |
+| `results[].unsupportedTypeCounts` | 读取并转换 Clash 正文时按上游类型汇总被跳过的选中条目。有跳过时返回。新候选的转换报告同时保留此计数。 |
 | `observedHeads` | 能读到时返回日志与稳定分支的观察 head，不作为后续执行凭证 |
 | `error` | 无法分配到单集的失败，或交付事实尚不能完成核实 |
 | `cleanup` | cleanup 的阶段、固化计划、保留/移除数量、其他引用与继续入口；无法盘点时可缺省 |
@@ -91,7 +94,7 @@ status 只读取，不登记操作、更新检查时间、恢复维护或发送�
 
 `pipeline/state.json` 使用 schema 2。`rules` 保存每集已接受定义、输入绑定、定义修订、配置修订、规则代次、lifecycle、控制、最近失败及可选的 `successfulInput`。`candidates` 保存构建、固定来源、证据及发布身份。`pendingDelivery` 登记一次未完成稳定写入，包含操作身份、配置修订、预期 stable head、目标规则事实与具体文件摘要/删除路径。状态写入还保存 `writeId`，以核实响应丢失的同一次提交。
 
-输入绑定依据规范化来源与所选列表计算。它不含 source 别名或上游随后出现的新版本；定义修订另包含稳定路径，以及 v3 的用途或 v4 的文件基名。控制只有 auto/pinned，不再由旧激活记录的双暂停布尔值与 resumes 叠加判定。
+输入绑定依据规范化来源、所选列表和 DLC 标签过滤条件计算。它不含 source 别名或上游随后出现的新版本；定义修订另包含稳定路径，以及 v3 的用途或 v4 的文件基名。控制只有 auto/pinned，不再由旧激活记录的双暂停布尔值与 resumes 叠加判定。
 
 候选文件位于 `candidates/<id>/`，仍使用固定 commit 地址、Manifest、构建记录与 readback 证据。候选首次成功发布保存 UTC ISO 8601 `publishedAt`，并以时间和候选稳定短身份组成 `versionId`，例如 `2026-11-16T12:34:56.789Z~1234abcd`。时间相同的候选仍由完整身份区分，短身份冲突时延长；不覆盖旧候选。pin、resume、重试和再次交付不刷新原版本身份或时间。有效内容与构建条件未变时，完整的当前交付可继续使用。
 
@@ -101,7 +104,7 @@ status 只读取，不登记操作、更新检查时间、恢复维护或发送�
 
 正式配置状态先单独保存。每集正常首次交付采用以下 7 个持久阶段，沿用现有 schema、分支与稳定 URL，不重写历史：
 
-1. 登记候选，固定来源及 buildId，状态为 building。从固定 HTTPS URL 获取的原始快照与登记写在同一次提交。初版 v4 使用 `candidates/<id>/input.source.json`，ChatGPT Voice 使用 `candidates/<id>/chatgpt-voice.json`。
+1. 登记候选，固定来源及 buildId，状态为 building。从固定 HTTPS URL 获取的原始快照与登记写在同一次提交。固定 URL 输入使用 `candidates/<id>/input.source.yml`（DLC）或 `candidates/<id>/input.source.json`（JSON）。配置了摘要地址时，来源身份同时保存摘要文件的 SHA-256。v3 的官方 ChatGPT Voice 输入继续使用 `candidates/<id>/chatgpt-voice.json`。
 2. 上传 JSON/SRS，同时保存 publishing 状态。
 3. 上传 Manifest、构建记录及追溯文件，同时保存规则文件所在 commit。
 4. 固定 commit 的 JSON 和 SRS 正文校验通过后保存回读记录，同时保存元数据 commit、地址和已确定的版本身份。

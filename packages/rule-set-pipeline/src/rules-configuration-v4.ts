@@ -2,17 +2,15 @@ import { Ajv, type ErrorObject } from 'ajv';
 import { isMap, isScalar, type Document, type LineCounter } from 'yaml';
 import schema from '../config/rulesets.schema.json' with { type: 'json' };
 import { validFixedUrl, type FixedUrlInput } from './fixed-url-source.js';
-import type { BuildConfiguration } from './configuration.js';
+import type { CommitInput } from './github-commit.js';
 import { singleArtifactPaths, pathsOverlap } from './stable-rule-paths.js';
 
-type Format = typeof schema.definitions.format.enum[number];
+type BranchFormat = Extract<CommitInput['input']['format'], 'clash-rule-list' | 'cidr-text' | 'domain-suffix-text'>;
 type FilterCondition = { tags: { allOf: string[] } | { anyOf: string[] } } | { type: { anyOf: string[] } };
-interface Source {
-  fetch: { method: 'url'; url: string; sha256Url?: string } | { method: 'github-branch'; repository: string; branch: string };
-  format?: Format;
-}
+type Source = { fetch: { method: 'url'; url: string; sha256Url?: string }; format: FixedUrlInput['input']['format'] }
+  | { fetch: { method: 'github-branch'; repository: string; branch: string }; format?: never };
 interface RuleSet {
-  data: { source: string; file?: string; format?: Format; list?: string };
+  data: { source: string; file?: string; format?: BranchFormat; list?: string };
   filter?: { include: FilterCondition } | { exclude: FilterCondition };
   publishPath: string;
   artifact: string;
@@ -80,7 +78,7 @@ function checkRulePaths(report: Report, rules: RulesConfigurationV4['ruleSets'])
 }
 
 /** The editor uses the JSON Schema. Checks that require the entire configuration run here. */
-export function parseRulesConfigurationV4(document: Document, lines: LineCounter, raw: unknown): BuildConfiguration {
+export function validateRulesConfigurationV4(document: Document, lines: LineCounter, raw: unknown): RulesConfigurationV4 {
   const diagnostics = new Set<string>();
   const report: Report = (path, message, key) => {
     const parent = document.getIn(path.slice(0, -1), true);
@@ -104,6 +102,9 @@ export function parseRulesConfigurationV4(document: Document, lines: LineCounter
       const url = source.fetch[field];
       if (url !== undefined && !validFixedUrl(url)) report(['sources', id, 'fetch', field], 'invalid fixed HTTPS URL');
     }
+    if (source.fetch.sha256Url === source.fetch.url) {
+      report(['sources', id, 'fetch', 'sha256Url'], 'must differ from the input URL');
+    }
   }
   for (const [id, rule] of Object.entries(raw.ruleSets)) {
     const source = Object.hasOwn(raw.sources, rule.data.source) ? raw.sources[rule.data.source] : undefined;
@@ -113,19 +114,5 @@ export function parseRulesConfigurationV4(document: Document, lines: LineCounter
   checkRulePaths(report, raw.ruleSets);
   if (diagnostics.size) return fail();
 
-  // #171 and #172 connect the remaining configuration forms to their readers.
-  const sources: Record<string, FixedUrlInput> = {};
-  for (const [id, { fetch, format }] of Object.entries(raw.sources)) {
-    if (fetch.method === 'url' && format === 'sing-box-source-json' && fetch.sha256Url === undefined) {
-      sources[id] = { version: 'url', input: { format, url: fetch.url } };
-    }
-  }
-  const ruleSets = Object.entries(raw.ruleSets).map(([id, { data, publishPath, artifact }]) => {
-    if (!Object.hasOwn(sources, data.source)) {
-      report(['ruleSets', id, 'data', 'source'], 'this input requires a v4 source adapter that is not available yet');
-    }
-    return { id, source: data.source, stablePath: publishPath, artifact };
-  });
-  if (diagnostics.size) return fail();
-  return { schemaVersion: raw.schemaVersion, candidateRetentionDays: raw.candidateRetentionDays, target: raw.target, sources, ruleSets };
+  return raw;
 }

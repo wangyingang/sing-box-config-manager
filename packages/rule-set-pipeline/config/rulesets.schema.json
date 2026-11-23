@@ -45,10 +45,15 @@
   },
   "definitions": {
     "logicalId": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
-    "format": {
-      "description": "读取所选文件时使用的输入格式。",
+    "urlFormat": {
+      "description": "读取固定 URL 文件使用的输入格式。",
       "type": "string",
-      "enum": ["v2fly-dlc-yaml", "clash-rule-list", "openai-voice-json", "cidr-text", "domain-suffix-text", "sing-box-source-json"]
+      "enum": ["v2fly-dlc-yaml", "openai-voice-json", "sing-box-source-json"]
+    },
+    "branchFormat": {
+      "description": "读取 GitHub 分支所选文件使用的输入格式。",
+      "type": "string",
+      "enum": ["clash-rule-list", "cidr-text", "domain-suffix-text"]
     },
     "httpsUrl": { "type": "string", "pattern": "^[Hh][Tt][Tt][Pp][Ss]://[^/\\s\\\\#?@]+(?:[/?][^\\s\\\\#]*)?$" },
     "source": {
@@ -90,7 +95,7 @@
             }
           ]
         },
-        "format": { "$ref": "#/definitions/format" }
+        "format": { "$ref": "#/definitions/urlFormat" }
       },
       "allOf": [
         {
@@ -124,19 +129,15 @@
               "type": "string",
               "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*(?:/[A-Za-z0-9][A-Za-z0-9._+-]*)*$"
             },
-            "format": { "$ref": "#/definitions/format" },
+            "format": { "$ref": "#/definitions/branchFormat" },
             "list": {
               "description": "DLC 文件中的真实列表名。读取整份文件时省略。",
               "type": "string",
               "pattern": "^[a-z0-9][a-z0-9!._-]*$"
             }
           },
-          "if": { "required": ["format"], "properties": { "format": { "const": "v2fly-dlc-yaml" } } },
-          "then": { "required": ["list"] },
-          "else": {
-            "if": { "required": ["format"] },
-            "then": { "properties": { "list": false } }
-          }
+          "if": { "required": ["file"] },
+          "then": { "properties": { "list": false } }
         },
         "filter": {
           "description": "按同一条目上的条件保留或排除规则。",
@@ -163,12 +164,8 @@
       },
       "allOf": [
         {
-          "if": { "required": ["data"], "properties": { "data": { "type": "object", "required": ["format"], "properties": { "format": { "enum": ["openai-voice-json", "cidr-text", "domain-suffix-text", "sing-box-source-json"] } } } } },
+          "if": { "required": ["data"], "properties": { "data": { "type": "object", "required": ["format"], "properties": { "format": { "enum": ["cidr-text", "domain-suffix-text"] } } } } },
           "then": { "properties": { "filter": false } }
-        },
-        {
-          "if": { "required": ["data"], "properties": { "data": { "type": "object", "required": ["format"], "properties": { "format": { "const": "v2fly-dlc-yaml" } } } } },
-          "then": { "properties": { "filter": { "type": "object", "properties": { "include": { "type": "object", "properties": { "type": false } }, "exclude": { "type": "object", "properties": { "type": false } } } } } }
         },
         {
           "if": { "required": ["data"], "properties": { "data": { "type": "object", "required": ["format"], "properties": { "format": { "const": "clash-rule-list" } } } } },
@@ -202,7 +199,7 @@
             "anyOf": {
               "type": "array",
               "minItems": 1,
-              "items": { "type": "string", "minLength": 1, "pattern": "^\\S+$" }
+              "items": { "type": "string", "minLength": 1, "pattern": "^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*$" }
             }
           }
         }
@@ -211,7 +208,7 @@
     "tags": {
       "type": "array",
       "minItems": 1,
-      "items": { "type": "string", "minLength": 1, "pattern": "^[^@\\s]+$" }
+      "items": { "type": "string", "minLength": 1, "pattern": "^[a-zA-Z0-9!]+$" }
     }
   }
 }

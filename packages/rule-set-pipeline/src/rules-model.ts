@@ -4,7 +4,7 @@ import type { BuildConfiguration, RuleDefinition, SourceInput } from './configur
 import { parseStoredRuleDefinition, parseSource } from './configuration.js';
 import { validCommitSource, type CommitSourceRecord } from './github-commit.js';
 import { validFixedUrlSource, type FixedUrlSource } from './fixed-url-source.js';
-import type { SourceRecord } from './types.js';
+import type { RuleConversionReport, SourceRecord } from './types.js';
 import { validOpenAiVoiceSource, type OpenAiVoiceSource } from './openai-voice-source.js';
 import { sha256 } from './release.js';
 import { ruleDeliveryRecordPath } from './stable-rule-paths.js';
@@ -129,12 +129,14 @@ export interface RuleResult {
   current?: RuleDelivery;
   control?: RuleControl;
   expectedSource?: SourceInput;
+  unsupportedTypeCounts?: Record<string, number>;
   candidate?: { versionId?: string; publishedAt?: string };
   successfulInput?: SuccessfulRuleInput;
   verified?: string[];
   reliedOn?: string[];
   unverified?: string[];
   continueWith?: string;
+  conversionReport?: RuleConversionReport;
 }
 export interface RulesResult {
   operation: 'status' | 'sync' | 'pin' | 'resume' | 'cleanup';
@@ -154,7 +156,7 @@ export interface RulesResult {
 
 /** Only resolved input semantics participate; aliases and upstream revisions do not. */
 export function inputBindingRevision(source: SourceInput, definition: RuleDefinition) {
-  return sha256(JSON.stringify({ source: parseSource(source), list: definition.list }));
+  return sha256(JSON.stringify({ source: parseSource(source), list: definition.list, filter: 'artifact' in definition ? definition.filter : undefined }));
 }
 
 export function definitionRevision(source: SourceInput, definition: RuleDefinition) {
@@ -171,20 +173,21 @@ function validQualification(value: unknown) {
     && typeof value.validationPolicy === 'string' && Boolean(value.validationPolicy);
 }
 
-export function validRuleSource(value: unknown, input: SourceInput): value is RuleSource {
+export function validRuleSource(value: unknown, input: SourceInput, definition: RuleDefinition): value is RuleSource {
   if (!object(value)) return false;
   if (input.version === 'url') return validFixedUrlSource(value, input);
   if (input.version === 'openai-voice') return validOpenAiVoiceSource(value);
   if (input.version === 'git-branch') {
-    return value.kind === 'github-commit' && validCommitSource(value as CommitSourceRecord, input) && value.inputBytes > 0;
+    return value.kind === 'github-commit' && validCommitSource(value as CommitSourceRecord, input)
+      && ('artifact' in definition || value.inputBytes > 0);
   }
   return validReleaseSource(value, input);
 }
 
-function validSuccessfulInput(value: unknown, source: SourceInput) {
+function validSuccessfulInput(value: unknown, source: SourceInput, definition: RuleDefinition) {
   if (!object(value) || !validQualification(value) || !object(value.source) || !uuid(value.definitionGeneration)
     || !digest(value.inputBindingRevision) || !digest(value.definitionRevision)) return false;
-  return validRuleSource(value.source, source);
+  return validRuleSource(value.source, source, definition);
 }
 
 export function parseRulesJournal(bytes: Buffer): RulesJournal {
@@ -201,7 +204,7 @@ export function parseRulesJournal(bytes: Buffer): RulesJournal {
     const pinned = rule.control.mode === 'pinned' ? value.candidates[rule.control.candidateId] : undefined;
     if (definition.id !== id || inputBindingRevision(source, definition) !== rule.inputBindingRevision
       || definitionRevision(source, definition) !== rule.definitionRevision || rule.control.inputBindingRevision !== rule.inputBindingRevision
-      || rule.successfulInput !== undefined && (!validSuccessfulInput(rule.successfulInput, source)
+      || rule.successfulInput !== undefined && (!validSuccessfulInput(rule.successfulInput, source, definition)
         || rule.successfulInput.inputBindingRevision !== rule.inputBindingRevision || rule.successfulInput.definitionRevision !== rule.definitionRevision
         || rule.successfulInput.definitionGeneration !== rule.generation || rule.lifecycle === 'deleted')
       || rule.control.mode === 'pinned' && (!pinned || pinned.logicalId !== id || pinned.definitionGeneration !== rule.generation)) throw new Error('RULE_STATE_CORRUPT: definition or control');
@@ -223,7 +226,7 @@ export function parseRulesJournal(bytes: Buffer): RulesJournal {
       || candidate.operation === 'sync' && !uuid(candidate.controlRevision)) throw new Error('RULE_STATE_CORRUPT: candidate');
     const source = parseSource(candidate.sourceInput), definition = parseStoredRuleDefinition(candidate.definition, source.input.format);
     if (candidate.logicalId !== definition.id || inputBindingRevision(source, definition) !== candidate.inputBindingRevision
-      || (source.version === 'url' || source.version === 'openai-voice') && !validRuleSource(candidate.source, source)) throw new Error('RULE_STATE_CORRUPT: candidate binding');
+      || (source.version === 'url' || source.version === 'openai-voice') && !validRuleSource(candidate.source, source, definition)) throw new Error('RULE_STATE_CORRUPT: candidate binding');
     if (candidate.publishedAt !== undefined || candidate.versionId !== undefined) {
       if (typeof candidate.publishedAt !== 'string' || !Number.isFinite(Date.parse(candidate.publishedAt))
         || new Date(candidate.publishedAt).toISOString() !== candidate.publishedAt || typeof candidate.versionId !== 'string'

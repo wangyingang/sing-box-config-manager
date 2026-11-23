@@ -90,13 +90,13 @@ pnpm rules sync --config /path/to/rulesets-draft.yml --dry-run --json
 
 `chatgpt-voice` 使用 `list: all`，发布到 `stable/chatgpt-voice`。流水线直接读取 [OpenAI 官方 JSON](https://openai.com/chatgpt-voice.json) 的 IPv4/IPv6 CIDR。规则集匹配地址，客户端策略可另按 [OpenAI 的网络说明](https://help.openai.com/en/articles/9247338-network-recommendations-for-chatgpt-errors-on-web-and-apps#chatgpt-voice-firewall-settings) 约束 UDP 3478 或 TCP 443。适用的强 ETag 可用条件 GET 取得 304；否则读取正文并比较 SHA-256。同一候选的原始 JSON 与登记原子保存，恢复按登记的字节数和 SHA-256 读回原始输入，历史清理保留仍被保留候选引用的快照。
 
-输入绑定由来源位置、获取方式、格式和所选列表决定。实质变化表示换源，接受新定义时撤销旧 pin。source 别名、注释、排列和保留期调整不会解除固定；上游新 Release/commit 是正常更新。稳定路径与用途变化另做订阅兼容检查，不能借换源更改已交付契约。
+输入绑定由来源位置、获取方式、格式、所选列表及 DLC 标签过滤条件决定。实质变化表示换源，接受新定义时撤销旧 pin。source 别名、注释、排列和保留期调整不会解除固定；上游新 Release/commit 是正常更新。稳定路径与用途变化另做订阅兼容检查，不能借换源更改已交付契约。
 
 ### 在隔离目标同步混合规则集
 
 将下面的编辑器指令与 [v4 Schema](config/rulesets.schema.json) 一起使用。示例适用于配置与 Schema 同目录的情况。支持 YAML Language Server 的编辑器会补全固定字段和枚举，并提示结构错误。`sync` 使用同一份 Schema，同步前继续检查 source 引用、实际输入格式和最终文件路径。诊断包含 YAML 行列号和字段路径。
 
-使用 `fetch.method: url` 从固定 HTTPS 地址读取整份 `sing-box-source-json`，在 `publishPath` 下发布以 `artifact` 命名的 JSON 和 SRS。将下例中的 URL 换成实际端点，并按下节配置同名的隔离目标。
+`sync` 支持最小 v4 配置。使用 `fetch.method: url` 从固定 HTTPS 地址读取整份 `sing-box-source-json`，在 `publishPath` 下发布以 `artifact` 命名的 JSON 和 SRS。将下例中的 URL 换成实际端点，并按下节配置同名的隔离目标。
 
 ```yaml
 # yaml-language-server: $schema=./rulesets.schema.json
@@ -121,11 +121,104 @@ ruleSets:
 
 规则集可以共用 `publishPath`，各集使用不同的 `artifact`。例如将 `domains` 和 `ips` 发布到 `stable/shared`，订阅地址分别以 `domains.json`、`domains.srs`、`ips.json` 和 `ips.srs` 结尾。移除一集只撤销该集的文件和交付记录。
 
-当前 v4 reader 支持从固定 HTTPS 地址读取整份 `sing-box-source-json`。其他固定 URL 输入及摘要校验由 [#171](https://github.com/wangyingang/sing-box-config-manager/issues/171) 跟踪，GitHub 分支输入由 [#172](https://github.com/wangyingang/sing-box-config-manager/issues/172) 跟踪。现阶段为规则集选用尚未接通的输入会在同步前报错。
+reader 接受 UTF-8 JSON 格式的 sing-box Source Format v4。顶层必须包含整数 `version: 4` 和 `rules` 数组，所有对象的键必须唯一。规则可使用 v4 的原生匹配字段，包括域名、源与目标 IP、端口、DNS query type、网络、进程、包名和接口条件。默认规则保留原有字段分组和顶层条目边界。逻辑规则保留嵌套的 `and`、`or` 和 `invert`。例如，以下规则要求后缀和关键词同时匹配。
 
-当前 reader 支持 sing-box Source Format v4 中的独立域名和 CIDR 条件，例如 `{"version":4,"rules":[{"domain_suffix":["example.test"]},{"ip_cidr":["192.0.2.0/24"]}]}`。每个规则对象只接受一个匹配字段，组合规则由 [#173](https://github.com/wangyingang/sing-box-config-manager/issues/173) 跟踪。源端点须直接返回 JSON，上限为 8 MiB。候选保留原始输入字节，重试按记录的摘要和长度核对快照。
+```json
+{
+  "version": 4,
+  "rules": [
+    {
+      "type": "logical",
+      "mode": "and",
+      "rules": [
+        { "domain_suffix": "example.test" },
+        { "domain_keyword": "api" }
+      ]
+    },
+    { "ip_cidr": ["192.0.2.0/24", "2001:db8::/32"] }
+  ]
+}
+```
+
+遇到不支持的字段、无效的条件结构，或原生解析器能定位到的无效值时，reader 跳过该顶层规则。原本有多条规则时，跳过后剩下的单条默认规则维持原有匹配范围，避免新触发 sing-box 对外层条件的分组合并。转换报告给出源文件、从 0 开始的规则下标、出错子条件路径及按字段汇总的数量。同步重新读取上游并发现跳过项时，`sync --json` 返回本次转换报告，即使当前交付版本可复用。候选的转换报告随其构建证据保留。空 `rules` 数组可发布为空规则集。非空输入若全部跳过，或通过结构检查的内容未能通过原生编译及任一格式的加载，构建失败并保留已有交付。[`sing-box` 1.14.4 的 SRS 字段定义](https://github.com/SagerNet/sing-box/blob/v1.14.4/common/srs/binary.go)
+
+源文件上限为 8 MiB。候选保留原始输入字节，重试按记录的摘要和长度核对快照。
 
 新候选的 [Artifact Manifest v3](contracts/artifact-manifest-v3.schema.json) 直接列出两种格式的固定 URL、字节数和 SHA-256。交付记录的 `subscription.formats` 列出两种格式的稳定 URL，`files` 记录实际发布文件的摘要和长度。正式配置迁移见 [#174](https://github.com/wangyingang/sing-box-config-manager/issues/174)。
+
+### 从固定 HTTPS URL 读取 DLC 和 ChatGPT Voice
+
+在 v4 的 `sources` 中给每个固定 URL 声明 `fetch.method: url` 和 `format`。GitHub Release 附件可以使用 `releases/latest/download/...` 地址，获取过程允许有限次数的 HTTPS 跳转。配置了 `fetch.sha256Url` 时，摘要必须是单个 SHA-256 十六进制值或一行 `sha256sum` 记录。摘要不可获取、格式错误或与正文不符时，依赖该来源的规则集保留旧交付，其他来源继续同步。
+
+```yaml
+sources:
+  dlc:
+    fetch:
+      method: url
+      url: https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat_plain.yml
+      sha256Url: https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat_plain.yml.sha256sum
+    format: v2fly-dlc-yaml
+  voice:
+    fetch:
+      method: url
+      url: https://openai.com/chatgpt-voice.json
+    format: openai-voice-json
+ruleSets:
+  openai:
+    data: { source: dlc, list: openai }
+    filter:
+      exclude:
+        tags:
+          anyOf: [cn]
+    publishPath: stable/openai
+    artifact: domains
+  voice:
+    data: { source: voice }
+    publishPath: stable/voice
+    artifact: ips
+```
+
+`v2fly-dlc-yaml` 必须用 `data.list` 选择真实列表。`all` 也按名称查找。各规则集可独立设置 `filter.include` 或 `filter.exclude`。同一条目上 `tags.allOf` 要求所有指定标签，`tags.anyOf` 要求任一指定标签。标签精确匹配，配置中省略 `@`，`'!cn'` 是完整标签名。两种发布格式均移除属性标签。存在空列表或过滤结果为空时发布空规则集。指定列表缺失时只阻止该规则集更新。ChatGPT Voice 按整份文件读取 IPv4 和 IPv6 CIDR，省略 `data.list`。
+
+DLC 的 [YAML 导出程序](https://github.com/v2fly/domain-list-community/blob/master/cmd/datdump/main.go) 直接在正则值后拼接属性。无法从文本区分的尾部沿用现有解析约定。符合标签语法且未转义的小写尾部按属性处理。
+
+### 在同一 GitHub 分支选择不同文件
+
+在 v4 配置中，`fetch.method: github-branch` 声明上游仓库及分支。每个规则集用 `data.file` 指定一个仓库内文件，用 `data.format` 选择 `clash-rule-list`、`cidr-text` 或 `domain-suffix-text`。这些格式均读取整份文件，省略 `list`。一次同步为同一仓库和分支固定一个 commit，各规则集按该 commit 读取各自的文件。
+
+例如，下列配置片段从同一分支选择一份 Clash 清单和一份 CIDR 文本。仓库和文件路径为示例值。
+
+```yaml
+sources:
+  example:
+    fetch:
+      method: github-branch
+      repository: example/rule-lists
+      branch: main
+ruleSets:
+  example-domains:
+    data:
+      source: example
+      file: rules/services.list
+      format: clash-rule-list
+    filter:
+      include:
+        type:
+          anyOf: [DOMAIN-SUFFIX, DOMAIN-KEYWORD]
+    publishPath: stable/example-domains
+    artifact: domains
+  example-networks:
+    data:
+      source: example
+      file: rules/networks.txt
+      format: cidr-text
+    publishPath: stable/example-networks
+    artifact: ips
+```
+
+`clash-rule-list` 读取 UTF-8 Classical 文本清单，转换 `DOMAIN`、`DOMAIN-SUFFIX`、`DOMAIN-KEYWORD`、`IP-CIDR`、`IP-CIDR6`、`SRC-IP-CIDR`、`SRC-PORT` 和 `DST-PORT`。地址规则按原类型匹配传入的源或目标 IP，客户端配置负责域名解析。可省略 `filter`，也可使用 `include.type.anyOf` 或 `exclude.type.anyOf` 选择上游类型。类型名称区分大小写，`IP-CIDR` 和 `IP-CIDR6` 分别筛选。其他类型和无法表达的修饰项按上游类型计入 `unsupportedTypeCounts`。 [Mihomo Classical 文本示例](https://wiki.metacubex.one/en/config/rule-providers/content/) · [Mihomo 匹配类型与修饰项](https://wiki.metacubex.one/en/config/rules/)
+
+三种格式均可发布空文件对应的空规则集。Clash 过滤结果为空时同样发布空规则集。选中项全部因不受支持被跳过时，本次构建失败。已有的两种订阅仍提供上一版，首次构建则等待后续成功，一次同步中的独立文件可继续交付。
 
 ## 环境与远端状态
 

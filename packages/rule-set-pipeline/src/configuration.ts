@@ -9,14 +9,22 @@ import { CHINA_IP_INPUT, isCommitInputFormat, type CommitInput } from './github-
 import { OPENAI_VOICE_FILE, OPENAI_VOICE_URL, type OpenAiVoiceInput } from './openai-voice-source.js';
 import { V2FLY_RELEASE_INPUT, type ReleaseInput } from './release.js';
 import { validFixedUrl, type FixedUrlInput } from './fixed-url-source.js';
-import { parseRulesConfigurationV4 } from './rules-configuration-v4.js';
+import { validClashRuleType, type ClashTypeFilter } from './clash-rule-list-adapter.js';
+import { validateRulesConfigurationV4 } from './rules-configuration-v4.js';
 import { singleArtifactPaths } from './stable-rule-paths.js';
 
 export type SourceInput = ReleaseInput | CommitInput | OpenAiVoiceInput | FixedUrlInput;
 export type SourceFormat = SourceInput['input']['format'];
+type GitHubBranchSource = { version: 'github-branch'; repository: string; branch: string };
+type ConfiguredSource = SourceInput | GitHubBranchSource;
 type AvailableUsage = { artifact: string };
 type ConfiguredUsage = AvailableUsage | { unavailable: 'empty' };
 type DnsUsage = Exclude<Usage, 'route'>;
+type ProjectedFormat = Exclude<SourceFormat, 'sing-box-source-json' | 'v2fly-dlc-yaml' | 'clash-rule-list'>;
+
+export function isProjectedFormat(format: SourceFormat): format is ProjectedFormat {
+  return format !== 'sing-box-source-json' && format !== 'v2fly-dlc-yaml' && format !== 'clash-rule-list';
+}
 
 const formatCapabilities = {
   'plain-yaml': { dns: 'dns-query', namedLists: true },
@@ -25,9 +33,9 @@ const formatCapabilities = {
   'sing-box-domain-json': { dns: 'dns-query', namedLists: false },
   'cidr-text': { dns: 'dns-response', namedLists: false },
   'openai-voice-json': { dns: 'dns-response', namedLists: false },
-} as const satisfies Record<Exclude<SourceFormat, 'sing-box-source-json'>, { dns: DnsUsage; namedLists: boolean }>;
+} as const satisfies Record<ProjectedFormat, { dns: DnsUsage; namedLists: boolean }>;
 
-export function configuredUsages(format: Exclude<SourceFormat, 'sing-box-source-json'>) {
+export function configuredUsages(format: ProjectedFormat) {
   const dns = formatCapabilities[format].dns;
   const unavailable = dns === 'dns-query' ? 'dns-response' : 'dns-query';
   return { dns, unavailable } as const;
@@ -43,21 +51,39 @@ export interface ProjectedRuleDefinition extends RuleLocation {
   usages: Record<Usage, ConfiguredUsage> & { route: AvailableUsage };
 }
 
-export interface SingleArtifactDefinition extends RuleLocation {
+export type DlcTagFilter = {
+  action: 'include' | 'exclude';
+  match: 'allOf' | 'anyOf';
+  tags: string[];
+};
+
+interface SingleArtifactLocation extends RuleLocation {
   artifact: string;
-  list?: never;
 }
+
+export interface DlcRuleDefinition extends SingleArtifactLocation {
+  list: string;
+  filter?: DlcTagFilter;
+}
+
+export type SingleArtifactDefinition = DlcRuleDefinition | (SingleArtifactLocation & { list?: never; filter?: ClashTypeFilter });
 
 export type RuleDefinition = ProjectedRuleDefinition | SingleArtifactDefinition;
 export interface BuildConfiguration {
   schemaVersion: 3 | 4;
   candidateRetentionDays: number;
-  sources: Record<string, SourceInput>;
+  sources: Record<string, ConfiguredSource>;
+  branchInputs?: Record<string, CommitInput>;
   target: { repository: typeof ARTIFACT_REPOSITORY; branch: string };
   ruleSets: RuleDefinition[];
 }
 
-export type ProjectedConfiguration = Omit<BuildConfiguration, 'schemaVersion' | 'sources' | 'ruleSets'> & { schemaVersion: 3; sources: Record<string, Exclude<SourceInput, FixedUrlInput>>; ruleSets: ProjectedRuleDefinition[] };
+type ProjectedSourceInput = ReleaseInput | OpenAiVoiceInput | (Omit<CommitInput, 'input'> & {
+  input: { format: Exclude<CommitInput['input']['format'], 'clash-rule-list'>; path: string };
+});
+export type ProjectedConfiguration = Omit<BuildConfiguration, 'schemaVersion' | 'sources' | 'ruleSets' | 'branchInputs'> & {
+  schemaVersion: 3; sources: Record<string, ProjectedSourceInput>; ruleSets: ProjectedRuleDefinition[];
+};
 
 const logicalId = /^[a-z][a-z0-9-]*$/;
 const stablePath = /^stable\/[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)*$/;
@@ -68,9 +94,10 @@ function mapping(value: unknown, label: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function exact(value: unknown, fields: string[], label: string) {
+function exact(value: unknown, fields: string[], label: string, optional: string[] = []) {
   const record = mapping(value, label);
-  if (Object.keys(record).length !== fields.length || fields.some(key => !Object.hasOwn(record, key))) {
+  if (Object.keys(record).some(key => !fields.includes(key) && !optional.includes(key))
+    || fields.some(key => !Object.hasOwn(record, key))) {
     throw new Error(`${label} fields are invalid`);
   }
   return record;
@@ -83,22 +110,68 @@ function ruleLocation({ id, source, stablePath: path }: Record<string, unknown>,
   return { id, source, stablePath: path };
 }
 
-function parseSingleArtifactDefinition(input: unknown): SingleArtifactDefinition {
-  const definition = exact(input, ['id', 'source', 'stablePath', 'artifact'], 'rule definition');
+function tagFilter(action: unknown, match: unknown, tags: unknown): DlcTagFilter {
+  if ((action !== 'include' && action !== 'exclude') || (match !== 'allOf' && match !== 'anyOf')
+    || !Array.isArray(tags) || !tags.length || tags.some(tag => typeof tag !== 'string' || !/^[a-zA-Z0-9!]+$/.test(tag))) {
+    throw new Error('Invalid DLC tag filter');
+  }
+  return { action, match, tags: [...new Set<string>(tags)].sort() };
+}
+
+function parseTagFilter(input: unknown): DlcTagFilter {
+  const filter = mapping(input, 'filter');
+  const [action] = Object.keys(filter);
+  if (action !== 'include' && action !== 'exclude') throw new Error('Invalid DLC tag filter action');
+  const { tags } = exact(exact(filter, [action], 'filter')[action], ['tags'], 'filter condition');
+  const condition = mapping(tags, 'tag condition');
+  const [match] = Object.keys(condition);
+  if (match !== 'allOf' && match !== 'anyOf') throw new Error('Invalid DLC tag filter condition');
+  return tagFilter(action, match, exact(condition, [match], 'tag condition')[match]);
+}
+
+function parseClashTypeFilter(input: unknown): ClashTypeFilter {
+  const filter = mapping(input, 'filter');
+  const action = Object.hasOwn(filter, 'include') ? 'include' : 'exclude';
+  const { type } = exact(exact(filter, [action], 'filter')[action], ['type'], `filter ${action}`);
+  const { anyOf } = exact(type, ['anyOf'], `filter ${action}.type`);
+  if (!Array.isArray(anyOf) || !anyOf.length || !anyOf.every(validClashRuleType)) {
+    throw new Error(`filter ${action}.type.anyOf must be a nonempty list of Clash rule types`);
+  }
+  const condition = { type: { anyOf: [...new Set(anyOf)].sort() } };
+  return action === 'include' ? { include: condition } : { exclude: condition };
+}
+
+function parseSingleArtifactDefinition(input: unknown, format: SourceFormat): SingleArtifactDefinition {
+  const named = format === 'v2fly-dlc-yaml';
+  const clash = format === 'clash-rule-list';
+  const label = 'rule definition';
+  if (!named && !clash && Object.hasOwn(mapping(input, label), 'filter')) {
+    throw new Error(`${label} fields are invalid: filter is not supported for ${format}`);
+  }
+  const definition = exact(input, ['id', 'source', 'stablePath', 'artifact', ...(named ? ['list'] : [])],
+    label, named || clash ? ['filter'] : []);
   const location = ruleLocation(definition, 'publishPath');
   if (!validArtifactBasename(definition.artifact) || reservedArtifactBasename(definition.artifact)) {
     throw new Error(`Invalid artifact basename: ${String(definition.artifact)}`);
   }
-  return { ...location, artifact: definition.artifact };
+  const base = { ...location, artifact: definition.artifact };
+  if (!named) {
+    return clash && Object.hasOwn(definition, 'filter') ? { ...base, filter: parseClashTypeFilter(definition.filter) } : base;
+  }
+  const { list } = definition;
+  if (typeof list !== 'string' || !/^[a-z0-9][a-z0-9!._-]*$/.test(list)) throw new Error(`Invalid DLC list: ${String(list)}`);
+  if (!Object.hasOwn(definition, 'filter')) return { ...base, list };
+  const { action, match, tags } = exact(definition.filter, ['action', 'match', 'tags'], 'DLC tag filter');
+  return { ...base, list, filter: tagFilter(action, match, tags) };
 }
 
 export function parseStoredRuleDefinition(input: unknown, format: SourceFormat): RuleDefinition {
-  if (Object.hasOwn(mapping(input, 'rule definition'), 'artifact')) return parseSingleArtifactDefinition(input);
-  if (format === 'sing-box-source-json') throw new Error('sing-box-source-json requires a single artifact');
+  if (Object.hasOwn(mapping(input, 'rule definition'), 'artifact')) return parseSingleArtifactDefinition(input, format);
+  if (!isProjectedFormat(format)) throw new Error(`${format} requires a single artifact`);
   return parseRuleDefinition(input, format);
 }
 
-export function parseRuleDefinition(input: unknown, format: Exclude<SourceFormat, 'sing-box-source-json'> = 'plain-yaml'): ProjectedRuleDefinition {
+export function parseRuleDefinition(input: unknown, format: ProjectedFormat = 'plain-yaml'): ProjectedRuleDefinition {
   const definition = exact(input, ['id', 'source', 'list', 'stablePath', 'usages'], 'rule definition');
   const { list, usages } = definition;
   const { id, source, stablePath: path } = ruleLocation(definition, 'stable path');
@@ -132,9 +205,14 @@ export function parseSource(input: unknown): SourceInput {
   const raw = mapping(input, 'source');
   if (raw.version === 'url') {
     const { input: declaration } = exact(raw, ['version', 'input'], 'URL source');
-    const { format, url } = exact(declaration, ['format', 'url'], 'URL input');
-    if (format !== 'sing-box-source-json' || !validFixedUrl(url)) throw new Error('Invalid sing-box-source-json HTTPS input');
-    return { version: 'url', input: { format, url } };
+    const { format, url, sha256Url } = exact(declaration, ['format', 'url'], 'URL input', ['sha256Url']);
+    if (format !== 'sing-box-source-json' && format !== 'v2fly-dlc-yaml' && format !== 'openai-voice-json') {
+      throw new Error(`Unsupported URL input format: ${String(format)}`);
+    }
+    if (!validFixedUrl(url) || (sha256Url !== undefined && (!validFixedUrl(sha256Url) || sha256Url === url))) {
+      throw new Error(`Invalid ${format} HTTPS input`);
+    }
+    return { version: 'url', input: { format, url, ...(sha256Url && { sha256Url }) } };
   }
   if (raw.version === 'openai-voice') {
     const source = exact(raw, ['version', 'input'], 'ChatGPT Voice source');
@@ -160,6 +238,32 @@ export function parseSource(input: unknown): SourceInput {
   throw new Error('Unsupported source acquisition method');
 }
 
+function configureV4(raw: ReturnType<typeof validateRulesConfigurationV4>): BuildConfiguration {
+  const sources = Object.fromEntries<ConfiguredSource>(Object.entries(raw.sources).map(([id, { fetch, format }]) => {
+    if (fetch.method === 'github-branch') {
+      return [id, { version: 'github-branch', repository: fetch.repository, branch: fetch.branch }];
+    }
+    return [id, parseSource({ version: 'url', input: { format, url: fetch.url,
+      ...(fetch.sha256Url !== undefined && { sha256Url: fetch.sha256Url }) } })];
+  }));
+  const branchInputs: Record<string, CommitInput> = Object.create(null);
+  const ruleSets = Object.entries(raw.ruleSets).map(([id, { data, publishPath, artifact, filter }]) => {
+    const source = sources[data.source];
+    if (source.version === 'github-branch') {
+      // Whole-configuration validation requires a file and format at this selection.
+      branchInputs[id] = { repository: source.repository, version: 'git-branch', branch: source.branch,
+        input: { format: data.format!, path: data.file! } };
+    }
+    const { format } = configuredRuleInput({ sources, branchInputs }, { id, source: data.source }).input;
+    return parseSingleArtifactDefinition({
+      id, source: data.source, stablePath: publishPath, artifact, ...(data.list !== undefined && { list: data.list }),
+      ...(filter !== undefined && { filter: format === 'v2fly-dlc-yaml' ? parseTagFilter(filter) : filter }),
+    }, format);
+  });
+  return { schemaVersion: 4, candidateRetentionDays: raw.candidateRetentionDays, sources, target: raw.target, ruleSets,
+    ...(Object.keys(branchInputs).length && { branchInputs }) };
+}
+
 /** Validate every definition before source access or output directory creation. */
 export function parseBuildConfiguration(input: string): BuildConfiguration {
   const lines = new LineCounter();
@@ -175,7 +279,7 @@ export function parseBuildConfiguration(input: string): BuildConfiguration {
   if (yamlDiagnostics.length) throw new Error(`Invalid build configuration YAML:\n${yamlDiagnostics.join('\n')}`);
   const value = document.toJS();
   if (!isMap(document.contents) || document.get('schemaVersion') !== 3) {
-    return parseRulesConfigurationV4(document, lines, value);
+    return configureV4(validateRulesConfigurationV4(document, lines, value));
   }
   const raw = exact(value, ['schemaVersion', 'candidateRetentionDays', 'sources', 'target', 'ruleSets'], 'configuration');
   if (!Number.isSafeInteger(raw.candidateRetentionDays) || Number(raw.candidateRetentionDays) <= 0) throw new Error('candidateRetentionDays must be a positive integer');
@@ -189,6 +293,7 @@ export function parseBuildConfiguration(input: string): BuildConfiguration {
     if (!logicalId.test(id)) throw new Error(`Invalid source ID: ${id}`);
     const parsed = parseSource(source);
     if (parsed.version === 'url') throw new Error('URL sources require configuration v4');
+    if (parsed.input.format === 'clash-rule-list') throw new Error('clash-rule-list requires configuration v4');
     return [id, parsed];
   }));
   const entries = raw.ruleSets;
@@ -201,8 +306,10 @@ export function parseBuildConfiguration(input: string): BuildConfiguration {
     }
     const input = sources[source].input;
     let rule: RuleDefinition;
-    try { rule = parseRuleDefinition(entry, input.format); }
-    catch (error) {
+    try {
+      if (!isProjectedFormat(input.format)) throw new Error(`${input.format} requires configuration v4`);
+      rule = parseRuleDefinition(entry, input.format);
+    } catch (error) {
       const file = 'path' in input ? input.path : 'asset' in input ? input.asset : input.url;
       throw new Error(`Rule set ${String(id)}, source ${source} (${file}): ${(error as Error).message}`, { cause: error });
     }
@@ -214,7 +321,17 @@ export function parseBuildConfiguration(input: string): BuildConfiguration {
     ids.add(rule.id); paths.add(path);
     return rule;
   });
-  return { schemaVersion: 3, candidateRetentionDays: Number(raw.candidateRetentionDays), sources, target: { repository: target.repository, branch: target.branch }, ruleSets };
+  return { schemaVersion: 3, candidateRetentionDays: Number(raw.candidateRetentionDays), sources,
+    target: { repository: target.repository, branch: target.branch }, ruleSets };
+}
+
+export function configuredRuleInput(configuration: Pick<BuildConfiguration, 'sources' | 'branchInputs'>,
+  { id, source }: Pick<RuleDefinition, 'id' | 'source'>): SourceInput {
+  const declaration = configuration.sources[source];
+  if (declaration.version !== 'github-branch') return declaration;
+  const input = configuration.branchInputs?.[id];
+  if (!input) throw new Error(`Missing GitHub branch file for rule set ${id}`);
+  return input;
 }
 
 export function configuredInput<Input extends SourceInput>(configuration: { sources: Record<string, Input> }, definitions: readonly RuleDefinition[]) {
@@ -227,7 +344,7 @@ export function configuredInput<Input extends SourceInput>(configuration: { sour
   return source;
 }
 
-export function configuredReleaseInput(configuration: BuildConfiguration, definitions: readonly RuleDefinition[]): ReleaseInput {
+export function configuredReleaseInput(configuration: ProjectedConfiguration, definitions: readonly RuleDefinition[]): ReleaseInput {
   const source = configuredInput(configuration, definitions);
   if (source.version !== 'latest-release') throw new Error('Select rule sets from one Release source');
   return source;

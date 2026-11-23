@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { singleArtifactPaths } from './stable-rule-paths.js';
 import { saveActivationReceipt } from './activation-receipt.js';
 import { configuredBuildIdentity, CONFIGURED_BUILD_RECORD } from './configured-build.js';
-import { artifactSubscription, configuredUsages, configuredProjections, nativeTargetForRule, parseProjectedConfiguration, parseStoredRuleDefinition, type RuleDefinition } from './configuration.js';
+import { artifactSubscription, configuredUsages, isProjectedFormat, configuredProjections, nativeTargetForRule, parseProjectedConfiguration, parseStoredRuleDefinition, type RuleDefinition } from './configuration.js';
 import { Ajv } from 'ajv';
 import manifestSchema from '../contracts/artifact-manifest.schema.json' with { type: 'json' };
 import singleArtifactManifestSchema from '../contracts/artifact-manifest-v3.schema.json' with { type: 'json' };
@@ -11,7 +11,8 @@ import subscriptionV2Schema from '../contracts/rule-subscription-v2.schema.json'
 import { validCommitSource } from './github-commit.js';
 import { buildRuleArtifacts, nativeArtifactCommands, nativeBuildIdentity, NATIVE_VALIDATION_POLICY, type NativeBuildOptions } from './native.js';
 import { ARTIFACT_MANIFEST_VERSION, SINGLE_ARTIFACT_MANIFEST_VERSION, CANDIDATE_READBACK_VERSION, LEGACY_BUILD_RECORD, RULE_READBACK_VERSION, candidateArtifactFiles, type RuleReadback } from './candidate-publication.js';
-import { readSourceTerms, USAGES } from './projection.js';
+import { readCandidateRules } from './sing-box-source-json-adapter.js';
+import { USAGES } from './projection.js';
 import { sha256, V2FLY_RELEASE_INPUT } from './release.js';
 import { validReleaseSource } from './release-source-fact.js';
 import { ARTIFACT_REPOSITORY, immutableUrl } from './publication.js';
@@ -117,9 +118,9 @@ export async function verifyCandidateEvidence(options: Partial<NativeBuildOption
   // Older evidence has only a recorded definition, so use its DNS usage.
   const projectedFormat = singleArtifact ? undefined : candidate?.sourceInput.input.format
     ?? (build.definition?.usages?.['dns-response']?.artifact ? 'cidr-text' : 'plain-yaml');
-  const layout = projectedFormat === undefined || projectedFormat === 'sing-box-source-json' ? undefined : configuredUsages(projectedFormat);
+  const layout = projectedFormat !== undefined && isProjectedFormat(projectedFormat) ? configuredUsages(projectedFormat) : undefined;
   if (candidate) {
-    requireThat(validRuleSource(candidate.source, candidate.sourceInput), 'Candidate source binding mismatch');
+    requireThat(validRuleSource(candidate.source, candidate.sourceInput, candidate.definition), 'Candidate source binding mismatch');
   } else if (source.kind === 'github-commit') {
     requireThat(definition && validCommitSource(source) && source.inputBytes > 0, 'Incomplete official Git source');
   } else if (source.kind === 'synthetic') {
@@ -129,7 +130,7 @@ export async function verifyCandidateEvidence(options: Partial<NativeBuildOption
     requireThat(validReleaseSource(source), 'Incomplete official Release source or asset identity');
   }
   const recordedDefinition = candidate?.definition ?? (definition && operation === 'rollback'
-    ? parseStoredRuleDefinition(build.definition, projectedFormat ?? 'sing-box-source-json') : definition);
+    ? parseStoredRuleDefinition(build.definition, projectedFormat ?? (definition.list === undefined ? 'sing-box-source-json' : 'v2fly-dlc-yaml')) : definition);
   const files = candidateArtifactFiles(recordedDefinition);
   const expectedSteps = nativeArtifactCommands(files.source, files.binary);
   const completedNativeSteps = (record: any) => record?.status === 'passed' && record.policy === NATIVE_VALIDATION_POLICY
@@ -185,7 +186,7 @@ export async function verifyCandidateEvidence(options: Partial<NativeBuildOption
   }
   const json = JSON.parse(sourceBytes.toString());
   requireThat(json.version === 4, 'Candidate Source Format mismatch');
-  const terms = readSourceTerms(json);
+  const terms = readCandidateRules(json, singleArtifact, build.tools?.conversionPolicy);
   if (layout) requireThat(terms.every(term => (term.type === 'ip_cidr') === (layout.dns === 'dns-response')),
     'Candidate has incompatible usage content');
   requireThat(!report || report.outputTermCount === terms.length, 'Conversion term count mismatch');

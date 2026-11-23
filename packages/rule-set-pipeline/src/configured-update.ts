@@ -289,6 +289,7 @@ export async function publishConfiguredCandidate(result: Extract<ConfiguredResul
   const singleArtifact = 'artifact' in result.definition;
   const manifestVersion = singleArtifact ? SINGLE_ARTIFACT_MANIFEST_VERSION : ARTIFACT_MANIFEST_VERSION;
   return publishCandidate({ candidate, native: result.native, buildId: result.buildId, target: nativeTargetForRule(result.definition),
+    conversionPolicy: tools.conversionPolicy,
     binary, nativeBuild, verifyEvidence, publication, save, beforeEvidence, ruleFilesOnly,
     records: filesCommit => {
       const artifactId = (file: string) => `${result.id}@${candidate.id}:${file}`;

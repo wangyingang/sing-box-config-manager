@@ -37,14 +37,14 @@ async function matches(build: NativeBuild, probes: [string, string, boolean][]) 
   } finally { await rm(directory, { recursive: true, force: true }); }
 }
 
-const semantics: BuildTerm[] = [
+const semantics = [
   { type: 'domain_suffix', value: 'example.test' },
   { type: 'domain', value: 'full.test' },
   { type: 'domain_keyword', value: 'needle' },
   { type: 'domain_regex', value: '^API\\.regex\\.test$' },
   { type: 'domain_regex', value: '^api\\.lower\\.test$' },
   { type: 'domain_regex', value: '(?i)^API\\.insensitive\\.test$' },
-];
+] satisfies BuildTerm[];
 
 test('real engine source/SRS matching: apex, labels, exact, substring, regexp anchors and case', async () => {
   const build = await buildNative(semantics, binary);
