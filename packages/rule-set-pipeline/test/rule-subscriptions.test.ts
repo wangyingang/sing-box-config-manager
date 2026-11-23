@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { configuredSubscriptions, parseProjectedConfiguration } from '../src/configuration.js';
 
-test('official configuration provides stable subscriptions and reuses files across compatible usages', () => {
+test('historical v3 configuration maps compatible v2 subscription usages to the same stable files', () => {
   for (const branch of ['main', 'acceptance-subscriptions']) {
-    const official = parseProjectedConfiguration(readV3Fixture());
-    const configuration = parseProjectedConfiguration(JSON.stringify({ ...official, target: { ...official.target, branch } }));
+    const historical = parseProjectedConfiguration(readV3Fixture());
+    const configuration = parseProjectedConfiguration(JSON.stringify({ ...historical, target: { ...historical.target, branch } }));
     const subscriptions = configuredSubscriptions(configuration);
     assert.deepEqual(Object.keys(subscriptions), ['openai', 'anthropic', 'google-deepmind', 'china-ip', 'chatgpt-voice',
       'china-domains', 'global', 'apple', 'microsoft', 'docker', 'github', 'google', 'youtube', 'gfw', 'onedrive', 'stream']);
