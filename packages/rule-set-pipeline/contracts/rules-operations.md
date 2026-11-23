@@ -14,6 +14,8 @@
 
 `sing-box-domain-json` 读取 UTF-8 的 Source Format v2 JSON。顶层包含 `version` 和 `rules`，规则对象仅接受 `domain`、`domain_suffix` 和 `domain_keyword` 的字符串数组，且须有可用的匹配值。每个值都是独立匹配条件，保留原值，按类型和值去重。重复字段、其他字段、非法结构或非法值使构建失败，诊断标明输入文件和对应规则或字段。生成的候选继续使用 Source Format v4。
 
+隔离目标可使用 [v4 配置 Schema](../config/rulesets.schema.json)。同步使用同一份 Schema，并额外核对 `data.source` 和对应获取方式、格式及最终路径。配置错误会在上游获取或产物写入前停止整次同步。v4 可共用 `publishPath`，但 `publishPath/artifact.json` 和 `publishPath/artifact.srs` 必须由一集独占。
+
 ## 共同结果
 
 五个服务返回 `RulesResult`，CLI `--json` 直接呈现相同业务结果：
@@ -117,7 +119,7 @@ Git 对象读取优化只复用完整 Git SHA 指定的不可变内容，缓存�
 
 历史候选可作为完整非当前版本保留；多候选的遍历顺序不选择版本，也不依次交付每个候选。unchanged 不跳过在途收尾；任一候选无法恢复时，结果包含该 candidateId、具体错误及 sync 继续入口，不能因当前字节相同返回整体 success。已删除定义、换源、新控制修订和 pin 仍约束迟到任务；查询、预览和 pinned 跳过不会恢复旧意图。本边界不新增选择状态或 schema；它以已有 current 时的最新输入检查，避免 A 当前、B 中断而上游已回到 A 时误交付残留 B。
 
-`<stablePath>/activation.json` 是 schema 2 交付记录，保存逻辑 ID、candidateId、版本身份、真实来源、订阅和当前文件摘要。v4 交付中的 `subscription.schemaVersion: 3` 通过 `formats.source.url` 和 `formats.binary.url` 描述稳定入口。更新控制记录在 journal。生产状态/候选位于 candidates 分支，稳定记录/文件位于 main；隔离目标共用同一 acceptance 分支。
+Schema 2 交付记录保存逻辑 ID、candidateId、版本身份、真实来源、订阅和当前文件摘要。v3 将记录写到 `<stablePath>/activation.json`。v4 按产物写到 `<publishPath>/_delivery/<artifact>.json`，删除该集时只移除这一条记录及它登记的 JSON/SRS。v4 交付中的 `subscription.schemaVersion: 3` 通过 `formats.source.url` 和 `formats.binary.url` 描述稳定入口。更新控制记录在 journal。生产状态/候选位于 candidates 分支，稳定记录/文件位于 main；隔离目标共用同一 acceptance 分支。
 
 稳定写入先登记操作，再核对配置、日志 head 和维护状态，按预期 parent 非强制更新目标 ref，并读回验证。响应丢失时先识别同一次操作；不明确时返回 pending。删除移除当前受管路径及候选，并保留最小代次记录防止旧任务复活。有稳定文件或候选被删除时，结案状态提交同时设置 `deletedHistoryPending: true`。该标记汇总仍需回收的受管历史，即使当前树和候选索引均已移除对应内容。
 

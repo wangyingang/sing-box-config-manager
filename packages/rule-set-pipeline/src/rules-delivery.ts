@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { filePaths } from './maintenance-baseline-transport.js';
 import { pathsOverlap, ruleDeliveryRecordPath, singleArtifactPaths, stableRecordLocation } from './stable-rule-paths.js';
 import { activationSubscription, candidateStableFiles } from './activation.js';
 import { artifactSubscription, configuredSubscription, type RuleDefinition } from './configuration.js';
@@ -27,10 +26,12 @@ export function ruleSubscription(session: RulesSession, rule: Pick<ManagedRule, 
   return subscription;
 }
 
-function checkOtherDeliveryRoots(logicalId: string, stablePath: string, recordPaths: ReadonlyMap<string, string>) {
+function checkOtherDeliveryRoots(logicalId: string, stablePath: string, recordPaths: ReadonlyMap<string, string>,
+  sharedDirectoryAllowed = false) {
   for (const [id, path] of recordPaths) {
     if (id === logicalId) continue;
-    const { directory } = stableRecordLocation(path)!;
+    const { directory, artifact } = stableRecordLocation(path)!;
+    if (sharedDirectoryAllowed && artifact !== undefined) continue;
     if (pathsOverlap(directory, stablePath)) {
       throw new Error(`SUBSCRIPTION_PATH_CONFLICT: ${stablePath} overlaps current delivery ${id}`);
     }
@@ -47,22 +48,16 @@ export async function ensureRulePathAvailable(session: RulesSession, definition:
   if (ownRecord && ownRecord !== recordPath) {
     throw new Error(`SUBSCRIPTION_PATH_CONFLICT: current delivery ${definition.id} is registered at ${ownRecord}`);
   }
+  checkOtherDeliveryRoots(definition.id, definition.stablePath, recordPaths, 'artifact' in definition);
   if ('artifact' in definition) {
-    for (const [id, path] of recordPaths) {
-      const location = stableRecordLocation(path)!;
-      if (id !== definition.id && location.artifact === undefined && pathsOverlap(location.directory, definition.stablePath)) {
-        throw new Error(`SUBSCRIPTION_PATH_CONFLICT: ${definition.stablePath} overlaps current delivery ${id}`);
-      }
-    }
     const expected = [recordPath, ...singleArtifactPaths(definition.stablePath, definition.artifact)];
-    const stablePaths = stable.paths.filter(path => path === 'stable' || path.startsWith('stable/'));
-    const occupied = filePaths(stablePaths).find(path =>
+    const occupied = stable.paths.find(path =>
       path !== ownRecord && !(current && Object.hasOwn(current.files, path))
-      && expected.some(output => pathsOverlap(output, path)));
+      && expected.some(output => pathsOverlap(output, path)
+        && !(output.startsWith(path + '/') && stable.isDirectory?.(path))));
     if (occupied) throw new Error(`SUBSCRIPTION_PATH_CONFLICT: ${definition.id} overlaps existing path ${occupied}`);
     return current;
   }
-  checkOtherDeliveryRoots(definition.id, definition.stablePath, recordPaths);
   if (stable.paths.some(path => path.startsWith(`${definition.stablePath}/`) && path !== ownRecord && !(current && Object.hasOwn(current.files, path)))) {
     throw new Error(`SUBSCRIPTION_PATH_CONFLICT: ${definition.stablePath} contains unmanaged files`);
   }

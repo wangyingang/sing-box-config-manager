@@ -14,7 +14,7 @@ export async function verifyStableDeliveries(snapshot: PublicationSnapshot): Pro
   const owners = new Map<string, string>();
   for (const path of snapshot.paths) {
     const location = stableRecordLocation(path);
-    if (!location) continue;
+    if (!location || snapshot.isDirectory?.(path)) continue;
     const bytes = await snapshot.read(path);
     const record = bytes && JSON.parse(bytes.toString());
     if (record?.schemaVersion !== 2 || typeof record.id !== 'string' || typeof record.logicalId !== 'string'

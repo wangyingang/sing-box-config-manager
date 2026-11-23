@@ -8,6 +8,8 @@ export interface PublicationSnapshot {
   parent?: string;
   parents?: string[];
   paths: string[];
+  /** File-only snapshots may omit directory entries. */
+  isDirectory?(path: string): boolean;
   read(path: string): Promise<Buffer | undefined>;
 }
 export interface PublicationRepository {
@@ -73,6 +75,7 @@ export function githubPublicationRepository(branch = PUBLICATION_BRANCH, request
     }
     const parents: string[] | undefined = parent.parents?.map((entry: { sha: string }) => entry.sha);
     return { head: currentHead, parent: parents?.length === 1 ? parents[0] : undefined, parents, treeSha, entries, paths: [...entries.keys()],
+      isDirectory: (path: string) => entries.get(path)?.type === 'tree',
       async read(path: string): Promise<Buffer | undefined> {
         const entry = entries.get(path);
         if (!entry) return undefined;

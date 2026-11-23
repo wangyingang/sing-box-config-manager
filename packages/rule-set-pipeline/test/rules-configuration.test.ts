@@ -96,10 +96,9 @@ for (const [scenario, input, expected] of [
     assert.equal(result.status, 'failed');
     assert.equal(result.exitCode, 1);
     assert.deepEqual(result.results, []);
-    assert.match(result.error ?? '', new RegExp(`(?:^|\\n)${line}:\\d+`));
-    assert.ok(result.error);
-    assert.ok(result.error.includes(path), result.error);
-    assert.ok(result.error.includes(message), result.error);
+    const diagnostic = result.error?.split('\n').find(entry =>
+      new RegExp(`^${line}:\\d+ ${path ? path.replaceAll('.', '\\.') + ':' : ''}`).test(entry) && entry.includes(message));
+    assert.ok(diagnostic, result.error ?? 'Missing configuration diagnostics');
     assert.deepEqual([downloads, snapshots, writes.length], [0, 0, 0]);
   });
 }
