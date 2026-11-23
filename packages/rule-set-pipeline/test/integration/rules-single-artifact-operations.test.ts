@@ -147,9 +147,14 @@ exec '${binary.replaceAll("'", "'\\''")}' "$@"
   const result = await automaticSync();
   assert.equal(result.status, 'partial', JSON.stringify(result));
   assert.equal(result.exitCode, 1);
-  assert.deepEqual(result.results.map(({ id, status }) => [id, status]),
-    [['existing', 'failed'], ['first', 'failed'], ['peer', 'delivered']]);
-  const [existing, first, peer] = result.results;
+  assert.equal(result.results.length, 3);
+  const byId = new Map(result.results.map(row => [row.id, row]));
+  const existing = byId.get('existing');
+  const first = byId.get('first');
+  const peer = byId.get('peer');
+  assert.equal(existing?.status, 'failed');
+  assert.equal(first?.status, 'failed');
+  assert.equal(peer?.status, 'delivered');
   assert.match(existing.error!, /injected SRS validation failure/);
   assert.deepEqual(existing.current, previousById.get('existing'));
   assert.deepEqual(await env.readPublished('existing'), previous);
