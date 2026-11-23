@@ -166,7 +166,7 @@ export async function verifyCandidateEvidence(options: Partial<NativeBuildOption
       && report.invalidCount === 0 && report.unsupportedCount === 0 && report.diagnostics?.length === 0
       && report.outputTermCount === report.convertedCount - report.duplicateCount, 'Incomplete conversion record');
   }
-  requireThat(manifest.artifacts.length === 2, 'Expected exactly two candidate files');
+  if (!singleArtifact) requireThat(manifest.artifacts.length === 2, 'Unsupported candidate projections');
   const artifactIds = manifest.artifacts.map((artifact: any) => artifact.id);
   requireThat(new Set(artifactIds).size === artifactIds.length, 'Duplicate artifact identity');
   const verifyBuildFiles = legacyAudit || singleArtifact;

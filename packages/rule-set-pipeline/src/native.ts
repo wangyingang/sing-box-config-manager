@@ -128,7 +128,7 @@ async function buildWithTool(layout: NativeLayout, tool: NativeTool, buildId: st
     if ('terms' in layout) await compile(renderRuleJson(layout.terms), layout.artifact, layout.terms.length);
     else usages = await buildProjections(layout, compile);
     // Guard against a binary replaced during validation.
-    if (sha256(await readFile(tool.path)) !== tool.sha256) throw new NativeBuildError('Binary changed during native validation', steps);
+    if (sha256(await readFile(tool.path)) !== tool.sha256) throw new NativeBuildError('Binary changed during build', steps);
     return { status: 'built-validated', tool, buildId, artifacts, ...(usages && { usages }),
       validation: { status: 'passed', policy: NATIVE_VALIDATION_POLICY, steps } };
   } finally { await rm(directory, { recursive: true, force: true }); }
