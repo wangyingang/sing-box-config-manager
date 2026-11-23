@@ -38,7 +38,7 @@ export function githubRulesRepository(targetBranch: string, request: typeof ghJs
         const candidate = /^candidates\/[a-f0-9-]{36}\/[a-z0-9][a-z0-9._-]*$/.test(path);
         const stableFile = /^stable\/(?:[a-z0-9][a-z0-9._-]*\/)+([^/]+)$/.exec(path)?.[1];
         const stable = stableRecordLocation(path)?.artifact !== undefined
-          || stableFile !== undefined && (stableFile === 'activation.json' || validArtifactFilename(stableFile));
+          || stableFile !== undefined && validArtifactFilename(stableFile);
         if ((!control && !candidate && !stable) || path.split('/').some(part => part === '.' || part === '..')
           || (candidate && target !== branch) || (stable && target !== targetBranch)) throw new Error(`Invalid rules write path: ${path}`);
         if (candidate && bytes && current.paths.includes(path)) throw new Error('Cannot overwrite a retained candidate');

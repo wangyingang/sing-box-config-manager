@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
 import { reservedArtifactBasename, validArtifactBasename } from './artifact-path.js';
 import { validRepository, validBranch, validInputPath, validInputFile } from './source-input.js';
-import { isMap, LineCounter, parseDocument, visit } from 'yaml';
+import { LineCounter, parseDocument, visit } from 'yaml';
 import { USAGES, type Usage } from './projection.js';
 import { ARTIFACT_REPOSITORY } from './publication.js';
 import { CHINA_IP_INPUT, isCommitInputFormat, type CommitInput } from './github-commit.js';
@@ -78,8 +78,12 @@ export interface BuildConfiguration {
   ruleSets: RuleDefinition[];
 }
 
+export type RulesConfiguration = Omit<BuildConfiguration, 'schemaVersion' | 'ruleSets'> & {
+  schemaVersion: 4;
+  ruleSets: SingleArtifactDefinition[];
+};
 type ProjectedSourceInput = ReleaseInput | OpenAiVoiceInput | (Omit<CommitInput, 'input'> & {
-  input: { format: Exclude<CommitInput['input']['format'], 'clash-rule-list'>; path: string };
+  input: { format: Exclude<CommitInput['input']['format'], 'clash-rule-list' | 'sing-box-source-json'>; path: string };
 });
 export type ProjectedConfiguration = Omit<BuildConfiguration, 'schemaVersion' | 'sources' | 'ruleSets' | 'branchInputs'> & {
   schemaVersion: 3; sources: Record<string, ProjectedSourceInput>; ruleSets: ProjectedRuleDefinition[];
@@ -238,7 +242,7 @@ export function parseSource(input: unknown): SourceInput {
   throw new Error('Unsupported source acquisition method');
 }
 
-function configureV4(raw: ReturnType<typeof validateRulesConfigurationV4>): BuildConfiguration {
+function configureV4(raw: ReturnType<typeof validateRulesConfigurationV4>): RulesConfiguration {
   const sources = Object.fromEntries<ConfiguredSource>(Object.entries(raw.sources).map(([id, { fetch, format }]) => {
     if (fetch.method === 'github-branch') {
       return [id, { version: 'github-branch', repository: fetch.repository, branch: fetch.branch }];
@@ -264,8 +268,7 @@ function configureV4(raw: ReturnType<typeof validateRulesConfigurationV4>): Buil
     ...(Object.keys(branchInputs).length && { branchInputs }) };
 }
 
-/** Validate every definition before source access or output directory creation. */
-export function parseBuildConfiguration(input: string): BuildConfiguration {
+function readConfigurationYaml(input: string) {
   const lines = new LineCounter();
   const document = parseDocument(input, { uniqueKeys: true, stringKeys: true, lineCounter: lines, prettyErrors: false });
   const yamlDiagnostics = [...document.errors, ...document.warnings].map(error => {
@@ -277,10 +280,19 @@ export function parseBuildConfiguration(input: string): BuildConfiguration {
     yamlDiagnostics.push(`${line}:${col} YAML aliases are not allowed`);
   } });
   if (yamlDiagnostics.length) throw new Error(`Invalid build configuration YAML:\n${yamlDiagnostics.join('\n')}`);
-  const value = document.toJS();
-  if (!isMap(document.contents) || document.get('schemaVersion') !== 3) {
-    return configureV4(validateRulesConfigurationV4(document, lines, value));
-  }
+  return { document, lines, value: document.toJS() };
+}
+
+/** Validate every definition before source access or output directory creation. */
+export function parseBuildConfiguration(input: string): RulesConfiguration {
+  const { document, lines, value } = readConfigurationYaml(input);
+  return configureV4(validateRulesConfigurationV4(document, lines, value));
+}
+
+/** Only used by the legacy build and historical evidence readers. */
+export function parseProjectedConfiguration(input: string): ProjectedConfiguration {
+  const { document, value } = readConfigurationYaml(input);
+  if (document.get('schemaVersion') !== 3) throw new Error('Projected rule operations require configuration v3');
   const raw = exact(value, ['schemaVersion', 'candidateRetentionDays', 'sources', 'target', 'ruleSets'], 'configuration');
   if (!Number.isSafeInteger(raw.candidateRetentionDays) || Number(raw.candidateRetentionDays) <= 0) throw new Error('candidateRetentionDays must be a positive integer');
   const target = exact(raw.target, ['repository', 'branch'], 'target');
@@ -289,12 +301,14 @@ export function parseBuildConfiguration(input: string): BuildConfiguration {
     throw new Error('Target repository or branch is outside the trusted publication target');
   }
   const declarations = Object.entries(mapping(raw.sources, 'sources'));
-  const sources = Object.fromEntries(declarations.map(([id, source]) => {
+  const sources = Object.fromEntries<ProjectedSourceInput>(declarations.map(([id, source]) => {
     if (!logicalId.test(id)) throw new Error(`Invalid source ID: ${id}`);
     const parsed = parseSource(source);
     if (parsed.version === 'url') throw new Error('URL sources require configuration v4');
-    if (parsed.input.format === 'clash-rule-list') throw new Error('clash-rule-list requires configuration v4');
-    return [id, parsed];
+    if (parsed.version !== 'git-branch') return [id, parsed] as const;
+    const { format, path } = parsed.input;
+    if (format === 'clash-rule-list' || format === 'sing-box-source-json') throw new Error(`${format} requires configuration v4`);
+    return [id, { ...parsed, input: { format, path } }] as const;
   }));
   const entries = raw.ruleSets;
   if (!Array.isArray(entries)) throw new Error('ruleSets must be an explicit sequence');
@@ -305,7 +319,7 @@ export function parseBuildConfiguration(input: string): BuildConfiguration {
       throw new Error(`Rule set ${String(id)}: unknown source ${String(source)}`);
     }
     const input = sources[source].input;
-    let rule: RuleDefinition;
+    let rule: ProjectedRuleDefinition;
     try {
       if (!isProjectedFormat(input.format)) throw new Error(`${input.format} requires configuration v4`);
       rule = parseRuleDefinition(entry, input.format);
@@ -348,12 +362,6 @@ export function configuredReleaseInput(configuration: ProjectedConfiguration, de
   const source = configuredInput(configuration, definitions);
   if (source.version !== 'latest-release') throw new Error('Select rule sets from one Release source');
   return source;
-}
-
-export function parseProjectedConfiguration(input: string): ProjectedConfiguration {
-  const configuration = parseBuildConfiguration(input);
-  if (configuration.schemaVersion !== 3) throw new Error('Projected rule operations require configuration v3');
-  return configuration as ProjectedConfiguration;
 }
 
 export function readOfficialConfiguration() {

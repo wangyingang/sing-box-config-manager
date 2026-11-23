@@ -169,7 +169,7 @@ async function prepareMigration(loaded: LoadedRules, journal: RemoteJournal, sna
     ...Object.values(journal.manualOperations ?? {}).filter(operation => !operation.notCommitted).map(operation => operation.id),
     ...Object.values(journal.automaticOperations ?? {}).filter(operation => !operation.notCommitted).map(operation => operation.id),
   ])];
-  parseRulesJournal(encodeRecord(next));
+  parseRulesJournal(encodeRecord(next), true);
   return { schemaVersion: 1, next, stableRecords };
 }
 
@@ -186,7 +186,7 @@ export async function migrateRulesState(request: RulesRequest) {
   if (!state) throw new Error('RULE_MIGRATION_BLOCKED: no legacy journal');
   const raw = JSON.parse(state.toString());
   if (raw.schemaVersion === 2) {
-    const current = parseRulesJournal(state) as MigrationPlan['next'];
+    const current = parseRulesJournal(state, true) as MigrationPlan['next'];
     if (!current.migration) throw new Error('RULE_MIGRATION_BLOCKED: journal is already current');
     return { status: 'already-converted', dryRun: loaded.dryRun, migration: current.migration };
   }
@@ -198,7 +198,7 @@ export async function migrateRulesState(request: RulesRequest) {
   }
   const plan = existing ?? await prepareMigration(loaded, journal, snapshot, stable);
   if (plan.schemaVersion !== 1 || !plan.next?.migration || !plan.stableRecords) throw new Error('RULE_MIGRATION_BLOCKED: invalid conversion checkpoint');
-  parseRulesJournal(encodeRecord(plan.next));
+  parseRulesJournal(encodeRecord(plan.next), true);
   const audit = plan.next.migration;
   if (audit.configurationRevision !== loaded.observed.revision || plan.next.targetBranch !== loaded.context.targetBranch) throw new Error('RULE_MIGRATION_BLOCKED: configuration changed during conversion');
   if (loaded.dryRun) return { status: 'planned', dryRun: true, migration: audit,
@@ -245,7 +245,7 @@ export async function migrateRulesState(request: RulesRequest) {
   const final = await repository.snapshot();
   const actual = await final.read(RULE_STATE_PATH);
   if (!actual?.equals(finalFiles[RULE_STATE_PATH]!)) throw new Error('RULE_MIGRATION_PENDING: final journal not confirmed');
-  parseRulesJournal(actual);
+  parseRulesJournal(actual, true);
   return { status: 'converted', dryRun: false, migration: audit,
     stableRecords: Object.keys(plan.stableRecords), stableBytesUnchanged: true };
 }

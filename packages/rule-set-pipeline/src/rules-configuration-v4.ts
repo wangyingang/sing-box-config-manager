@@ -5,7 +5,7 @@ import { validFixedUrl, type FixedUrlInput } from './fixed-url-source.js';
 import type { CommitInput } from './github-commit.js';
 import { singleArtifactPaths, pathsOverlap } from './stable-rule-paths.js';
 
-type BranchFormat = Extract<CommitInput['input']['format'], 'clash-rule-list' | 'cidr-text' | 'domain-suffix-text'>;
+type BranchFormat = Extract<CommitInput['input']['format'], 'clash-rule-list' | 'cidr-text' | 'domain-suffix-text' | 'sing-box-source-json'>;
 type FilterCondition = { tags: { allOf: string[] } | { anyOf: string[] } } | { type: { anyOf: string[] } };
 type Source = { fetch: { method: 'url'; url: string; sha256Url?: string }; format: FixedUrlInput['input']['format'] }
   | { fetch: { method: 'github-branch'; repository: string; branch: string }; format?: never };

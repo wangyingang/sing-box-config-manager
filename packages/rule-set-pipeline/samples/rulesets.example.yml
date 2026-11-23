@@ -1,23 +1,21 @@
-schemaVersion: 3
-# 候选保留策略为 30 天；#85 实现清理，当前交付不受保留期限制。
+# yaml-language-server: $schema=../config/rulesets.schema.json
+schemaVersion: 4
+# 候选保留策略为 30 天，由 cleanup 执行；当前交付不受保留期限制。
 candidateRetentionDays: 30
 target:
   repository: wangyingang/sing-box-rule-artifacts
   branch: acceptance-example
 sources:
   dlc:
-    repository: v2fly/domain-list-community
-    version: latest-release
-    input:
-      format: plain-yaml
-      asset: dlc.dat_plain.yml
-      checksum: dlc.dat_plain.yml.sha256sum
+    fetch:
+      method: url
+      url: https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat_plain.yml
+      sha256Url: https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat_plain.yml.sha256sum
+    format: v2fly-dlc-yaml
 ruleSets:
-  - id: openai
-    source: dlc
-    list: openai
-    stablePath: stable/openai
-    usages:
-      route: { artifact: domains }
-      dns-query: { artifact: domains }
-      dns-response: { unavailable: empty }
+  openai:
+    data:
+      source: dlc
+      list: openai
+    publishPath: stable/openai
+    artifact: domains
