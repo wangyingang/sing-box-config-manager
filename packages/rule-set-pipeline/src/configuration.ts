@@ -15,6 +15,11 @@ export type SourceFormat = SourceInput['input']['format'];
 type AvailableUsage = { artifact: string };
 type ConfiguredUsage = AvailableUsage | { unavailable: 'empty' };
 type DnsUsage = Exclude<Usage, 'route'>;
+type ProjectedFormat = Exclude<SourceFormat, 'sing-box-source-json' | 'v2fly-dlc-yaml'>;
+
+export function isProjectedFormat(format: SourceFormat): format is ProjectedFormat {
+  return format !== 'sing-box-source-json' && format !== 'v2fly-dlc-yaml';
+}
 
 const formatCapabilities = {
   'plain-yaml': { dns: 'dns-query', namedLists: true },
@@ -23,9 +28,9 @@ const formatCapabilities = {
   'sing-box-domain-json': { dns: 'dns-query', namedLists: false },
   'cidr-text': { dns: 'dns-response', namedLists: false },
   'openai-voice-json': { dns: 'dns-response', namedLists: false },
-} as const satisfies Record<Exclude<SourceFormat, 'sing-box-source-json'>, { dns: DnsUsage; namedLists: boolean }>;
+} as const satisfies Record<ProjectedFormat, { dns: DnsUsage; namedLists: boolean }>;
 
-export function configuredUsages(format: Exclude<SourceFormat, 'sing-box-source-json'>) {
+export function configuredUsages(format: ProjectedFormat) {
   const dns = formatCapabilities[format].dns;
   const unavailable = dns === 'dns-query' ? 'dns-response' : 'dns-query';
   return { dns, unavailable } as const;
@@ -41,10 +46,22 @@ export interface ProjectedRuleDefinition extends RuleLocation {
   usages: Record<Usage, ConfiguredUsage> & { route: AvailableUsage };
 }
 
-export interface SingleArtifactDefinition extends RuleLocation {
+export type DlcTagFilter = {
+  action: 'include' | 'exclude';
+  match: 'allOf' | 'anyOf';
+  tags: string[];
+};
+
+interface SingleArtifactLocation extends RuleLocation {
   artifact: string;
-  list?: never;
 }
+
+export interface DlcRuleDefinition extends SingleArtifactLocation {
+  list: string;
+  filter?: DlcTagFilter;
+}
+
+export type SingleArtifactDefinition = DlcRuleDefinition | (SingleArtifactLocation & { list?: never; filter?: never });
 
 export type RuleDefinition = ProjectedRuleDefinition | SingleArtifactDefinition;
 export interface BuildConfiguration {
@@ -66,9 +83,10 @@ function mapping(value: unknown, label: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function exact(value: unknown, fields: string[], label: string) {
+function exact(value: unknown, fields: string[], label: string, optional: string[] = []) {
   const record = mapping(value, label);
-  if (Object.keys(record).length !== fields.length || fields.some(key => !Object.hasOwn(record, key))) {
+  if (Object.keys(record).some(key => !fields.includes(key) && !optional.includes(key))
+    || fields.some(key => !Object.hasOwn(record, key))) {
     throw new Error(`${label} fields are invalid`);
   }
   return record;
@@ -81,22 +99,49 @@ function ruleLocation({ id, source, stablePath: path }: Record<string, unknown>,
   return { id, source, stablePath: path };
 }
 
-function parseSingleArtifactDefinition(input: unknown): SingleArtifactDefinition {
-  const definition = exact(input, ['id', 'source', 'stablePath', 'artifact'], 'rule definition');
+function tagFilter(action: unknown, match: unknown, tags: unknown): DlcTagFilter {
+  if ((action !== 'include' && action !== 'exclude') || (match !== 'allOf' && match !== 'anyOf')
+    || !Array.isArray(tags) || !tags.length || tags.some(tag => typeof tag !== 'string' || !/^[a-zA-Z0-9!]+$/.test(tag))) {
+    throw new Error('Invalid DLC tag filter');
+  }
+  return { action, match, tags: [...new Set<string>(tags)].sort() };
+}
+
+function parseTagFilter(input: unknown): DlcTagFilter {
+  const filter = mapping(input, 'filter');
+  const [action] = Object.keys(filter);
+  if (action !== 'include' && action !== 'exclude') throw new Error('Invalid DLC tag filter action');
+  const { tags } = exact(exact(filter, [action], 'filter')[action], ['tags'], 'filter condition');
+  const condition = mapping(tags, 'tag condition');
+  const [match] = Object.keys(condition);
+  if (match !== 'allOf' && match !== 'anyOf') throw new Error('Invalid DLC tag filter condition');
+  return tagFilter(action, match, exact(condition, [match], 'tag condition')[match]);
+}
+
+function parseSingleArtifactDefinition(input: unknown, format: SourceFormat): SingleArtifactDefinition {
+  const named = format === 'v2fly-dlc-yaml';
+  const definition = exact(input, ['id', 'source', 'stablePath', 'artifact', ...(named ? ['list'] : [])],
+    'rule definition', named ? ['filter'] : []);
   const location = ruleLocation(definition, 'publishPath');
   if (!validArtifactBasename(definition.artifact) || reservedArtifactBasename(definition.artifact)) {
     throw new Error(`Invalid artifact basename: ${String(definition.artifact)}`);
   }
-  return { ...location, artifact: definition.artifact };
+  const base = { ...location, artifact: definition.artifact };
+  if (!named) return base;
+  const { list } = definition;
+  if (typeof list !== 'string' || !/^[a-z0-9][a-z0-9!._-]*$/.test(list)) throw new Error(`Invalid DLC list: ${String(list)}`);
+  if (!Object.hasOwn(definition, 'filter')) return { ...base, list };
+  const { action, match, tags } = exact(definition.filter, ['action', 'match', 'tags'], 'DLC tag filter');
+  return { ...base, list, filter: tagFilter(action, match, tags) };
 }
 
 export function parseStoredRuleDefinition(input: unknown, format: SourceFormat): RuleDefinition {
-  if (Object.hasOwn(mapping(input, 'rule definition'), 'artifact')) return parseSingleArtifactDefinition(input);
-  if (format === 'sing-box-source-json') throw new Error('sing-box-source-json requires a single artifact');
+  if (Object.hasOwn(mapping(input, 'rule definition'), 'artifact')) return parseSingleArtifactDefinition(input, format);
+  if (!isProjectedFormat(format)) throw new Error(`${format} requires a single artifact`);
   return parseRuleDefinition(input, format);
 }
 
-export function parseRuleDefinition(input: unknown, format: Exclude<SourceFormat, 'sing-box-source-json'> = 'plain-yaml'): ProjectedRuleDefinition {
+export function parseRuleDefinition(input: unknown, format: ProjectedFormat = 'plain-yaml'): ProjectedRuleDefinition {
   const definition = exact(input, ['id', 'source', 'list', 'stablePath', 'usages'], 'rule definition');
   const { list, usages } = definition;
   const { id, source, stablePath: path } = ruleLocation(definition, 'stable path');
@@ -130,9 +175,14 @@ export function parseSource(input: unknown): SourceInput {
   const raw = mapping(input, 'source');
   if (raw.version === 'url') {
     const { input: declaration } = exact(raw, ['version', 'input'], 'URL source');
-    const { format, url } = exact(declaration, ['format', 'url'], 'URL input');
-    if (format !== 'sing-box-source-json' || !validFixedUrl(url)) throw new Error('Invalid sing-box-source-json HTTPS input');
-    return { version: 'url', input: { format, url } };
+    const { format, url, sha256Url } = exact(declaration, ['format', 'url'], 'URL input', ['sha256Url']);
+    if (format !== 'sing-box-source-json' && format !== 'v2fly-dlc-yaml' && format !== 'openai-voice-json') {
+      throw new Error(`Unsupported URL input format: ${String(format)}`);
+    }
+    if (!validFixedUrl(url) || (sha256Url !== undefined && (!validFixedUrl(sha256Url) || sha256Url === url))) {
+      throw new Error(`Invalid ${format} HTTPS input`);
+    }
+    return { version: 'url', input: { format, url, ...(sha256Url && { sha256Url }) } };
   }
   if (raw.version === 'openai-voice') {
     const source = exact(raw, ['version', 'input'], 'ChatGPT Voice source');
@@ -178,18 +228,19 @@ export function parseBuildConfiguration(input: string): BuildConfiguration {
     if (!logicalId.test(id)) throw new Error(`Invalid source ID: ${id}`);
     if (raw.schemaVersion === 4) {
       const { fetch, format } = exact(source, ['fetch', 'format'], `source ${id}`);
-      const { method, url } = exact(fetch, ['method', 'url'], `source ${id} fetch`);
+      const { method, url, sha256Url } = exact(fetch, ['method', 'url'], `source ${id} fetch`, ['sha256Url']);
       if (method !== 'url') throw new Error(`Unsupported source acquisition method: ${String(method)}`);
-      return [id, parseSource({ version: 'url', input: { format, url } })];
+      return [id, parseSource({ version: 'url', input: { format, url, ...(sha256Url !== undefined && { sha256Url }) } })];
     }
     const parsed = parseSource(source);
     if (parsed.version === 'url') throw new Error('URL sources require configuration v4');
     return [id, parsed];
   }));
   const entries = raw.schemaVersion === 4 ? Object.entries(mapping(raw.ruleSets, 'ruleSets')).map(([id, entry]) => {
-    const { data, publishPath, artifact } = exact(entry, ['data', 'publishPath', 'artifact'], `rule set ${id}`);
-    const { source } = exact(data, ['source'], `rule set ${id} data`);
-    return { id, source, stablePath: publishPath, artifact };
+    const { data, publishPath, artifact, filter } = exact(entry, ['data', 'publishPath', 'artifact'], `rule set ${id}`, ['filter']);
+    const { source, list } = exact(data, ['source'], `rule set ${id} data`, ['list']);
+    return { id, source, stablePath: publishPath, artifact, ...(list !== undefined && { list }),
+      ...(filter !== undefined && { filter: parseTagFilter(filter) }) };
   }) : raw.ruleSets;
   if (!Array.isArray(entries)) throw new Error('ruleSets must be an explicit sequence');
   const ids = new Set<string>(), paths = new Set<string>();
@@ -201,9 +252,9 @@ export function parseBuildConfiguration(input: string): BuildConfiguration {
     const input = sources[source].input;
     let rule: RuleDefinition;
     try {
-      if (raw.schemaVersion === 4) rule = parseSingleArtifactDefinition(entry);
+      if (raw.schemaVersion === 4) rule = parseSingleArtifactDefinition(entry, input.format);
       else {
-        if (input.format === 'sing-box-source-json') throw new Error('sing-box-source-json requires configuration v4');
+        if (!isProjectedFormat(input.format)) throw new Error(`${input.format} requires configuration v4`);
         rule = parseRuleDefinition(entry, input.format);
       }
     }

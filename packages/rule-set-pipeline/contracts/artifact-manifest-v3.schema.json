@@ -12,7 +12,7 @@
       "type": "array",
       "minItems": 2,
       "maxItems": 2,
-      "allOf": [{ "$ref": "./artifact-manifest.schema.json#/properties/artifacts" }]
+      "items": { "$ref": "./artifact-manifest.schema.json#/definitions/artifact" }
     }
   },
   "required": ["schemaVersion", "id", "revision", "targetVersion", "sourceFormatVersion", "artifacts"]

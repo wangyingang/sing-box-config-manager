@@ -125,7 +125,7 @@ async function buildWithTool(layout: NativeLayout, tool: NativeTool, buildId: st
   };
   try {
     let usages: NativeBuild['usages'] | undefined;
-    if ('terms' in layout) await compile(renderRuleJson(layout.terms), layout.artifact, layout.terms.length);
+    if ('terms' in layout) await compile(renderRuleJson(layout.terms, { allowEmpty: true }), layout.artifact, layout.terms.length);
     else usages = await buildProjections(layout, compile);
     // Guard against a binary replaced during validation.
     if (sha256(await readFile(tool.path)) !== tool.sha256) throw new NativeBuildError('Binary changed during build', steps);
