@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { promisify } from 'node:util';
+import { githubBaselineTransport } from '../../src/maintenance-baseline-transport.js';
+import { gitMaintenanceRefs } from '../../src/maintenance-refs.js';
 import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
 import { ghJson, ARTIFACT_REPOSITORY, GitHubHttpError, immutableUrl } from '../../src/publication.js';
 import { createGitCommit } from '../../src/publication-repository.js';
@@ -138,6 +140,7 @@ test('the 16 formal v4 rule sets deliver from an empty GitHub target', {
   repository.download = downloadProbeFile;
   const context: RulesContext = {
     repository, targetBranch: target, allowWrites: true, binary, token,
+    cleanup: { baseline: githubBaselineTransport(request), refs: gitMaintenanceRefs() },
     readConfiguration: async () => ({ revision: previous?.outcomes.sync.configurationRevision ?? sha, content: configuration, origin: 'formal-v4-checkout' }),
     async fetch(url, init) {
       const response = await retryProbeRead(url, init);
