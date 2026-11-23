@@ -27,9 +27,11 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
-function sourceRules(document: unknown): unknown[] {
-  if (!isObject(document) || document.version !== 4 || !Array.isArray(document.rules)
-    || Object.keys(document).length !== 2) throw new Error('Expected sing-box Source Format v4 with version and rules');
+function sourceRules(document: unknown, versions: readonly number[]): unknown[] {
+  if (!isObject(document) || typeof document.version !== 'number' || !versions.includes(document.version)
+    || !Array.isArray(document.rules) || Object.keys(document).length !== 2) {
+    throw new Error(`Expected sing-box Source Format version ${versions.join(' or ')} with version and rules`);
+  }
   return document.rules;
 }
 
@@ -110,7 +112,7 @@ export function sourceBuildRules({ inputCount, accepted }: SourceRuleEntries): B
 /** Candidate files are already converted. Any unsupported rule invalidates the candidate. */
 export function readCandidateRules(document: unknown, singleArtifact: boolean, conversionPolicy: unknown): BuildRule[] {
   if (singleArtifact && conversionPolicy === NATIVE_SOURCE_CONVERSION_POLICY) {
-    return sourceRules(document).map((rule, index) => headless(readRule(rule, `rules[${index}]`)));
+    return sourceRules(document, [4]).map((rule, index) => headless(readRule(rule, `rules[${index}]`)));
   }
   return readSourceTerms(document, singleArtifact);
 }
@@ -159,8 +161,11 @@ export function convertSingBoxSourceJson(bytes: Uint8Array, file: string) {
     const structure = parseDocument(text.replace(/\r\n?/g, '\n').trim(), { schema: 'json', uniqueKeys: true, stringKeys: true });
     if (structure.errors.length) throw new Error(structure.errors[0].message);
     const version = structure.get('version', true);
-    if (!isScalar(version) || version.source !== '4') throw new Error('Expected Source Format version 4');
-    const rules = sourceRules(document);
+    if (!isScalar(version) || (version.source !== '2' && version.source !== '4')) {
+      throw new Error('Expected Source Format version 2 or 4');
+    }
+    // sing-box 1.14.4 reads both wrappers into the same HeadlessRule model.
+    const rules = sourceRules(document, [2, 4]);
     const entries: SourceRuleEntries = { inputCount: rules.length, accepted: [] };
     for (const [index, rule] of rules.entries()) {
       try {

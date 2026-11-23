@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { promisify } from 'node:util';
 import { parseBuildConfiguration, readOfficialConfiguration } from '../../src/configuration.js';
-import { ghJson, ARTIFACT_REPOSITORY, immutableUrl } from '../../src/publication.js';
+import { ghJson, ARTIFACT_REPOSITORY, GitHubHttpError, immutableUrl } from '../../src/publication.js';
 import { createGitCommit } from '../../src/publication-repository.js';
 import { sha256 } from '../../src/release.js';
 import { cleanupRuleHistory } from '../../src/rules-cleanup.js';
@@ -61,9 +61,18 @@ test('the 16 formal v4 rule sets deliver from an empty GitHub target', {
       if (endpoint.endsWith('/git/refs')) assert.equal((input as { ref: string }).ref, `refs/heads/${target}`);
       else assert.ok(endpoint.endsWith(`/refs/heads/${target}`) || /\/git\/(blobs|trees|commits)$/.test(endpoint), endpoint);
     }
-    const cacheable = method === 'GET' && /\/git\/(commits|trees|blobs)\/[a-f0-9]{40}(?:\?recursive=1)?$/.test(endpoint);
+    const cacheable = method === 'GET' && (endpoint === `repos/${ARTIFACT_REPOSITORY}`
+      || /\/git\/(?:trees|commits|blobs)\/[a-f0-9]{40}(?:\?recursive=1)?$/.test(endpoint)
+      || /\/commits\?sha=[a-f0-9]{40}&path=/.test(endpoint));
     if (cacheable && immutable.has(endpoint)) return immutable.get(endpoint)!;
-    const response = ghJson(args, input, token);
+    const response = (async () => {
+      const res = await fetch(`https://api.github.com/${endpoint}`, { method,
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
+        body: input === undefined ? undefined : JSON.stringify(input), signal: AbortSignal.timeout(120_000) });
+      const body = await res.text();
+      if (!res.ok) throw new GitHubHttpError(res.status, `${method} ${endpoint}: HTTP ${res.status}`);
+      return body ? JSON.parse(body) : null;
+    })();
     if (cacheable) {
       immutable.set(endpoint, response);
       response.catch(() => immutable.delete(endpoint));
@@ -115,12 +124,13 @@ test('the 16 formal v4 rule sets deliver from an empty GitHub target', {
       return response;
     },
   };
-  const input = { context, onProgress: ({ stage, id }: { stage: string; id?: string }) => console.log(stage, id ?? '') };
+  const input = { context, onProgress: ({ stage, logicalId }: { stage: string; logicalId?: string }) => console.log(stage, logicalId ?? '') };
   const empty = await repository.snapshot();
   assert.equal(empty.head, evidence.seed);
   assert.deepEqual(empty.paths, ['README.md']);
+  await archive();
   const initial = await getRulesStatus(input);
-  assert.equal(initial.status, 'success', initial.error);
+  assert.equal(initial.status, 'success', initial.error ?? '');
   assert.equal(initial.rules?.length, 16);
   assert.ok(initial.rules?.every(rule => !rule.current && !rule.candidateCount));
   const synced = await syncRules(input);
@@ -131,7 +141,7 @@ test('the 16 formal v4 rule sets deliver from an empty GitHub target', {
   assert.equal(synced.readbackRequests?.length, 64);
 
   const status = await getRulesStatus(input);
-  assert.equal(status.status, 'success', status.error);
+  assert.equal(status.status, 'success', status.error ?? '');
   evidence.outcomes.status = status;
   const snapshot = await repository.snapshot();
   evidence.finalHead = snapshot.head;
@@ -190,8 +200,8 @@ test('the 16 formal v4 rule sets deliver from an empty GitHub target', {
       const matches = [];
       for (const [value, expected] of [...positives[id].map(value => [value, true] as const),
         [id === 'china-ip' || id === 'chatgpt-voice' ? '192.0.2.1' : 'no-match-example.invalid', false] as const]) {
-        const result = await exec(binary, ['rule-set', 'match', localPath, value, '--format', format]);
-        const matched = (result.stdout + result.stderr).includes('match rules.');
+        const result: { stdout: string; stderr: string } = await exec(binary, ['rule-set', 'match', localPath, value, '--format', format]);
+        const matched: boolean = (result.stdout + result.stderr).includes('match rules.');
         assert.equal(matched, expected, `${id} ${format} ${value}`);
         matches.push({ value, matched });
       }
@@ -208,18 +218,18 @@ test('the 16 formal v4 rule sets deliver from an empty GitHub target', {
   assert.ok(version);
   const pin = await pinRuleVersion({ ...input, id: 'onedrive', version });
   evidence.outcomes.pin = pin;
-  assert.equal(pin.status, 'success', pin.error);
+  assert.equal(pin.status, 'success', pin.error ?? '');
   assert.equal(pin.results[0].control?.mode, 'pinned');
   const resumed = await resumeRuleUpdates({ ...input, id: 'onedrive' });
   evidence.outcomes.resume = resumed;
-  assert.equal(resumed.status, 'success', resumed.error);
+  assert.equal(resumed.status, 'success', resumed.error ?? '');
   assert.equal(resumed.results[0].control?.mode, 'auto');
   const preflight = await readSchedulePreflight({ context });
   evidence.outcomes.preflight = preflight;
-  assert.equal(preflight.status, 'success', preflight.error);
+  assert.equal(preflight.status, 'success', preflight.error ?? '');
   assert.equal(preflight.results.filter(rule => rule.current).length, 16);
   const cleanup = await cleanupRuleHistory({ ...input, dryRun: true });
   evidence.outcomes.cleanup = cleanup;
-  assert.equal(cleanup.status, 'success', cleanup.error);
+  assert.equal(cleanup.status, 'success', cleanup.error ?? '');
   assert.equal(cleanup.cleanup?.plan.retain.candidateIds.length, 16);
 });
