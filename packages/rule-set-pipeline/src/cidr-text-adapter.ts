@@ -3,7 +3,7 @@ import ipaddr from 'ipaddr.js';
 import { normalizeTerms, type BuildTerm } from './projection.js';
 import { diagnostic, emptyReport } from './types.js';
 
-function normalizeCidr(value: string) {
+export function normalizeCidr(value: string) {
   const parts = value.split('/');
   if (parts.length !== 2 || !/^(0|[1-9][0-9]{0,2})$/.test(parts[1]) || parts[0].includes('%')) return undefined;
   const family = isIP(parts[0]);
@@ -19,15 +19,16 @@ function normalizeCidr(value: string) {
 }
 
 /** Each non-comment line is one CIDR. An invalid line fails the entire conversion. */
-export function convertCidrText(bytes: Uint8Array, file: string, list: string) {
+export function convertCidrText(bytes: Uint8Array, file: string, list?: string) {
   const report = emptyReport();
+  const location = { file, list: list ?? '' };
   const counts = { input: 0, converted: 0, output: 0 };
   report.typeCounts.ip_cidr = counts;
   const failure = { ok: false as const, report, error: 'CIDR text conversion failed' };
   let text: string;
   try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
   catch {
-    report.diagnostics.push(diagnostic('INVALID_UTF8', 'CIDR input must be UTF-8', { file, list }));
+    report.diagnostics.push(diagnostic('INVALID_UTF8', 'CIDR input must be UTF-8', location));
     return failure;
   }
 
@@ -40,11 +41,11 @@ export function convertCidrText(bytes: Uint8Array, file: string, list: string) {
     if (!cidr) {
       report.invalidCount++;
       report.diagnostics.push(diagnostic('INVALID_CIDR', 'Expected one IPv4 or IPv6 CIDR', {
-        file, list, line: index + 1, column: line.indexOf(value) + 1,
+        ...location, line: index + 1, column: line.indexOf(value) + 1,
       }));
     } else terms.push({ type: 'ip_cidr', value: cidr });
   }
-  if (!report.inputCount) report.diagnostics.push(diagnostic('EMPTY_INPUT', 'CIDR input contains no rules', { file, list }));
+  if (!report.inputCount && list !== undefined) report.diagnostics.push(diagnostic('EMPTY_INPUT', 'CIDR input contains no rules', location));
 
   const output = normalizeTerms(terms);
   report.convertedCount = terms.length;

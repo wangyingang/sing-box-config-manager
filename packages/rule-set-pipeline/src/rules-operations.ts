@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { candidateStableFiles } from './activation.js';
-import type { RuleDefinition } from './configuration.js';
+import { conversionKey } from './configured-build.js';
+import { configuredRuleInput, type RuleDefinition } from './configuration.js';
 import { guardRulesConfiguration, loadRulesRequest, rulesBinary, type LoadedRules, type RulesRequest } from './rules-context.js';
 import { buildPreparedRules, buildRulesInput, resolveRulesInput, publishRuleBuild, recoverPublishedRuleCandidate, verifyRuleCandidate } from './rules-build.js';
 import { deleteRuleDelivery, deliverRuleVersion, readRuleDeliveries, recoverRuleDelivery, ruleSubscription, ensureRulePathAvailable, matchesRuleDelivery } from './rules-delivery.js';
@@ -17,7 +18,7 @@ const ownRule = (session: RulesSession, id: string) => Object.hasOwn(session.jou
 
 function desiredRule(session: RulesSession, definition: RuleDefinition): ManagedRule {
   const previous = ownRule(session, definition.id);
-  const source = session.loaded.configuration.sources[definition.source];
+  const source = configuredRuleInput(session.loaded.configuration, definition);
   const binding = inputBindingRevision(source, definition);
   const fresh = !previous || previous.lifecycle === 'deleted';
   const control = fresh || previous.inputBindingRevision !== binding
@@ -144,8 +145,13 @@ async function updateSelectedRules(session: RulesSession, definitions: RuleDefin
       continue;
     }
     const batchResults = new Map<string, RuleResult>();
+    const skippedByRule = new Map<string, RuleResult['unsupportedTypeCounts']>();
     const orderedResults = () => batch.map(definition => batchResults.get(definition.id))
-      .filter((result): result is RuleResult => result !== undefined);
+      .filter((result): result is RuleResult => result !== undefined)
+      .map(result => {
+        const counts = skippedByRule.get(result.id);
+        return counts ? { ...result, unsupportedTypeCounts: counts } : result;
+      });
     if (!session.loaded.dryRun) for (const definition of batch) {
       const id = definition.id;
       const rule = ownRule(session, id)!;
@@ -170,6 +176,8 @@ async function updateSelectedRules(session: RulesSession, definitions: RuleDefin
       const current = deliveries.get(id);
       try {
         const input = await (body ??= source.read(bodyNeeded));
+        const counts = input.lists.get(conversionKey(definition))?.report.unsupportedTypeCounts;
+        if (counts) skippedByRule.set(id, counts);
         const reused = !session.loaded.dryRun && await reuseSuccessfulInput(session, rule, current, input);
         if (reused) {
           batchResults.set(id, await unchangedResult(session, rule, reused, itemChanges, 'normalized-content'));

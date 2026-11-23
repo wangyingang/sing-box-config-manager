@@ -51,7 +51,7 @@
           },
           "termCount": {
             "type": "integer",
-            "minimum": 1,
+            "minimum": 0,
             "maximum": 9007199254740991
           },
           "requiredCapabilities": {
@@ -213,6 +213,17 @@
       ]
     }
   },
+  "allOf": [{
+    "properties": {
+      "artifacts": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": { "termCount": { "type": "integer", "minimum": 1 } }
+        }
+      }
+    }
+  }],
   "required": [
     "schemaVersion",
     "id",

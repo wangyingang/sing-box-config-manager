@@ -1,5 +1,6 @@
 import { candidateTraceFiles } from './candidate-publication.js';
 import { candidateStableFiles } from './activation.js';
+import { configuredRuleInput } from './configuration.js';
 import { ARTIFACT_REPOSITORY } from './publication.js';
 import { loadRulesRequest, type LoadedRules, type RulesRequest } from './rules-context.js';
 import { openRulesSession, type RulesSession } from './rules-session.js';
@@ -63,8 +64,8 @@ export async function addCurrentFacts(session: RulesSession, results: RuleResult
     result.current = deliveries.get(result.id);
     result.control = actual?.control;
     result.successfulInput = session.journal.rules[result.id]?.successfulInput;
-    result.expectedSource = session.loaded.configuration.ruleSets.some(rule => rule.id === result.id)
-      ? session.loaded.configuration.sources[session.loaded.configuration.ruleSets.find(rule => rule.id === result.id)!.source] : undefined;
+    const definition = session.loaded.configuration.ruleSets.find(rule => rule.id === result.id);
+    result.expectedSource = definition && configuredRuleInput(session.loaded.configuration, definition);
   }
   return stable;
 }
@@ -130,7 +131,7 @@ export async function getRulesStatus(request: RulesRequest & { id?: string } = {
       const definition = definitions.get(id);
       const current = deliveries.get(id);
       const { accepted, facts: { lastFailure, ...facts } } = await observeRuleFacts(session, id, stable, current);
-      const expectedSource = definition && session.loaded.configuration.sources[definition.source];
+      const expectedSource = definition && configuredRuleInput(session.loaded.configuration, definition);
       const candidates: RuleStatus['candidates'] = [];
       const currentCandidate = current && session.journal.candidates[current.candidateId];
       let deliveryIssue = current && (currentCandidate?.logicalId !== id || currentCandidate.status !== 'verified')

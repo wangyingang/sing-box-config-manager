@@ -128,6 +128,7 @@ export interface RuleResult {
   current?: RuleDelivery;
   control?: RuleControl;
   expectedSource?: SourceInput;
+  unsupportedTypeCounts?: Record<string, number>;
   candidate?: { versionId?: string; publishedAt?: string };
   successfulInput?: SuccessfulRuleInput;
   verified?: string[];
@@ -153,7 +154,8 @@ export interface RulesResult {
 
 /** Only resolved input semantics participate; aliases and upstream revisions do not. */
 export function inputBindingRevision(source: SourceInput, definition: RuleDefinition) {
-  return sha256(JSON.stringify({ source: parseSource(source), list: definition.list }));
+  return sha256(JSON.stringify({ source: parseSource(source), list: definition.list,
+    filter: 'filter' in definition ? definition.filter : undefined }));
 }
 
 export function definitionRevision(source: SourceInput, definition: RuleDefinition) {
@@ -175,7 +177,7 @@ export function validRuleSource(value: unknown, input: SourceInput): value is Ru
   if (input.version === 'url') return validFixedUrlSource(value, input);
   if (input.version === 'openai-voice') return validOpenAiVoiceSource(value);
   if (input.version === 'git-branch') {
-    return value.kind === 'github-commit' && validCommitSource(value as CommitSourceRecord, input) && value.inputBytes > 0;
+    return value.kind === 'github-commit' && validCommitSource(value as CommitSourceRecord, input);
   }
   return validReleaseSource(value, input);
 }

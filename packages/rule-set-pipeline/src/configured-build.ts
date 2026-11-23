@@ -7,6 +7,7 @@ import { readReleaseInput, sha256, SourceError, type ReleaseOptions } from './re
 import { diagnostic, type RuleConversionReport, type ConversionReport } from './types.js';
 import { readCommitInput, type CommitOptions } from './github-commit.js';
 import { configuredInput, configuredReleaseInput, nativeTargetForRule, parseProjectedConfiguration, type BuildConfiguration, type ProjectedRuleDefinition, type RuleDefinition, type SourceFormat } from './configuration.js';
+import { convertClashRuleList } from './clash-rule-list-adapter.js';
 import { convertOpenAiVoice } from './openai-voice-source.js';
 import { convertPlainYaml } from './plain-yaml-adapter.js';
 import { convertDomainSuffixText } from './domain-suffix-text-adapter.js';
@@ -35,6 +36,7 @@ export type ConfiguredResult<Definition = RuleDefinition, Built = ValidatedNativ
 export async function configuredBuildTools(format: SourceFormat = 'plain-yaml') {
   const files = ['artifact-path', 'source-input', 'configuration', 'configured-build', 'release', 'plain-yaml-adapter', 'yaml-input', 'convert',
     'types', 'projection', 'native'];
+  if (format === 'clash-rule-list') files.push('github-commit', 'clash-rule-list-adapter', 'cidr-text-adapter');
   if (format === 'cidr-text') files.push('github-commit', 'cidr-text-adapter');
   if (format === 'domain-suffix-text') files.push('github-commit', 'domain-suffix-text-adapter');
   if (format === 'typed-domain-text') files.push('github-commit', 'typed-domain-text-adapter');
@@ -47,7 +49,7 @@ export async function configuredBuildTools(format: SourceFormat = 'plain-yaml') 
   )));
   return { pipeline: packageInfo.version, implementationSha256, conversionPolicy: format === 'plain-yaml' ? 'v2fly-domain-v1' : `${format}-v1`,
     node: process.versions.node, yaml: yamlPackage.version, sourceFormat: 4,
-    ...(format === 'cidr-text' || format === 'openai-voice-json' ? { ipaddr: ipaddrPackage.version } : {}) };
+    ...(format === 'cidr-text' || format === 'openai-voice-json' || format === 'clash-rule-list' ? { ipaddr: ipaddrPackage.version } : {}) };
 }
 
 interface BuildOptions { configuration: string; binary: string; selectedIds?: string[] }
@@ -94,8 +96,25 @@ const wholeFileConverters = {
   'openai-voice-json': convertOpenAiVoice,
 };
 
+export function conversionKey(rule: RuleDefinition) {
+  return 'filter' in rule && rule.filter ? JSON.stringify(rule.filter) : rule.list;
+}
+
 export function convertInput(bytes: Uint8Array, definitions: RuleDefinition[], format: SourceFormat, file: string): ReadonlyMap<string | undefined, Converted> {
   if (format === 'sing-box-source-json') return new Map([[undefined, convertSingBoxSourceJson(bytes, file)]]);
+  if (format === 'clash-rule-list') {
+    const converted = new Map<string | undefined, Converted>();
+    for (const rule of definitions) {
+      const key = conversionKey(rule);
+      if (!converted.has(key)) converted.set(key, convertClashRuleList(bytes, file, 'filter' in rule ? rule.filter : undefined));
+    }
+    return converted;
+  }
+  if ((format === 'cidr-text' || format === 'domain-suffix-text') && definitions[0].list === undefined) {
+    const converted = wholeFileConverters[format](bytes, file);
+    const { usageCounts: _legacy, ...report } = converted.report;
+    return new Map([[undefined, { ...converted, report }]]);
+  }
   const lists = definitions.map(rule => {
     if (rule.list === undefined) throw new Error(`Missing list selection for ${rule.id}`);
     return rule.list;
@@ -125,7 +144,7 @@ export async function buildConfigured<Source extends RuleSource, Definition exte
   const tools = await configuredBuildTools(format);
   const results: ConfiguredResult<Definition>[] = [];
   for (const definition of definitions) {
-    const converted = lists.get(definition.list)!;
+    const converted = lists.get(conversionKey(definition))!;
     const report = structuredClone(converted.report);
     if (!converted.ok) {
       results.push({ id: definition.id, definition, status: 'failed', report, error: converted.error });
@@ -149,7 +168,7 @@ export async function buildConfigured<Source extends RuleSource, Definition exte
       results.push({ id: definition.id, definition, status: 'built-validated', report, native, buildId });
     } catch (error) {
       report.status = 'failed';
-      report.diagnostics.push(diagnostic('NATIVE_FAILED', String(error), { list: definition.list, file }));
+      report.diagnostics.push(diagnostic('NATIVE_FAILED', String(error), { list: definition.list ?? '', file }));
       results.push({ id: definition.id, definition, status: 'failed', report, error: String(error) });
     }
   }

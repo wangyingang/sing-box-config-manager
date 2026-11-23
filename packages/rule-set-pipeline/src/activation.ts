@@ -116,7 +116,7 @@ export async function verifyCandidateEvidence(options: Partial<NativeBuildOption
   // Older evidence has only a recorded definition, so use its DNS usage.
   const projectedFormat = singleArtifact ? undefined : candidate?.sourceInput.input.format
     ?? (build.definition?.usages?.['dns-response']?.artifact ? 'cidr-text' : 'plain-yaml');
-  const layout = projectedFormat === undefined || projectedFormat === 'sing-box-source-json' ? undefined : configuredUsages(projectedFormat);
+  const layout = projectedFormat === undefined || projectedFormat === 'sing-box-source-json' || projectedFormat === 'clash-rule-list' ? undefined : configuredUsages(projectedFormat);
   if (candidate) {
     requireThat(validRuleSource(candidate.source, candidate.sourceInput), 'Candidate source binding mismatch');
   } else if (source.kind === 'github-commit') {
@@ -184,7 +184,7 @@ export async function verifyCandidateEvidence(options: Partial<NativeBuildOption
   }
   const json = JSON.parse(sourceBytes.toString());
   requireThat(json.version === 4, 'Candidate Source Format mismatch');
-  const terms = readSourceTerms(json);
+  const terms = readSourceTerms(json, singleArtifact);
   if (layout) requireThat(terms.every(term => (term.type === 'ip_cidr') === (layout.dns === 'dns-response')),
     'Candidate has incompatible usage content');
   requireThat(!report || report.outputTermCount === terms.length, 'Conversion term count mismatch');
