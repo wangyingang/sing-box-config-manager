@@ -16,7 +16,7 @@ import type { RulesContext } from '../../src/rules-context.js';
 import { syncRules, pinRuleVersion, resumeRuleUpdates } from '../../src/rules-operations.js';
 import { githubRulesRepository } from '../../src/rules-repository.js';
 import { getRulesStatus, readSchedulePreflight } from '../../src/rules-status.js';
-import { formalSourceVerifier } from './formal-v4-sources.js';
+import { downloadProbeFile, formalSourceVerifier, retryProbeRead } from './formal-v4-sources.js';
 
 const exec = promisify(execFile);
 const positives: Record<string, string[]> = {
@@ -77,7 +77,8 @@ test('the 16 formal v4 rule sets deliver from an empty GitHub target', {
       if (endpoint.endsWith('/git/refs')) assert.equal((input as { ref: string }).ref, `refs/heads/${target}`);
       else assert.ok(endpoint.endsWith(`/refs/heads/${target}`) || /\/git\/(blobs|trees|commits)$/.test(endpoint), endpoint);
     }
-    const response = await fetch(`https://api.github.com/${endpoint}`, { method,
+    const transport = method === 'GET' ? retryProbeRead : fetch;
+    const response = await transport(`https://api.github.com/${endpoint}`, { method,
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
       body: input === undefined ? undefined : JSON.stringify(input), signal: AbortSignal.timeout(120_000) });
     const body = await response.text();
@@ -134,11 +135,12 @@ test('the 16 formal v4 rule sets deliver from an empty GitHub target', {
   await api('git/refs', { ref: `refs/heads/${target}`, sha: continuationHead ?? evidence.seed });
   ownsTarget = true;
   const repository = githubRulesRepository(target, request);
+  repository.download = downloadProbeFile;
   const context: RulesContext = {
     repository, targetBranch: target, allowWrites: true, binary, token,
     readConfiguration: async () => ({ revision: previous?.outcomes.sync.configurationRevision ?? sha, content: configuration, origin: 'formal-v4-checkout' }),
     async fetch(url, init) {
-      const response = await fetch(url, init);
+      const response = await retryProbeRead(url, init);
       // Signed redirect URLs contain transient credentials. Record only the host/path.
       const address = new URL(String(url));
       evidence.upstreamRequests.push({ endpoint: address.origin + address.pathname, status: response.status });
@@ -149,7 +151,15 @@ test('the 16 formal v4 rule sets deliver from an empty GitHub target', {
   const starting = await repository.snapshot();
   assert.equal(starting.head, continuationHead ?? evidence.seed);
   if (!continuationHead) assert.deepEqual(starting.paths, ['README.md']);
-  const initial = await getRulesStatus(input);
+  async function observe() {
+    for (let attempt = 1; ; attempt++) {
+      const observed = await getRulesStatus(input);
+      const issues = observed.rules?.flatMap(rule => rule.deliveryIssue ? [rule.deliveryIssue] : []) ?? [];
+      if (attempt === 3 || !issues.length || !issues.every(issue => issue.includes('Git publication stage missing'))) return observed;
+      console.log('retry status', attempt, issues.join('; '));
+    }
+  }
+  const initial = await observe();
   assert.equal(initial.status, 'success', initial.error ?? '');
   assert.equal(initial.rules?.length, 16);
   const previousRules = new Map<string, string>();
@@ -161,25 +171,32 @@ test('the 16 formal v4 rule sets deliver from an empty GitHub target', {
     assert.equal(rule.candidateCount, previousRules.has(rule.id) ? 1 : 0, rule.id);
   }
   await archive();
+  const observedSuccessfulSync = previous?.outcomes.sync.status === 'success' ? previous.outcomes.sync as RulesResult : undefined;
   const attempts: RulesResult[] = [];
-  evidence.outcomes.syncAttempts = attempts;
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    const result = await syncRules(input);
-    attempts.push(result);
-    evidence.outcomes.sync = result;
-    await archive();
-    if (result.status === 'success') break;
-    const errors = [result.error, ...result.results.map(({ error }) => error)].filter(Boolean);
-    if (!errors.length || !errors.every(error => /RULE_WRITE_CONFLICT|HTTP 5\d\d|timeout|fetch failed/i.test(error!))) break;
+  if (observedSuccessfulSync) {
+    evidence.outcomes.reusedSyncHead = continuationHead;
+    evidence.outcomes.sync = observedSuccessfulSync;
+  } else {
+    evidence.outcomes.syncAttempts = attempts;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const result = await syncRules(input);
+      attempts.push(result);
+      evidence.outcomes.sync = result;
+      await archive();
+      if (result.status === 'success') break;
+      const errors = [result.error, ...result.results.map(({ error }) => error)].filter(Boolean);
+      if (!errors.length || !errors.every(error => /RULE_WRITE_CONFLICT|HTTP 5\d\d|timeout|fetch failed/i.test(error!))) break;
+    }
   }
-  const synced = attempts.at(-1)!;
+  const synced = observedSuccessfulSync ?? attempts.at(-1)!;
   assert.equal(synced.status, 'success', JSON.stringify(synced.results.filter(rule => rule.error)));
   assert.equal(synced.results.length, 16);
 
-  const status = await getRulesStatus(input);
+  const status = observedSuccessfulSync ? initial : await observe();
   assert.equal(status.status, 'success', status.error ?? '');
   evidence.outcomes.status = status;
   const snapshot = await repository.snapshot();
+  assert.equal(snapshot.head, status.observedHeads?.stable);
   evidence.finalHead = snapshot.head;
   const verifySource = formalSourceVerifier(snapshot.head);
   for (const definition of ruleSets) {

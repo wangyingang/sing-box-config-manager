@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { setTimeout } from 'node:timers/promises';
 import { readFile, writeFile } from 'node:fs/promises';
 import { parseProjectedConfiguration } from '../../src/configuration.js';
 import { convertInput } from '../../src/configured-build.js';
@@ -9,8 +10,22 @@ import type { RuleSource } from '../../src/rules-model.js';
 import { convertSingBoxDomainJson } from '../../src/sing-box-domain-json-adapter.js';
 import { readV3Fixture } from '../fixtures/baseline-configuration.js';
 
-async function download(url: string) {
-  const response = await fetch(url, { signal: AbortSignal.timeout(60_000) });
+/** Only retry reads so transport recovery cannot replay a Git write. */
+export const retryProbeRead: typeof fetch = async (url, init) => {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const response = await fetch(url, init);
+      if (response.status < 500 || attempt === 3) return response;
+      await response.body?.cancel();
+    } catch (error) {
+      if (!(error instanceof TypeError) || attempt === 3 || init?.signal?.aborted) throw error;
+    }
+    await setTimeout(attempt * 1000);
+  }
+};
+
+export async function downloadProbeFile(url: string) {
+  const response = await retryProbeRead(url, { signal: AbortSignal.timeout(60_000) });
   assert.ok(response.ok, `HTTP ${response.status}: ${url}`);
   return Buffer.from(await response.arrayBuffer());
 }
@@ -31,7 +46,7 @@ export function formalSourceVerifier(deliveryHead: string) {
   async function cached(url: string) {
     let pending = inputs.get(url);
     if (!pending) {
-      pending = download(url);
+      pending = downloadProbeFile(url);
       inputs.set(url, pending);
     }
     return pending;
@@ -105,7 +120,7 @@ if (import.meta.main) {
     const source = rule.files.find(({ format }: { format: string }) => format === 'source');
     const match = /\/candidates\/([a-f0-9-]{36})\//.exec(source.candidateUrl);
     assert.ok(match);
-    sources.push(await verify({ id: rule.id, candidateId: match[1], source: rule.source, artifactUrl: source.candidateUrl, artifact: await download(source.candidateUrl) }));
+    sources.push(await verify({ id: rule.id, candidateId: match[1], source: rule.source, artifactUrl: source.candidateUrl, artifact: await downloadProbeFile(source.candidateUrl) }));
     console.log('source checked', rule.id, sources.at(-1)!.exactPredicateCount);
   }
   await writeFile(output, JSON.stringify({ sourceEvidence: finalHead, sources }, null, 2) + '\n', { flag: 'wx' });
