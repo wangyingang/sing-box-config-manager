@@ -1,4 +1,5 @@
 import { validArtifactFilename } from './artifact-path.js';
+import { stableRecordLocation } from './stable-rule-paths.js';
 import { createGitCommit, githubPublicationRepository, PublicationWriteError, type PublicationSnapshot } from './publication-repository.js';
 import { ARTIFACT_REPOSITORY, ghJson, GitHubHttpError, githubPublication } from './publication.js';
 
@@ -36,7 +37,8 @@ export function githubRulesRepository(targetBranch: string, request: typeof ghJs
         const control = ['pipeline/state.json', 'pipeline/identity.json', 'pipeline/rule-operation.json'].includes(path);
         const candidate = /^candidates\/[a-f0-9-]{36}\/[a-z0-9][a-z0-9._-]*$/.test(path);
         const stableFile = /^stable\/(?:[a-z0-9][a-z0-9._-]*\/)+([^/]+)$/.exec(path)?.[1];
-        const stable = stableFile !== undefined && (stableFile === 'activation.json' || validArtifactFilename(stableFile));
+        const stable = stableRecordLocation(path)?.artifact !== undefined
+          || stableFile !== undefined && (stableFile === 'activation.json' || validArtifactFilename(stableFile));
         if ((!control && !candidate && !stable) || path.split('/').some(part => part === '.' || part === '..')
           || (candidate && target !== branch) || (stable && target !== targetBranch)) throw new Error(`Invalid rules write path: ${path}`);
         if (candidate && bytes && current.paths.includes(path)) throw new Error('Cannot overwrite a retained candidate');

@@ -1,3 +1,4 @@
+import { stableRecordLocation } from './stable-rule-paths.js';
 import type { PreparedBaseline } from './maintenance-baseline-transport.js';
 import type { Ref } from './maintenance-refs.js';
 import type { RuleDelivery } from './rules-model.js';
@@ -74,7 +75,8 @@ export function validateCleanupFields(value: Record<string, any>) {
       || p.blockers.length || !Number.isSafeInteger(p.retainedBytes) || p.retainedBytes < 0 || p.hasCleanup !== true
       || !Array.isArray(p.otherRefs) || !p.otherRefs.every((r: any) => object(r) && typeof r.ref === 'string' && sha(r.head))) return false;
     if (!p.retain.active.every((a: any) => object(a) && typeof a.recordPath === 'string'
-      && /^stable\/(?:[a-z0-9][a-z0-9._-]*\/)+activation\.json$/.test(a.recordPath)
+      && (/^stable\/(?:[a-z0-9][a-z0-9._-]*\/)+activation\.json$/.test(a.recordPath)
+        || stableRecordLocation(a.recordPath)?.artifact !== undefined)
       && object(a.record) && a.record.schemaVersion === 2 && p.retain.candidateIds.includes(a.record.candidateId))) return false;
     const all = [...p.retain.candidateIds, ...p.discard.candidateIds];
     return p.decisions.length === all.length && new Set(p.decisions.map((d: any) => d.candidateId)).size === all.length

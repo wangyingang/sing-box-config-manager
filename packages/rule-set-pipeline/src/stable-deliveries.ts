@@ -1,5 +1,6 @@
 import type { PublicationSnapshot } from './publication-repository.js';
 import { sha256 } from './release.js';
+import { singleArtifactPaths, stableRecordLocation } from './stable-rule-paths.js';
 import type { FileEvidence, RuleDelivery } from './rules-model.js';
 
 export interface StableDeliveries {
@@ -10,7 +11,10 @@ export interface StableDeliveries {
 export async function verifyStableDeliveries(snapshot: PublicationSnapshot): Promise<StableDeliveries> {
   const records = new Map<string, RuleDelivery>();
   const recordPaths = new Map<string, string>();
-  for (const path of snapshot.paths.filter(path => path.startsWith('stable/') && path.endsWith('/activation.json'))) {
+  const owners = new Map<string, string>();
+  for (const path of snapshot.paths) {
+    const location = stableRecordLocation(path);
+    if (!location || snapshot.isDirectory?.(path)) continue;
     const bytes = await snapshot.read(path);
     const record = bytes && JSON.parse(bytes.toString());
     if (record?.schemaVersion !== 2 || typeof record.id !== 'string' || typeof record.logicalId !== 'string'
@@ -18,8 +22,16 @@ export async function verifyStableDeliveries(snapshot: PublicationSnapshot): Pro
       throw new Error(`RULE_DELIVERY_CORRUPT: ${path}`);
     }
     if (records.has(record.logicalId)) throw new Error('RULE_DELIVERY_CORRUPT: duplicate logical ID');
-    for (const [file, evidence] of Object.entries(record.files) as [string, FileEvidence][]) {
-      if (!file.startsWith(path.slice(0, -'activation.json'.length))) throw new Error('RULE_DELIVERY_CORRUPT: unowned file');
+    const files = Object.entries(record.files) as [string, FileEvidence][];
+    if (location.artifact !== undefined && (files.length !== 2
+      || !singleArtifactPaths(location.directory, location.artifact).every(file => Object.hasOwn(record.files, file)))) {
+      throw new Error(`RULE_DELIVERY_CORRUPT: unexpected files for ${path}`);
+    }
+    for (const [file, evidence] of files) {
+      if (!file.startsWith(location.directory + '/')) throw new Error('RULE_DELIVERY_CORRUPT: unowned file');
+      const owner = owners.get(file);
+      if (owner !== undefined) throw new Error(`SUBSCRIPTION_PATH_CONFLICT: ${file} is owned by ${owner} and ${record.logicalId}`);
+      owners.set(file, record.logicalId);
       const actual = await snapshot.read(file);
       if (!actual || actual.length !== evidence.byteLength || sha256(actual) !== evidence.sha256) throw new Error(`RULE_DELIVERY_CORRUPT: ${file}`);
     }

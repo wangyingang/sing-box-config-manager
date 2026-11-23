@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
+import { pathsOverlap, ruleDeliveryRecordPath, singleArtifactPaths, stableRecordLocation } from './stable-rule-paths.js';
 import { activationSubscription, candidateStableFiles } from './activation.js';
 import { artifactSubscription, configuredSubscription, type RuleDefinition } from './configuration.js';
 import { immutableUrl } from './publication.js';
@@ -25,26 +26,38 @@ export function ruleSubscription(session: RulesSession, rule: Pick<ManagedRule, 
   return subscription;
 }
 
-function checkOtherDeliveryRoots(logicalId: string, stablePath: string, recordPaths: ReadonlyMap<string, string>) {
+function checkOtherDeliveryRoots(logicalId: string, stablePath: string, recordPaths: ReadonlyMap<string, string>,
+  sharedDirectoryAllowed = false) {
   for (const [id, path] of recordPaths) {
     if (id === logicalId) continue;
-    const root = path.slice(0, -'/activation.json'.length);
-    if (root === stablePath || root.startsWith(`${stablePath}/`) || stablePath.startsWith(`${root}/`)) {
+    const { directory, artifact } = stableRecordLocation(path)!;
+    if (sharedDirectoryAllowed && artifact !== undefined) continue;
+    if (pathsOverlap(directory, stablePath)) {
       throw new Error(`SUBSCRIPTION_PATH_CONFLICT: ${stablePath} overlaps current delivery ${id}`);
     }
   }
 }
 
 /** Desired paths cannot overwrite a different rule's still-current contract. */
-export async function ensureRulePathAvailable(session: RulesSession, definition: Pick<RuleDefinition, 'id' | 'stablePath'>, observed?: PublicationSnapshot) {
+export async function ensureRulePathAvailable(session: RulesSession, definition: RuleDefinition, observed?: PublicationSnapshot) {
   const stable = observed ?? await session.stable();
   const { records, recordPaths } = await session.loaded.readStableDeliveries(stable);
   const current = records.get(definition.id);
   const ownRecord = recordPaths.get(definition.id);
-  if (ownRecord && ownRecord !== `${definition.stablePath}/activation.json`) {
+  const recordPath = ruleDeliveryRecordPath(definition);
+  if (ownRecord && ownRecord !== recordPath) {
     throw new Error(`SUBSCRIPTION_PATH_CONFLICT: current delivery ${definition.id} is registered at ${ownRecord}`);
   }
-  checkOtherDeliveryRoots(definition.id, definition.stablePath, recordPaths);
+  checkOtherDeliveryRoots(definition.id, definition.stablePath, recordPaths, 'artifact' in definition);
+  if ('artifact' in definition) {
+    const expected = [recordPath, ...singleArtifactPaths(definition.stablePath, definition.artifact)];
+    const occupied = stable.paths.find(path =>
+      path !== ownRecord && !(current && Object.hasOwn(current.files, path))
+      && expected.some(output => pathsOverlap(output, path)
+        && !(output.startsWith(path + '/') && stable.isDirectory?.(path))));
+    if (occupied) throw new Error(`SUBSCRIPTION_PATH_CONFLICT: ${definition.id} overlaps existing path ${occupied}`);
+    return current;
+  }
   if (stable.paths.some(path => path.startsWith(`${definition.stablePath}/`) && path !== ownRecord && !(current && Object.hasOwn(current.files, path)))) {
     throw new Error(`SUBSCRIPTION_PATH_CONFLICT: ${definition.stablePath} contains unmanaged files`);
   }
@@ -57,7 +70,8 @@ async function observedDeletion(session: RulesSession, id: string, stable: Publi
   if (!record) return { record, paths: [] };
   // A rejected definition may name a different root. Unmanaged siblings are left in place.
   const recordPath = recordPaths.get(id)!;
-  checkOtherDeliveryRoots(id, recordPath.slice(0, -'/activation.json'.length), recordPaths);
+  const location = stableRecordLocation(recordPath)!;
+  if (location.artifact === undefined) checkOtherDeliveryRoots(id, location.directory, recordPaths);
   return { record, paths: [recordPath, ...Object.keys(record.files)] };
 }
 
@@ -81,7 +95,7 @@ async function plannedDeliveryFiles(session: RulesSession, pending: PendingDeliv
   const verified = await verifyRuleCandidate(session, candidate, rulesBinary(session.loaded.context));
   const subscription = ruleSubscription(session, pending.afterRule, record);
   const files: RuleWrites = candidateStableFiles(verified, subscription, pending.afterRule.definition, session.loaded.context.targetBranch);
-  files[`${pending.afterRule.definition.stablePath}/activation.json`] = encodeRecord(record);
+  files[ruleDeliveryRecordPath(pending.afterRule.definition)] = encodeRecord(record);
   return files;
 }
 
@@ -216,7 +230,7 @@ export async function deliverRuleVersion(session: RulesSession, rule: ManagedRul
   const record: RuleDelivery = { schemaVersion: 2, id, logicalId: rule.definition.id, candidateId: candidate.id,
     versionId: candidate.versionId, publishedAt: candidate.publishedAt, candidateEvidenceUrl: candidate.evidenceUrl!,
     source: candidate.source, subscription, files: evidenceFor(files) as Record<string, FileEvidence> };
-  files[`${rule.definition.stablePath}/activation.json`] = encodeRecord(record);
+  files[ruleDeliveryRecordPath(rule.definition)] = encodeRecord(record);
   session.journal.pendingDelivery = { id, kind, logicalId: rule.definition.id, configurationRevision: session.loaded.observed.revision,
     stableHead: stable.head, afterRule: rule, record, changes: evidenceFor(files), removeCandidates: [],
     ...(qualification && { qualifiedCandidate: qualification }) };

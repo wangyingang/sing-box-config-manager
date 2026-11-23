@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
+import { ruleDeliveryRecordPath } from './stable-rule-paths.js';
 import { candidateStableFiles } from './activation.js';
 import { matchesRuleDelivery } from './rules-delivery.js';
 import { configuredBuildIdentity, configuredBuildTools } from './configured-build.js';
@@ -50,7 +51,7 @@ async function currentCandidate(session: RulesSession, rule: ManagedRule, curren
   if (!qualification) return;
   const files = candidateStableFiles(verified, current.subscription, rule.definition, session.loaded.context.targetBranch);
   const stable = stableSnapshot ?? await session.stable();
-  const record = await stable.read(`${rule.definition.stablePath}/activation.json`);
+  const record = await stable.read(ruleDeliveryRecordPath(rule.definition));
   if (!record || !isDeepStrictEqual(JSON.parse(record.toString()), current) || !matchesRuleDelivery(current, candidate, files)) return;
   for (const [path, bytes] of Object.entries(files)) {
     if (!(await stable.read(path))?.equals(bytes)) return;

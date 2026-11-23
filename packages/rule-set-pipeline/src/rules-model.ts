@@ -7,6 +7,7 @@ import { validFixedUrlSource, type FixedUrlSource } from './fixed-url-source.js'
 import type { RuleConversionReport, SourceRecord } from './types.js';
 import { validOpenAiVoiceSource, type OpenAiVoiceSource } from './openai-voice-source.js';
 import { sha256 } from './release.js';
+import { ruleDeliveryRecordPath } from './stable-rule-paths.js';
 import { validReleaseSource } from './release-source-fact.js';
 import type { CleanupCheckpoint, CleanupReport, CleanupRun, LastCleanup } from './rules-cleanup-model.js';
 import { validateCleanupFields } from './rules-cleanup-model.js';
@@ -249,7 +250,7 @@ export function parseRulesJournal(bytes: Buffer): RulesJournal {
       || pending.kind === 'pin' && (pending.afterRule.control?.mode !== 'pinned' || pending.afterRule.control.candidateId !== candidate.id)) {
       throw new Error('RULE_STATE_CORRUPT: pending delivery record');
     }
-    const activationPath = `${definition.stablePath}/activation.json`;
+    const activationPath = ruleDeliveryRecordPath(parseStoredRuleDefinition(definition, parseSource(pending.afterRule.source).input.format));
     const activation = encodeRecord(record);
     if (!isDeepStrictEqual(pending.changes, { ...record.files, [activationPath]: { sha256: sha256(activation), byteLength: activation.length } })) {
       throw new Error('RULE_STATE_CORRUPT: pending delivery changes');

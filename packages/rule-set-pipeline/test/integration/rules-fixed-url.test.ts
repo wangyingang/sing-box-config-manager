@@ -226,18 +226,17 @@ test('empty DLC results publish valid empty artifacts while a missing list prese
 });
 
 test('v4 rejects invalid DLC and whole-file selections before downloading', async () => {
-  for (const rule of [
-    { ...dlcRule('invalid', 'unused'), data: { source: 'dlc' } },
-    dlcRule('invalid', 'a', { include: { tags: { allOf: [] } } }),
-    dlcRule('invalid', 'a', { include: { tags: { allOf: ['cn'], anyOf: ['cn'] } } }),
-    { ...voice, data: { source: 'voice', list: 'all' } },
-    { ...voice, filter: { include: { tags: { anyOf: ['cn'] } } } },
-  ]) {
+  for (const [rule, expected] of [
+    [{ ...dlcRule('invalid', 'unused'), data: { source: 'dlc' } }, /data\.list: required for v2fly-dlc-yaml/],
+    [dlcRule('invalid', 'a', { include: { tags: { allOf: [] } } }), /filter\.include\.tags\.allOf: must contain at least one value/],
+    [dlcRule('invalid', 'a', { include: { tags: { allOf: ['cn'], anyOf: ['cn'] } } }), /filter\.include\.tags: .*more than 1 properties/],
+    [{ ...voice, data: { source: 'voice', list: 'all' } }, /data\.list: must be omitted for openai-voice-json/],
+    [{ ...voice, filter: { include: { tags: { anyOf: ['cn'] } } } }, /filter: invalid filter for openai-voice-json/],
+  ] as const) {
     const env = fixture({ invalid: rule }, { a: ['domain:example.com'] });
     const result = await env.sync();
     assert.equal(result.status, 'failed', JSON.stringify(rule));
-    assert.match(result.error!, /Rule set invalid, source (dlc|voice)/);
-    assert.match(result.error!, /DLC tag filter|tag condition|rule definition fields/);
+    assert.match(result.error!, new RegExp(`\\d+:\\d+ ruleSets\\.invalid\\.${expected.source}`));
     assert.deepEqual(env.requests, []);
     assert.deepEqual(env.writes, []);
   }

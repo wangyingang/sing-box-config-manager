@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
+import { singleArtifactPaths } from './stable-rule-paths.js';
 import { saveActivationReceipt } from './activation-receipt.js';
 import { configuredBuildIdentity, CONFIGURED_BUILD_RECORD } from './configured-build.js';
 import { artifactSubscription, configuredUsages, isProjectedFormat, configuredProjections, nativeTargetForRule, parseProjectedConfiguration, parseStoredRuleDefinition, type RuleDefinition } from './configuration.js';
@@ -291,8 +292,8 @@ export function candidateStableFiles(candidate: Awaited<ReturnType<typeof verify
     const checked = artifactSubscription(definition, branch);
     requireThat(equal(subscription, checked) && candidate.manifest.schemaVersion === SINGLE_ARTIFACT_MANIFEST_VERSION,
       'Candidate or subscription does not describe a single artifact');
-    const path = `${definition.stablePath}/${definition.artifact}`;
-    return { [`${path}.json`]: candidate.bytesByFormat.source, [`${path}.srs`]: candidate.bytesByFormat.binary };
+    const [source, binary] = singleArtifactPaths(definition.stablePath, definition.artifact);
+    return { [source]: candidate.bytesByFormat.source, [binary]: candidate.bytesByFormat.binary };
   }
   const recordPath = `${definition.stablePath}/activation.json`;
   const files: Record<string, Buffer> = {};

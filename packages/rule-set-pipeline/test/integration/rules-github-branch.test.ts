@@ -207,15 +207,15 @@ test('v4 delivers empty Clash and text rule sets after a normal empty selection'
 test('v4 rejects invalid branch file selections and Clash filters before upstream access', async t => {
   const valid = rule('test-rule', clashFile, 'clash-rule-list');
   const malformed = [
-    ['path traversal', { ...valid, data: { ...valid.data, file: 'rules/../mixed.list' } }, /invalid GitHub branch file/],
-    ['missing format', { ...valid, data: { source: 'example', file: clashFile } }, /data fields are invalid/],
-    ['whole-file list', { ...valid, data: { ...valid.data, list: 'all' } }, /data fields are invalid/],
-    ['unknown format', { ...valid, data: { ...valid.data, format: 'plain-yaml' } }, /invalid GitHub branch file or format/],
-    ['undefined source', { ...valid, data: { ...valid.data, source: 'missing' } }, /unknown source missing/],
-    ['two actions', { ...valid, filter: { include: { type: { anyOf: ['DOMAIN'] } }, exclude: { type: { anyOf: ['IP-ASN'] } } } }, /filter fields are invalid/],
-    ['empty condition', { ...valid, filter: { include: { type: { anyOf: [] } } } }, /nonempty list of Clash rule types/],
-    ['non-type condition', { ...valid, filter: { include: { tags: { anyOf: ['cn'] } } } }, /filter include fields are invalid/],
-    ['filter on CIDR', { ...rule('test-rule', 'ip.txt', 'cidr-text'), filter: { include: { type: { anyOf: ['IP-CIDR'] } } } }, /filter is not supported for cidr-text/],
+    ['path traversal', { ...valid, data: { ...valid.data, file: 'rules/../mixed.list' } }, /\d+:\d+ ruleSets\.test-rule\.data\.file: must match pattern/],
+    ['missing format', { ...valid, data: { source: 'example', file: clashFile } }, /\d+:\d+ ruleSets\.test-rule\.data\.format: required when file is present/],
+    ['whole-file list', { ...valid, data: { ...valid.data, list: 'all' } }, /\d+:\d+ ruleSets\.test-rule\.data\.list: field is not allowed/],
+    ['unknown format', { ...valid, data: { ...valid.data, format: 'plain-yaml' } }, /\d+:\d+ ruleSets\.test-rule\.data\.format: allowed values/],
+    ['undefined source', { ...valid, data: { ...valid.data, source: 'missing' } }, /\d+:\d+ ruleSets\.test-rule\.data\.source: unknown source missing/],
+    ['two actions', { ...valid, filter: { include: { type: { anyOf: ['DOMAIN'] } }, exclude: { type: { anyOf: ['IP-ASN'] } } } }, /\d+:\d+ ruleSets\.test-rule\.filter: .*more than 1 properties/],
+    ['empty condition', { ...valid, filter: { include: { type: { anyOf: [] } } } }, /\d+:\d+ ruleSets\.test-rule\.filter\.include\.type\.anyOf: must contain at least one value/],
+    ['non-type condition', { ...valid, filter: { include: { tags: { anyOf: ['cn'] } } } }, /\d+:\d+ ruleSets\.test-rule\.filter\.include\.tags: field is not allowed/],
+    ['filter on CIDR', { ...rule('test-rule', 'ip.txt', 'cidr-text'), filter: { include: { type: { anyOf: ['IP-CIDR'] } } } }, /\d+:\d+ ruleSets\.test-rule\.filter: field is not allowed/],
   ] as const;
   for (const [name, definition, error] of malformed) {
     await t.test(name, async () => {

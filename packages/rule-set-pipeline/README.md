@@ -94,9 +94,12 @@ pnpm rules sync --config /path/to/rulesets-draft.yml --dry-run --json
 
 ### 在隔离目标同步混合规则集
 
+将下面的编辑器指令与 [v4 Schema](config/rulesets.schema.json) 一起使用。示例适用于配置与 Schema 同目录的情况。支持 YAML Language Server 的编辑器会补全固定字段和枚举，并提示结构错误。`sync` 使用同一份 Schema，同步前继续检查 source 引用、实际输入格式和最终文件路径。诊断包含 YAML 行列号和字段路径。
+
 `sync` 支持最小 v4 配置。使用 `fetch.method: url` 从固定 HTTPS 地址读取整份 `sing-box-source-json`，在 `publishPath` 下发布以 `artifact` 命名的 JSON 和 SRS。将下例中的 URL 换成实际端点，并按下节配置同名的隔离目标。
 
 ```yaml
+# yaml-language-server: $schema=./rulesets.schema.json
 schemaVersion: 4
 candidateRetentionDays: 30
 target:
@@ -115,6 +118,8 @@ ruleSets:
     publishPath: stable/example-mixed
     artifact: mixed
 ```
+
+规则集可以共用 `publishPath`，各集使用不同的 `artifact`。例如将 `domains` 和 `ips` 发布到 `stable/shared`，订阅地址分别以 `domains.json`、`domains.srs`、`ips.json` 和 `ips.srs` 结尾。移除一集只撤销该集的文件和交付记录。
 
 reader 接受 UTF-8 JSON 格式的 sing-box Source Format v4。顶层必须包含整数 `version: 4` 和 `rules` 数组，所有对象的键必须唯一。规则可使用 v4 的原生匹配字段，包括域名、源与目标 IP、端口、DNS query type、网络、进程、包名和接口条件。默认规则保留原有字段分组和顶层条目边界。逻辑规则保留嵌套的 `and`、`or` 和 `invert`。例如，以下规则要求后缀和关键词同时匹配。
 

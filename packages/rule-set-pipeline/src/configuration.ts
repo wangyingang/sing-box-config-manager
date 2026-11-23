@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
 import { reservedArtifactBasename, validArtifactBasename } from './artifact-path.js';
 import { validRepository, validBranch, validInputPath, validInputFile } from './source-input.js';
-import { isMap, parseDocument, visit } from 'yaml';
+import { isMap, LineCounter, parseDocument, visit } from 'yaml';
 import { USAGES, type Usage } from './projection.js';
 import { ARTIFACT_REPOSITORY } from './publication.js';
 import { CHINA_IP_INPUT, isCommitInputFormat, type CommitInput } from './github-commit.js';
@@ -10,14 +10,13 @@ import { OPENAI_VOICE_FILE, OPENAI_VOICE_URL, type OpenAiVoiceInput } from './op
 import { V2FLY_RELEASE_INPUT, type ReleaseInput } from './release.js';
 import { validFixedUrl, type FixedUrlInput } from './fixed-url-source.js';
 import { validClashRuleType, type ClashTypeFilter } from './clash-rule-list-adapter.js';
+import { validateRulesConfigurationV4 } from './rules-configuration-v4.js';
+import { singleArtifactPaths } from './stable-rule-paths.js';
 
 export type SourceInput = ReleaseInput | CommitInput | OpenAiVoiceInput | FixedUrlInput;
 export type SourceFormat = SourceInput['input']['format'];
 type GitHubBranchSource = { version: 'github-branch'; repository: string; branch: string };
 type ConfiguredSource = SourceInput | GitHubBranchSource;
-const branchFileFormats = ['cidr-text', 'domain-suffix-text', 'clash-rule-list'] as const;
-const isBranchFileFormat = (value: unknown): value is (typeof branchFileFormats)[number] =>
-  branchFileFormats.some(format => format === value);
 type AvailableUsage = { artifact: string };
 type ConfiguredUsage = AvailableUsage | { unavailable: 'empty' };
 type DnsUsage = Exclude<Usage, 'route'>;
@@ -239,31 +238,50 @@ export function parseSource(input: unknown): SourceInput {
   throw new Error('Unsupported source acquisition method');
 }
 
-function parseV4Source(input: unknown, id: string): ConfiguredSource {
-  const label = `source ${id}`;
-  const { fetch } = mapping(input, label);
-  const { method } = mapping(fetch, `${label} fetch`);
-  if (method === 'github-branch') {
-    exact(input, ['fetch'], label);
-    const { repository, branch } = exact(fetch, ['method', 'repository', 'branch'], `${label} fetch`);
-    if (!validRepository(repository) || !validBranch(branch)) throw new Error(`Invalid GitHub repository or branch for ${label}`);
-    return { version: 'github-branch', repository, branch };
-  }
-  if (method !== 'url') throw new Error(`Unsupported source acquisition method: ${String(method)}`);
-  const { format } = exact(input, ['fetch', 'format'], label);
-  const { url, sha256Url } = exact(fetch, ['method', 'url'], `${label} fetch`, ['sha256Url']);
-  return parseSource({ version: 'url', input: { format, url, ...(sha256Url !== undefined && { sha256Url }) } });
+function configureV4(raw: ReturnType<typeof validateRulesConfigurationV4>): BuildConfiguration {
+  const sources = Object.fromEntries<ConfiguredSource>(Object.entries(raw.sources).map(([id, { fetch, format }]) => {
+    if (fetch.method === 'github-branch') {
+      return [id, { version: 'github-branch', repository: fetch.repository, branch: fetch.branch }];
+    }
+    return [id, parseSource({ version: 'url', input: { format, url: fetch.url,
+      ...(fetch.sha256Url !== undefined && { sha256Url: fetch.sha256Url }) } })];
+  }));
+  const branchInputs: Record<string, CommitInput> = Object.create(null);
+  const ruleSets = Object.entries(raw.ruleSets).map(([id, { data, publishPath, artifact, filter }]) => {
+    const source = sources[data.source];
+    if (source.version === 'github-branch') {
+      // Whole-configuration validation requires a file and format at this selection.
+      branchInputs[id] = { repository: source.repository, version: 'git-branch', branch: source.branch,
+        input: { format: data.format!, path: data.file! } };
+    }
+    const { format } = configuredRuleInput({ sources, branchInputs }, { id, source: data.source }).input;
+    return parseSingleArtifactDefinition({
+      id, source: data.source, stablePath: publishPath, artifact, ...(data.list !== undefined && { list: data.list }),
+      ...(filter !== undefined && { filter: format === 'v2fly-dlc-yaml' ? parseTagFilter(filter) : filter }),
+    }, format);
+  });
+  return { schemaVersion: 4, candidateRetentionDays: raw.candidateRetentionDays, sources, target: raw.target, ruleSets,
+    ...(Object.keys(branchInputs).length && { branchInputs }) };
 }
 
 /** Validate every definition before source access or output directory creation. */
 export function parseBuildConfiguration(input: string): BuildConfiguration {
-  const document = parseDocument(input, { uniqueKeys: true, stringKeys: true });
-  if (document.errors.length || document.warnings.length) throw new Error(`Invalid build configuration YAML: ${document.errors[0]?.message ?? document.warnings[0]?.message}`);
-  let alias = false;
-  visit(document, { Alias() { alias = true; } });
-  if (alias || !isMap(document.contents)) throw new Error('Invalid build configuration YAML');
-  const raw = exact(document.toJS(), ['schemaVersion', 'candidateRetentionDays', 'sources', 'target', 'ruleSets'], 'configuration');
-  if (raw.schemaVersion !== 3 && raw.schemaVersion !== 4) throw new Error('Unsupported configuration version');
+  const lines = new LineCounter();
+  const document = parseDocument(input, { uniqueKeys: true, stringKeys: true, lineCounter: lines, prettyErrors: false });
+  const yamlDiagnostics = [...document.errors, ...document.warnings].map(error => {
+    const { line, col } = lines.linePos(error.pos[0]);
+    return `${line}:${col} ${error.message}`;
+  });
+  visit(document, { Alias(_key, node) {
+    const { line, col } = lines.linePos(node.range?.[0] ?? 0);
+    yamlDiagnostics.push(`${line}:${col} YAML aliases are not allowed`);
+  } });
+  if (yamlDiagnostics.length) throw new Error(`Invalid build configuration YAML:\n${yamlDiagnostics.join('\n')}`);
+  const value = document.toJS();
+  if (!isMap(document.contents) || document.get('schemaVersion') !== 3) {
+    return configureV4(validateRulesConfigurationV4(document, lines, value));
+  }
+  const raw = exact(value, ['schemaVersion', 'candidateRetentionDays', 'sources', 'target', 'ruleSets'], 'configuration');
   if (!Number.isSafeInteger(raw.candidateRetentionDays) || Number(raw.candidateRetentionDays) <= 0) throw new Error('candidateRetentionDays must be a positive integer');
   const target = exact(raw.target, ['repository', 'branch'], 'target');
   if (target.repository !== ARTIFACT_REPOSITORY || typeof target.branch !== 'string'
@@ -273,57 +291,25 @@ export function parseBuildConfiguration(input: string): BuildConfiguration {
   const declarations = Object.entries(mapping(raw.sources, 'sources'));
   const sources = Object.fromEntries(declarations.map(([id, source]) => {
     if (!logicalId.test(id)) throw new Error(`Invalid source ID: ${id}`);
-    if (raw.schemaVersion === 4) return [id, parseV4Source(source, id)];
     const parsed = parseSource(source);
     if (parsed.version === 'url') throw new Error('URL sources require configuration v4');
     if (parsed.input.format === 'clash-rule-list') throw new Error('clash-rule-list requires configuration v4');
     return [id, parsed];
   }));
-  const branchInputs: Record<string, CommitInput> = Object.create(null);
-  const entries = raw.schemaVersion === 4 ? Object.entries(mapping(raw.ruleSets, 'ruleSets')).map(([id, entry]) => {
-    const label = `rule set ${id}`;
-    const fields = exact(entry, ['data', 'publishPath', 'artifact'], label, ['filter']);
-    const { data, publishPath, artifact, filter } = fields;
-    const dataLabel = `${label} data`;
-    const { source } = mapping(data, dataLabel);
-    if (typeof source !== 'string' || !Object.hasOwn(sources, source)) {
-      throw new Error(`Rule set ${id}: unknown source ${String(source)}`);
-    }
-    const declaration = sources[source];
-    let list: unknown;
-    if (declaration.version === 'github-branch') {
-      const { file, format } = exact(data, ['source', 'file', 'format'], dataLabel);
-      if (!validInputPath(file) || !isBranchFileFormat(format)) {
-        throw new Error(`Rule set ${id}: invalid GitHub branch file or format`);
-      }
-      branchInputs[id] = { repository: declaration.repository, version: 'git-branch', branch: declaration.branch,
-        input: { format, path: file } };
-    } else {
-      ({ list } = exact(data, ['source'], dataLabel, ['list']));
-    }
-    return { id, source, stablePath: publishPath, artifact, ...(list !== undefined && { list }),
-      ...(Object.hasOwn(fields, 'filter') && { filter }) };
-  }) : raw.ruleSets;
+  const entries = raw.ruleSets;
   if (!Array.isArray(entries)) throw new Error('ruleSets must be an explicit sequence');
   const ids = new Set<string>(), paths = new Set<string>();
   const ruleSets = entries.map(entry => {
-    const declaration = mapping(entry, 'rule definition');
-    const { id, source, filter } = declaration;
+    const { id, source } = mapping(entry, 'rule definition');
     if (typeof source !== 'string' || !Object.hasOwn(sources, source)) {
       throw new Error(`Rule set ${String(id)}: unknown source ${String(source)}`);
     }
-    const input = configuredRuleInput({ sources, branchInputs }, { id: String(id), source }).input;
+    const input = sources[source].input;
     let rule: RuleDefinition;
     try {
-      if (raw.schemaVersion === 4) {
-        const definition = input.format !== 'v2fly-dlc-yaml' || filter === undefined ? declaration : { ...declaration, filter: parseTagFilter(filter) };
-        rule = parseSingleArtifactDefinition(definition, input.format);
-      } else {
-        if (!isProjectedFormat(input.format)) throw new Error(`${input.format} requires configuration v4`);
-        rule = parseRuleDefinition(entry, input.format);
-      }
-    }
-    catch (error) {
+      if (!isProjectedFormat(input.format)) throw new Error(`${input.format} requires configuration v4`);
+      rule = parseRuleDefinition(entry, input.format);
+    } catch (error) {
       const file = 'path' in input ? input.path : 'asset' in input ? input.asset : input.url;
       throw new Error(`Rule set ${String(id)}, source ${source} (${file}): ${(error as Error).message}`, { cause: error });
     }
@@ -335,9 +321,8 @@ export function parseBuildConfiguration(input: string): BuildConfiguration {
     ids.add(rule.id); paths.add(path);
     return rule;
   });
-  return { schemaVersion: raw.schemaVersion, candidateRetentionDays: Number(raw.candidateRetentionDays), sources,
-    target: { repository: target.repository, branch: target.branch }, ruleSets,
-    ...(Object.keys(branchInputs).length && { branchInputs }) };
+  return { schemaVersion: 3, candidateRetentionDays: Number(raw.candidateRetentionDays), sources,
+    target: { repository: target.repository, branch: target.branch }, ruleSets };
 }
 
 export function configuredRuleInput(configuration: Pick<BuildConfiguration, 'sources' | 'branchInputs'>,
@@ -393,9 +378,10 @@ export function configuredProjections({ stablePath, usages }: ProjectedRuleDefin
 }
 
 export function artifactSubscription(definition: SingleArtifactDefinition, branch: string) {
-  const prefix = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${branch}/${definition.stablePath}/${definition.artifact}`;
+  const prefix = `https://raw.githubusercontent.com/${ARTIFACT_REPOSITORY}/${branch}/`;
+  const [source, binary] = singleArtifactPaths(definition.stablePath, definition.artifact);
   return { schemaVersion: 3, systemRuleSetId: definition.id, targetVersion: '1.14.4', sourceFormatVersion: 4,
-    formats: { source: { url: `${prefix}.json` }, binary: { url: `${prefix}.srs` } } };
+    formats: { source: { url: prefix + source }, binary: { url: prefix + binary } } };
 }
 
 export function configuredSubscription(rule: ProjectedRuleDefinition, branch: string) {
