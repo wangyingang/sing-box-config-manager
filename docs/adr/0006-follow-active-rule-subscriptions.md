@@ -4,6 +4,8 @@ status: partially superseded by Rule Set Pipeline ADR 0001
 
 # Recipe 自动跟随已激活的系统规则版本
 
+2026-11-23 更新：正式 Pipeline 为每个规则集交付一份 JSON/SRS 产物，交付记录中的 `subscription.schemaVersion: 3` 标识两种格式的稳定入口。可信宿主在 Rule Subscription v2 中声明用途与能力，Compiler 在生成和交付配置时校验这些声明。下文关于 Pipeline 在激活时校验用途的描述属于早期设计。
+
 2026-11-16 更新：本 ADR 的稳定订阅、Compiler 边界与客户端原生更新决定继续有效。下述显式激活、旧操作入口及人工暂停安排已由 [Rule Set Pipeline ADR 0001](../../packages/rule-set-pipeline/docs/adr/0001-configuration-driven-rule-operations.md) 和 [Spec #84](https://github.com/wangyingang/sing-box-config-manager/issues/84) 替代；原文保留设计背景，不作为当前命令指南。
 
 2026-11-03，Rule Set Pipeline 首个完整交付的设计确认：Recipe 选择系统规则集及用途，通过稳定的规则订阅入口自动跟随已激活版本，不提供固定规则产物版本的选项。规则候选通过验证和订阅兼容性检查后，才可显式激活。客户端按自身远程规则更新机制加载新版本，无需修改 Recipe 或重新发布配置。

@@ -8,7 +8,7 @@
 不读取或引入 #16 的实现，不修改原工作区分支。新增 Pipeline 内容仅为订阅契约数据与文档，
 没有编译、远程获取、候选上传、激活或回滚运行时代码。
 
-[Rule Subscription v1](../../../rule-set-pipeline/contracts/rule-subscription.md)
+[Rule Subscription v1](../../../../docs/history/rule-subscription-v1/rule-subscription.md)
 与不可变 Artifact Manifest 分别管理。Recipe／Template v2 显式选择稳定订阅；
 v1 固定产物仍保持原义。后续激活须遵守契约中的用途、格式、版本和能力约束。
 

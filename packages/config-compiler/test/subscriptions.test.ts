@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import Ajv from 'ajv';
-import schema from '../../rule-set-pipeline/contracts/rule-subscription-v2.schema.json' with { type: 'json' };
+import schema from '../contracts/rule-subscription-v2.schema.json' with { type: 'json' };
 import { compile, compileRecipe, resolveRecipe, prepareRecipePublication, renderSubscription, ruleSubscriptionSchema, validateRecipeDraft, decideRecipeEdit } from '../src/index.js';
 import { artifactInput } from './artifact-fixtures.js';
 import { subscriptionInput, subscriptionResponseInput } from './subscription-fixtures.js';

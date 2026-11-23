@@ -1,11 +1,20 @@
+import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const web = join(root, 'apps/web');
 const compiler = join(root, 'packages/config-compiler');
+// A built Pipeline must resolve its historical validator locally, even in a workspace with Compiler installed.
+const pipelineEntry = new URL('../packages/rule-set-pipeline/dist/src/index.js', import.meta.url);
+const schemaName = 'contracts/rule-subscription-v2.schema.json';
+const bundledSchema = createRequire(pipelineEntry).resolve('#rule-subscription-v2');
+assert.equal(bundledSchema, fileURLToPath(new URL('../' + schemaName, pipelineEntry)));
+assert.deepEqual(await readFile(bundledSchema), await readFile(join(compiler, schemaName)));
+await import(pipelineEntry.href);
 // Temporary consumer files resolve through the Web App's actual workspace dependency.
 const temporary = await mkdtemp(join(web, '.workspace-smoke-'));
 const name = '@sing-box-config-manager/config-compiler';
@@ -77,7 +86,7 @@ void [draftTyped, editTyped, deleteTyped, invalidState];
 
   await writeFile(join(temporary, 'browser.mjs'), `export { compile, compileRecipe, resolveRecipe, inspectRecipeComposition, prepareRecipePublication, recipeSchema, templateSchema, nodeRevisionSchema, artifactManifestSchema, ruleSubscriptionSchema, renderSubscription, validateRecipeDraft, decideRecipeEdit, decideNodeRevisionDeletion } from '${name}';\n`);
   execFileSync('pnpm', ['--dir', compiler, 'exec', 'esbuild', join(temporary, 'browser.mjs'), '--bundle', '--platform=browser', '--format=esm', '--log-level=error', `--outfile=${join(temporary, 'browser.bundle.mjs')}`], { cwd: root, stdio: 'inherit' });
-  console.log('Workspace smoke passed: Web App imports, public declarations, and browser bundle.');
+  console.log('Workspace smoke passed: Pipeline package, Web App imports, public declarations, and browser bundle.');
 } finally {
   await rm(temporary, { recursive: true, force: true });
 }

@@ -1,8 +1,8 @@
 # Rule Subscription v1
 
-**历史契约，已废止。** 本页及其 Schema 和示例记录 #17 的原始交付。现行 Compiler 和 Pipeline 激活、回滚均使用 [Rule Subscription v2](rule-subscription-v2.md)。以下内容描述旧版本的行为。
+**历史契约，已废止。** 本页及同目录的 Schema、示例记录 #17 的原始交付。以下正文保留当时的分工和行为。现行入口见 [Compiler 的 Rule Subscription v2](../../../packages/config-compiler/contracts/rule-subscription-v2.md) 和 [Pipeline 交付契约](../../../packages/rule-set-pipeline/contracts/README.md)。
 
-交付范围：[工单 #17](https://github.com/wangyingang/sing-box-config-manager/issues/17)，承接 [Spec #14](https://github.com/wangyingang/sing-box-config-manager/issues/14) 和 [ADR 0006](../../../docs/adr/0006-follow-active-rule-subscriptions.md)。
+交付范围：[工单 #17](https://github.com/wangyingang/sing-box-config-manager/issues/17)，承接 [Spec #14](https://github.com/wangyingang/sing-box-config-manager/issues/14) 和 [ADR 0006](../../adr/0006-follow-active-rule-subscriptions.md)。
 
 本契约由 Pipeline 拥有，Compiler 只消费可信宿主提供的已验证内存数据。
 [JSON Schema](rule-subscription.schema.json) 是语言无关的封闭结构；
@@ -34,20 +34,20 @@ Compiler 按选中用途检查固定 Client Profile 能否支持声明的所有�
 未选择的用途不限制该配置的 Profile。
 
 本契约没有产物 revision、sha256、字节数或 term 数。这些属于不可变
-[Artifact Manifest](README.md)，用于描述某次已验证规则文件的实际内容和追溯身份。
+[当时的 Artifact Manifest](https://github.com/wangyingang/sing-box-config-manager/blob/805ad0d40cbd93e7a3caedca8633ba7b42522c05/packages/rule-set-pipeline/contracts/README.md)，用于描述某次已验证规则文件的实际内容和追溯身份。
 稳定入口未来可以交付另一版本，不能把某次不可变产物摘要当作其未来内容摘要。
 规则订阅和面向配置使用者的配置订阅授权也分别处理。
 
 ## 每次激活必须遵守的兼容性约束
 
-本契约最初由 #17 交付，该工单只实现 Recipe／Compiler 消费路径。当时首个纯域名切片的候选发布与激活分别由 #18、#19 实现，见 [#19 历史验收](../docs/verification/issue-19.md)。以下为该历史契约的激活约束。Compiler 本身仍不执行下载、候选上传、激活或客户端更新。
+本契约最初由 #17 交付，该工单只实现 Recipe／Compiler 消费路径。当时首个纯域名切片的候选发布与激活分别由 #18、#19 实现，见 [#19 历史验收](../../../packages/rule-set-pipeline/docs/verification/issue-19.md)。以下为该历史契约的激活约束。Compiler 本身仍不执行下载、候选上传、激活或客户端更新。
 
 1. 核验候选完整性、实际字节摘要、字节数、非空 term 数、真实目标版本的编译／解码／加载及用途语义。配置 `check` 不能替代这些证据。
 2. 候选目标版本和 Source Format 必须与订阅契约一致；所有可用用途的每种声明格式均须有对应的已验证非空产物。不能删除既有入口或改变其格式。
 3. Route 保留适用谓词；DNS 请求只能使用域名谓词；DNS 响应只能使用目标 `ip_cidr`。不能以改变文件内容绕过消费位置限制。
 4. 各产物实际需要的能力必须是对应入口 `requiredCapabilities` 的子集。需要新增能力时不能静默扩大既有契约；应另行版本化契约和兼容入口，并重新验证受影响配置。
 5. 保持系统规则集身份、稳定 URL、用途可用性和复用文件关系。不可用用途不能偷偷上线为可绑定用途；改变公开兼容性约束需要显式契约演进，不能使旧快照指向不兼容内容。
-6. 仅通过门禁的候选才可更新稳定文件。激活同时遵守 Spec #14 的并发保护、状态核实和回滚要求；该切片的历史验收见 [#19 记录](../docs/verification/issue-19.md)。
+6. 仅通过门禁的候选才可更新稳定文件。激活同时遵守 Spec #14 的并发保护、状态核实和回滚要求；该切片的历史验收见 [#19 记录](../../../packages/rule-set-pipeline/docs/verification/issue-19.md)。
 
 ## Recipe／Compiler 接入
 
@@ -88,4 +88,4 @@ HTTP client、节点、模板、Profile 及现有资源引用检查继续生效�
 `recipeSource.subscriptions` 和 `compiled.subscriptions` 与发布 ID 绑定；
 `recipeSource.artifacts` 仅记录旧版不可变产物，新订阅不会生成伪造的固定摘要。
 原生检查回执证明发布时配置通过指定 checker；真实远程内容和来源验证仍由可信宿主负责。
-快照不固定客户端此后加载的规则字节。#17 的交付范围不包括下载、候选上传、激活或客户端更新；这些能力的后续交付与限制见 [Pipeline README](../README.md)，不属于 Compiler 的职责。
+快照不固定客户端此后加载的规则字节。#17 的交付范围不包括下载、候选上传、激活或客户端更新；这些能力的后续交付与限制见 [Pipeline README](../../../packages/rule-set-pipeline/README.md)，不属于 Compiler 的职责。

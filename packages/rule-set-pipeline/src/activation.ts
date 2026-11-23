@@ -7,7 +7,7 @@ import { artifactSubscription, configuredUsages, isProjectedFormat, configuredPr
 import { Ajv } from 'ajv';
 import manifestSchema from '../contracts/artifact-manifest.schema.json' with { type: 'json' };
 import singleArtifactManifestSchema from '../contracts/artifact-manifest-v3.schema.json' with { type: 'json' };
-import subscriptionV2Schema from '../contracts/rule-subscription-v2.schema.json' with { type: 'json' };
+import subscriptionV2Schema from '#rule-subscription-v2' with { type: 'json' };
 import { validCommitSource } from './github-commit.js';
 import { buildRuleArtifacts, nativeArtifactCommands, nativeBuildIdentity, NATIVE_VALIDATION_POLICY, type NativeBuildOptions } from './native.js';
 import { ARTIFACT_MANIFEST_VERSION, SINGLE_ARTIFACT_MANIFEST_VERSION, CANDIDATE_READBACK_VERSION, LEGACY_BUILD_RECORD, RULE_READBACK_VERSION, candidateArtifactFiles, type RuleReadback } from './candidate-publication.js';

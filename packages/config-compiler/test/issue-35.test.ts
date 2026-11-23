@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import Ajv from 'ajv';
-import schema from '../../rule-set-pipeline/contracts/rule-subscription-v2.schema.json' with { type: 'json' };
+import schema from '../contracts/rule-subscription-v2.schema.json' with { type: 'json' };
 import { compile, compileRecipe, preparePublication, prepareRecipePublication, renderSubscription, resolveRecipe } from '../src/index.js';
 import { digest } from '../src/json.js';
 import example from '../examples/three-rule-subscriptions-v2.json' with { type: 'json' };

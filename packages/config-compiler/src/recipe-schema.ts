@@ -139,7 +139,7 @@ const curatedSet = object({ kind: literal('curated'), tag: string,
       return parsed;
     } } })), httpClient: optional(string) });
 const ruleSet = union(inlineSet, curatedSet);
-// Data contract owned by rule-set-pipeline/contracts; no Pipeline runtime import.
+// Fixed Artifact Manifest v2 is defined in rule-set-pipeline/contracts.
 const nonemptyStrings = schema((v): v is string[] => Array.isArray(v) && v.length > 0 && v.every(s => typeof s === 'string' && s.length > 0) && new Set(v).size === v.length);
 const capability = enumeration(['processMatching', 'packageMatching', 'dhcpDns'] as const);
 const capabilities: Schema<Value<typeof capability>[]> = { parse(v, p) {
@@ -164,7 +164,7 @@ export const artifactManifestSchema = object({ schemaVersion: literal(2), id: st
   projections: object({ route: projection, 'dns-query': projection, 'dns-response': projection }),
 });
 export type ArtifactManifest = Value<typeof artifactManifestSchema>;
-// Stable subscription contract owned by Pipeline; no artifact revision or content digest.
+// Rule Subscription v2 is a Compiler input supplied by the trusted host.
 const subscriptionEndpoint = object({ url: httpsUrl, requiredCapabilities: capabilities });
 const subscriptionProjection = union(
   object({ formats: object({ binary: subscriptionEndpoint, source: optional(subscriptionEndpoint) }) }),

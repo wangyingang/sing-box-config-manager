@@ -38,7 +38,8 @@
     "./publisher": {
       "types": "./dist/types/src/publisher.d.ts",
       "import": "./dist/publisher.js"
-    }
+    },
+    "./contracts/rule-subscription-v2.schema.json": "./contracts/rule-subscription-v2.schema.json"
   },
   "engines": {
     "node": ">=24"
