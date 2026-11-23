@@ -44,8 +44,8 @@ async function fileBlob(input: CommitInput, network: Network, commit: string) {
   }
 }
 
-export async function probeCommitInput(input: CommitInput, network: Network) {
-  const identity = await resolveCommit(input, network);
+export async function probeCommitInput(input: CommitInput, network: Network, branchHeads?: Map<string, Promise<string>>) {
+  const identity = await resolveCommit(input, network, branchHeads);
   const blobs = new Map<string, NonNullable<Awaited<ReturnType<typeof fileBlob>>>>();
   async function blob(commit: string) {
     const cached = blobs.get(commit);

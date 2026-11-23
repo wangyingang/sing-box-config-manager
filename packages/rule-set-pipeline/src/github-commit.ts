@@ -7,7 +7,7 @@ export const CHINA_IP_INPUT = {
   input: { format: 'cidr-text', path: 'china46.txt' },
 } as const;
 
-const commitInputFormats = ['plain-yaml', 'cidr-text', 'domain-suffix-text', 'typed-domain-text', 'sing-box-domain-json'] as const;
+const commitInputFormats = ['plain-yaml', 'cidr-text', 'domain-suffix-text', 'typed-domain-text', 'sing-box-domain-json', 'clash-rule-list'] as const;
 type CommitInputFormat = (typeof commitInputFormats)[number];
 
 export function isCommitInputFormat(value: unknown): value is CommitInputFormat {
@@ -78,7 +78,7 @@ export function validCommitSource(source: CommitSourceRecord, input?: CommitInpu
     && Number.isSafeInteger(inputBytes) && inputBytes >= 0;
 }
 
-export async function resolveCommit(input: CommitInput, options: CommitOptions): Promise<CommitIdentity> {
+export async function resolveCommit(input: CommitInput, options: CommitOptions, branchHeads?: Map<string, Promise<string>>): Promise<CommitIdentity> {
   const fetcher = options.fetch ?? fetch;
   const { repository, branch } = input;
   if (options.commit !== undefined && !fullGitCommit(options.commit)) {
@@ -92,12 +92,19 @@ export async function resolveCommit(input: CommitInput, options: CommitOptions):
     if (!response.ok) throw new SourceError(errorCode, `${repository}/${endpoint}: HTTP ${response.status}`);
     return response.json();
   };
-  const metadata = await api(`branches/${encodeURIComponent(branch)}`, 'BRANCH_LOOKUP_FAILED') as
-    { name?: unknown; commit?: { sha?: unknown } } | null;
-  const head = metadata?.commit?.sha;
-  if (metadata?.name !== branch || !fullGitCommit(head)) {
-    throw new SourceError('INVALID_COMMIT', `${repository}/${branch} did not resolve to a full commit SHA`);
-  }
+  const readHead = async () => {
+    const metadata = await api(`branches/${encodeURIComponent(branch)}`, 'BRANCH_LOOKUP_FAILED') as
+      { name?: unknown; commit?: { sha?: unknown } } | null;
+    const head = metadata?.commit?.sha;
+    if (metadata?.name !== branch || !fullGitCommit(head)) {
+      throw new SourceError('INVALID_COMMIT', `${repository}/${branch} did not resolve to a full commit SHA`);
+    }
+    return head;
+  };
+  const branchKey = `${repository.toLowerCase()}:${branch}`;
+  const headRequest = branchHeads?.get(branchKey) ?? readHead();
+  branchHeads?.set(branchKey, headRequest);
+  const head = await headRequest;
   const commit = options.commit ?? head;
   // The raw host can serve fork commits under the upstream repository's name.
   if (commit !== head) {

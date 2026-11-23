@@ -67,7 +67,7 @@ export function convertTypedDomainText(bytes: Uint8Array, file: string, list: st
 
   const output = normalizeTerms(terms);
   for (const term of output) {
-    if (term.type !== 'ip_cidr') report.typeCounts[term.type].output++;
+    report.typeCounts[term.type].output++;
   }
   report.status = 'converted';
   report.duplicateCount = terms.length - output.length;

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { candidateStableFiles } from './activation.js';
-import type { RuleDefinition } from './configuration.js';
+import { configuredRuleInput, type RuleDefinition } from './configuration.js';
 import { guardRulesConfiguration, loadRulesRequest, rulesBinary, type LoadedRules, type RulesRequest } from './rules-context.js';
 import { buildPreparedRules, buildRulesInput, resolveRulesInput, publishRuleBuild, recoverPublishedRuleCandidate, verifyRuleCandidate } from './rules-build.js';
 import { deleteRuleDelivery, deliverRuleVersion, readRuleDeliveries, recoverRuleDelivery, ruleSubscription, ensureRulePathAvailable, matchesRuleDelivery } from './rules-delivery.js';
@@ -18,7 +18,7 @@ const ownRule = (session: RulesSession, id: string) => Object.hasOwn(session.jou
 
 function desiredRule(session: RulesSession, definition: RuleDefinition): ManagedRule {
   const previous = ownRule(session, definition.id);
-  const source = session.loaded.configuration.sources[definition.source];
+  const source = configuredRuleInput(session.loaded.configuration, definition);
   const binding = inputBindingRevision(source, definition);
   const fresh = !previous || previous.lifecycle === 'deleted';
   const control = fresh || previous.inputBindingRevision !== binding
@@ -150,10 +150,13 @@ async function updateSelectedRules(session: RulesSession, definitions: RuleDefin
     }
     const batchResults = new Map<string, RuleResult>();
     const conversionReports = new Map<string, RuleConversionReport>();
+    const skippedByRule = new Map<string, NonNullable<RuleResult['unsupportedTypeCounts']>>();
     const orderedResults = () => batch.flatMap(({ id }) => {
       const result = batchResults.get(id);
       const conversionReport = conversionReports.get(id);
-      return result ? [conversionReport ? { ...result, conversionReport } : result] : [];
+      const unsupportedTypeCounts = skippedByRule.get(id);
+      return result ? [{ ...result, ...(conversionReport && { conversionReport }),
+        ...(unsupportedTypeCounts && { unsupportedTypeCounts }) }] : [];
     });
     if (!session.loaded.dryRun) for (const definition of batch) {
       const id = definition.id;
@@ -180,6 +183,7 @@ async function updateSelectedRules(session: RulesSession, definitions: RuleDefin
       try {
         const input = await (body ??= source.read(bodyNeeded));
         const report = input.conversionsByRuleId.get(id)?.report;
+        if (report?.unsupportedTypeCounts) skippedByRule.set(id, report.unsupportedTypeCounts);
         if (input.format === 'sing-box-source-json' && report?.diagnostics.length) conversionReports.set(id, report);
         const reused = !session.loaded.dryRun && await reuseSuccessfulInput(session, rule, current, input);
         if (reused) {

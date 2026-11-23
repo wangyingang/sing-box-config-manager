@@ -7,6 +7,7 @@ import { readReleaseInput, sha256, SourceError, type ReleaseOptions } from './re
 import { diagnostic, type RuleConversionReport, type ConversionReport } from './types.js';
 import { readCommitInput, type CommitOptions } from './github-commit.js';
 import { configuredInput, configuredReleaseInput, nativeTargetForRule, parseProjectedConfiguration, type BuildConfiguration, type ProjectedRuleDefinition, type RuleDefinition, type SourceFormat } from './configuration.js';
+import { convertClashRuleList } from './clash-rule-list-adapter.js';
 import { convertOpenAiVoice } from './openai-voice-source.js';
 import { convertDlcYaml, convertPlainYaml } from './plain-yaml-adapter.js';
 import { convertDomainSuffixText } from './domain-suffix-text-adapter.js';
@@ -36,6 +37,7 @@ export type ConfiguredResult<Definition = RuleDefinition, Built = ValidatedNativ
 export async function configuredBuildTools(format: SourceFormat = 'plain-yaml') {
   const files = ['artifact-path', 'source-input', 'configuration', 'configured-build', 'release', 'plain-yaml-adapter', 'yaml-input', 'convert',
     'types', 'projection', 'native'];
+  if (format === 'clash-rule-list') files.push('github-commit', 'clash-rule-list-adapter', 'cidr-text-adapter');
   if (format === 'cidr-text') files.push('github-commit', 'cidr-text-adapter');
   if (format === 'domain-suffix-text') files.push('github-commit', 'domain-suffix-text-adapter');
   if (format === 'typed-domain-text') files.push('github-commit', 'typed-domain-text-adapter');
@@ -50,7 +52,7 @@ export async function configuredBuildTools(format: SourceFormat = 'plain-yaml') 
   return { pipeline: packageInfo.version, implementationSha256, conversionPolicy: format === 'sing-box-source-json' ? NATIVE_SOURCE_CONVERSION_POLICY
     : format === 'plain-yaml' ? 'v2fly-domain-v1' : `${format}-v1`,
     node: process.versions.node, yaml: yamlPackage.version, sourceFormat: 4,
-    ...(format === 'cidr-text' || format === 'openai-voice-json' ? { ipaddr: ipaddrPackage.version } : {}) };
+    ...(format === 'cidr-text' || format === 'openai-voice-json' || format === 'clash-rule-list' ? { ipaddr: ipaddrPackage.version } : {}) };
 }
 
 interface BuildOptions { configuration: string; binary: string; selectedIds?: string[] }
@@ -101,6 +103,19 @@ export function convertInput(bytes: Uint8Array, definitions: RuleDefinition[], f
     const converted = convertSingBoxSourceJson(bytes, file);
     return new Map(definitions.map(({ id }) => [id, converted]));
   }
+  if (format === 'clash-rule-list') {
+    const selections = new Map<string | undefined, Converted>();
+    return new Map(definitions.map(rule => {
+      const filter = 'artifact' in rule && rule.list === undefined ? rule.filter : undefined;
+      const key = filter && JSON.stringify(filter);
+      let converted = selections.get(key);
+      if (!converted) {
+        converted = convertClashRuleList(bytes, file, filter);
+        selections.set(key, converted);
+      }
+      return [rule.id, converted];
+    }));
+  }
   if (format === 'v2fly-dlc-yaml') {
     return convertDlcYaml(bytes, definitions.map(rule => {
       if (!('artifact' in rule) || rule.list === undefined) throw new Error(`Missing DLC list for ${rule.id}`);
@@ -114,6 +129,7 @@ export function convertInput(bytes: Uint8Array, definitions: RuleDefinition[], f
   const list = definitions[0].list;
   const converted = (() => {
     if (format === 'openai-voice-json') return convertOpenAiVoice(bytes, file, list);
+    if (format === 'cidr-text' || format === 'domain-suffix-text') return wholeFileConverters[format](bytes, file, list);
     if (list === undefined) throw new Error(`Missing list selection for ${definitions[0].id}`);
     return wholeFileConverters[format](bytes, file, list);
   })();
@@ -193,7 +209,7 @@ export async function buildConfigured<Source extends RuleSource, Definition exte
       results.push({ id: definition.id, definition, status: 'built-validated', report, native, buildId });
     } catch (error) {
       report.status = 'failed';
-      report.diagnostics.push(diagnostic('NATIVE_FAILED', String(error), { list: definition.list, file }));
+      report.diagnostics.push(diagnostic('NATIVE_FAILED', String(error), { list: definition.list ?? '', file }));
       results.push({ id: definition.id, definition, status: 'failed', report, error: String(error) });
     }
   }

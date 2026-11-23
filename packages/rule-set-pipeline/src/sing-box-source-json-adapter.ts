@@ -1,6 +1,6 @@
 import { isScalar, parseDocument } from 'yaml';
 import { BUILD_TERM_TYPES, readSourceTerms, type BuildRule } from './projection.js';
-import { diagnostic, emptyRuleReport, type RuleConversionReport } from './types.js';
+import { diagnostic, emptyRuleReport, TERM_TYPES, type RuleConversionReport } from './types.js';
 
 export const NATIVE_SOURCE_CONVERSION_POLICY = 'sing-box-source-json-v2';
 export interface SourceRuleEntry { index: number; rule: Record<string, unknown> }
@@ -8,7 +8,7 @@ export interface SourceRuleEntries { inputCount: number; accepted: SourceRuleEnt
 
 // Source Format v4 fields written by sing-box 1.14.4's SRS encoder.
 const stringLists = new Set([
-  ...BUILD_TERM_TYPES, 'network', 'source_ip_cidr', 'source_port_range', 'port_range',
+  ...TERM_TYPES, 'ip_cidr', 'network', 'source_ip_cidr', 'source_port_range', 'port_range',
   'process_name', 'process_path', 'process_path_regex', 'package_name', 'network_type',
   'wifi_ssid', 'wifi_bssid', 'default_interface_address',
 ]);
@@ -112,7 +112,7 @@ export function readCandidateRules(document: unknown, singleArtifact: boolean, c
   if (singleArtifact && conversionPolicy === NATIVE_SOURCE_CONVERSION_POLICY) {
     return sourceRules(document).map((rule, index) => headless(readRule(rule, `rules[${index}]`)));
   }
-  return readSourceTerms(document, { allowEmpty: singleArtifact });
+  return readSourceTerms(document, singleArtifact);
 }
 
 export function recordRejectedSourceRule(report: RuleConversionReport, file: string, index: number,

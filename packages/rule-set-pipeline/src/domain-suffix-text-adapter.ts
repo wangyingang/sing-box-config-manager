@@ -2,14 +2,15 @@ import { normalizeBareDomain } from './convert.js';
 import { normalizeTerms } from './projection.js';
 import { diagnostic, emptyReport, type RuleTerm } from './types.js';
 
-export function convertDomainSuffixText(bytes: Uint8Array, file: string, list: string) {
+export function convertDomainSuffixText(bytes: Uint8Array, file: string, list?: string) {
   const report = emptyReport();
+  const location = { file, list: list ?? '' };
   const counts = report.typeCounts.domain_suffix;
   const failed = (detail: string) => ({ ok: false as const, report, error: `${file}: ${detail}` });
   let text: string;
   try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
   catch {
-    report.diagnostics.push(diagnostic('INVALID_UTF8', 'Domain input must be UTF-8', { file, list }));
+    report.diagnostics.push(diagnostic('INVALID_UTF8', 'Domain input must be UTF-8', location));
     return failed('domain input must be UTF-8');
   }
 
@@ -22,7 +23,7 @@ export function convertDomainSuffixText(bytes: Uint8Array, file: string, list: s
     if (!domain) {
       report.invalidCount++;
       report.diagnostics.push(diagnostic('INVALID_RULE', 'Expected one bare domain name', {
-        file, list, line: index + 1, column: line.indexOf(value) + 1,
+        ...location, line: index + 1, column: line.indexOf(value) + 1,
       }));
     } else terms.push({ type: 'domain_suffix', value: domain });
   }
@@ -30,8 +31,8 @@ export function convertDomainSuffixText(bytes: Uint8Array, file: string, list: s
   counts.input = report.inputCount;
   counts.converted = report.convertedCount = terms.length;
   report.duplicateCount = terms.length - output.length;
-  if (!report.inputCount) {
-    report.diagnostics.push(diagnostic('EMPTY_INPUT', 'Domain input contains no rules', { file, list }));
+  if (!report.inputCount && list !== undefined) {
+    report.diagnostics.push(diagnostic('EMPTY_INPUT', 'Domain input contains no rules', location));
     return failed('domain input contains no rules');
   }
   if (report.invalidCount) return failed(`expected one bare domain name on line ${report.diagnostics[0].line}`);

@@ -53,6 +53,10 @@ function humanResult(result: RulesResult & { rules?: RuleStatus[]; maintenance?:
     lines.push(`${row.id}: ${row.status}; ${row.control?.mode ?? 'unmanaged'}; current=${version}`);
     if (row.changes?.length) lines.push(`  Changes: ${row.changes.join(', ')}`);
     if (row.error) lines.push(`  Error: ${row.error}`);
+    if (row.unsupportedTypeCounts) {
+      const skipped = Object.entries(row.unsupportedTypeCounts).map(([type, count]) => `${type}=${count}`).join(', ');
+      lines.push(`  Unsupported rules skipped: ${skipped}`);
+    }
     if (row.continueWith) lines.push(`  Continue: pnpm rules ${row.continueWith}`);
     if (detailed && row.verified?.length) lines.push(`  Verified: ${row.verified.join(', ')}`);
     if (row.reliedOn?.length) lines.push(`  Relied on: ${row.reliedOn.join(', ')}`);
