@@ -10,7 +10,8 @@ import subscriptionV2Schema from '../contracts/rule-subscription-v2.schema.json'
 import { validCommitSource } from './github-commit.js';
 import { buildRuleArtifacts, nativeArtifactCommands, nativeBuildIdentity, NATIVE_VALIDATION_POLICY, type NativeBuildOptions } from './native.js';
 import { ARTIFACT_MANIFEST_VERSION, SINGLE_ARTIFACT_MANIFEST_VERSION, CANDIDATE_READBACK_VERSION, LEGACY_BUILD_RECORD, RULE_READBACK_VERSION, candidateArtifactFiles, type RuleReadback } from './candidate-publication.js';
-import { readSourceTerms, USAGES } from './projection.js';
+import { readCandidateRules } from './sing-box-source-json-adapter.js';
+import { USAGES } from './projection.js';
 import { sha256, V2FLY_RELEASE_INPUT } from './release.js';
 import { validReleaseSource } from './release-source-fact.js';
 import { ARTIFACT_REPOSITORY, immutableUrl } from './publication.js';
@@ -184,7 +185,7 @@ export async function verifyCandidateEvidence(options: Partial<NativeBuildOption
   }
   const json = JSON.parse(sourceBytes.toString());
   requireThat(json.version === 4, 'Candidate Source Format mismatch');
-  const terms = readSourceTerms(json, singleArtifact);
+  const terms = readCandidateRules(json, singleArtifact, build.tools?.conversionPolicy);
   if (layout) requireThat(terms.every(term => (term.type === 'ip_cidr') === (layout.dns === 'dns-response')),
     'Candidate has incompatible usage content');
   requireThat(!report || report.outputTermCount === terms.length, 'Conversion term count mismatch');

@@ -116,7 +116,28 @@ ruleSets:
     artifact: mixed
 ```
 
-初版 reader 支持 sing-box Source Format v4 中的独立域名和 CIDR 条件，例如 `{"version":4,"rules":[{"domain_suffix":["example.test"]},{"ip_cidr":["192.0.2.0/24"]}]}`。每个规则对象只接受一个匹配字段，组合规则由 [#173](https://github.com/wangyingang/sing-box-config-manager/issues/173) 跟踪。源文件上限为 8 MiB。候选保留原始输入字节，重试按记录的摘要和长度核对快照。
+reader 接受 UTF-8 JSON 格式的 sing-box Source Format v4。顶层必须包含整数 `version: 4` 和 `rules` 数组，所有对象的键必须唯一。规则可使用 v4 的原生匹配字段，包括域名、源与目标 IP、端口、DNS query type、网络、进程、包名和接口条件。默认规则保留原有字段分组和顶层条目边界。逻辑规则保留嵌套的 `and`、`or` 和 `invert`。例如，以下规则要求后缀和关键词同时匹配。
+
+```json
+{
+  "version": 4,
+  "rules": [
+    {
+      "type": "logical",
+      "mode": "and",
+      "rules": [
+        { "domain_suffix": "example.test" },
+        { "domain_keyword": "api" }
+      ]
+    },
+    { "ip_cidr": ["192.0.2.0/24", "2001:db8::/32"] }
+  ]
+}
+```
+
+遇到不支持的字段、无效的条件结构，或原生解析器能定位到的无效值时，reader 跳过该顶层规则。原本有多条规则时，跳过后剩下的单条默认规则维持原有匹配范围，避免新触发 sing-box 对外层条件的分组合并。转换报告给出源文件、从 0 开始的规则下标、出错子条件路径及按字段汇总的数量。同步重新读取上游并发现跳过项时，`sync --json` 返回本次转换报告，即使当前交付版本可复用。候选的转换报告随其构建证据保留。空 `rules` 数组可发布为空规则集。非空输入若全部跳过，或通过结构检查的内容未能通过原生编译及任一格式的加载，构建失败并保留已有交付。[`sing-box` 1.14.4 的 SRS 字段定义](https://github.com/SagerNet/sing-box/blob/v1.14.4/common/srs/binary.go)
+
+源文件上限为 8 MiB。候选保留原始输入字节，重试按记录的摘要和长度核对快照。
 
 新候选的 [Artifact Manifest v3](contracts/artifact-manifest-v3.schema.json) 直接列出两种格式的固定 URL、字节数和 SHA-256。交付记录的 `subscription.formats` 列出两种格式的稳定 URL，`files` 记录实际发布文件的摘要和长度。正式配置迁移见 [#174](https://github.com/wangyingang/sing-box-config-manager/issues/174)。
 

@@ -2,7 +2,7 @@ import { verifyWithoutEvidenceCache, type VerifyEvidence } from './evidence-down
 import type { RuleDefinition } from './configuration.js';
 import type { SourceReference } from './update.js';
 import { buildRuleArtifacts, type NativeTarget, type ValidatedNativeBuild, type NativeBuildOptions } from './native.js';
-import { readSourceTerms } from './projection.js';
+import { readCandidateRules } from './sing-box-source-json-adapter.js';
 import { immutableUrl, type PublicationTransport } from './publication.js';
 import { sha256 } from './release.js';
 import { isDeepStrictEqual } from 'node:util';
@@ -45,6 +45,7 @@ export interface PublicationCandidate {
 /** Common immutable publication gate for legacy and configured candidates. */
 export async function publishCandidate(options: NativeBuildOptions & {
   candidate: PublicationCandidate; native: ValidatedNativeBuild; buildId: string; target?: NativeTarget;
+  conversionPolicy?: string | number;
   publication: PublicationTransport; save: () => Promise<void>;
   records: (filesCommit: string) => Record<string, Buffer>;
   beforeEvidence?: () => void;
@@ -108,7 +109,8 @@ export async function publishCandidate(options: NativeBuildOptions & {
   const source = native.artifacts.find(artifact => artifact.format === 'source');
   const json = source && downloaded.get(`${prefix}/${source.file}`);
   if (!json) throw new Error('Remote native JSON is missing');
-  const terms = readSourceTerms(JSON.parse(json.toString('utf8')), typeof options.target === 'object');
+  const document = JSON.parse(json.toString('utf8'));
+  const terms = readCandidateRules(document, typeof options.target === 'object', options.conversionPolicy);
   const remoteNative = await nativeBuild(terms, binary, options.target);
   if (remoteNative.tool.sha256 !== native.tool.sha256) throw new Error('Binary changed between build and readback');
   if (remoteNative.artifacts.length !== native.artifacts.length || remoteNative.artifacts.some(artifact =>

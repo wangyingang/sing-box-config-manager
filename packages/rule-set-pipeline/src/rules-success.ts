@@ -3,7 +3,7 @@ import { candidateStableFiles } from './activation.js';
 import { matchesRuleDelivery } from './rules-delivery.js';
 import { configuredBuildIdentity, configuredBuildTools } from './configured-build.js';
 import { inspectBinary, nativeBuildIdentity, NATIVE_VALIDATION_POLICY, type NativeTool } from './native.js';
-import { normalizeTerms } from './projection.js';
+import { normalizeBuildRules } from './projection.js';
 import type { PublicationSnapshot } from './publication-repository.js';
 import { verifyRuleCandidate, type PreparedRulesInput, type RuleBuild, type ValidRuleBuild } from './rules-build.js';
 import { rulesBinary } from './rules-context.js';
@@ -84,7 +84,7 @@ export async function reuseSuccessfulInput(session: RulesSession, rule: ManagedR
   const baseline = reusableInputBaseline(rule, current);
   const converted = input.conversionsByRuleId.get(rule.definition.id);
   if (!baseline || !converted?.ok) return;
-  const terms = normalizeTerms(converted.terms);
+  const terms = normalizeBuildRules(converted.terms);
   if (nativeBuildIdentity(baseline.toolSha256, terms) !== baseline.nativeBuildId) return;
   return reuseVerifiedInput(session, rule, current, baseline, input.source);
 }

@@ -3,9 +3,10 @@ import { TERM_TYPES, type RuleTerm } from './types.js';
 const PROJECTED_TERM_TYPES = [...TERM_TYPES, 'ip_cidr'] as const;
 const PORT_TYPES = ['source_port', 'port'] as const;
 const TRANSPORT_STRING_TYPES = ['source_ip_cidr', 'source_port_range', 'port_range'] as const;
-const BUILD_TERM_TYPES = [...PROJECTED_TERM_TYPES, ...TRANSPORT_STRING_TYPES, ...PORT_TYPES] as const;
+export const BUILD_TERM_TYPES = [...PROJECTED_TERM_TYPES, ...TRANSPORT_STRING_TYPES, ...PORT_TYPES] as const;
 export type BuildTerm = RuleTerm | { type: 'ip_cidr' | (typeof TRANSPORT_STRING_TYPES)[number]; value: string }
   | { type: (typeof PORT_TYPES)[number]; value: number };
+export type BuildRule = BuildTerm | { type: 'headless'; rule: Record<string, unknown> };
 export const USAGES = ['route', 'dns-query', 'dns-response'] as const;
 export type Usage = typeof USAGES[number];
 
@@ -37,13 +38,27 @@ export function projectTerms(terms: readonly BuildTerm[]): Record<Usage, BuildTe
 export function renderRuleJson(terms: readonly BuildTerm[], singleArtifact = false): string {
   const normalized = normalizeTerms(terms);
   if (!normalized.length && !singleArtifact) throw new Error('Cannot render an empty rule set');
-  return JSON.stringify({ version: 4, rules: BUILD_TERM_TYPES.flatMap(type => {
-    const values = normalized.filter(term => term.type === type).map(term => term.value);
-    return values.length ? [{ [type]: values }] : [];
-  }) }, null, 2) + '\n';
+  return renderRules(normalized);
 }
 
-/** Read generated Source Format v4 without flattening AND/logical rules into OR. */
+/** Keep native rules intact, including the order of logical children. */
+export function normalizeBuildRules(rules: readonly BuildRule[]): BuildRule[] {
+  // A single native default rule can merge with the consumer's outer groups.
+  // Preserve the original native rule count, boundaries and order.
+  return rules.every(rule => rule.type !== 'headless') ? normalizeTerms(rules) : [...rules];
+}
+
+export function renderRules(rules: readonly BuildRule[]): string {
+  const independent = rules.filter(rule => rule.type !== 'headless');
+  const terms = BUILD_TERM_TYPES.flatMap(type => {
+    const values = independent.filter(term => term.type === type).map(term => term.value);
+    return values.length ? [{ [type]: values }] : [];
+  });
+  const headless = rules.filter(rule => rule.type === 'headless').map(rule => rule.rule);
+  return JSON.stringify({ version: 4, rules: [...terms, ...headless] }, null, 2) + '\n';
+}
+
+/** Read artifacts rendered from independent predicates. */
 export function readSourceTerms(value: unknown, singleArtifact = false): BuildTerm[] {
   return normalizeTerms(readIndependentTerms(value, singleArtifact));
 }

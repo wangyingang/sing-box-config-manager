@@ -9,6 +9,7 @@ import { definitionRevision, inputBindingRevision, type ManagedRule, type RuleCa
 import { openRulesSession, type RulesSession } from './rules-session.js';
 import { findReusableBuild, reusableInputBaseline, reuseSuccessfulInput, reuseVerifiedInput, unchangedBuiltInput } from './rules-success.js';
 import { addCurrentFacts, disabledRulesResult, rulesFailure, rulesReport } from './rules-status.js';
+import type { RuleConversionReport } from './types.js';
 
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 const sharedFailure = (session: RulesSession, error: unknown) => Boolean(session.journal.pendingDelivery)
@@ -102,6 +103,7 @@ async function updateSelectedRules(session: RulesSession, definitions: RuleDefin
         .sort((a, b) => a.id.localeCompare(b.id));
       if (recovering.length) rulesWithRecoveredCandidates.add(definition.id);
       for (const fixed of recovering) {
+        let conversionReport: RuleConversionReport | undefined;
         try {
           const current = deliveries.get(definition.id);
           const direct = recovering.length === 1 && !current;
@@ -110,6 +112,7 @@ async function updateSelectedRules(session: RulesSession, definitions: RuleDefin
           if (!candidate) {
             const built = await buildRulesInput(session.loaded, [fixed.definition], { candidate: fixed, snapshot: session.snapshot });
             const result = built.results[0];
+            if (fixed.sourceInput.input.format === 'sing-box-source-json' && result.report.diagnostics.length) conversionReport = result.report;
             if (result.status === 'failed') throw new Error(result.error);
             candidate = await publishRuleBuild(session, built, result, rule, fixed);
           }
@@ -123,10 +126,12 @@ async function updateSelectedRules(session: RulesSession, definitions: RuleDefin
             results.push({ id: definition.id, status: 'delivered', changes: [...(changes.get(definition.id) ?? []), current ? 'replace-current-version' : 'first-delivery'],
               candidate: { versionId: candidate.versionId, publishedAt: candidate.publishedAt },
               verified: ['candidate-git', 'native', 'subscription', 'stable-git', 'stable-HTTPS', ...(!published ? ['candidate-HTTPS'] : [])],
-              ...(published && { reliedOn: ['historical-candidate-publication'] }) });
+              ...(published && { reliedOn: ['historical-candidate-publication'] }),
+              ...(conversionReport && { conversionReport }) });
           } else await session.save(); // Qualified history is durable even if latest input fails.
         } catch (error) {
-          results.push(await failure(session, definition.id, new Error(`Candidate ${fixed.id}: ${message(error)}`), changes.get(definition.id)));
+          const failed = await failure(session, definition.id, new Error(`Candidate ${fixed.id}: ${message(error)}`), changes.get(definition.id));
+          results.push({ ...failed, ...(conversionReport && { conversionReport }) });
           blocked.add(definition.id);
           if (sharedFailure(session, error)) return results;
         }
@@ -144,13 +149,15 @@ async function updateSelectedRules(session: RulesSession, definitions: RuleDefin
       continue;
     }
     const batchResults = new Map<string, RuleResult>();
-    const skippedByRule = new Map<string, RuleResult['unsupportedTypeCounts']>();
-    const orderedResults = () => batch.map(definition => batchResults.get(definition.id))
-      .filter((result): result is RuleResult => result !== undefined)
-      .map(result => {
-        const counts = skippedByRule.get(result.id);
-        return counts ? { ...result, unsupportedTypeCounts: counts } : result;
-      });
+    const conversionReports = new Map<string, RuleConversionReport>();
+    const skippedByRule = new Map<string, NonNullable<RuleResult['unsupportedTypeCounts']>>();
+    const orderedResults = () => batch.flatMap(({ id }) => {
+      const result = batchResults.get(id);
+      const conversionReport = conversionReports.get(id);
+      const unsupportedTypeCounts = skippedByRule.get(id);
+      return result ? [{ ...result, ...(conversionReport && { conversionReport }),
+        ...(unsupportedTypeCounts && { unsupportedTypeCounts }) }] : [];
+    });
     if (!session.loaded.dryRun) for (const definition of batch) {
       const id = definition.id;
       const rule = ownRule(session, id)!;
@@ -175,8 +182,9 @@ async function updateSelectedRules(session: RulesSession, definitions: RuleDefin
       const current = deliveries.get(id);
       try {
         const input = await (body ??= source.read(bodyNeeded));
-        const counts = input.conversionsByRuleId.get(definition.id)?.report.unsupportedTypeCounts;
-        if (counts) skippedByRule.set(id, counts);
+        const report = input.conversionsByRuleId.get(id)?.report;
+        if (report?.unsupportedTypeCounts) skippedByRule.set(id, report.unsupportedTypeCounts);
+        if (input.format === 'sing-box-source-json' && report?.diagnostics.length) conversionReports.set(id, report);
         const reused = !session.loaded.dryRun && await reuseSuccessfulInput(session, rule, current, input);
         if (reused) {
           batchResults.set(id, await unchangedResult(session, rule, reused, itemChanges, 'normalized-content'));
@@ -184,6 +192,7 @@ async function updateSelectedRules(session: RulesSession, definitions: RuleDefin
         }
         const built = await buildPreparedRules(session.loaded, [definition], input);
         const builtRule = built.results[0];
+        if (input.format === 'sing-box-source-json' && builtRule.report.diagnostics.length) conversionReports.set(id, builtRule.report);
         if (builtRule.status === 'failed') {
           batchResults.set(id, await failure(session, id, builtRule.error, itemChanges));
           continue;
