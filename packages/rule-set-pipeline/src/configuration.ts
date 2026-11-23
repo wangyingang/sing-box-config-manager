@@ -18,10 +18,14 @@ type ConfiguredSource = SourceInput | GitHubBranchSource;
 const branchFileFormats = ['cidr-text', 'domain-suffix-text', 'clash-rule-list'] as const;
 const isBranchFileFormat = (value: unknown): value is (typeof branchFileFormats)[number] =>
   branchFileFormats.some(format => format === value);
-type ProjectedSourceFormat = Exclude<SourceFormat, 'sing-box-source-json' | 'clash-rule-list'>;
 type AvailableUsage = { artifact: string };
 type ConfiguredUsage = AvailableUsage | { unavailable: 'empty' };
 type DnsUsage = Exclude<Usage, 'route'>;
+type ProjectedFormat = Exclude<SourceFormat, 'sing-box-source-json' | 'v2fly-dlc-yaml' | 'clash-rule-list'>;
+
+export function isProjectedFormat(format: SourceFormat): format is ProjectedFormat {
+  return format !== 'sing-box-source-json' && format !== 'v2fly-dlc-yaml' && format !== 'clash-rule-list';
+}
 
 const formatCapabilities = {
   'plain-yaml': { dns: 'dns-query', namedLists: true },
@@ -30,9 +34,9 @@ const formatCapabilities = {
   'sing-box-domain-json': { dns: 'dns-query', namedLists: false },
   'cidr-text': { dns: 'dns-response', namedLists: false },
   'openai-voice-json': { dns: 'dns-response', namedLists: false },
-} as const satisfies Record<ProjectedSourceFormat, { dns: DnsUsage; namedLists: boolean }>;
+} as const satisfies Record<ProjectedFormat, { dns: DnsUsage; namedLists: boolean }>;
 
-export function configuredUsages(format: ProjectedSourceFormat) {
+export function configuredUsages(format: ProjectedFormat) {
   const dns = formatCapabilities[format].dns;
   const unavailable = dns === 'dns-query' ? 'dns-response' : 'dns-query';
   return { dns, unavailable } as const;
@@ -48,11 +52,22 @@ export interface ProjectedRuleDefinition extends RuleLocation {
   usages: Record<Usage, ConfiguredUsage> & { route: AvailableUsage };
 }
 
-export interface SingleArtifactDefinition extends RuleLocation {
+export type DlcTagFilter = {
+  action: 'include' | 'exclude';
+  match: 'allOf' | 'anyOf';
+  tags: string[];
+};
+
+interface SingleArtifactLocation extends RuleLocation {
   artifact: string;
-  list?: never;
-  filter?: ClashTypeFilter;
 }
+
+export interface DlcRuleDefinition extends SingleArtifactLocation {
+  list: string;
+  filter?: DlcTagFilter;
+}
+
+export type SingleArtifactDefinition = DlcRuleDefinition | (SingleArtifactLocation & { list?: never; filter?: ClashTypeFilter });
 
 export type RuleDefinition = ProjectedRuleDefinition | SingleArtifactDefinition;
 export interface BuildConfiguration {
@@ -80,9 +95,10 @@ function mapping(value: unknown, label: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function exact(value: unknown, fields: string[], label: string) {
+function exact(value: unknown, fields: string[], label: string, optional: string[] = []) {
   const record = mapping(value, label);
-  if (Object.keys(record).length !== fields.length || fields.some(key => !Object.hasOwn(record, key))) {
+  if (Object.keys(record).some(key => !fields.includes(key) && !optional.includes(key))
+    || fields.some(key => !Object.hasOwn(record, key))) {
     throw new Error(`${label} fields are invalid`);
   }
   return record;
@@ -93,6 +109,25 @@ function ruleLocation({ id, source, stablePath: path }: Record<string, unknown>,
   if (typeof source !== 'string' || !logicalId.test(source)) throw new Error(`Invalid source ID: ${String(source)}`);
   if (typeof path !== 'string' || !stablePath.test(path)) throw new Error(`Invalid ${pathField}: ${String(path)}`);
   return { id, source, stablePath: path };
+}
+
+function tagFilter(action: unknown, match: unknown, tags: unknown): DlcTagFilter {
+  if ((action !== 'include' && action !== 'exclude') || (match !== 'allOf' && match !== 'anyOf')
+    || !Array.isArray(tags) || !tags.length || tags.some(tag => typeof tag !== 'string' || !/^[a-zA-Z0-9!]+$/.test(tag))) {
+    throw new Error('Invalid DLC tag filter');
+  }
+  return { action, match, tags: [...new Set<string>(tags)].sort() };
+}
+
+function parseTagFilter(input: unknown): DlcTagFilter {
+  const filter = mapping(input, 'filter');
+  const [action] = Object.keys(filter);
+  if (action !== 'include' && action !== 'exclude') throw new Error('Invalid DLC tag filter action');
+  const { tags } = exact(exact(filter, [action], 'filter')[action], ['tags'], 'filter condition');
+  const condition = mapping(tags, 'tag condition');
+  const [match] = Object.keys(condition);
+  if (match !== 'allOf' && match !== 'anyOf') throw new Error('Invalid DLC tag filter condition');
+  return tagFilter(action, match, exact(condition, [match], 'tag condition')[match]);
 }
 
 function parseClashTypeFilter(input: unknown): ClashTypeFilter {
@@ -108,25 +143,34 @@ function parseClashTypeFilter(input: unknown): ClashTypeFilter {
 }
 
 function parseSingleArtifactDefinition(input: unknown, format: SourceFormat): SingleArtifactDefinition {
-  const fields = ['id', 'source', 'stablePath', 'artifact'];
-  const hasFilter = Object.hasOwn(mapping(input, 'rule definition'), 'filter');
-  if (hasFilter) fields.push('filter');
-  const definition = exact(input, fields, 'rule definition');
+  const named = format === 'v2fly-dlc-yaml';
+  const clash = format === 'clash-rule-list';
+  const label = 'rule definition';
+  if (!named && !clash && Object.hasOwn(mapping(input, label), 'filter')) throw new Error(`filter is not supported for ${format}`);
+  const definition = exact(input, ['id', 'source', 'stablePath', 'artifact', ...(named ? ['list'] : [])],
+    label, named || clash ? ['filter'] : []);
   const location = ruleLocation(definition, 'publishPath');
   if (!validArtifactBasename(definition.artifact) || reservedArtifactBasename(definition.artifact)) {
     throw new Error(`Invalid artifact basename: ${String(definition.artifact)}`);
   }
-  if (hasFilter && format !== 'clash-rule-list') throw new Error(`filter is not supported for ${format}`);
-  return { ...location, artifact: definition.artifact, ...(hasFilter && { filter: parseClashTypeFilter(definition.filter) }) };
+  const base = { ...location, artifact: definition.artifact };
+  if (!named) {
+    return clash && Object.hasOwn(definition, 'filter') ? { ...base, filter: parseClashTypeFilter(definition.filter) } : base;
+  }
+  const { list } = definition;
+  if (typeof list !== 'string' || !/^[a-z0-9][a-z0-9!._-]*$/.test(list)) throw new Error(`Invalid DLC list: ${String(list)}`);
+  if (!Object.hasOwn(definition, 'filter')) return { ...base, list };
+  const { action, match, tags } = exact(definition.filter, ['action', 'match', 'tags'], 'DLC tag filter');
+  return { ...base, list, filter: tagFilter(action, match, tags) };
 }
 
 export function parseStoredRuleDefinition(input: unknown, format: SourceFormat): RuleDefinition {
   if (Object.hasOwn(mapping(input, 'rule definition'), 'artifact')) return parseSingleArtifactDefinition(input, format);
-  if (format === 'sing-box-source-json' || format === 'clash-rule-list') throw new Error(`${format} requires a single artifact`);
+  if (!isProjectedFormat(format)) throw new Error(`${format} requires a single artifact`);
   return parseRuleDefinition(input, format);
 }
 
-export function parseRuleDefinition(input: unknown, format: ProjectedSourceFormat = 'plain-yaml'): ProjectedRuleDefinition {
+export function parseRuleDefinition(input: unknown, format: ProjectedFormat = 'plain-yaml'): ProjectedRuleDefinition {
   const definition = exact(input, ['id', 'source', 'list', 'stablePath', 'usages'], 'rule definition');
   const { list, usages } = definition;
   const { id, source, stablePath: path } = ruleLocation(definition, 'stable path');
@@ -160,9 +204,14 @@ export function parseSource(input: unknown): SourceInput {
   const raw = mapping(input, 'source');
   if (raw.version === 'url') {
     const { input: declaration } = exact(raw, ['version', 'input'], 'URL source');
-    const { format, url } = exact(declaration, ['format', 'url'], 'URL input');
-    if (format !== 'sing-box-source-json' || !validFixedUrl(url)) throw new Error('Invalid sing-box-source-json HTTPS input');
-    return { version: 'url', input: { format, url } };
+    const { format, url, sha256Url } = exact(declaration, ['format', 'url'], 'URL input', ['sha256Url']);
+    if (format !== 'sing-box-source-json' && format !== 'v2fly-dlc-yaml' && format !== 'openai-voice-json') {
+      throw new Error(`Unsupported URL input format: ${String(format)}`);
+    }
+    if (!validFixedUrl(url) || (sha256Url !== undefined && (!validFixedUrl(sha256Url) || sha256Url === url))) {
+      throw new Error(`Invalid ${format} HTTPS input`);
+    }
+    return { version: 'url', input: { format, url, ...(sha256Url && { sha256Url }) } };
   }
   if (raw.version === 'openai-voice') {
     const source = exact(raw, ['version', 'input'], 'ChatGPT Voice source');
@@ -200,8 +249,8 @@ function parseV4Source(input: unknown, id: string): ConfiguredSource {
   }
   if (method !== 'url') throw new Error(`Unsupported source acquisition method: ${String(method)}`);
   const { format } = exact(input, ['fetch', 'format'], label);
-  const { url } = exact(fetch, ['method', 'url'], `${label} fetch`);
-  return parseSource({ version: 'url', input: { format, url } });
+  const { url, sha256Url } = exact(fetch, ['method', 'url'], `${label} fetch`, ['sha256Url']);
+  return parseSource({ version: 'url', input: { format, url, ...(sha256Url !== undefined && { sha256Url }) } });
 }
 
 /** Validate every definition before source access or output directory creation. */
@@ -231,16 +280,15 @@ export function parseBuildConfiguration(input: string): BuildConfiguration {
   const branchInputs: Record<string, CommitInput> = Object.create(null);
   const entries = raw.schemaVersion === 4 ? Object.entries(mapping(raw.ruleSets, 'ruleSets')).map(([id, entry]) => {
     const label = `rule set ${id}`;
-    const fields = ['data', 'publishPath', 'artifact'];
-    const hasFilter = Object.hasOwn(mapping(entry, label), 'filter');
-    if (hasFilter) fields.push('filter');
-    const { data, publishPath, artifact, filter } = exact(entry, fields, label);
-    const dataLabel = `rule set ${id} data`;
+    const fields = exact(entry, ['data', 'publishPath', 'artifact'], label, ['filter']);
+    const { data, publishPath, artifact, filter } = fields;
+    const dataLabel = `${label} data`;
     const { source } = mapping(data, dataLabel);
     if (typeof source !== 'string' || !Object.hasOwn(sources, source)) {
       throw new Error(`Rule set ${id}: unknown source ${String(source)}`);
     }
     const declaration = sources[source];
+    let list: unknown;
     if (declaration.version === 'github-branch') {
       const { file, format } = exact(data, ['source', 'file', 'format'], dataLabel);
       if (!validInputPath(file) || !isBranchFileFormat(format)) {
@@ -248,22 +296,28 @@ export function parseBuildConfiguration(input: string): BuildConfiguration {
       }
       branchInputs[id] = { repository: declaration.repository, version: 'git-branch', branch: declaration.branch,
         input: { format, path: file } };
-    } else exact(data, ['source'], dataLabel);
-    return { id, source, stablePath: publishPath, artifact, ...(hasFilter && { filter }) };
+    } else {
+      ({ list } = exact(data, ['source'], dataLabel, ['list']));
+    }
+    return { id, source, stablePath: publishPath, artifact, ...(list !== undefined && { list }),
+      ...(Object.hasOwn(fields, 'filter') && { filter }) };
   }) : raw.ruleSets;
   if (!Array.isArray(entries)) throw new Error('ruleSets must be an explicit sequence');
   const ids = new Set<string>(), paths = new Set<string>();
   const ruleSets = entries.map(entry => {
-    const { id, source } = mapping(entry, 'rule definition');
+    const declaration = mapping(entry, 'rule definition');
+    const { id, source, filter } = declaration;
     if (typeof source !== 'string' || !Object.hasOwn(sources, source)) {
       throw new Error(`Rule set ${String(id)}: unknown source ${String(source)}`);
     }
     const input = configuredRuleInput({ sources, branchInputs }, { id: String(id), source }).input;
     let rule: RuleDefinition;
     try {
-      if (raw.schemaVersion === 4) rule = parseSingleArtifactDefinition(entry, input.format);
-      else {
-        if (input.format === 'sing-box-source-json' || input.format === 'clash-rule-list') throw new Error(`${input.format} requires configuration v4`);
+      if (raw.schemaVersion === 4) {
+        const definition = input.format !== 'v2fly-dlc-yaml' || filter === undefined ? declaration : { ...declaration, filter: parseTagFilter(filter) };
+        rule = parseSingleArtifactDefinition(definition, input.format);
+      } else {
+        if (!isProjectedFormat(input.format)) throw new Error(`${input.format} requires configuration v4`);
         rule = parseRuleDefinition(entry, input.format);
       }
     }

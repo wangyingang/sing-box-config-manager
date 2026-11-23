@@ -111,7 +111,7 @@ export function probeOpenAiVoiceInput(fetcher: typeof fetch = fetch) {
   };
 }
 
-export function convertOpenAiVoice(bytes: Uint8Array, file: string, list: string): ReturnType<typeof convertCidrText> {
+export function convertOpenAiVoice(bytes: Uint8Array, file: string, list?: string): ReturnType<typeof convertCidrText> {
   try {
     const document = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
     if (!Array.isArray(document?.prefixes) || !document.prefixes.length) throw new Error('Expected a nonempty prefixes array');

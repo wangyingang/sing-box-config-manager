@@ -175,7 +175,7 @@ async function updateSelectedRules(session: RulesSession, definitions: RuleDefin
       const current = deliveries.get(id);
       try {
         const input = await (body ??= source.read(bodyNeeded));
-        const counts = input.conversionFor(definition).report.unsupportedTypeCounts;
+        const counts = input.conversionsByRuleId.get(definition.id)?.report.unsupportedTypeCounts;
         if (counts) skippedByRule.set(id, counts);
         const reused = !session.loaded.dryRun && await reuseSuccessfulInput(session, rule, current, input);
         if (reused) {

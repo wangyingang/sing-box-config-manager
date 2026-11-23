@@ -82,8 +82,8 @@ export async function reuseVerifiedInput(session: RulesSession, rule: ManagedRul
 export async function reuseSuccessfulInput(session: RulesSession, rule: ManagedRule, current: RuleDelivery | undefined,
   input: PreparedRulesInput) {
   const baseline = reusableInputBaseline(rule, current);
-  const converted = input.conversionFor(rule.definition);
-  if (!baseline || !converted.ok) return;
+  const converted = input.conversionsByRuleId.get(rule.definition.id);
+  if (!baseline || !converted?.ok) return;
   const terms = normalizeTerms(converted.terms);
   if (nativeBuildIdentity(baseline.toolSha256, terms) !== baseline.nativeBuildId) return;
   return reuseVerifiedInput(session, rule, current, baseline, input.source);

@@ -9,7 +9,7 @@ import { readCommitInput, type CommitOptions } from './github-commit.js';
 import { configuredInput, configuredReleaseInput, nativeTargetForRule, parseProjectedConfiguration, type BuildConfiguration, type ProjectedRuleDefinition, type RuleDefinition, type SourceFormat } from './configuration.js';
 import { convertClashRuleList } from './clash-rule-list-adapter.js';
 import { convertOpenAiVoice } from './openai-voice-source.js';
-import { convertPlainYaml } from './plain-yaml-adapter.js';
+import { convertDlcYaml, convertPlainYaml } from './plain-yaml-adapter.js';
 import { convertDomainSuffixText } from './domain-suffix-text-adapter.js';
 import { convertTypedDomainText } from './typed-domain-text-adapter.js';
 import { convertSingBoxDomainJson } from './sing-box-domain-json-adapter.js';
@@ -42,7 +42,8 @@ export async function configuredBuildTools(format: SourceFormat = 'plain-yaml') 
   if (format === 'typed-domain-text') files.push('github-commit', 'typed-domain-text-adapter');
   if (format === 'sing-box-domain-json') files.push('github-commit', 'sing-box-domain-json-adapter');
   if (format === 'openai-voice-json') files.push('openai-voice-source', 'cidr-text-adapter');
-  if (format === 'sing-box-source-json') files.push('fixed-url-source', 'sing-box-source-json-adapter');
+  if (format === 'sing-box-source-json') files.push('sing-box-source-json-adapter');
+  if (format === 'sing-box-source-json' || format === 'v2fly-dlc-yaml' || format === 'openai-voice-json') files.push('fixed-url-source');
   const implementationSha256 = sha256(Buffer.concat(await Promise.all(
     files.map(name =>
       readFile(new URL(`./${name}.${import.meta.url.endsWith('.ts') ? 'ts' : 'js'}`, import.meta.url))),
@@ -70,8 +71,8 @@ export async function buildConfiguredRelease(options: BuildOptions & { release: 
   const definitions = selectDefinitions(configuration, options.selectedIds);
   const input = configuredReleaseInput(configuration, definitions);
   const { bytes, source } = await readReleaseInput(options.release, input);
-  const conversionFor = convertInput(bytes, definitions, input.input.format, input.input.asset);
-  return buildProjectedConfiguration(configuration, definitions, { binary: options.binary }, source, conversionFor, input.input.format, input.input.asset);
+  const conversionsByRuleId = convertInput(bytes, definitions, input.input.format, input.input.asset);
+  return buildProjectedConfiguration(configuration, definitions, { binary: options.binary }, source, conversionsByRuleId, input.input.format, input.input.asset);
 }
 
 export async function buildConfiguredCommit(options: BuildOptions & { github: CommitOptions }) {
@@ -84,8 +85,8 @@ export async function buildConfiguredCommit(options: BuildOptions & { github: Co
     const ids = definitions.map(rule => rule.id).join(', ');
     throw new SourceError(error.code, `Rule set(s) ${ids}, Git input ${input.input.path}: ${error.message}`);
   });
-  const conversionFor = convertInput(bytes, definitions, input.input.format, input.input.path);
-  return buildProjectedConfiguration(configuration, definitions, { binary: options.binary }, source, conversionFor, input.input.format, input.input.path);
+  const conversionsByRuleId = convertInput(bytes, definitions, input.input.format, input.input.path);
+  return buildProjectedConfiguration(configuration, definitions, { binary: options.binary }, source, conversionsByRuleId, input.input.format, input.input.path);
 }
 
 const wholeFileConverters = {
@@ -93,53 +94,51 @@ const wholeFileConverters = {
   'domain-suffix-text': convertDomainSuffixText,
   'typed-domain-text': convertTypedDomainText,
   'sing-box-domain-json': convertSingBoxDomainJson,
-  'openai-voice-json': convertOpenAiVoice,
 };
 
-function conversionKey(rule: RuleDefinition) {
-  return 'filter' in rule && rule.filter ? JSON.stringify(rule.filter) : rule.list;
-}
-
-type ConversionLookup = (rule: RuleDefinition) => Converted;
-
-export function convertInput(bytes: Uint8Array, definitions: RuleDefinition[], format: SourceFormat, file: string): ConversionLookup {
-  const conversions = convertSelections(bytes, definitions, format, file);
-  return rule => {
-    const result = conversions.get(conversionKey(rule));
-    if (!result) throw new Error(`Missing conversion for rule set ${rule.id}`);
-    return result;
-  };
-}
-
-function convertSelections(bytes: Uint8Array, definitions: RuleDefinition[], format: SourceFormat, file: string): ReadonlyMap<string | undefined, Converted> {
-  if (format === 'sing-box-source-json') return new Map([[undefined, convertSingBoxSourceJson(bytes, file)]]);
+export function convertInput(bytes: Uint8Array, definitions: RuleDefinition[], format: SourceFormat, file: string): ReadonlyMap<string, Converted> {
+  if (format === 'sing-box-source-json') {
+    const converted = convertSingBoxSourceJson(bytes, file);
+    return new Map(definitions.map(({ id }) => [id, converted]));
+  }
   if (format === 'clash-rule-list') {
-    const converted = new Map<string | undefined, Converted>();
-    for (const rule of definitions) {
-      const key = conversionKey(rule);
-      if (!converted.has(key)) converted.set(key, convertClashRuleList(bytes, file, 'filter' in rule ? rule.filter : undefined));
-    }
-    return converted;
+    const selections = new Map<string | undefined, Converted>();
+    return new Map(definitions.map(rule => {
+      const filter = 'artifact' in rule && rule.list === undefined ? rule.filter : undefined;
+      const key = filter && JSON.stringify(filter);
+      let converted = selections.get(key);
+      if (!converted) {
+        converted = convertClashRuleList(bytes, file, filter);
+        selections.set(key, converted);
+      }
+      return [rule.id, converted];
+    }));
   }
-  if ((format === 'cidr-text' || format === 'domain-suffix-text') && definitions[0].list === undefined) {
-    const converted = wholeFileConverters[format](bytes, file);
-    const { usageCounts: _legacy, ...report } = converted.report;
-    return new Map([[undefined, { ...converted, report }]]);
+  if (format === 'v2fly-dlc-yaml') {
+    return convertDlcYaml(bytes, definitions.map(rule => {
+      if (!('artifact' in rule) || rule.list === undefined) throw new Error(`Missing DLC list for ${rule.id}`);
+      return rule;
+    }), file);
   }
-  const lists = definitions.map(rule => {
-    if (rule.list === undefined) throw new Error(`Missing list selection for ${rule.id}`);
-    return rule.list;
-  });
-  if (format === 'plain-yaml') return convertPlainYaml(bytes, lists);
-  const convert = wholeFileConverters[format];
-  return new Map([...new Set(lists)].map(list => [list, convert(bytes, file, list)]));
+  if (format === 'plain-yaml') {
+    const converted = convertPlainYaml(bytes, definitions.map(rule => rule.list!));
+    return new Map(definitions.map(({ id, list }) => [id, converted.get(list!)!]));
+  }
+  const list = definitions[0].list;
+  const converted = (() => {
+    if (format === 'openai-voice-json') return convertOpenAiVoice(bytes, file, list);
+    if (format === 'cidr-text' || format === 'domain-suffix-text') return wholeFileConverters[format](bytes, file, list);
+    if (list === undefined) throw new Error(`Missing list selection for ${definitions[0].id}`);
+    return wholeFileConverters[format](bytes, file, list);
+  })();
+  return new Map(definitions.map(({ id }) => [id, converted]));
 }
 
 async function buildProjectedConfiguration<Source extends RuleSource>(
   configuration: BuildConfiguration, definitions: ProjectedRuleDefinition[], options: NativeBuildOptions,
-  source: Source, conversionFor: ConversionLookup, format: SourceFormat, file: string,
+  source: Source, conversionsByRuleId: ReadonlyMap<string, Converted>, format: SourceFormat, file: string,
 ) {
-  const built = await buildConfigured(configuration, definitions, options, source, conversionFor, format, file);
+  const built = await buildConfigured(configuration, definitions, options, source, conversionsByRuleId, format, file);
   const results = built.results.map((result): ConfiguredResult<ProjectedRuleDefinition, NativeBuild, ConversionReport> => {
     if (!('usageCounts' in result.report)) throw new Error('Missing legacy conversion usage counts');
     const report = result.report as ConversionReport;
@@ -150,13 +149,14 @@ async function buildProjectedConfiguration<Source extends RuleSource>(
 
 export async function buildConfigured<Source extends RuleSource, Definition extends RuleDefinition>(
   configuration: BuildConfiguration, definitions: Definition[], { binary, nativeBuild = buildRuleArtifacts }: NativeBuildOptions,
-  source: Source, conversionFor: ConversionLookup, format: SourceFormat, file: string,
+  source: Source, conversionsByRuleId: ReadonlyMap<string, Converted>, format: SourceFormat, file: string,
 ) {
   const tools = await configuredBuildTools(format);
   const results: ConfiguredResult<Definition>[] = [];
   for (const definition of definitions) {
-    const converted = conversionFor(definition);
+    const converted = conversionsByRuleId.get(definition.id)!;
     const report = structuredClone(converted.report);
+    if ('artifact' in definition && 'usageCounts' in report) delete report.usageCounts;
     if (!converted.ok) {
       results.push({ id: definition.id, definition, status: 'failed', report, error: converted.error });
       continue;
