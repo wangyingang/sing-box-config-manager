@@ -1,5 +1,6 @@
 import { isIP } from 'node:net';
 import { domainToASCII } from 'node:url';
+import type { DlcTagFilter } from './configuration.js';
 import { renderRuleJson } from './projection.js';
 import { diagnostic, emptyReport, TERM_TYPES, type ConversionReport, type InputRule, type RuleTerm, type TermType } from './types.js';
 
@@ -36,10 +37,18 @@ function regexpAttributeSeparator(value: string): number {
   return (separator - beforeEscape) % 2 === 0 ? separator : -1;
 }
 
-export function convertRules(rules: readonly InputRule[]): ConversionResult {
+function selectsTags(filter: DlcTagFilter | undefined, tags: readonly string[]) {
+  if (!filter) return true;
+  const hasTag = (tag: string) => tags.includes(tag);
+  const matches = filter.match === 'allOf' ? filter.tags.every(hasTag) : filter.tags.some(hasTag);
+  return filter.action === 'include' ? matches : !matches;
+}
+
+export function convertRules(rules: readonly InputRule[], selection?: { filter?: DlcTagFilter }): ConversionResult {
   const report = emptyReport();
   report.inputCount = rules.length;
   const terms = new Map<string, RuleTerm>();
+  const unsupportedTypes = new Map<string, number>();
   for (const rule of rules) {
     const location = { line: rule.line, column: rule.column, index: rule.index };
     const invalid = (message: string) => {
@@ -50,14 +59,18 @@ export function convertRules(rules: readonly InputRule[]): ConversionResult {
     const colon = rule.value.indexOf(':');
     if (colon < 1) { invalid('规则缺少类型或分隔符'); continue; }
     const sourceType = rule.value.slice(0, colon);
-    if (!Object.hasOwn(mapping, sourceType)) {
+    const type = Object.hasOwn(mapping, sourceType) ? mapping[sourceType] : undefined;
+    const unsupported = () => {
       report.unsupportedCount++;
+      if (selection) unsupportedTypes.set(sourceType, (unsupportedTypes.get(sourceType) ?? 0) + 1);
       report.diagnostics.push(diagnostic('UNSUPPORTED_TYPE', `未知类型 ${sourceType}`, location));
-      continue;
+    };
+    if (!selection) {
+      if (!type) { unsupported(); continue; }
+      report.typeCounts[type].input++;
     }
-    const type = mapping[sourceType];
-    report.typeCounts[type].input++;
     let value = rule.value.slice(colon + 1);
+    let tags: string[] = [];
     const attributes = sourceType === 'regexp' ? regexpAttributeSeparator(value) : value.indexOf(':@');
     if (attributes !== -1) {
       const tail = value.slice(attributes + 1);
@@ -65,11 +78,15 @@ export function convertRules(rules: readonly InputRule[]): ConversionResult {
       // V2Fly lowercases attributes before serializing. Keep uppercase literals in regexps.
       if (validTail && (sourceType !== 'regexp' || tail === tail.toLowerCase())) {
         value = value.slice(0, attributes);
+        tags = tail.slice(1).split(',@');
         report.attributeRecordCount++;
       } else if (sourceType !== 'regexp') {
         invalid('属性尾部格式非法'); continue;
       }
     }
+    if (!selectsTags(selection?.filter, tags)) continue;
+    if (!type) { unsupported(); continue; }
+    if (selection) report.typeCounts[type].input++;
     if (!value || /[\u0000-\u001f\u007f]/u.test(value) || (sourceType !== 'regexp' && /\s/u.test(value))) {
       invalid('匹配值为空或含非法空白／控制字符'); continue;
     }
@@ -88,11 +105,15 @@ export function convertRules(rules: readonly InputRule[]): ConversionResult {
   }
   const output = [...terms.values()].sort((a, b) => TERM_TYPES.indexOf(a.type) - TERM_TYPES.indexOf(b.type)
     || (a.value < b.value ? -1 : a.value > b.value ? 1 : 0));
+  if (unsupportedTypes.size) report.unsupportedTypeCounts = Object.fromEntries(unsupportedTypes);
   report.outputTermCount = output.length;
   for (const term of output) report.typeCounts[term.type].output++;
   report.usageCounts = { route: output.length, 'dns-query': output.length, 'dns-response': 0 };
-  if (!rules.length) report.diagnostics.push(diagnostic('EMPTY_LIST', '不能转换空规则列表'));
-  if (report.diagnostics.length) return { ok: false, report };
+  if (!selection && !rules.length) report.diagnostics.push(diagnostic('EMPTY_LIST', '不能转换空规则列表'));
+  const failed = selection
+    ? report.invalidCount > 0 || (report.unsupportedCount > 0 && output.length === 0)
+    : report.diagnostics.length > 0;
+  if (failed) return { ok: false, report };
   report.status = 'converted';
   return { ok: true, report, terms: output };
 }

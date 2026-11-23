@@ -24,9 +24,9 @@ export function projectTerms(terms: readonly BuildTerm[]): Record<Usage, BuildTe
     'dns-response': route.filter(term => term.type === 'ip_cidr') };
 }
 
-export function renderRuleJson(terms: readonly BuildTerm[]): string {
+export function renderRuleJson(terms: readonly BuildTerm[], { allowEmpty = false } = {}): string {
   const normalized = normalizeTerms(terms);
-  if (!normalized.length) throw new Error('Cannot render an empty rule set');
+  if (!allowEmpty && !normalized.length) throw new Error('Cannot render an empty rule set');
   return JSON.stringify({ version: 4, rules: BUILD_TERM_TYPES.flatMap(type => {
     const values = normalized.filter(term => term.type === type).map(term => term.value);
     return values.length ? [{ [type]: values }] : [];
@@ -34,14 +34,14 @@ export function renderRuleJson(terms: readonly BuildTerm[]): string {
 }
 
 /** Read generated Source Format v4 without flattening AND/logical rules into OR. */
-export function readSourceTerms(value: unknown): BuildTerm[] {
-  return normalizeTerms(readIndependentTerms(value));
+export function readSourceTerms(value: unknown, options?: { allowEmpty: boolean }): BuildTerm[] {
+  return normalizeTerms(readIndependentTerms(value, options));
 }
 
-export function readIndependentTerms(value: unknown): BuildTerm[] {
+export function readIndependentTerms(value: unknown, { allowEmpty = false } = {}): BuildTerm[] {
   const source = value as { version?: unknown; rules?: unknown };
   if (!source || source.version !== 4
-      || !Array.isArray(source.rules) || !source.rules.length) throw new Error('Invalid candidate source rules');
+      || !Array.isArray(source.rules) || (!allowEmpty && !source.rules.length)) throw new Error('Invalid candidate source rules');
   const terms: BuildTerm[] = [];
   for (const rule of source.rules) {
     if (!rule || typeof rule !== 'object' || Array.isArray(rule)) throw new Error('Invalid candidate rule');

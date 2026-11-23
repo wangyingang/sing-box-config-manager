@@ -19,7 +19,7 @@ function normalizeCidr(value: string) {
 }
 
 /** Each non-comment line is one CIDR. An invalid line fails the entire conversion. */
-export function convertCidrText(bytes: Uint8Array, file: string, list: string) {
+export function convertCidrText(bytes: Uint8Array, file: string, list?: string) {
   const report = emptyReport();
   const counts = { input: 0, converted: 0, output: 0 };
   report.typeCounts.ip_cidr = counts;
