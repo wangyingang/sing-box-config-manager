@@ -39,8 +39,36 @@ interface SourceCheck {
   artifact: Buffer;
 }
 
+function normalizeDecodedRule(rule: Record<string, unknown>): Record<string, unknown> {
+  const list = (value: unknown) => Array.isArray(value) ? value : [value];
+  return Object.fromEntries(Object.entries(rule).map(([field, value]) => {
+    if (field === 'rules') {
+      assert.ok(Array.isArray(value));
+      return [field, value.map(normalizeDecodedRule)];
+    }
+    if (field === 'network_interface_address') {
+      assert.ok(value && typeof value === 'object' && !Array.isArray(value));
+      return [field, Object.fromEntries(Object.entries(value).map(([name, prefixes]) => [name, list(prefixes)]))];
+    }
+    if (field === 'type' || field === 'mode' || typeof value === 'boolean') return [field, value];
+    return [field, list(value)];
+  }));
+}
+
+function countPredicates(rule: Record<string, unknown>): number {
+  return Object.entries(rule).reduce((count, [field, value]) => {
+    if (field === 'type' || field === 'mode' || field === 'invert') return count;
+    if (field === 'rules' && Array.isArray(value)) return count + value.reduce((total, child) => total + countPredicates(child), 0);
+    if (field === 'network_interface_address' && value && typeof value === 'object') {
+      return count + Object.values(value).flat().length;
+    }
+    return count + (Array.isArray(value) ? value.length : 1);
+  }, 0);
+}
+
 /** Compare all matched predicates against the previous formal input selections at the same upstream bytes. */
-export function formalSourceVerifier(deliveryHead: string, binary?: string) {
+export function formalSourceVerifier(deliveryHead: string, { binary, verifyPinnedSrs = false }:
+  { binary?: string; verifyPinnedSrs?: boolean } = {}) {
   const baseline = parseProjectedConfiguration(readV3Fixture());
   const inputs = new Map<string, Promise<Buffer>>();
   const expectedByInput = new Map<string, ReturnType<typeof convertInput>>();
@@ -62,16 +90,19 @@ export function formalSourceVerifier(deliveryHead: string, binary?: string) {
       assert.match(source.commit, /^[a-f0-9]{40}$/);
       assert.equal(source.file.url, `https://raw.githubusercontent.com/SagerNet/sing-geosite/${source.commit}/geosite-geolocation-cn.srs`);
       const address = immutableUrl(deliveryHead, `candidates/${candidateId}/input.source.srs`);
-      const upstream = await cached(address);
-      assert.equal(sha256(upstream), source.inputSha256, id);
-      assert.equal(upstream.length, source.inputBytes, id);
-      const decoded = JSON.parse(await decompileRuleBinary(upstream, binary));
-      const rules = decoded.rules.map((rule: Record<string, string | string[]>) =>
-        Object.fromEntries(Object.entries(rule).map(([field, values]) => [field, Array.isArray(values) ? values : [values]])));
+      const snapshotBytes = await cached(address);
+      assert.equal(sha256(snapshotBytes), source.inputSha256, id);
+      assert.equal(snapshotBytes.length, source.inputBytes, id);
+      if (verifyPinnedSrs) {
+        assert.deepEqual(snapshotBytes, await cached(source.file.url), `${id}: retained SRS differs from the pinned upstream file`);
+      }
+      const decoded = JSON.parse(await decompileRuleBinary(snapshotBytes, binary)) as { rules?: Record<string, unknown>[] };
+      const rules = (decoded.rules ?? []).map(normalizeDecodedRule);
       assert.deepEqual(JSON.parse(artifact.toString()), { version: 4, rules });
-      const exactPredicateCount = decoded.rules.flatMap((rule: object) => Object.values(rule).flat()).length;
-      return { id, candidateId, sourceAddress: source.file.url, checkedInput: address, inputSha256: source.inputSha256,
-        inputBytes: upstream.length, checkedOutput: artifactUrl, outputSha256: sha256(artifact), exactPredicateCount };
+      const exactPredicateCount = rules.reduce((count, rule) => count + countPredicates(rule), 0);
+      return { id, candidateId, sourceAddress: source.file.url, checkedInput: address,
+        ...(verifyPinnedSrs && { checkedUpstream: source.file.url }), inputSha256: source.inputSha256,
+        inputBytes: snapshotBytes.length, checkedOutput: artifactUrl, outputSha256: sha256(artifact), exactPredicateCount };
     }
     const old = baseline.ruleSets.find(rule => rule.id === id);
     assert.ok(old, id);
@@ -134,7 +165,7 @@ if (import.meta.main) {
   assert.ok(evidencePath && output, 'Pass the formal v4 evidence file and a new output file');
   const { finalHead, rules } = JSON.parse(await readFile(evidencePath, 'utf8'));
   assert.equal(rules.length, 16);
-  const verify = formalSourceVerifier(finalHead, process.env.SING_BOX_TEST_BINARY);
+  const verify = formalSourceVerifier(finalHead, { binary: process.env.SING_BOX_TEST_BINARY });
   const sources = [];
   for (const rule of rules) {
     const source = rule.files.find(({ format }: { format: string }) => format === 'source');
