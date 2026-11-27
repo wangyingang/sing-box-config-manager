@@ -17,6 +17,11 @@ sources:
       method: github-branch
       repository: gaoyifan/china-operator-ip
       branch: ip-lists
+  sing-geosite:
+    fetch:
+      method: github-branch
+      repository: SagerNet/sing-geosite
+      branch: rule-set
   openai-voice:
     fetch:
       method: url
@@ -70,8 +75,9 @@ ruleSets:
     artifact: ips
   china-domains:
     data:
-      source: dlc
-      list: geolocation-cn
+      source: sing-geosite
+      file: geosite-geolocation-cn.srs
+      format: sing-box-domain-srs
     publishPath: stable/china-domains
     artifact: domains
   global:

@@ -70,12 +70,13 @@ pnpm rules sync --config /path/to/rulesets-draft.yml --dry-run --json
 
 每集从一个来源选择整份文件或命名列表，可按格式筛选。构建将结果写到 `publishPath/artifact.json` 和 `publishPath/artifact.srs`，基名最多 250 个字符，可使用小写 ASCII 字母、数字、连字符和下划线。更新已有交付时，Pipeline 核对这两个稳定地址与当前交付记录一致。
 
-正式配置保留 16 个独立的 `stable/<id>` 目录。`china-ip` 与 `chatgpt-voice` 的基名为 `ips`，其余 14 集为 `domains`。`china-domains` 选择 V2Fly 的 `geolocation-cn`，`global` 选择 `geolocation-!cn`，其余 V2Fly 集选择同名列表。客户端配置决定规则的用途和匹配顺序。
+正式配置保留 16 个独立的 `stable/<id>` 目录。`china-ip` 与 `chatgpt-voice` 的基名为 `ips`，其余 14 集为 `domains`。`global` 选择 V2Fly 的 `geolocation-!cn`，其余 V2Fly 集选择同名列表。客户端配置决定规则的用途和匹配顺序。
 
 - `gfw` 从 GitHub 分支读取逐行域名后缀。[Loyalsoldier 的 `release:gfw.txt`](https://github.com/Loyalsoldier/v2ray-rules-dat/blob/release/gfw.txt)
 - `onedrive` 从 Clash 清单选择 `DOMAIN-SUFFIX` 和 `DOMAIN-KEYWORD`。[blackmatrix7 的 `master:rule/Clash/OneDrive/OneDrive.list`](https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Clash/OneDrive/OneDrive.list)
 - `stream` 从 GitHub 分支读取 sing-box Source Format v2，保留精确域名、后缀和关键词的原生匹配结构。[Sukka 的 `master:sing-box/non_ip/stream.json`](https://github.com/SukkaLab/ruleset.skk.moe/blob/master/sing-box/non_ip/stream.json)
 - `china-ip` 从 GitHub 分支读取逐行 IPv4/IPv6 CIDR。[gaoyifan 的 `ip-lists:china46.txt`](https://github.com/gaoyifan/china-operator-ip/blob/ip-lists/china46.txt)
+- `china-domains` 从 GitHub 分支读取 `sing-box-domain-srs`。Pipeline 按 commit 下载并保存原始 SRS，解码一个仅含域名条件的默认规则，将其完整交付为 v4 JSON 和重新编译的 SRS。中断恢复使用候选保存的原始输入。[SagerNet 的 `rule-set:geosite-geolocation-cn.srs`](https://github.com/SagerNet/sing-geosite/blob/rule-set/geosite-geolocation-cn.srs)
 - `chatgpt-voice` 从固定 URL 读取 IPv4/IPv6 CIDR。客户端策略可另按 OpenAI 网络说明约束 UDP 3478 或 TCP 443。[OpenAI 官方输入](https://openai.com/chatgpt-voice.json) · [OpenAI 网络说明](https://help.openai.com/en/articles/9247338-network-recommendations-for-chatgpt-errors-on-web-and-apps#chatgpt-voice-firewall-settings)
 
 输入绑定取决于获取方式、来源地址、文件路径、格式、命名列表和过滤条件。实质换源会在接受新定义时撤销旧 pin。别名、注释、排列和保留期调整保持控制状态，Git 分支或固定 URL 内容变化按常规同步处理。稳定路径另做交付兼容检查。

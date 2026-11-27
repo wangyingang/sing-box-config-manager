@@ -202,7 +202,7 @@ test('the 16 formal v4 rule sets deliver from an empty GitHub target', {
   const snapshot = await repository.snapshot();
   assert.equal(snapshot.head, status.observedHeads?.stable);
   evidence.finalHead = snapshot.head;
-  const verifySource = formalSourceVerifier(snapshot.head);
+  const verifySource = formalSourceVerifier(snapshot.head, binary);
   for (const definition of ruleSets) {
     const rule = status.rules?.find(({ id }) => id === definition.id);
     assert.ok(rule?.current, definition.id);

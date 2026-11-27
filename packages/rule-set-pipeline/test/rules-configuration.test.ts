@@ -111,7 +111,7 @@ for (const [scenario, input, expected] of [
 }
 
 
-test('the formal v4 YAML preserves every v3 publication path and selected input', () => {
+test('the formal v4 YAML preserves publication paths and switches only china-domains to SagerNet', () => {
   const yaml = readOfficialConfiguration();
   assert.match(yaml, /^# yaml-language-server: \$schema=\.\/rulesets\.schema\.json$/m);
   const current = parseBuildConfiguration(yaml);
@@ -124,10 +124,18 @@ test('the formal v4 YAML preserves every v3 publication path and selected input'
     baseline.ruleSets.map(rule => [rule.id, rule.stablePath, rule.usages.route.artifact]));
 
   for (const rule of current.ruleSets) {
+    const acquired = configuredRuleInput(current, rule);
+    if (rule.id === 'china-domains') {
+      assert.equal(rule.source, 'sing-geosite');
+      assert.equal(rule.list, undefined);
+      assert.equal(rule.filter, undefined);
+      assert.deepEqual(acquired, { version: 'git-branch', repository: 'SagerNet/sing-geosite', branch: 'rule-set',
+        input: { format: 'sing-box-domain-srs', path: 'geosite-geolocation-cn.srs' } });
+      continue;
+    }
     const previousRule = baseline.ruleSets.find(({ id }) => id === rule.id)!;
     assert.equal(rule.source, previousRule.source);
     const previousInput = baseline.sources[previousRule.source];
-    const acquired = configuredRuleInput(current, rule);
     if (previousInput.version === 'latest-release') {
       const prefix = `https://github.com/${previousInput.repository}/releases/latest/download/`;
       assert.deepEqual(acquired, { version: 'url', input: { format: 'v2fly-dlc-yaml',

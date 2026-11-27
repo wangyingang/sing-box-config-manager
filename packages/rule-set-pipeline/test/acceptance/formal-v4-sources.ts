@@ -9,6 +9,7 @@ import { sha256 } from '../../src/release.js';
 import type { RuleSource } from '../../src/rules-model.js';
 import { convertSingBoxDomainJson } from '../../src/sing-box-domain-json-adapter.js';
 import { readV3Fixture } from '../fixtures/baseline-configuration.js';
+import { decompileRuleBinary } from '../../src/native.js';
 
 /** Only retry reads so transport recovery cannot replay a Git write. */
 export const retryProbeRead: typeof fetch = async (url, init) => {
@@ -39,7 +40,7 @@ interface SourceCheck {
 }
 
 /** Compare all matched predicates against the previous formal input selections at the same upstream bytes. */
-export function formalSourceVerifier(deliveryHead: string) {
+export function formalSourceVerifier(deliveryHead: string, binary?: string) {
   const baseline = parseProjectedConfiguration(readV3Fixture());
   const inputs = new Map<string, Promise<Buffer>>();
   const expectedByInput = new Map<string, ReturnType<typeof convertInput>>();
@@ -53,6 +54,25 @@ export function formalSourceVerifier(deliveryHead: string) {
   }
 
   return async ({ id, candidateId, source, artifactUrl, artifact }: SourceCheck) => {
+    if (id === 'china-domains' && 'kind' in source && source.kind === 'github-commit') {
+      assert.ok(binary, 'Set SING_BOX_TEST_BINARY to verify the SRS input');
+      assert.equal(source.repository, 'SagerNet/sing-geosite');
+      assert.equal(source.branch, 'rule-set');
+      assert.equal(source.file.path, 'geosite-geolocation-cn.srs');
+      assert.match(source.commit, /^[a-f0-9]{40}$/);
+      assert.equal(source.file.url, `https://raw.githubusercontent.com/SagerNet/sing-geosite/${source.commit}/geosite-geolocation-cn.srs`);
+      const address = immutableUrl(deliveryHead, `candidates/${candidateId}/input.source.srs`);
+      const upstream = await cached(address);
+      assert.equal(sha256(upstream), source.inputSha256, id);
+      assert.equal(upstream.length, source.inputBytes, id);
+      const decoded = JSON.parse(await decompileRuleBinary(upstream, binary));
+      const rules = decoded.rules.map((rule: Record<string, string | string[]>) =>
+        Object.fromEntries(Object.entries(rule).map(([field, values]) => [field, Array.isArray(values) ? values : [values]])));
+      assert.deepEqual(JSON.parse(artifact.toString()), { version: 4, rules });
+      const exactPredicateCount = decoded.rules.flatMap((rule: object) => Object.values(rule).flat()).length;
+      return { id, candidateId, sourceAddress: source.file.url, checkedInput: address, inputSha256: source.inputSha256,
+        inputBytes: upstream.length, checkedOutput: artifactUrl, outputSha256: sha256(artifact), exactPredicateCount };
+    }
     const old = baseline.ruleSets.find(rule => rule.id === id);
     assert.ok(old, id);
     const input = baseline.sources[old.source];
@@ -114,7 +134,7 @@ if (import.meta.main) {
   assert.ok(evidencePath && output, 'Pass the formal v4 evidence file and a new output file');
   const { finalHead, rules } = JSON.parse(await readFile(evidencePath, 'utf8'));
   assert.equal(rules.length, 16);
-  const verify = formalSourceVerifier(finalHead);
+  const verify = formalSourceVerifier(finalHead, process.env.SING_BOX_TEST_BINARY);
   const sources = [];
   for (const rule of rules) {
     const source = rule.files.find(({ format }: { format: string }) => format === 'source');

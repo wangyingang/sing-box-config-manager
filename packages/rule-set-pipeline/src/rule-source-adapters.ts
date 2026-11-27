@@ -1,11 +1,11 @@
 import type { SourceInput } from './configuration.js';
 import { readFixedUrlInput, validFixedUrlSource, verifyFixedUrlSnapshot } from './fixed-url-source.js';
-import type { CommitSourceRecord } from './github-commit.js';
+import { validCommitSource, type CommitSourceRecord } from './github-commit.js';
 import { probeCommitInput, readPinnedCommitInput } from './git-input-probe.js';
 import { OPENAI_VOICE_FILE, openAiVoiceSnapshotPath, probeOpenAiVoiceInput, validOpenAiVoiceSource,
   verifyOpenAiVoiceSnapshot } from './openai-voice-source.js';
 import type { PublicationSnapshot } from './publication-repository.js';
-import { lookupRelease, readReleaseInput, type ReleaseInput, type ReleaseOptions } from './release.js';
+import { lookupRelease, readReleaseInput, sha256, type ReleaseInput, type ReleaseOptions } from './release.js';
 import { probeReleaseInput } from './release-input-probe.js';
 import type { RuleCandidate, RuleSource } from './rules-model.js';
 import type { SourceRecord } from './types.js';
@@ -75,18 +75,39 @@ export function ruleSourceAdapter(input: SourceInput): RuleSourceAdapter {
     };
   }
   if (input.version === 'openai-voice') return voiceAdapter;
-  if (input.version === 'git-branch') return {
-    file: input.input.path,
-    async probe(network, branchHeads) {
-      const probe = await probeCommitInput(input, network, branchHeads);
-      return { read: probe.read, unchanged: async previous => 'kind' in previous && previous.kind === 'github-commit' ? probe.unchanged(previous) : undefined };
-    },
-    openFixed(network, candidate) {
-      const expected = candidate.source as CommitSourceRecord;
-      const { inputSha256: _hash, inputBytes: _bytes, ...identity } = expected;
-      return { read: () => readPinnedCommitInput(input, network, identity, expected) };
-    },
-  };
+  if (input.version === 'git-branch') {
+    const snapshotRequirement = input.input.format === 'sing-box-domain-srs' ? (candidate: CandidateSource): InputSnapshot => {
+      const source = candidate.source;
+      if (!('kind' in source) || source.kind !== 'github-commit' || !validCommitSource(source, input)) {
+        throw new Error('Invalid recorded SRS input identity');
+      }
+      return {
+        path: `candidates/${candidate.id}/input.source.srs`,
+        verify(bytes) {
+          if (!bytes || bytes.byteLength !== source.inputBytes || sha256(bytes) !== source.inputSha256) {
+            throw new Error('Recorded SRS snapshot is missing or differs from its input digest');
+          }
+          return bytes;
+        },
+      };
+    } : undefined;
+    return {
+      file: input.input.path,
+      async probe(network, branchHeads) {
+        const probe = await probeCommitInput(input, network, branchHeads);
+        return { read: probe.read, unchanged: async previous => 'kind' in previous && previous.kind === 'github-commit' ? probe.unchanged(previous) : undefined };
+      },
+      openFixed(network, candidate, snapshot) {
+        if (snapshotRequirement) {
+          return { read: async () => ({ source: candidate.source, bytes: await readSnapshot(snapshotRequirement(candidate), snapshot) }) };
+        }
+        const expected = candidate.source as CommitSourceRecord;
+        const { inputSha256: _hash, inputBytes: _bytes, ...identity } = expected;
+        return { read: () => readPinnedCommitInput(input, network, identity, expected) };
+      },
+      snapshotRequirement,
+    };
+  }
   return {
     file: input.input.asset,
     async probe(network) {
