@@ -74,6 +74,7 @@ ruleSets:
     publishPath: stable/chatgpt-voice
     artifact: ips
   china-domains:
+    # SagerNet 的 geolocation-cn 已合并 DLC 中符合条件的 category-*-cn 和 category-*@cn 条目。
     data:
       source: sing-geosite
       file: geosite-geolocation-cn.srs
