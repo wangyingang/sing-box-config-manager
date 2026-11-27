@@ -53,7 +53,7 @@
     "branchFormat": {
       "description": "读取 GitHub 分支所选文件使用的输入格式。",
       "type": "string",
-      "enum": ["clash-rule-list", "cidr-text", "domain-suffix-text", "sing-box-source-json"]
+      "enum": ["clash-rule-list", "cidr-text", "domain-suffix-text", "sing-box-source-json", "sing-box-srs"]
     },
     "httpsUrl": { "type": "string", "pattern": "^[Hh][Tt][Tt][Pp][Ss]://[^/\\s\\\\#?@]+(?:[/?][^\\s\\\\#]*)?$" },
     "source": {

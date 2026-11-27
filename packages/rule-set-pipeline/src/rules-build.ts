@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { verifyCandidateEvidence } from './activation.js';
-import { buildConfigured, convertInput } from './configured-build.js';
+import { buildConfigured, convertRulesInput } from './configured-build.js';
 import { publishConfiguredCandidate } from './configured-update.js';
 import { configuredRuleInput, type RuleDefinition, type SourceInput } from './configuration.js';
 import { candidateInputSnapshot, ruleSourceAdapter } from './rule-source-adapters.js';
@@ -23,7 +23,7 @@ interface FixedRuleInput {
 
 export interface PreparedRulesInput {
   source: RuleSource;
-  conversionsByRuleId: ReturnType<typeof convertInput>;
+  conversionsByRuleId: Awaited<ReturnType<typeof convertRulesInput>>;
   inputSnapshot?: Uint8Array;
   format: SourceInput['input']['format'];
   file: string;
@@ -44,7 +44,8 @@ export async function resolveRulesInput(loaded: LoadedRules, definitions: RuleDe
     async read(selected: RuleDefinition[]): Promise<PreparedRulesInput> {
       loaded.progress('source', selected.map(rule => rule.id).join(', '));
       const acquired = await probe.read();
-      return { source: acquired.source, conversionsByRuleId: convertInput(acquired.bytes, selected, format, file), format, file,
+      const conversionsByRuleId = await convertRulesInput(acquired.bytes, selected, format, file, () => rulesBinary(loaded.context));
+      return { source: acquired.source, conversionsByRuleId, format, file,
         ...(adapter.snapshotRequirement && { inputSnapshot: acquired.bytes }) };
     },
   };

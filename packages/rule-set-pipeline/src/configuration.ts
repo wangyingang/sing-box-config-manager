@@ -20,10 +20,10 @@ type ConfiguredSource = SourceInput | GitHubBranchSource;
 type AvailableUsage = { artifact: string };
 type ConfiguredUsage = AvailableUsage | { unavailable: 'empty' };
 type DnsUsage = Exclude<Usage, 'route'>;
-type ProjectedFormat = Exclude<SourceFormat, 'sing-box-source-json' | 'v2fly-dlc-yaml' | 'clash-rule-list'>;
+type ProjectedFormat = Exclude<SourceFormat, 'sing-box-source-json' | 'sing-box-srs' | 'v2fly-dlc-yaml' | 'clash-rule-list'>;
 
 export function isProjectedFormat(format: SourceFormat): format is ProjectedFormat {
-  return format !== 'sing-box-source-json' && format !== 'v2fly-dlc-yaml' && format !== 'clash-rule-list';
+  return format !== 'sing-box-source-json' && format !== 'sing-box-srs' && format !== 'v2fly-dlc-yaml' && format !== 'clash-rule-list';
 }
 
 const formatCapabilities = {
@@ -83,7 +83,7 @@ export type RulesConfiguration = Omit<BuildConfiguration, 'schemaVersion' | 'rul
   ruleSets: SingleArtifactDefinition[];
 };
 type ProjectedSourceInput = ReleaseInput | OpenAiVoiceInput | (Omit<CommitInput, 'input'> & {
-  input: { format: Exclude<CommitInput['input']['format'], 'clash-rule-list' | 'sing-box-source-json'>; path: string };
+  input: { format: Extract<CommitInput['input']['format'], ProjectedFormat>; path: string };
 });
 export type ProjectedConfiguration = Omit<BuildConfiguration, 'schemaVersion' | 'sources' | 'ruleSets' | 'branchInputs'> & {
   schemaVersion: 3; sources: Record<string, ProjectedSourceInput>; ruleSets: ProjectedRuleDefinition[];
@@ -307,7 +307,7 @@ export function parseProjectedConfiguration(input: string): ProjectedConfigurati
     if (parsed.version === 'url') throw new Error('URL sources require configuration v4');
     if (parsed.version !== 'git-branch') return [id, parsed] as const;
     const { format, path } = parsed.input;
-    if (format === 'clash-rule-list' || format === 'sing-box-source-json') throw new Error(`${format} requires configuration v4`);
+    if (!isProjectedFormat(format)) throw new Error(`${format} requires configuration v4`);
     return [id, { ...parsed, input: { format, path } }] as const;
   }));
   const entries = raw.ruleSets;

@@ -55,6 +55,18 @@ export function nativeArtifactCommands(source: string, srs: string): string[][] 
   ];
 }
 
+export async function decompileRuleBinary(bytes: Uint8Array, binary: string) {
+  const tool = await inspectBinary(binary);
+  const directory = await mkdtemp(join(tmpdir(), 'rule-native-decode-'));
+  try {
+    await writeFile(join(directory, 'input.srs'), bytes);
+    await exec(tool.path, ['rule-set', 'decompile', 'input.srs', '-o', 'decoded.json'],
+      { cwd: directory, timeout: 30_000, maxBuffer: 8 * 1024 * 1024 });
+    if (sha256(await readFile(tool.path)) !== tool.sha256) throw new NativeBuildError('Binary changed during decompilation');
+    return await readFile(join(directory, 'decoded.json'), 'utf8');
+  } finally { await rm(directory, { recursive: true, force: true }); }
+}
+
 /**
  * Attribute a source-load failure to its top-level rule, then check the others.
  * Only indexed input errors from the pinned native parser qualify for skipping.
