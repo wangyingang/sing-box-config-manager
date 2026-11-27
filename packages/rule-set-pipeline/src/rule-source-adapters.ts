@@ -76,7 +76,7 @@ export function ruleSourceAdapter(input: SourceInput): RuleSourceAdapter {
   }
   if (input.version === 'openai-voice') return voiceAdapter;
   if (input.version === 'git-branch') {
-    const snapshotRequirement = input.input.format === 'sing-box-domain-srs' ? (candidate: CandidateSource): InputSnapshot => {
+    const snapshotRequirement = input.input.format === 'sing-box-srs' ? (candidate: CandidateSource): InputSnapshot => {
       const source = candidate.source;
       if (!('kind' in source) || source.kind !== 'github-commit' || !validCommitSource(source, input)) {
         throw new Error('Invalid recorded SRS input identity');

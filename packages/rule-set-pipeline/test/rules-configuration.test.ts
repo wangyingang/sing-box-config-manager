@@ -130,7 +130,7 @@ test('the formal v4 YAML preserves publication paths and switches only china-dom
       assert.equal(rule.list, undefined);
       assert.equal(rule.filter, undefined);
       assert.deepEqual(acquired, { version: 'git-branch', repository: 'SagerNet/sing-geosite', branch: 'rule-set',
-        input: { format: 'sing-box-domain-srs', path: 'geosite-geolocation-cn.srs' } });
+        input: { format: 'sing-box-srs', path: 'geosite-geolocation-cn.srs' } });
       continue;
     }
     const previousRule = baseline.ruleSets.find(({ id }) => id === rule.id)!;

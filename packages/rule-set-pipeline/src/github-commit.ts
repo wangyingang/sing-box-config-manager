@@ -8,7 +8,7 @@ export const CHINA_IP_INPUT = {
 } as const;
 
 const commitInputFormats = ['plain-yaml', 'cidr-text', 'domain-suffix-text', 'typed-domain-text', 'sing-box-domain-json',
-  'clash-rule-list', 'sing-box-source-json', 'sing-box-domain-srs'] as const;
+  'clash-rule-list', 'sing-box-source-json', 'sing-box-srs'] as const;
 type CommitInputFormat = (typeof commitInputFormats)[number];
 
 export function isCommitInputFormat(value: unknown): value is CommitInputFormat {

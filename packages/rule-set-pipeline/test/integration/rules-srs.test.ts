@@ -18,11 +18,14 @@ test('旧 DLC 交付保持可用，SRS 候选从固定快照恢复后通过原�
   config.target.branch = branch;
   config.ruleSets = config.ruleSets.filter(rule => rule.id === 'china-domains');
   const [definition] = config.ruleSets;
-  env.configure({ ...config, ruleSets: [{ ...definition, source: 'dlc', list: 'geolocation-cn' }] });
+  const { id, stablePath, artifact } = definition;
+  env.configure({ ...config, ruleSets: [{ id, stablePath, artifact, source: 'dlc', list: 'geolocation-cn' }] });
 
   const rule = { domain: ['exact.example'], domain_suffix: ['.child-only.example'],
     domain_keyword: ['keyword'], domain_regex: ['^regex[0-9]+\\.example$'] };
-  const native = await buildRuleArtifacts([{ type: 'headless', rule }], binary, { kind: 'single-artifact', artifact: 'domains' });
+  const logical = { type: 'logical', mode: 'and', rules: [{ ip_cidr: ['192.0.2.0/24', '2001:db8::/32'] }, { port: [80], invert: true }] };
+  const native = await buildRuleArtifacts([{ type: 'headless', rule }, { type: 'headless', rule: logical }],
+    binary, { kind: 'single-artifact', artifact: 'domains' });
   const bytes = native.artifacts.find(artifact => artifact.format === 'binary')!.content;
   const dlc = JSON.stringify({ lists: [{ name: 'geolocation-cn', length: 1, rules: ['domain:dlc-only.example'] }] });
   const oldCommit = 'a'.repeat(40), newCommit = 'b'.repeat(40);
@@ -80,7 +83,7 @@ test('旧 DLC 交付保持可用，SRS 候选从固定快照恢复后通过原�
   assert.notEqual(current.candidateId, recoveredId);
   assert.deepEqual(current.subscription, old.subscription);
   const [json, srs] = await Promise.all(['json', 'srs'].map(ext => env.context.repository.download(`${url}.${ext}`)));
-  assert.deepEqual(JSON.parse(json.toString()), { version: 4, rules: [rule] });
+  assert.deepEqual(JSON.parse(json.toString()), { version: 4, rules: [rule, logical] });
   const originalRules = JSON.parse(await decompileRuleBinary(bytes, binary)).rules;
   assert.deepEqual(JSON.parse(await decompileRuleBinary(srs, binary)).rules, originalRules);
   const status = await getRulesStatus({ ...request, id: 'china-domains' });

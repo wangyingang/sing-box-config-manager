@@ -6,7 +6,7 @@ import type { CommitInput } from './github-commit.js';
 import { singleArtifactPaths, pathsOverlap } from './stable-rule-paths.js';
 
 type BranchFormat = Extract<CommitInput['input']['format'],
-  'clash-rule-list' | 'cidr-text' | 'domain-suffix-text' | 'sing-box-source-json' | 'sing-box-domain-srs'>;
+  'clash-rule-list' | 'cidr-text' | 'domain-suffix-text' | 'sing-box-source-json' | 'sing-box-srs'>;
 type FilterCondition = { tags: { allOf: string[] } | { anyOf: string[] } } | { type: { anyOf: string[] } };
 type Source = { fetch: { method: 'url'; url: string; sha256Url?: string }; format: FixedUrlInput['input']['format'] }
   | { fetch: { method: 'github-branch'; repository: string; branch: string }; format?: never };

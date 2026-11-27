@@ -20,10 +20,10 @@ type ConfiguredSource = SourceInput | GitHubBranchSource;
 type AvailableUsage = { artifact: string };
 type ConfiguredUsage = AvailableUsage | { unavailable: 'empty' };
 type DnsUsage = Exclude<Usage, 'route'>;
-type ProjectedFormat = Exclude<SourceFormat, 'sing-box-source-json' | 'sing-box-domain-srs' | 'v2fly-dlc-yaml' | 'clash-rule-list'>;
+type ProjectedFormat = Exclude<SourceFormat, 'sing-box-source-json' | 'sing-box-srs' | 'v2fly-dlc-yaml' | 'clash-rule-list'>;
 
 export function isProjectedFormat(format: SourceFormat): format is ProjectedFormat {
-  return format !== 'sing-box-source-json' && format !== 'sing-box-domain-srs' && format !== 'v2fly-dlc-yaml' && format !== 'clash-rule-list';
+  return format !== 'sing-box-source-json' && format !== 'sing-box-srs' && format !== 'v2fly-dlc-yaml' && format !== 'clash-rule-list';
 }
 
 const formatCapabilities = {

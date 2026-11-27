@@ -16,7 +16,7 @@ import { convertTypedDomainText } from './typed-domain-text-adapter.js';
 import { convertSingBoxDomainJson } from './sing-box-domain-json-adapter.js';
 import { convertCidrText } from './cidr-text-adapter.js';
 import { USAGES, type BuildRule } from './projection.js';
-import { convertDecodedDomainRule, convertSingBoxSourceJson, NATIVE_SOURCE_CONVERSION_POLICY, SRS_DOMAIN_CONVERSION_POLICY, noConvertedRules, recordRejectedSourceRule,
+import { convertDecodedSrs, convertSingBoxSourceJson, NATIVE_SOURCE_CONVERSION_POLICY, SRS_CONVERSION_POLICY, noConvertedRules, recordRejectedSourceRule,
   sourceBuildRules, sourceConversionReport, sourceRuleType, type SourceRuleEntries } from './sing-box-source-json-adapter.js';
 import type { RuleSource } from './rules-model.js';
 
@@ -45,14 +45,14 @@ export async function configuredBuildTools(format: SourceFormat = 'plain-yaml') 
   if (format === 'sing-box-domain-json') files.push('github-commit', 'sing-box-domain-json-adapter');
   if (format === 'openai-voice-json') files.push('openai-voice-source', 'cidr-text-adapter');
   if (format === 'sing-box-source-json') files.push('sing-box-source-json-adapter');
-  if (format === 'sing-box-domain-srs') files.push('github-commit', 'sing-box-source-json-adapter');
+  if (format === 'sing-box-srs') files.push('github-commit', 'sing-box-source-json-adapter');
   if (format === 'sing-box-source-json' || format === 'v2fly-dlc-yaml' || format === 'openai-voice-json') files.push('fixed-url-source');
   const implementationSha256 = sha256(Buffer.concat(await Promise.all(
     files.map(name =>
       readFile(new URL(`./${name}.${import.meta.url.endsWith('.ts') ? 'ts' : 'js'}`, import.meta.url))),
   )));
   return { pipeline: packageInfo.version, implementationSha256, conversionPolicy: format === 'sing-box-source-json' ? NATIVE_SOURCE_CONVERSION_POLICY
-    : format === 'sing-box-domain-srs' ? SRS_DOMAIN_CONVERSION_POLICY
+    : format === 'sing-box-srs' ? SRS_CONVERSION_POLICY
       : format === 'plain-yaml' ? 'v2fly-domain-v1' : `${format}-v1`,
     node: process.versions.node, yaml: yamlPackage.version, sourceFormat: 4,
     ...(format === 'cidr-text' || format === 'openai-voice-json' || format === 'clash-rule-list' ? { ipaddr: ipaddrPackage.version } : {}) };
@@ -103,10 +103,10 @@ const wholeFileConverters = {
 
 export async function convertRulesInput(bytes: Uint8Array, definitions: RuleDefinition[], format: SourceFormat, file: string,
   binary: () => string): Promise<ReadonlyMap<string, Converted>> {
-  if (format !== 'sing-box-domain-srs') return convertInput(bytes, definitions, format, file);
+  if (format !== 'sing-box-srs') return convertInput(bytes, definitions, format, file);
   try {
     const decoded: unknown = JSON.parse(await decompileRuleBinary(bytes, binary()));
-    const converted = convertDecodedDomainRule(decoded);
+    const converted = convertDecodedSrs(decoded);
     return new Map(definitions.map(({ id }) => [id, converted]));
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
@@ -114,7 +114,7 @@ export async function convertRulesInput(bytes: Uint8Array, definitions: RuleDefi
   }
 }
 
-export function convertInput(bytes: Uint8Array, definitions: RuleDefinition[], format: Exclude<SourceFormat, 'sing-box-domain-srs'>,
+export function convertInput(bytes: Uint8Array, definitions: RuleDefinition[], format: Exclude<SourceFormat, 'sing-box-srs'>,
   file: string): ReadonlyMap<string, Converted> {
   if (format === 'sing-box-source-json') {
     const converted = convertSingBoxSourceJson(bytes, file);

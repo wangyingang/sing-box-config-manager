@@ -3,7 +3,7 @@ import { BUILD_TERM_TYPES, readSourceTerms, type BuildRule } from './projection.
 import { diagnostic, emptyRuleReport, TERM_TYPES, type RuleConversionReport } from './types.js';
 
 export const NATIVE_SOURCE_CONVERSION_POLICY = 'sing-box-source-json-v2';
-export const SRS_DOMAIN_CONVERSION_POLICY = 'sing-box-domain-srs-v1';
+export const SRS_CONVERSION_POLICY = 'sing-box-srs-v1';
 export interface SourceRuleEntry { index: number; rule: Record<string, unknown> }
 export interface SourceRuleEntries { inputCount: number; accepted: SourceRuleEntry[] }
 
@@ -112,31 +112,22 @@ export function sourceBuildRules({ inputCount, accepted }: SourceRuleEntries): B
 
 /** Candidate files are already converted. Any unsupported rule invalidates the candidate. */
 export function readCandidateRules(document: unknown, singleArtifact: boolean, conversionPolicy: unknown): BuildRule[] {
-  if (singleArtifact && conversionPolicy === SRS_DOMAIN_CONVERSION_POLICY) {
-    return [headless(readDomainRule(sourceRules(document, [4])))];
-  }
-  if (singleArtifact && conversionPolicy === NATIVE_SOURCE_CONVERSION_POLICY) {
+  if (singleArtifact && (conversionPolicy === NATIVE_SOURCE_CONVERSION_POLICY || conversionPolicy === SRS_CONVERSION_POLICY)) {
     return sourceRules(document, [4]).map((rule, index) => headless(readRule(rule, `rules[${index}]`)));
   }
   return readSourceTerms(document, singleArtifact);
 }
 
-function readDomainRule(rules: unknown[]) {
-  if (rules.length !== 1) throw new Error('Expected one default domain rule');
-  const rule = readRule(rules[0], 'rules[0]');
-  if (Object.keys(rule).some(field => !TERM_TYPES.some(type => type === field))) {
-    throw new Error('Expected only domain, domain_suffix, domain_keyword or domain_regex conditions');
-  }
-  return rule;
-}
-
-/** Preserve the upstream rule boundary and reject the input as a whole if it cannot be represented. */
-export function convertDecodedDomainRule(document: unknown) {
-  const rule = readDomainRule(sourceRules(document, [1, 2, 3, 4]));
-  const entries: SourceRuleEntries = { inputCount: 1, accepted: [{ index: 0, rule }] };
+/** Keep all decoded rule boundaries and fail the entire input on any incompatible rule. */
+export function convertDecodedSrs(document: unknown) {
+  // The native decompiler omits the rules key for an empty rule set.
+  const decoded = isObject(document) && !Object.hasOwn(document, 'rules') ? { ...document, rules: [] } : document;
+  const rules = sourceRules(decoded, [1, 2, 3, 4, 5]);
+  const accepted = rules.map((rule, index) => ({ index, rule: readRule(rule, `rules[${index}]`) }));
+  const entries: SourceRuleEntries = { inputCount: rules.length, accepted };
   const report = emptyRuleReport();
   sourceConversionReport(report, entries);
-  return { ok: true as const, terms: [headless(rule)], report };
+  return { ok: true as const, terms: sourceBuildRules(entries), report };
 }
 
 export function recordRejectedSourceRule(report: RuleConversionReport, file: string, index: number,

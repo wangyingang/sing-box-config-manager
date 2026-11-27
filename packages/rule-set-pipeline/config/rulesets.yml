@@ -77,7 +77,7 @@ ruleSets:
     data:
       source: sing-geosite
       file: geosite-geolocation-cn.srs
-      format: sing-box-domain-srs
+      format: sing-box-srs
     publishPath: stable/china-domains
     artifact: domains
   global:
